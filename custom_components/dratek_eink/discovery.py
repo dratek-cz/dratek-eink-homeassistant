@@ -31,9 +31,15 @@ SDK_TYPE_BY_RAW_TYPE = {
     0x410B: 267,
 }
 
+SDK_TYPE_BY_NAME = {
+    "PE29R_V4_BLE": 296,
+    "PE29R": 296,
+}
+
 MODEL_BY_SDK_TYPE = {
     11: "EPA LCD 212x104 BWR",
     75: "EPA LCD 400x300 BWR",
+    296: "DRATEK eInk PE29R 296x128 BWR",
     264: "EPA LCD 250x122 BWR",
     267: "EPA LCD 250x122 BWR",
     270: "EPA LCD 250x122 BWR",
@@ -53,13 +59,18 @@ def parse_dratek_advertisement(service_info: Any) -> DratekAdvertisement | None:
     if not data or len(data) < 5:
         return None
 
-    raw_type = (data[4] << 8) | data[0]
-    sdk_type = SDK_TYPE_BY_RAW_TYPE.get(raw_type, raw_type)
-    model = MODEL_BY_SDK_TYPE.get(sdk_type, f"Unknown DRATEK eInk type {sdk_type}")
     address = getattr(service_info, "address", "")
     name = getattr(service_info, "name", None) or getattr(service_info, "device", None)
     if not isinstance(name, str) or not name:
         name = physical_code_from_address(address)
+    raw_type = (data[4] << 8) | data[0]
+    sdk_type = SDK_TYPE_BY_RAW_TYPE.get(raw_type, raw_type)
+    upper_name = name.upper()
+    for pattern, named_sdk_type in SDK_TYPE_BY_NAME.items():
+        if pattern in upper_name:
+            sdk_type = named_sdk_type
+            break
+    model = MODEL_BY_SDK_TYPE.get(sdk_type, f"Unknown DRATEK eInk type {sdk_type}")
 
     return DratekAdvertisement(
         address=address,
