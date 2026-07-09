@@ -21,6 +21,18 @@ https://github.com/dratek-cz/dratek-eink-homeassistant
 8. Nainstaluj integraci.
 9. Restartuj Home Assistant.
 
+## Povinný krok: Bluetooth integrace
+
+Před použitím DRATEK eInk musí být v Home Assistantu přidaná a funkční integrace `Bluetooth`.
+
+1. Otevři `Settings`.
+2. Otevři `Devices & services`.
+3. Klikni na `Add integration`.
+4. Vyhledej `Bluetooth`.
+5. Přidej Bluetooth adaptér nebo ověř, že už je Bluetooth integrace aktivní.
+
+Bez této integrace Home Assistant neposkytuje BLE skenování a DRATEK eInk panel neuvidí žádné cenovky.
+
 ## Aktivace integrace
 
 Po instalaci přes HACS je potřeba integraci jednou přidat do Home Assistantu:
@@ -40,6 +52,7 @@ Tím se integrace aktivuje a v levém menu Home Assistantu se zobrazí nová pol
 2. Klikni na `Vyhledat zařízení`.
 3. Stránka zobrazí stav Bluetoothu, počet dostupných Bluetooth scannerů/proxy a počet BLE zařízení, která Home Assistant vidí.
 4. Pokud jsou v dosahu DRATEK eInk cenovky, zobrazí se v tabulce.
+5. U nalezené cenovky můžeš kliknout na `Odeslat dratek.cz` pro první test zápisu na displej.
 
 U nalezených displejů se zobrazuje:
 
