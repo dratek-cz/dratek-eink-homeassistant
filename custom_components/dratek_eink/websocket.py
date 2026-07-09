@@ -28,6 +28,8 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_save_project)
     websocket_api.async_register_command(hass, websocket_load_project)
     websocket_api.async_register_command(hass, websocket_delete_project)
+    websocket_api.async_register_command(hass, websocket_load_device_draft)
+    websocket_api.async_register_command(hass, websocket_save_device_draft)
 
 
 @websocket_api.websocket_command({"type": "dratek_eink/scan"})
@@ -128,9 +130,14 @@ def _project_store(hass: HomeAssistant) -> Store:
 async def _load_project_data(hass: HomeAssistant) -> dict[str, Any]:
     data = await _project_store(hass).async_load()
     if not isinstance(data, dict):
-        return {"projects": []}
+        return {"projects": [], "device_drafts": {}}
     data.setdefault("projects", [])
+    data.setdefault("device_drafts", {})
     return data
+
+
+def _normalize_address(address: str) -> str:
+    return address.upper()
 
 
 @websocket_api.websocket_command({"type": "dratek_eink/projects/list"})
@@ -223,6 +230,50 @@ async def websocket_delete_project(
     data["projects"] = [item for item in data["projects"] if item.get("id") != msg["project_id"]]
     await _project_store(hass).async_save(data)
     connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/device_drafts/load",
+        "address": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_load_device_draft(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    data = await _load_project_data(hass)
+    draft = data["device_drafts"].get(_normalize_address(msg["address"]))
+    connection.send_result(msg["id"], {"draft": draft})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/device_drafts/save",
+        "address": str,
+        "draft": dict,
+    }
+)
+@websocket_api.async_response
+async def websocket_save_device_draft(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    address = _normalize_address(msg["address"])
+    draft = dict(msg["draft"])
+    draft.update(
+        {
+            "device_address": address,
+            "updated_at": int(time.time()),
+        }
+    )
+    data = await _load_project_data(hass)
+    data["device_drafts"][address] = draft
+    await _project_store(hass).async_save(data)
+    connection.send_result(msg["id"], {"draft": draft})
 
 
 @websocket_api.websocket_command(
