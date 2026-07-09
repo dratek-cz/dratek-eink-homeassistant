@@ -3,8 +3,10 @@ class DratekEinkPanel extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
     this._loading = false;
+    this._sendingAddress = "";
     this._result = null;
     this._error = "";
+    this._sendResult = null;
   }
 
   set hass(hass) {
@@ -27,6 +29,32 @@ class DratekEinkPanel extends HTMLElement {
       this._error = err && err.message ? err.message : String(err);
     } finally {
       this._loading = false;
+      this._render();
+    }
+  }
+
+  async _sendTestText(device) {
+    if (!this._hass || this._sendingAddress) return;
+    this._sendingAddress = device.address;
+    this._sendResult = null;
+    this._render();
+    try {
+      this._sendResult = await this._hass.callWS({
+        type: "dratek_eink/send_text",
+        address: device.address,
+        sdk_type: Number(device.sdk_type),
+        text: "dratek.cz",
+      });
+    } catch (err) {
+      this._sendResult = {
+        ok: false,
+        address: device.address,
+        text: "dratek.cz",
+        error: err && err.message ? err.message : String(err),
+        log: [],
+      };
+    } finally {
+      this._sendingAddress = "";
       this._render();
     }
   }
@@ -101,6 +129,11 @@ class DratekEinkPanel extends HTMLElement {
         button:disabled {
           opacity: 0.55;
           cursor: progress;
+        }
+        .secondary {
+          background: var(--secondary-background-color);
+          color: var(--primary-text-color);
+          border: 1px solid var(--divider-color);
         }
         .grid {
           display: grid;
@@ -211,6 +244,7 @@ class DratekEinkPanel extends HTMLElement {
         <div class="card">
           <h2 style="margin:0 0 12px;font-size:18px;">Nalezené DRATEK eInk displeje</h2>
           ${this._renderDevices(result.devices)}
+          ${this._renderSendResult()}
         </div>
 
         <div class="card" style="margin-top:16px;">
@@ -225,6 +259,13 @@ class DratekEinkPanel extends HTMLElement {
       </div>
     `;
     this.shadowRoot.querySelector("#scan").addEventListener("click", () => this._scan());
+    this.shadowRoot.querySelectorAll("[data-send-address]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const address = button.getAttribute("data-send-address");
+        const device = result.devices.find((item) => item.address === address);
+        if (device) this._sendTestText(device);
+      });
+    });
   }
 
   _renderDevices(devices) {
@@ -243,6 +284,7 @@ class DratekEinkPanel extends HTMLElement {
             <th>SDK</th>
             <th>Baterie</th>
             <th>SW/HW</th>
+            <th>Akce</th>
           </tr>
         </thead>
         <tbody>
@@ -256,10 +298,30 @@ class DratekEinkPanel extends HTMLElement {
               <td>${this._escape(device.sdk_type)} <span style="color:var(--secondary-text-color)">raw ${this._escape(device.raw_type)}</span></td>
               <td>${this._escape(device.battery)}</td>
               <td>${this._escape(device.sw)} / ${this._escape(device.hw)}</td>
+              <td>
+                <button class="secondary" data-send-address="${this._escape(device.address)}" ${this._sendingAddress ? "disabled" : ""}>
+                  ${this._sendingAddress === device.address ? "Odesílám..." : "Odeslat dratek.cz"}
+                </button>
+              </td>
             </tr>
           `).join("")}
         </tbody>
       </table>
+    `;
+  }
+
+  _renderSendResult() {
+    if (!this._sendResult) return "";
+    const result = this._sendResult;
+    const cls = result.ok ? "good" : "bad";
+    const title = result.ok
+      ? `Text '${result.text}' byl odeslán na ${result.address}.`
+      : `Odeslání na ${result.address} selhalo: ${result.error || "neznámá chyba"}`;
+    return `
+      <div style="margin-top:16px;">
+        <span class="pill ${cls}">${this._escape(title)}</span>
+        ${(result.log || []).length ? `<pre>${this._escape(result.log.join("\\n"))}</pre>` : ""}
+      </div>
     `;
   }
 
