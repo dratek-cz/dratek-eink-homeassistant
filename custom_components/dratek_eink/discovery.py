@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .const import DEVICE_SIZES, PICKSMART_COMPANY_ID
+from .const import DEVICE_SIZES, DRATEK_COMPANY_ID
 
 
 @dataclass(slots=True)
@@ -47,9 +47,9 @@ def physical_code_from_address(address: str) -> str:
     return address
 
 
-def parse_picksmart_advertisement(service_info: Any) -> DratekAdvertisement | None:
+def parse_dratek_advertisement(service_info: Any) -> DratekAdvertisement | None:
     manufacturer_data = getattr(service_info, "manufacturer_data", {}) or {}
-    data = manufacturer_data.get(PICKSMART_COMPANY_ID)
+    data = manufacturer_data.get(DRATEK_COMPANY_ID)
     if not data or len(data) < 5:
         return None
 
