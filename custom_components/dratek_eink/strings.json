@@ -20,7 +20,8 @@
       "unsupported_display_type": "Displej byl nalezen, ale jeho SDK typ {sdk_type} zatím není podporovaný."
     },
     "abort": {
-      "already_configured": "Tento DRATEK eInk displej už je v Home Assistantu přidaný."
+      "already_configured": "Tento DRATEK eInk displej už je v Home Assistantu přidaný.",
+      "not_dratek_eink": "Toto Bluetooth zařízení není DRATEK eInk displej."
     }
   }
 }
