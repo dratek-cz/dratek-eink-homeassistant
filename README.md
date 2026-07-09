@@ -14,6 +14,13 @@
 - obrazky a QR kody se pri tazeni rohu zvetsuji a zmensuji proporcne
 - kurzor na platne lepe ukazuje, kdy jde objekt presouvat nebo menit jeho velikost
 
+## Novinky ve verzi 0.1.2
+
+- Home Assistant si pamatuje samostatny pracovni navrh pro kazdy displej podle BLE adresy
+- pri prepnuti na jiny nalezeny displej se automaticky ulozi aktualni navrh a nacte navrh vybraneho displeje
+- pokud displej jeste vlastni navrh nema, editor zobrazi prazdnou plochu ve spravnem rozliseni daneho displeje
+- nacteny ulozeny projekt se rovnou ulozi jako pracovni navrh aktualne vybraneho displeje
+
 Integrace pro Home Assistant, která umí vyhledat dostupné BLE eInk cenovky DRATEK, zobrazit diagnostiku Bluetoothu a připravit grafický návrh přímo v Home Assistantu.
 
 Instalace je určena výhradně přes HACS. Není potřeba nic kopírovat ručně ani psát do `configuration.yaml`.
