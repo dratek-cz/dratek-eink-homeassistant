@@ -1,6 +1,6 @@
 # DRATEK eInk pro Home Assistant
 
-Integrace pro Home Assistant, která umí vyhledat dostupné BLE eInk cenovky DRATEK/Picksmart, zobrazit diagnostiku Bluetoothu a připravit grafický návrh přímo v Home Assistantu.
+Integrace pro Home Assistant, která umí vyhledat dostupné BLE eInk cenovky DRATEK, zobrazit diagnostiku Bluetoothu a připravit grafický návrh přímo v Home Assistantu.
 
 Instalace je určena výhradně přes HACS. Není potřeba nic kopírovat ručně ani psát do `configuration.yaml`.
 
@@ -83,10 +83,12 @@ Panel obsahuje první verzi grafického editoru:
 - přesné zadání X/Y/šířky/výšky
 - posun vrstvy dopředu/dozadu
 - smazání vybraného objektu
-- uložení projektu jako JSON
-- otevření uloženého projektu pro stejné rozlišení
+- interní uložení projektu přímo v Home Assistantu
+- načtení uloženého projektu pro stejné rozlišení
 - náhled v reálných barvách eInk displeje
 - odeslání celého návrhu do vybraného displeje
+
+Projekty se ukládají interně do Home Assistant storage. Nestahují se jako soubory do počítače.
 
 Poznámka: EAN a QR objekty jsou v této verzi určené hlavně pro návrh layoutu. Skutečně validní čárový kód/QR encoder bude doplněn v některé z dalších verzí.
 
