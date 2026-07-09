@@ -18,6 +18,8 @@ class DratekEinkPanel extends HTMLElement {
     this._projects = [];
     this._selectedProjectId = "";
     this._projectName = "Novy navrh";
+    this._variables = {};
+    this._variables = {};
   }
 
   set hass(hass) {
@@ -111,6 +113,10 @@ class DratekEinkPanel extends HTMLElement {
       strokeWidth: 2,
       text: type === "text" ? "Text" : type === "qr" ? "https://dratek.cz" : "8591234567890",
       fontSize: Math.max(16, Math.round(size.height * 0.16)),
+      fontFamily: "Arial",
+      bold: false,
+      variable: false,
+      variableName: "",
       image: "",
       keepRatio: type === "image",
     };
@@ -164,6 +170,9 @@ class DratekEinkPanel extends HTMLElement {
 
   _deleteSelected() {
     const selected = new Set(this._selectedIds);
+    for (const object of this._objects.filter((object) => selected.has(object.id))) {
+      if (object.variableName) delete this._variables[object.variableName];
+    }
     this._objects = this._objects.filter((object) => !selected.has(object.id));
     this._selectedIds = [];
     this._render();
@@ -172,14 +181,21 @@ class DratekEinkPanel extends HTMLElement {
 
   _duplicateSelected() {
     const selected = new Set(this._selectedIds);
-    const copies = this._objects.filter((object) => selected.has(object.id)).map(({ _img, ...object }) => ({
-      ...structuredClone(object),
-      id: `obj-${this._nextId++}`,
-      x: this._snapValue((object.x || 0) + 10),
-      y: this._snapValue((object.y || 0) + 10),
-      x2: object.x2 === undefined ? undefined : this._snapValue(object.x2 + 10),
-      y2: object.y2 === undefined ? undefined : this._snapValue(object.y2 + 10),
-    }));
+    const copies = this._objects.filter((object) => selected.has(object.id)).map(({ _img, ...object }) => {
+      const copy = {
+        ...structuredClone(object),
+        id: `obj-${this._nextId++}`,
+        x: this._snapValue((object.x || 0) + 10),
+        y: this._snapValue((object.y || 0) + 10),
+        x2: object.x2 === undefined ? undefined : this._snapValue(object.x2 + 10),
+        y2: object.y2 === undefined ? undefined : this._snapValue(object.y2 + 10),
+      };
+      if (copy.variable && copy.variableName) {
+        copy.variableName = this._uniqueVariableName(copy.variableName, copy.id);
+        this._variables[copy.variableName] = copy.text || "";
+      }
+      return copy;
+    });
     this._objects.push(...copies);
     this._selectedIds = copies.map((object) => object.id);
     this._render();
@@ -190,6 +206,7 @@ class DratekEinkPanel extends HTMLElement {
     if (this._objects.length && !confirm("Vytvorit novy prazdny navrh?")) return;
     this._objects = [];
     this._selectedIds = [];
+    this._variables = {};
     this._selectedProjectId = "";
     this._projectName = "Novy navrh";
     this._nextId = 1;
@@ -254,6 +271,39 @@ class DratekEinkPanel extends HTMLElement {
 
   _snapValue(value) {
     return this._snap ? Math.round(value / 5) * 5 : Math.round(value);
+  }
+
+  _normalizeVariableName(value) {
+    const cleaned = String(value || "")
+      .trim()
+      .replace(/[^a-zA-Z0-9_]/g, "_")
+      .replace(/^([0-9])/, "_$1")
+      .replace(/_+/g, "_");
+    return cleaned || "variable";
+  }
+
+  _uniqueVariableName(value, objectId) {
+    const base = this._normalizeVariableName(value);
+    const used = new Set(
+      this._objects
+        .filter((object) => object.id !== objectId && object.type === "text" && object.variable && object.variableName)
+        .map((object) => object.variableName)
+    );
+    if (!used.has(base)) return base;
+    let index = 2;
+    while (used.has(`${base}_${index}`)) index++;
+    return `${base}_${index}`;
+  }
+
+  _variableDefs() {
+    return this._objects
+      .filter((object) => object.type === "text" && object.variable && object.variableName)
+      .map((object) => ({
+        id: object.id,
+        name: object.variableName,
+        defaultValue: object.text || "",
+        value: this._variables[object.variableName] ?? object.text ?? "",
+      }));
   }
 
   _canvasPoint(event) {
@@ -381,6 +431,7 @@ class DratekEinkPanel extends HTMLElement {
       sdk_type: device ? Number(device.sdk_type) : 75,
       width: size.width,
       height: size.height,
+      variables: this._variables,
       objects: this._objects.map(({ _img, ...object }) => object),
     };
   }
@@ -407,6 +458,7 @@ class DratekEinkPanel extends HTMLElement {
         return;
       }
       this._objects = Array.isArray(project.objects) ? project.objects : [];
+      this._variables = project.variables || {};
       this._projectName = project.name || "DRATEK eInk projekt";
       this._selectedIds = [];
       this._nextId = this._objects.length + 1;
@@ -486,7 +538,7 @@ class DratekEinkPanel extends HTMLElement {
         .editor-shell{display:grid;grid-template-columns:250px minmax(0,1fr) 320px;gap:12px;align-items:start}.left,.right{position:sticky;top:12px}.tool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.tool-icon{min-height:70px;display:grid;grid-template-rows:28px auto;place-items:center;text-align:center;padding:10px 6px}.tool-icon .ico{font-size:24px;line-height:1}.tool-icon .txt{font-size:12px}.action-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:18px;display:grid;place-items:center}.wide-action{grid-column:span 3;font-size:13px}
         .workspace{min-height:500px;overflow:auto;display:grid;place-items:center;background:linear-gradient(45deg,var(--secondary-background-color) 25%,transparent 25%),linear-gradient(-45deg,var(--secondary-background-color) 25%,transparent 25%);background-size:18px 18px;border-radius:8px;border:1px solid var(--divider-color);padding:24px}
         canvas{background:#fff;box-shadow:0 14px 36px rgba(0,0,0,.2);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:700}.field input,.field select,.projectbar input,.projectbar select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-        table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:var(--secondary-background-color);border-radius:8px;padding:10px;font-size:12px;line-height:1.45}.send-result{margin-top:10px}
+        table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:var(--secondary-background-color);border-radius:8px;padding:10px;font-size:12px;line-height:1.45}.send-result{margin-top:10px}.variable-table input{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:7px}
         @media(max-width:1100px){.editor-shell,.status-grid,.projectbar{grid-template-columns:1fr}.left,.right{position:static}}
       </style>
       <div class="page">
@@ -497,6 +549,7 @@ class DratekEinkPanel extends HTMLElement {
         <div class="status-grid"><div class="card"><div class="metric">Stav</div><span class="pill ${status.cls}">${this._escape(status.text)}</span></div><div class="card"><div class="metric">Bluetooth adaptery / proxy</div><div class="value">${result.scanner_count}</div></div><div class="card"><div class="metric">BLE zarizeni v dosahu</div><div class="value">${result.ble_count}</div></div></div>
         <div class="card projectbar"><input id="projectName" value="${this._escape(this._projectName)}" placeholder="Nazev navrhu"><select id="projectSelect"><option value="">Novy / neulozeny navrh</option>${this._projects.map((project) => `<option value="${this._escape(project.id)}" ${project.id === this._selectedProjectId ? "selected" : ""}>${this._escape(project.name)} (${project.width}x${project.height})</option>`).join("")}</select><div class="toolbar"><button id="newProject" class="secondary">Novy</button><button id="saveProject">Ulozit do HA</button><button id="loadProject" class="secondary" ${this._selectedProjectId ? "" : "disabled"}>Nacist</button><button id="deleteProject" class="danger" ${this._selectedProjectId ? "" : "disabled"}>Smazat</button></div></div>
         <div class="card" style="margin-bottom:12px"><div class="toolbar"><label>Displej</label><select id="deviceSelect">${result.devices.map((item) => `<option value="${this._escape(item.address)}" ${item.address === (device && device.address) ? "selected" : ""}>${this._escape(item.physical_code)} - ${this._escape(item.model)} - RSSI ${this._escape(item.rssi)}</option>`).join("")}</select><span class="pill muted">${size.width} x ${size.height}</span><button id="sendTest" class="secondary" ${!device ? "disabled" : ""}>Odeslat dratek.cz</button><label><input id="realPreview" type="checkbox" ${this._realPreview ? "checked" : ""}> Real eInk colors</label></div>${this._renderSendResult()}</div>
+        ${this._renderVariables()}
         <div class="editor-shell">
           <div class="card left"><h2>Nastroje</h2><div class="tool-grid"><button class="tool-icon" data-add="text" title="Text"><span class="ico">T</span><span class="txt">Text</span></button><button class="tool-icon" data-add="rect" title="Rectangle"><span class="ico">▭</span><span class="txt">Rect</span></button><button class="tool-icon" data-add="line" title="Cara"><span class="ico">╱</span><span class="txt">Cara</span></button><button class="tool-icon" data-add="barcode" title="EAN"><span class="ico">▥</span><span class="txt">EAN</span></button><button class="tool-icon" data-add="qr" title="QR"><span class="ico">▦</span><span class="txt">QR</span></button><button id="addImage" class="tool-icon secondary" title="Obrazek"><span class="ico">▧</span><span class="txt">Image</span></button><input id="imageFile" type="file" accept="image/*" hidden></div><h2 style="margin-top:18px">Upravy</h2><div class="action-grid"><button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${this._selectedIds.length ? "" : "disabled"}>⧉</button><button id="rotateSelected" class="icon-btn secondary" title="Otocit 90" ${this._selectedIds.length ? "" : "disabled"}>↻</button><button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${this._selectedIds.length ? "" : "disabled"}>⇋</button><button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${this._selectedIds.length ? "" : "disabled"}>⫷</button><button id="alignCenter" class="icon-btn secondary" title="Zarovnat na stred" ${this._selectedIds.length ? "" : "disabled"}>↔</button><button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${this._selectedIds.length ? "" : "disabled"}>⫶</button><button id="alignMiddle" class="icon-btn secondary" title="Svisly stred" ${this._selectedIds.length ? "" : "disabled"}>↕</button><button id="layerFront" class="icon-btn secondary" title="Do popredi" ${this._selectedIds.length ? "" : "disabled"}>⬆</button><button id="layerBack" class="icon-btn secondary" title="Do pozadi" ${this._selectedIds.length ? "" : "disabled"}>⬇</button><button id="deleteSelected" class="wide-action danger" ${this._selectedIds.length ? "" : "disabled"}>Smazat vybrane</button><button id="clearDesign" class="wide-action danger">Smazat vse</button></div><h2 style="margin-top:18px">Zobrazeni</h2><div class="action-grid"><button id="zoomIn" class="icon-btn secondary" title="Priblizit">＋</button><button id="zoomOut" class="icon-btn secondary" title="Oddalit">－</button><button id="zoomFit" class="icon-btn secondary" title="Prizpusobit">□</button><label class="wide-action"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}> Grid snap 5 px</label></div></div>
           <div class="workspace"><canvas id="editor" width="${size.width}" height="${size.height}" style="width:${Math.round(size.width * this._zoom)}px;height:${Math.round(size.height * this._zoom)}px"></canvas></div>
@@ -538,6 +591,10 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#realPreview").addEventListener("change", (event) => { this._realPreview = event.target.checked; this._paint(); });
     this.shadowRoot.querySelector("#sendTest").addEventListener("click", () => this._sendTestText());
     this.shadowRoot.querySelector("#deviceSelect").addEventListener("change", (event) => { this._selectedDeviceAddress = event.target.value; this._fitZoom(); this._render(); });
+    this.shadowRoot.querySelectorAll("[data-variable]").forEach((input) => input.addEventListener("input", () => {
+      this._variables[input.dataset.variable] = input.value;
+      this._paint();
+    }));
     const canvas = this.shadowRoot.querySelector("#editor");
     canvas.addEventListener("pointerdown", (event) => this._onPointerDown(event));
     canvas.addEventListener("pointermove", (event) => this._onPointerMove(event));
@@ -551,7 +608,7 @@ class DratekEinkPanel extends HTMLElement {
       return `<p class="muted" style="padding:10px;border-radius:8px">${this._selectedIds.length > 1 ? `Vybrano ${this._selectedIds.length} objektu.` : "Vyber objekt v navrhu."}</p>`;
     }
     const common = `<div class="row"><div class="field"><label>X</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label>Y</label><input data-prop="y" type="number" value="${object.y}"></div></div><div class="row"><div class="field"><label>Sirka</label><input data-prop="w" type="number" value="${object.w || 1}"></div><div class="field"><label>Vyska</label><input data-prop="h" type="number" value="${object.h || 1}"></div></div><div class="row"><div class="field"><label>Rotace</label><select data-prop="rotation"><option ${object.rotation === 0 ? "selected" : ""}>0</option><option ${object.rotation === 90 ? "selected" : ""}>90</option><option ${object.rotation === 180 ? "selected" : ""}>180</option><option ${object.rotation === 270 ? "selected" : ""}>270</option></select></div><div class="field"><label>Barva</label><select data-prop="color"><option value="black" ${object.color === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.color === "red" ? "selected" : ""}>Cervena</option><option value="white" ${object.color === "white" ? "selected" : ""}>Bila</option></select></div></div>`;
-    if (object.type === "text") return `${common}<div class="field"><label>Text</label><input data-prop="text" value="${this._escape(object.text)}"></div><div class="field"><label>Velikost textu</label><input data-prop="fontSize" type="number" value="${object.fontSize}"></div>`;
+    if (object.type === "text") return `${common}<div class="field"><label>Text</label><input data-prop="text" value="${this._escape(object.text)}"></div><div class="row"><div class="field"><label>Velikost textu</label><input data-prop="fontSize" type="number" value="${object.fontSize}"></div><div class="field"><label>Font</label><select data-prop="fontFamily"><option value="Arial" ${object.fontFamily === "Arial" ? "selected" : ""}>Arial</option><option value="Verdana" ${object.fontFamily === "Verdana" ? "selected" : ""}>Verdana</option><option value="Tahoma" ${object.fontFamily === "Tahoma" ? "selected" : ""}>Tahoma</option><option value="Georgia" ${object.fontFamily === "Georgia" ? "selected" : ""}>Georgia</option><option value="Courier New" ${object.fontFamily === "Courier New" ? "selected" : ""}>Courier</option></select></div></div><label><input data-prop="bold" type="checkbox" ${object.bold ? "checked" : ""}> Bold</label><label><input data-prop="variable" type="checkbox" ${object.variable ? "checked" : ""}> Promenny text</label><div class="field"><label>Nazev promenne</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="napr_teplota"></div>`;
     if (object.type === "rect") return `${common}<div class="row"><div class="field"><label>Vypln</label><select data-prop="fill"><option value="none" ${object.fill === "none" ? "selected" : ""}>Bez vyplne</option><option value="black" ${object.fill === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.fill === "red" ? "selected" : ""}>Cervena</option><option value="white" ${object.fill === "white" ? "selected" : ""}>Bila</option></select></div><div class="field"><label>Ramecek</label><select data-prop="stroke"><option value="none" ${object.stroke === "none" ? "selected" : ""}>Bez ramecku</option><option value="black" ${object.stroke === "black" ? "selected" : ""}>Cerny</option><option value="red" ${object.stroke === "red" ? "selected" : ""}>Cerveny</option></select></div></div><div class="field"><label>Sila ramecku</label><input data-prop="strokeWidth" type="number" value="${object.strokeWidth || 0}"></div>`;
     if (object.type === "line") return `<div class="row"><div class="field"><label>X1</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label>Y1</label><input data-prop="y" type="number" value="${object.y}"></div></div><div class="row"><div class="field"><label>X2</label><input data-prop="x2" type="number" value="${object.x2}"></div><div class="field"><label>Y2</label><input data-prop="y2" type="number" value="${object.y2}"></div></div><div class="row"><div class="field"><label>Barva</label><select data-prop="color"><option value="black" ${object.color === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.color === "red" ? "selected" : ""}>Cervena</option></select></div><div class="field"><label>Sila</label><input data-prop="strokeWidth" type="number" value="${object.strokeWidth || 2}"></div></div>`;
     if (object.type === "barcode" || object.type === "qr") return `${common}<div class="field"><label>${object.type === "qr" ? "QR data" : "EAN data"}</label><input data-prop="text" value="${this._escape(object.text)}"></div>`;
@@ -567,6 +624,16 @@ class DratekEinkPanel extends HTMLElement {
       else if (["x", "y", "x2", "y2", "w", "h", "rotation", "fontSize", "strokeWidth"].includes(key)) object[key] = Number(input.value);
       else object[key] = input.value;
     });
+    if (object.type === "text") {
+      if (object.variable) {
+        object.variableName = this._uniqueVariableName(object.variableName || object.text || "variable", object.id);
+        if (this._variables[object.variableName] === undefined) this._variables[object.variableName] = object.text || "";
+      } else if (object.variableName) {
+        delete this._variables[object.variableName];
+        object.variableName = "";
+      }
+      this._render();
+    }
     this._paint();
   }
 
@@ -616,9 +683,14 @@ class DratekEinkPanel extends HTMLElement {
 
   _drawText(ctx, object, box) {
     ctx.fillStyle = this._color(object.color);
-    ctx.font = `${object.fontSize || 24}px Arial, sans-serif`;
+    const family = object.fontFamily || "Arial";
+    const weight = object.bold ? "700 " : "";
+    ctx.font = `${weight}${object.fontSize || 24}px ${family}, sans-serif`;
     ctx.textBaseline = "top";
-    String(object.text || "").split("\n").forEach((line, index) => ctx.fillText(line, 0, index * (object.fontSize || 24) * 1.18, box.w));
+    const value = object.variable && object.variableName
+      ? (this._variables[object.variableName] ?? object.text ?? "")
+      : (object.text || "");
+    String(value).split("\n").forEach((line, index) => ctx.fillText(line, 0, index * (object.fontSize || 24) * 1.18, box.w));
   }
 
   _drawRect(ctx, object, box) {
@@ -894,6 +966,12 @@ class DratekEinkPanel extends HTMLElement {
     const cls = this._sendResult.ok ? "good" : "bad";
     const text = this._sendResult.ok ? "Odeslano do displeje." : `Odeslani selhalo: ${this._sendResult.error || "neznama chyba"}`;
     return `<div class="send-result"><span class="pill ${cls}">${this._escape(text)}</span>${(this._sendResult.log || []).length ? `<pre>${this._escape(this._sendResult.log.join("\n"))}</pre>` : ""}</div>`;
+  }
+
+  _renderVariables() {
+    const variables = this._variableDefs();
+    if (!variables.length) return "";
+    return `<div class="card" style="margin-bottom:12px"><h2>Promenne navrhu</h2><table class="variable-table"><thead><tr><th>Nazev</th><th>Default</th><th>Hodnota pro odeslani</th></tr></thead><tbody>${variables.map((variable) => `<tr><td><strong>${this._escape(variable.name)}</strong></td><td>${this._escape(variable.defaultValue)}</td><td><input data-variable="${this._escape(variable.name)}" value="${this._escape(variable.value)}"></td></tr>`).join("")}</tbody></table></div>`;
   }
 
   _renderBleDevices(devices) {
