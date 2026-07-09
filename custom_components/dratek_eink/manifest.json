@@ -3,7 +3,7 @@
   "name": "DRATEK eInk",
   "codeowners": [],
   "config_flow": true,
-  "dependencies": ["bluetooth"],
+  "dependencies": ["bluetooth", "frontend", "http", "panel_custom"],
   "documentation": "https://github.com/dratek-cz/dratek-eink-homeassistant",
   "issue_tracker": "https://github.com/dratek-cz/dratek-eink-homeassistant/issues",
   "iot_class": "local_push",
@@ -14,5 +14,5 @@
     }
   ],
   "requirements": ["bleak>=0.21.1", "Pillow>=10.0.0"],
-  "version": "0.0.3"
+  "version": "0.0.4"
 }
