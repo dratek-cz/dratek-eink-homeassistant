@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import base64
+import io
 from typing import Any
 
 from homeassistant.components import bluetooth, websocket_api
 from homeassistant.core import HomeAssistant, callback
+from PIL import Image
 
 from .discovery import parse_picksmart_advertisement
 from .render import render_text_image
@@ -14,6 +17,7 @@ from .transfer import DratekTransfer
 def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_scan)
     websocket_api.async_register_command(hass, websocket_send_text)
+    websocket_api.async_register_command(hass, websocket_send_design)
 
 
 @websocket_api.websocket_command({"type": "dratek_eink/scan"})
@@ -103,6 +107,60 @@ async def websocket_scan(
             "devices": devices,
             "ble_devices": ble_devices,
             "debug": debug,
+        },
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/send_design",
+        "address": str,
+        "sdk_type": int,
+        "image": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_send_design(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    address = msg["address"]
+    sdk_type = msg["sdk_type"]
+    image_data = msg["image"]
+    log_lines: list[str] = []
+
+    def log(message: str) -> None:
+        log_lines.append(message)
+
+    try:
+        if "," in image_data:
+            image_data = image_data.split(",", 1)[1]
+        raw = base64.b64decode(image_data)
+        image = Image.open(io.BytesIO(raw)).convert("RGB")
+        log(f"Sending editor design {image.width}x{image.height} to SDK type {sdk_type}.")
+        transfer = DratekTransfer(log=log)
+        await transfer.send_image(address, sdk_type, image)
+    except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
+        log(f"Send failed: {exc}")
+        connection.send_result(
+            msg["id"],
+            {
+                "ok": False,
+                "address": address,
+                "error": str(exc),
+                "log": log_lines,
+            },
+        )
+        return
+
+    log("Design sent.")
+    connection.send_result(
+        msg["id"],
+        {
+            "ok": True,
+            "address": address,
+            "log": log_lines,
         },
     )
 
