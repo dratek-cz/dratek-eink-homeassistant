@@ -14,5 +14,5 @@
     }
   ],
   "requirements": ["bleak>=0.21.1", "Pillow>=10.0.0"],
-  "version": "0.0.8"
+  "version": "0.0.9"
 }
