@@ -1,0 +1,26 @@
+{
+  "title": "DRATEK eInk",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Vyhledat DRATEK eInk displeje",
+        "description": "Klikni na Odeslat a Home Assistant zkusí vyhledat dostupné DRATEK eInk displeje přes Bluetooth LE."
+      },
+      "pick_device": {
+        "title": "Vyber DRATEK eInk displej",
+        "description": "Nalezeno {device_count} DRATEK eInk displejů. Bluetooth scannerů: {scanner_count}. Všech BLE zařízení v dosahu: {generic_ble_count}.",
+        "data": {
+          "address": "Dostupné displeje"
+        }
+      }
+    },
+    "error": {
+      "no_bluetooth_adapter": "Home Assistant nenašel žádný aktivní Bluetooth adaptér ani Bluetooth proxy. Zapni Bluetooth integraci nebo přidej Bluetooth proxy.",
+      "no_devices_found": "Bluetooth funguje, ale nebyl nalezen žádný DRATEK eInk displej. Scannerů: {scanner_count}. Všech BLE zařízení v dosahu: {generic_ble_count}.",
+      "unsupported_display_type": "Displej byl nalezen, ale jeho SDK typ {sdk_type} zatím není podporovaný."
+    },
+    "abort": {
+      "already_configured": "Tento DRATEK eInk displej už je v Home Assistantu přidaný."
+    }
+  }
+}
