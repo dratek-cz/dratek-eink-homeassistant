@@ -368,12 +368,24 @@ class DratekEinkPanel extends HTMLElement {
 
   _handleAt(point, object) {
     const box = this._box(object);
-    return this._handles(box).find((handle) => Math.abs(point.x - handle.x) <= 8 / this._zoom && Math.abs(point.y - handle.y) <= 8 / this._zoom);
+    const radius = Math.max(8, 16 / this._zoom);
+    return this._handles(box).find((handle) => Math.abs(point.x - handle.x) <= radius && Math.abs(point.y - handle.y) <= radius);
+  }
+
+  _handleHitTest(point) {
+    const selected = this._objects.filter((object) => this._selectedIds.includes(object.id)).reverse();
+    const others = [...this._objects].reverse().filter((object) => !this._selectedIds.includes(object.id));
+    for (const object of [...selected, ...others]) {
+      const handle = this._handleAt(point, object);
+      if (handle) return { object, handle };
+    }
+    return null;
   }
 
   _onPointerDown(event) {
     const point = this._canvasPoint(event);
-    const object = this._hitTest(point);
+    const handleHit = this._handleHitTest(point);
+    const object = handleHit ? handleHit.object : this._hitTest(point);
     if (!object) {
       this._selectedIds = [];
       this._drag = null;
@@ -388,7 +400,7 @@ class DratekEinkPanel extends HTMLElement {
     } else if (!this._selectedIds.includes(object.id)) {
       this._selectedIds = [object.id];
     }
-    const handle = this._handleAt(point, object);
+    const handle = handleHit && handleHit.object.id === object.id ? handleHit.handle : this._handleAt(point, object);
     this._drag = {
       mode: handle ? "resize" : "move",
       handle: handle ? handle.name : "",
@@ -401,7 +413,10 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _onPointerMove(event) {
-    if (!this._drag) return;
+    if (!this._drag) {
+      this._updateCursor(event);
+      return;
+    }
     const point = this._canvasPoint(event);
     const dx = point.x - this._drag.start.x;
     const dy = point.y - this._drag.start.y;
@@ -425,6 +440,17 @@ class DratekEinkPanel extends HTMLElement {
 
   _onPointerUp() {
     this._drag = null;
+  }
+
+  _updateCursor(event) {
+    const canvas = this.shadowRoot.querySelector("#editor");
+    if (!canvas) return;
+    const hit = this._handleHitTest(this._canvasPoint(event));
+    if (!hit) {
+      canvas.style.cursor = this._hitTest(this._canvasPoint(event)) ? "move" : "default";
+      return;
+    }
+    canvas.style.cursor = hit.handle.name === "top-left" || hit.handle.name === "bottom-right" ? "nwse-resize" : "nesw-resize";
   }
 
   _resizeObject(object, snapshot, dx, dy, handle) {
@@ -454,8 +480,16 @@ class DratekEinkPanel extends HTMLElement {
     }
     if (object.keepRatio || object.type === "image" || object.type === "qr") {
       const ratio = snapshot.w / Math.max(1, snapshot.h);
-      if (Math.abs(dx) > Math.abs(dy)) h = w / ratio;
+      const anchorX = handle.includes("left") ? snapshot.x + snapshot.w : snapshot.x;
+      const anchorY = handle.includes("top") ? snapshot.y + snapshot.h : snapshot.y;
+      const rawMovingX = handle.includes("left") ? snapshot.x + dx : snapshot.x + snapshot.w + dx;
+      const rawMovingY = handle.includes("top") ? snapshot.y + dy : snapshot.y + snapshot.h + dy;
+      w = Math.max(8, Math.abs(rawMovingX - anchorX));
+      h = Math.max(8, Math.abs(rawMovingY - anchorY));
+      if (Math.abs(dx / Math.max(1, snapshot.w)) > Math.abs(dy / Math.max(1, snapshot.h))) h = w / ratio;
       else w = h * ratio;
+      x = handle.includes("left") ? anchorX - w : anchorX;
+      y = handle.includes("top") ? anchorY - h : anchorY;
     }
     object.x = this._snapValue(x);
     object.y = this._snapValue(y);
@@ -875,8 +909,10 @@ class DratekEinkPanel extends HTMLElement {
       ctx.strokeRect(box.x, box.y, box.w, box.h);
       ctx.setLineDash([]);
       for (const handle of this._handles(box)) {
-        ctx.fillRect(handle.x - 4, handle.y - 4, 8, 8);
-        ctx.strokeRect(handle.x - 4, handle.y - 4, 8, 8);
+        const size = Math.max(8, 12 / this._zoom);
+        const half = size / 2;
+        ctx.fillRect(handle.x - half, handle.y - half, size, size);
+        ctx.strokeRect(handle.x - half, handle.y - half, size, size);
       }
     }
     ctx.restore();
