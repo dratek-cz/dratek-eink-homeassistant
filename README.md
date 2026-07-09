@@ -74,8 +74,9 @@ Panel obsahuje první verzi grafického editoru:
 - obdélníky s výplní a rámečkem
 - čáry
 - obrázky z počítače
-- EAN objekt pro návrh etikety
-- QR objekt pro návrh etikety
+- EAN objekt
+- QR objekt
+- ikonová paleta nástrojů
 - výběr objektu kliknutím
 - posouvání objektů myší
 - změna velikosti tažením rohů
@@ -90,7 +91,7 @@ Panel obsahuje první verzi grafického editoru:
 
 Projekty se ukládají interně do Home Assistant storage. Nestahují se jako soubory do počítače.
 
-Poznámka: EAN a QR objekty jsou v této verzi určené hlavně pro návrh layoutu. Skutečně validní čárový kód/QR encoder bude doplněn v některé z dalších verzí.
+QR objekt používá vestavěný QR encoder pro běžné krátké texty a URL. EAN objekt odděluje čárový kód od čísla pod ním, aby text nezasahoval do čar.
 
 ## Debug Bluetoothu
 
@@ -105,6 +106,7 @@ Panel zobrazuje i obecná BLE zařízení, která Home Assistant zachytil. Díky
 Zatím jsou připraveny tyto typy:
 
 - `75`: EPA LCD 400x300 BWR
+- `296`: PE29R_V4_BLE 296x128 BWR
 - `267`: EPA LCD 250x122 BWR
 
 ## Poznámky k dosahu
