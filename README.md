@@ -71,6 +71,9 @@ Panel obsahuje první verzi grafického editoru:
 - výběr nalezeného displeje
 - pracovní plocha podle rozlišení displeje
 - textové objekty
+- proměnné textové objekty
+- hodnoty proměnných přímo v Home Assistant panelu
+- výběr fontu a bold pro text
 - obdélníky s výplní a rámečkem
 - čáry
 - obrázky z počítače
@@ -90,6 +93,14 @@ Panel obsahuje první verzi grafického editoru:
 - odeslání celého návrhu do vybraného displeje
 
 Projekty se ukládají interně do Home Assistant storage. Nestahují se jako soubory do počítače.
+
+## Proměnné v návrhu
+
+Textový objekt může být označený jako proměnný. Každá proměnná má vlastní název a editor hlídá, aby se názvy v jednom návrhu neopakovaly.
+
+V panelu `Proměnné návrhu` je možné zadat aktuální hodnoty proměnných. Náhled se po změně hodnoty překreslí hned a při odeslání návrhu do displeje se použije hodnota proměnné místo defaultního textu.
+
+Aktuální verze odesílá do displeje celý návrh. Částečné překreslení pouze změněné části displeje bude doplněno až po ověření příslušného BLE příkazu pro partial update.
 
 QR objekt používá vestavěný QR encoder pro běžné krátké texty a URL. EAN objekt odděluje čárový kód od čísla pod ním, aby text nezasahoval do čar.
 
