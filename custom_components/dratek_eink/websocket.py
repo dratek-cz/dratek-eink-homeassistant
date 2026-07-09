@@ -6,11 +6,14 @@ from homeassistant.components import bluetooth, websocket_api
 from homeassistant.core import HomeAssistant, callback
 
 from .discovery import parse_picksmart_advertisement
+from .render import render_text_image
+from .transfer import DratekTransfer
 
 
 @callback
 def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_scan)
+    websocket_api.async_register_command(hass, websocket_send_text)
 
 
 @websocket_api.websocket_command({"type": "dratek_eink/scan"})
@@ -100,5 +103,58 @@ async def websocket_scan(
             "devices": devices,
             "ble_devices": ble_devices,
             "debug": debug,
+        },
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/send_text",
+        "address": str,
+        "sdk_type": int,
+        "text": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_send_text(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    address = msg["address"]
+    sdk_type = msg["sdk_type"]
+    text = msg["text"]
+    log_lines: list[str] = []
+
+    def log(message: str) -> None:
+        log_lines.append(message)
+
+    try:
+        log(f"Rendering text '{text}' for SDK type {sdk_type}.")
+        image = await hass.async_add_executor_job(render_text_image, sdk_type, text, None, "black")
+        transfer = DratekTransfer(log=log)
+        await transfer.send_image(address, sdk_type, image)
+    except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
+        log(f"Send failed: {exc}")
+        connection.send_result(
+            msg["id"],
+            {
+                "ok": False,
+                "address": address,
+                "text": text,
+                "error": str(exc),
+                "log": log_lines,
+            },
+        )
+        return
+
+    log("Text sent.")
+    connection.send_result(
+        msg["id"],
+        {
+            "ok": True,
+            "address": address,
+            "text": text,
+            "log": log_lines,
         },
     )
