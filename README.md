@@ -1,28 +1,28 @@
 # DRATEK eInk pro Home Assistant
 
-Minimalni experimentalni integrace pro Home Assistant, ktera umi poslat text na BLE eInk cenovky DRATEK/Picksmart.
+Minimální experimentální integrace pro Home Assistant, která umí poslat text na BLE eInk cenovky DRATEK/Picksmart.
 
-Projekt je zatim prvni proof of concept. Cilem je pozdeji pridat automaticke vyhledavani displeju, sablony a editor grafiky primo pro Home Assistant.
+Projekt je zatím první proof of concept. Cílem je později přidat automatické vyhledávání displejů, šablony a editor grafiky přímo pro Home Assistant.
 
-## Instalace pres HACS
+## Instalace přes HACS
 
-1. V Home Assistantu otevri `HACS`.
-2. Vpravo nahore otevri menu se tremi teckami.
+1. V Home Assistantu otevři `HACS`.
+2. Vpravo nahoře otevři menu se třemi tečkami.
 3. Zvol `Custom repositories`.
-4. Do pole `Repository` vloz:
+4. Do pole `Repository` vlož:
 
 ```text
 https://github.com/dratek-cz/dratek-eink-homeassistant
 ```
 
 5. Jako kategorii vyber `Integration`.
-6. Potvrd pridani repozitare.
+6. Potvrď přidání repozitáře.
 7. V HACS najdi `DRATEK eInk` a nainstaluj integraci.
 8. Restartuj Home Assistant.
 
-## Rucni instalace
+## Ruční instalace
 
-Pokud nechces pouzit HACS, zkopiruj slozku:
+Pokud nechceš použít HACS, zkopíruj složku:
 
 ```text
 custom_components/dratek_eink
@@ -36,19 +36,19 @@ config/custom_components/dratek_eink
 
 Potom restartuj Home Assistant.
 
-## Zapnuti integrace
+## Zapnutí integrace
 
-Do `configuration.yaml` pridej:
+Do `configuration.yaml` přidej:
 
 ```yaml
 dratek_eink:
 ```
 
-Po ulozeni restartuj Home Assistant.
+Po uložení restartuj Home Assistant.
 
 ## Prvni test
 
-V Home Assistantu otevri `Developer Tools` -> `Services` a zavolej sluzbu:
+V Home Assistantu otevři `Developer Tools` -> `Services` a zavolej službu:
 
 ```yaml
 service: dratek_eink.send_text
@@ -62,17 +62,17 @@ Parametry:
 
 - `address`: BLE adresa cenovky.
 - `sdk_type`: typ displeje podle SDK.
-- `text`: text, ktery se ma zobrazit.
+- `text`: text, který se má zobrazit.
 
-## Podporovane typy displeju
+## Podporované typy displejů
 
-Zatim jsou pripraveny tyto typy:
+Zatím jsou připraveny tyto typy:
 
 - `75`: EPA LCD 400x300 BWR
 - `267`: EPA LCD 250x122 BWR
 
-## Poznamky
+## Poznámky
 
-- Home Assistant musi bezet na zarizeni, ktere ma Bluetooth LE dosah k cenovce.
-- Pokud Home Assistant bezi mimo dosah, bude pozdeji potreba resit Bluetooth proxy nebo sitovy gateway.
-- Integrace je zatim experimentalni a slouzi hlavne pro overeni komunikace s displejem.
+- Home Assistant musí běžet na zařízení, které má Bluetooth LE dosah k cenovce.
+- Pokud Home Assistant běží mimo dosah, bude později potřeba řešit Bluetooth proxy nebo síťový gateway.
+- Integrace je zatím experimentální a slouží hlavně pro ověření komunikace s displejem.
