@@ -1,3 +1,5 @@
+import qrcode from "./qrcode-generator.js";
+
 class DratekEinkPanel extends HTMLElement {
   constructor() {
     super();
@@ -19,7 +21,6 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedProjectId = "";
     this._projectName = "Novy navrh";
     this._variables = {};
-    this._variables = {};
   }
 
   set hass(hass) {
@@ -39,9 +40,11 @@ class DratekEinkPanel extends HTMLElement {
     this._render();
     try {
       this._result = await this._hass.callWS({ type: "dratek_eink/scan" });
-      if (!this._selectedDeviceAddress && this._result.devices.length) {
-        this._selectedDeviceAddress = this._result.devices[0].address;
-        this._fitZoom();
+      if (this._result.devices.length) {
+        const found = this._result.devices.some((device) => device.address === this._selectedDeviceAddress);
+        if (!this._selectedDeviceAddress || !found) {
+          this._selectDevice(this._result.devices[0].address, { scaleDesign: false, render: false });
+        }
       }
     } catch (err) {
       this._error = this._message(err);
@@ -81,6 +84,45 @@ class DratekEinkPanel extends HTMLElement {
   _fitZoom() {
     const size = this._displaySize();
     this._zoom = Math.min(2.4, Math.max(0.55, Math.min(820 / size.width, 460 / size.height)));
+  }
+
+  _selectDevice(address, options = {}) {
+    const { scaleDesign = true, render = true } = options;
+    const before = this._displaySize();
+    this._selectedDeviceAddress = address;
+    const after = this._displaySize();
+    if (scaleDesign && (before.width !== after.width || before.height !== after.height)) {
+      this._scaleDesign(before, after);
+      this._selectedProjectId = "";
+      this._sendResult = {
+        ok: true,
+        log: [`Pracovni plocha zmenena z ${before.width}x${before.height} na ${after.width}x${after.height}. Navrh byl prepocitan na novy displej.`],
+      };
+    }
+    this._fitZoom();
+    if (render) {
+      this._render();
+      this._paint();
+    }
+  }
+
+  _scaleDesign(before, after) {
+    if (!before.width || !before.height) return;
+    const sx = after.width / before.width;
+    const sy = after.height / before.height;
+    const textScale = Math.max(0.5, Math.min(2, (sx + sy) / 2));
+    this._objects = this._objects.map((object) => {
+      const next = { ...object };
+      for (const key of ["x", "w", "x2"]) if (Number.isFinite(Number(next[key]))) next[key] = Math.max(0, Math.round(Number(next[key]) * sx));
+      for (const key of ["y", "h", "y2"]) if (Number.isFinite(Number(next[key]))) next[key] = Math.max(0, Math.round(Number(next[key]) * sy));
+      if (Number.isFinite(Number(next.fontSize))) next.fontSize = Math.max(6, Math.round(Number(next.fontSize) * textScale));
+      if (next.type === "qr") {
+        const side = Math.max(12, Math.min(next.w || 12, next.h || 12));
+        next.w = side;
+        next.h = side;
+      }
+      return next;
+    });
   }
 
   _status() {
@@ -481,6 +523,16 @@ class DratekEinkPanel extends HTMLElement {
     const device = this._device();
     if (!device || this._sending) return;
     const canvas = this._renderExportCanvas();
+    const size = this._displaySize(device);
+    if (canvas.width !== size.width || canvas.height !== size.height) {
+      this._sendResult = {
+        ok: false,
+        error: `Rozmer navrhu ${canvas.width}x${canvas.height} nesedi s vybranym displejem ${size.width}x${size.height}. Prepnul jsem pracovni plochu, zkuste odeslat znovu.`,
+        log: [],
+      };
+      this._selectDevice(device.address);
+      return;
+    }
     this._sending = true;
     this._sendResult = null;
     this._render();
@@ -526,34 +578,36 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>
         :host{display:block;min-height:100%;color:var(--primary-text-color);background:var(--primary-background-color);font-family:Roboto,Arial,sans-serif}
-        .page{max-width:1480px;margin:0 auto;padding:18px}
+        .page{max-width:1520px;margin:0 auto;padding:18px}
         .topbar,.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.topbar{justify-content:space-between;margin-bottom:12px}
-        .brand{display:flex;align-items:center;gap:12px}.logo{width:42px;height:42px;border-radius:8px;display:grid;place-items:center;background:var(--primary-color);color:#fff;font-weight:800}
-        h1{margin:0;font-size:24px;font-weight:700}h2{margin:0 0 12px;font-size:15px}.subtitle{color:var(--secondary-text-color);font-size:13px}
-        button,select,input{font:inherit}button{border:0;border-radius:6px;background:var(--primary-color);color:var(--text-primary-color,#fff);padding:9px 12px;font-weight:650;cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}
-        .secondary{background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color)}.danger{background:#b3261e;color:#fff}
-        .card{background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;padding:14px;box-sizing:border-box}.metric{color:var(--secondary-text-color);font-size:12px;margin-bottom:5px}.value{font-size:24px;font-weight:800}
+        .brand{display:flex;align-items:center;gap:12px}.logo{width:42px;height:42px;border-radius:8px;display:grid;place-items:center;background:linear-gradient(135deg,#0f766e,#2563eb);color:#fff;font-weight:900;letter-spacing:.5px}
+        h1{margin:0;font-size:24px;font-weight:800}h2{margin:0 0 12px;font-size:13px;text-transform:uppercase;color:var(--secondary-text-color);letter-spacing:.08em}.subtitle{color:var(--secondary-text-color);font-size:13px}
+        button,select,input{font:inherit}button{border:0;border-radius:7px;background:var(--primary-color);color:var(--text-primary-color,#fff);padding:9px 12px;font-weight:750;cursor:pointer;box-shadow:0 1px 0 rgba(0,0,0,.08)}button:hover:not(:disabled){filter:brightness(1.03)}button:disabled{opacity:.5;cursor:not-allowed}
+        .primary-action{display:inline-flex;align-items:center;gap:8px}.primary-action .mini-ico{font-size:16px}
+        .secondary{background:var(--card-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color)}.danger{background:#b3261e;color:#fff}
+        .card{background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;padding:14px;box-sizing:border-box;box-shadow:0 8px 28px rgba(0,0,0,.06)}.metric{color:var(--secondary-text-color);font-size:12px;margin-bottom:5px}.value{font-size:24px;font-weight:850}
         .pill{display:inline-flex;min-height:26px;align-items:center;border-radius:999px;padding:0 10px;font-size:12px;font-weight:800}.good{background:#d7f5df;color:#0b6b2a}.warn{background:#fff2c7;color:#775500}.bad{background:#ffd9d4;color:#9d1c0f}.muted{background:var(--secondary-background-color);color:var(--secondary-text-color)}
         .status-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:12px}.projectbar{display:grid;grid-template-columns:minmax(180px,280px) minmax(180px,320px) auto;gap:8px;align-items:center;margin-bottom:12px}
-        .editor-shell{display:grid;grid-template-columns:250px minmax(0,1fr) 320px;gap:12px;align-items:start}.left,.right{position:sticky;top:12px}.tool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.tool-icon{min-height:70px;display:grid;grid-template-rows:28px auto;place-items:center;text-align:center;padding:10px 6px}.tool-icon .ico{font-size:24px;line-height:1}.tool-icon .txt{font-size:12px}.action-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:18px;display:grid;place-items:center}.wide-action{grid-column:span 3;font-size:13px}
-        .workspace{min-height:500px;overflow:auto;display:grid;place-items:center;background:linear-gradient(45deg,var(--secondary-background-color) 25%,transparent 25%),linear-gradient(-45deg,var(--secondary-background-color) 25%,transparent 25%);background-size:18px 18px;border-radius:8px;border:1px solid var(--divider-color);padding:24px}
-        canvas{background:#fff;box-shadow:0 14px 36px rgba(0,0,0,.2);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:700}.field input,.field select,.projectbar input,.projectbar select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+        .editor-shell{display:grid;grid-template-columns:270px minmax(0,1fr) 340px;gap:12px;align-items:start}.left,.right{position:sticky;top:12px}.tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.tool-icon{min-height:78px;display:grid;grid-template-rows:34px auto;place-items:center;text-align:center;padding:10px 6px;border:1px solid var(--divider-color);background:linear-gradient(180deg,var(--card-background-color),var(--secondary-background-color));color:var(--primary-text-color)}.tool-icon .ico{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;background:rgba(37,99,235,.11);color:#2563eb;font-size:19px;font-weight:900}.tool-icon .txt{font-size:11px;font-weight:800;color:var(--secondary-text-color);text-transform:uppercase}.tool-icon:hover:not(:disabled){border-color:var(--primary-color)}
+        .action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:16px;display:grid;place-items:center}.wide-action{grid-column:span 4;font-size:13px}.panel-divider{height:1px;background:var(--divider-color);margin:14px 0}.properties-panel{max-height:calc(100vh - 120px);overflow:auto}
+        .workspace{min-height:560px;overflow:auto;display:grid;place-items:center;background:linear-gradient(45deg,rgba(127,127,127,.08) 25%,transparent 25%),linear-gradient(-45deg,rgba(127,127,127,.08) 25%,transparent 25%);background-size:18px 18px;border-radius:8px;border:1px solid var(--divider-color);padding:28px}
+        canvas{background:#fff;box-shadow:0 18px 46px rgba(0,0,0,.22);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:750}.field input,.field select,.projectbar input,.projectbar select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
         table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:var(--secondary-background-color);border-radius:8px;padding:10px;font-size:12px;line-height:1.45}.send-result{margin-top:10px}.variable-table input{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:7px}
         @media(max-width:1100px){.editor-shell,.status-grid,.projectbar{grid-template-columns:1fr}.left,.right{position:static}}
       </style>
       <div class="page">
         <div class="topbar">
           <div class="brand"><div class="logo">DE</div><div><h1>DRATEK eInk</h1><div class="subtitle">Profesionalni editor a Bluetooth diagnostika</div></div></div>
-          <div class="toolbar"><button id="scan" class="secondary" ${this._loading ? "disabled" : ""}>${this._loading ? "Vyhledavam..." : "Vyhledat zarizeni"}</button><button id="sendDesign" ${!device || this._sending ? "disabled" : ""}>${this._sending ? "Odesilam..." : "Odeslat navrh"}</button></div>
+          <div class="toolbar"><button id="scan" class="secondary" ${this._loading ? "disabled" : ""}>${this._loading ? "Vyhledavam..." : "Vyhledat zarizeni"}</button><button id="sendDesign" class="primary-action" ${!device || this._sending ? "disabled" : ""}><span class="mini-ico">&#8593;</span>${this._sending ? "Odesilam..." : "Odeslat navrh"}</button></div>
         </div>
         <div class="status-grid"><div class="card"><div class="metric">Stav</div><span class="pill ${status.cls}">${this._escape(status.text)}</span></div><div class="card"><div class="metric">Bluetooth adaptery / proxy</div><div class="value">${result.scanner_count}</div></div><div class="card"><div class="metric">BLE zarizeni v dosahu</div><div class="value">${result.ble_count}</div></div></div>
         <div class="card projectbar"><input id="projectName" value="${this._escape(this._projectName)}" placeholder="Nazev navrhu"><select id="projectSelect"><option value="">Novy / neulozeny navrh</option>${this._projects.map((project) => `<option value="${this._escape(project.id)}" ${project.id === this._selectedProjectId ? "selected" : ""}>${this._escape(project.name)} (${project.width}x${project.height})</option>`).join("")}</select><div class="toolbar"><button id="newProject" class="secondary">Novy</button><button id="saveProject">Ulozit do HA</button><button id="loadProject" class="secondary" ${this._selectedProjectId ? "" : "disabled"}>Nacist</button><button id="deleteProject" class="danger" ${this._selectedProjectId ? "" : "disabled"}>Smazat</button></div></div>
         <div class="card" style="margin-bottom:12px"><div class="toolbar"><label>Displej</label><select id="deviceSelect">${result.devices.map((item) => `<option value="${this._escape(item.address)}" ${item.address === (device && device.address) ? "selected" : ""}>${this._escape(item.physical_code)} - ${this._escape(item.model)} - RSSI ${this._escape(item.rssi)}</option>`).join("")}</select><span class="pill muted">${size.width} x ${size.height}</span><button id="sendTest" class="secondary" ${!device ? "disabled" : ""}>Odeslat dratek.cz</button><label><input id="realPreview" type="checkbox" ${this._realPreview ? "checked" : ""}> Real eInk colors</label></div>${this._renderSendResult()}</div>
         ${this._renderVariables()}
         <div class="editor-shell">
-          <div class="card left"><h2>Nastroje</h2><div class="tool-grid"><button class="tool-icon" data-add="text" title="Text"><span class="ico">T</span><span class="txt">Text</span></button><button class="tool-icon" data-add="rect" title="Rectangle"><span class="ico">▭</span><span class="txt">Rect</span></button><button class="tool-icon" data-add="line" title="Cara"><span class="ico">╱</span><span class="txt">Cara</span></button><button class="tool-icon" data-add="barcode" title="EAN"><span class="ico">▥</span><span class="txt">EAN</span></button><button class="tool-icon" data-add="qr" title="QR"><span class="ico">▦</span><span class="txt">QR</span></button><button id="addImage" class="tool-icon secondary" title="Obrazek"><span class="ico">▧</span><span class="txt">Image</span></button><input id="imageFile" type="file" accept="image/*" hidden></div><h2 style="margin-top:18px">Upravy</h2><div class="action-grid"><button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${this._selectedIds.length ? "" : "disabled"}>⧉</button><button id="rotateSelected" class="icon-btn secondary" title="Otocit 90" ${this._selectedIds.length ? "" : "disabled"}>↻</button><button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${this._selectedIds.length ? "" : "disabled"}>⇋</button><button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${this._selectedIds.length ? "" : "disabled"}>⫷</button><button id="alignCenter" class="icon-btn secondary" title="Zarovnat na stred" ${this._selectedIds.length ? "" : "disabled"}>↔</button><button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${this._selectedIds.length ? "" : "disabled"}>⫶</button><button id="alignMiddle" class="icon-btn secondary" title="Svisly stred" ${this._selectedIds.length ? "" : "disabled"}>↕</button><button id="layerFront" class="icon-btn secondary" title="Do popredi" ${this._selectedIds.length ? "" : "disabled"}>⬆</button><button id="layerBack" class="icon-btn secondary" title="Do pozadi" ${this._selectedIds.length ? "" : "disabled"}>⬇</button><button id="deleteSelected" class="wide-action danger" ${this._selectedIds.length ? "" : "disabled"}>Smazat vybrane</button><button id="clearDesign" class="wide-action danger">Smazat vse</button></div><h2 style="margin-top:18px">Zobrazeni</h2><div class="action-grid"><button id="zoomIn" class="icon-btn secondary" title="Priblizit">＋</button><button id="zoomOut" class="icon-btn secondary" title="Oddalit">－</button><button id="zoomFit" class="icon-btn secondary" title="Prizpusobit">□</button><label class="wide-action"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}> Grid snap 5 px</label></div></div>
+          <div class="card left"><h2>Nastroje</h2><div class="tool-grid"><button class="tool-icon" data-add="text" title="Text"><span class="ico">T</span><span class="txt">Text</span></button><button class="tool-icon" data-add="rect" title="Rectangle"><span class="ico">&#9633;</span><span class="txt">Rect</span></button><button class="tool-icon" data-add="line" title="Cara"><span class="ico">&#9585;</span><span class="txt">Cara</span></button><button class="tool-icon" data-add="barcode" title="EAN"><span class="ico">&#9776;</span><span class="txt">EAN</span></button><button class="tool-icon" data-add="qr" title="QR"><span class="ico">&#9638;</span><span class="txt">QR</span></button><button id="addImage" class="tool-icon secondary" title="Obrazek"><span class="ico">&#9729;</span><span class="txt">Image</span></button><input id="imageFile" type="file" accept="image/*" hidden></div><div class="panel-divider"></div><h2>Upravy</h2><div class="action-grid"><button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${this._selectedIds.length ? "" : "disabled"}>&#10697;</button><button id="rotateSelected" class="icon-btn secondary" title="Otocit 90" ${this._selectedIds.length ? "" : "disabled"}>&#8635;</button><button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${this._selectedIds.length ? "" : "disabled"}>&#8644;</button><button id="layerFront" class="icon-btn secondary" title="Do popredi" ${this._selectedIds.length ? "" : "disabled"}>&#8679;</button><button id="layerBack" class="icon-btn secondary" title="Do pozadi" ${this._selectedIds.length ? "" : "disabled"}>&#8681;</button><button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${this._selectedIds.length ? "" : "disabled"}>&#8676;</button><button id="alignCenter" class="icon-btn secondary" title="Zarovnat na stred" ${this._selectedIds.length ? "" : "disabled"}>&#8596;</button><button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${this._selectedIds.length ? "" : "disabled"}>&#8673;</button><button id="alignMiddle" class="icon-btn secondary" title="Svisly stred" ${this._selectedIds.length ? "" : "disabled"}>&#8597;</button><button id="deleteSelected" class="wide-action danger" ${this._selectedIds.length ? "" : "disabled"}>Smazat vybrane</button><button id="clearDesign" class="wide-action danger">Smazat vse</button></div><div class="panel-divider"></div><h2>Zobrazeni</h2><div class="action-grid"><button id="zoomIn" class="icon-btn secondary" title="Priblizit">+</button><button id="zoomOut" class="icon-btn secondary" title="Oddalit">-</button><button id="zoomFit" class="icon-btn secondary" title="Prizpusobit">&#9633;</button><label class="wide-action"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}> Grid snap 5 px</label></div></div>
           <div class="workspace"><canvas id="editor" width="${size.width}" height="${size.height}" style="width:${Math.round(size.width * this._zoom)}px;height:${Math.round(size.height * this._zoom)}px"></canvas></div>
-          <div class="card right"><h2>Object properties</h2>${this._renderProperties(object)}</div>
+          <div class="card right properties-panel"><h2>Vlastnosti objektu</h2>${this._renderProperties(object)}</div>
         </div>
         <div class="card" style="margin-top:12px"><h2>Debug</h2><pre>${this._escape((result.debug || []).join("\n"))}</pre><details><summary>Vsechna BLE zarizeni (${result.ble_devices.length})</summary>${this._renderBleDevices(result.ble_devices)}</details></div>
       </div>`;
@@ -590,7 +644,7 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#snap").addEventListener("change", (event) => { this._snap = event.target.checked; });
     this.shadowRoot.querySelector("#realPreview").addEventListener("change", (event) => { this._realPreview = event.target.checked; this._paint(); });
     this.shadowRoot.querySelector("#sendTest").addEventListener("click", () => this._sendTestText());
-    this.shadowRoot.querySelector("#deviceSelect").addEventListener("change", (event) => { this._selectedDeviceAddress = event.target.value; this._fitZoom(); this._render(); });
+    this.shadowRoot.querySelector("#deviceSelect").addEventListener("change", (event) => this._selectDevice(event.target.value));
     this.shadowRoot.querySelectorAll("[data-variable]").forEach((input) => input.addEventListener("input", () => {
       this._variables[input.dataset.variable] = input.value;
       this._paint();
@@ -715,170 +769,72 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _drawBarcode(ctx, object, box) {
-    const text = String(object.text || "8591234567890").replace(/\D/g, "") || "0";
-    const labelHeight = Math.min(18, Math.max(12, Math.floor(box.h * 0.24)));
-    const barHeight = Math.max(8, box.h - labelHeight - 3);
+    const text = this._normalizeEan13(object.text || "8591234567890");
+    const pattern = this._ean13Pattern(text);
+    const labelHeight = Math.min(20, Math.max(13, Math.floor(box.h * 0.22)));
+    const gap = 4;
+    const barHeight = Math.max(12, box.h - labelHeight - gap);
+    const moduleWidth = Math.max(1, Math.floor(box.w / pattern.length));
+    const barcodeWidth = moduleWidth * pattern.length;
+    const startX = Math.floor((box.w - barcodeWidth) / 2);
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, box.w, box.h);
     ctx.fillStyle = this._color(object.color);
-    let x = 0;
-    const unit = Math.max(1, box.w / (text.length * 7));
-    for (const char of text) {
-      const bits = (Number(char).toString(2).padStart(4, "0") + "101").slice(0, 7);
-      for (const bit of bits) {
-        if (bit === "1") ctx.fillRect(Math.round(x), 0, Math.ceil(unit), barHeight);
-        x += unit;
-      }
+    for (let index = 0; index < pattern.length; index++) {
+      if (pattern[index] === "1") ctx.fillRect(startX + index * moduleWidth, 0, moduleWidth, barHeight);
     }
-    ctx.font = `${Math.max(10, labelHeight - 4)}px Arial`;
+    ctx.font = `${Math.max(10, labelHeight - 5)}px Arial, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(text, box.w / 2, barHeight + 3);
+    ctx.fillText(text, box.w / 2, barHeight + gap);
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
   }
 
+  _normalizeEan13(value) {
+    let digits = String(value).replace(/\D/g, "");
+    if (digits.length < 12) digits = digits.padEnd(12, "0");
+    if (digits.length > 13) digits = digits.slice(0, 13);
+    if (digits.length === 12) digits += this._ean13Checksum(digits);
+    return digits.slice(0, 12) + this._ean13Checksum(digits.slice(0, 12));
+  }
+
+  _ean13Checksum(twelveDigits) {
+    const sum = twelveDigits.split("").reduce((acc, digit, index) => acc + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
+    return String((10 - (sum % 10)) % 10);
+  }
+
+  _ean13Pattern(digits) {
+    const leftOdd = ["0001101", "0011001", "0010011", "0111101", "0100011", "0110001", "0101111", "0111011", "0110111", "0001011"];
+    const leftEven = ["0100111", "0110011", "0011011", "0100001", "0011101", "0111001", "0000101", "0010001", "0001001", "0010111"];
+    const right = ["1110010", "1100110", "1101100", "1000010", "1011100", "1001110", "1010000", "1000100", "1001000", "1110100"];
+    const parity = ["OOOOOO", "OOEOEE", "OOEEOE", "OOEEEO", "OEOOEE", "OEEOOE", "OEEEOO", "OEOEOE", "OEOEEO", "OEEOEO"][Number(digits[0])];
+    let pattern = "101";
+    for (let i = 1; i <= 6; i++) pattern += parity[i - 1] === "O" ? leftOdd[Number(digits[i])] : leftEven[Number(digits[i])];
+    pattern += "01010";
+    for (let i = 7; i <= 12; i++) pattern += right[Number(digits[i])];
+    return pattern + "101";
+  }
+
   _drawQr(ctx, object, box) {
     const data = String(object.text || "https://dratek.cz");
-    const matrix = this._makeQrMatrix(data);
-    const cells = matrix.length;
+    const qr = qrcode(0, "M");
+    qr.addData(data);
+    qr.make();
+    const cells = qr.getModuleCount();
     const quiet = 4;
     const cell = Math.max(1, Math.floor(Math.min(box.w, box.h) / (cells + quiet * 2)));
-    const offsetX = Math.floor((box.w - cell * (cells + quiet * 2)) / 2) + quiet * cell;
-    const offsetY = Math.floor((box.h - cell * (cells + quiet * 2)) / 2) + quiet * cell;
+    const total = cell * (cells + quiet * 2);
+    const offsetX = Math.floor((box.w - total) / 2) + quiet * cell;
+    const offsetY = Math.floor((box.h - total) / 2) + quiet * cell;
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, box.w, box.h);
     ctx.fillStyle = this._color(object.color);
     for (let y = 0; y < cells; y++) {
       for (let x = 0; x < cells; x++) {
-        if (matrix[y][x]) ctx.fillRect(offsetX + x * cell, offsetY + y * cell, cell, cell);
+        if (qr.isDark(y, x)) ctx.fillRect(offsetX + x * cell, offsetY + y * cell, cell, cell);
       }
     }
-  }
-
-  _makeQrMatrix(text) {
-    const size = 33;
-    const dataCodewords = 80;
-    const eccCodewords = 20;
-    const modules = Array.from({ length: size }, () => Array(size).fill(false));
-    const reserved = Array.from({ length: size }, () => Array(size).fill(false));
-    const set = (x, y, value, reserve = true) => {
-      if (x < 0 || y < 0 || x >= size || y >= size) return;
-      modules[y][x] = !!value;
-      if (reserve) reserved[y][x] = true;
-    };
-    const finder = (x, y) => {
-      for (let dy = -1; dy <= 7; dy++) for (let dx = -1; dx <= 7; dx++) {
-        const xx = x + dx, yy = y + dy;
-        const on = dx >= 0 && dx <= 6 && dy >= 0 && dy <= 6 && (dx === 0 || dx === 6 || dy === 0 || dy === 6 || (dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4));
-        set(xx, yy, on);
-      }
-    };
-    finder(0, 0); finder(size - 7, 0); finder(0, size - 7);
-    for (let i = 8; i < size - 8; i++) {
-      set(i, 6, i % 2 === 0);
-      set(6, i, i % 2 === 0);
-    }
-    this._qrAlignment(modules, reserved, 26, 26);
-    set(8, size - 8, true);
-    for (let i = 0; i < 9; i++) {
-      reserved[8][i] = true; reserved[i][8] = true;
-      reserved[8][size - 1 - i] = true; reserved[size - 1 - i][8] = true;
-    }
-    for (let i = 0; i < 8; i++) reserved[8][size - 8 + i] = true;
-    const bytes = new TextEncoder().encode(text).slice(0, 78);
-    const bits = [0, 1, 0, 0];
-    for (let i = 7; i >= 0; i--) bits.push((bytes.length >>> i) & 1);
-    for (const byte of bytes) for (let i = 7; i >= 0; i--) bits.push((byte >>> i) & 1);
-    for (let i = 0; i < 4 && bits.length < dataCodewords * 8; i++) bits.push(0);
-    while (bits.length % 8) bits.push(0);
-    const data = [];
-    for (let i = 0; i < bits.length; i += 8) data.push(bits.slice(i, i + 8).reduce((acc, bit) => (acc << 1) | bit, 0));
-    for (let pad = 0xec; data.length < dataCodewords; pad ^= 0xec ^ 0x11) data.push(pad);
-    const codewords = [...data, ...this._qrEcc(data, eccCodewords)];
-    const allBits = codewords.flatMap((byte) => Array.from({ length: 8 }, (_, i) => (byte >>> (7 - i)) & 1));
-    let index = 0;
-    let upward = true;
-    for (let right = size - 1; right >= 1; right -= 2) {
-      if (right === 6) right--;
-      for (let vert = 0; vert < size; vert++) {
-        const y = upward ? size - 1 - vert : vert;
-        for (let dx = 0; dx < 2; dx++) {
-          const x = right - dx;
-          if (reserved[y][x]) continue;
-          const bit = index < allBits.length ? allBits[index++] : 0;
-          modules[y][x] = !!(bit ^ this._qrMask(0, x, y));
-        }
-      }
-      upward = !upward;
-    }
-    this._qrFormat(modules, size, 0);
-    return modules;
-  }
-
-  _qrAlignment(modules, reserved, cx, cy) {
-    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
-      const on = Math.max(Math.abs(dx), Math.abs(dy)) !== 1;
-      modules[cy + dy][cx + dx] = on;
-      reserved[cy + dy][cx + dx] = true;
-    }
-  }
-
-  _qrMask(mask, x, y) {
-    return mask === 0 ? (x + y) % 2 === 0 : false;
-  }
-
-  _qrFormat(modules, size, mask) {
-    let data = (1 << 3) | mask;
-    let rem = data << 10;
-    for (let i = 14; i >= 10; i--) if ((rem >>> i) & 1) rem ^= 0x537 << (i - 10);
-    const bits = ((data << 10) | rem) ^ 0x5412;
-    const get = (i) => ((bits >>> i) & 1) !== 0;
-    for (let i = 0; i <= 5; i++) modules[8][i] = get(i);
-    modules[8][7] = get(6); modules[8][8] = get(7); modules[7][8] = get(8);
-    for (let i = 9; i < 15; i++) modules[14 - i][8] = get(i);
-    for (let i = 0; i < 8; i++) modules[size - 1 - i][8] = get(i);
-    for (let i = 8; i < 15; i++) modules[8][size - 15 + i] = get(i);
-    modules[8][size - 8] = true;
-  }
-
-  _qrEcc(data, degree) {
-    const gen = this._qrGenerator(degree);
-    const result = Array(degree).fill(0);
-    for (const byte of data) {
-      const factor = byte ^ result.shift();
-      result.push(0);
-      for (let i = 0; i < degree; i++) result[i] ^= this._qrMultiply(gen[i], factor);
-    }
-    return result;
-  }
-
-  _qrGenerator(degree) {
-    let result = [1];
-    for (let i = 0; i < degree; i++) {
-      const next = Array(result.length + 1).fill(0);
-      for (let j = 0; j < result.length; j++) {
-        next[j] ^= this._qrMultiply(result[j], 1);
-        next[j + 1] ^= this._qrMultiply(result[j], this._qrPow(2, i));
-      }
-      result = next;
-    }
-    return result.slice(1);
-  }
-
-  _qrMultiply(x, y) {
-    let z = 0;
-    for (let i = 7; i >= 0; i--) {
-      z = (z << 1) ^ ((z >>> 7) * 0x11d);
-      if ((y >>> i) & 1) z ^= x;
-    }
-    return z & 0xff;
-  }
-
-  _qrPow(x, n) {
-    let result = 1;
-    for (let i = 0; i < n; i++) result = this._qrMultiply(result, x);
-    return result;
   }
 
   _drawImage(ctx, object, box) {
