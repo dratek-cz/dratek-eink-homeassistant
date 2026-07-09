@@ -1,6 +1,6 @@
 # DRATEK eInk pro Home Assistant
 
-Integrace pro Home Assistant, která umí vyhledat dostupné BLE eInk cenovky DRATEK/Picksmart a zobrazit diagnostiku Bluetoothu přímo v Home Assistantu.
+Integrace pro Home Assistant, která umí vyhledat dostupné BLE eInk cenovky DRATEK/Picksmart, zobrazit diagnostiku Bluetoothu a připravit grafický návrh přímo v Home Assistantu.
 
 Instalace je určena výhradně přes HACS. Není potřeba nic kopírovat ručně ani psát do `configuration.yaml`.
 
@@ -64,6 +64,32 @@ U nalezených displejů se zobrazuje:
 - baterie
 - SW/HW informace
 
+## Editor grafiky
+
+Panel obsahuje první verzi grafického editoru:
+
+- výběr nalezeného displeje
+- pracovní plocha podle rozlišení displeje
+- textové objekty
+- obdélníky s výplní a rámečkem
+- čáry
+- obrázky z počítače
+- EAN objekt pro návrh etikety
+- QR objekt pro návrh etikety
+- výběr objektu kliknutím
+- posouvání objektů myší
+- změna velikosti tažením rohů
+- vlastnosti objektu v pravém sloupci
+- přesné zadání X/Y/šířky/výšky
+- posun vrstvy dopředu/dozadu
+- smazání vybraného objektu
+- uložení projektu jako JSON
+- otevření uloženého projektu pro stejné rozlišení
+- náhled v reálných barvách eInk displeje
+- odeslání celého návrhu do vybraného displeje
+
+Poznámka: EAN a QR objekty jsou v této verzi určené hlavně pro návrh layoutu. Skutečně validní čárový kód/QR encoder bude doplněn v některé z dalších verzí.
+
 ## Debug Bluetoothu
 
 Panel zobrazuje i obecná BLE zařízení, která Home Assistant zachytil. Díky tomu jde poznat rozdíl mezi těmito stavy:
@@ -83,4 +109,8 @@ Zatím jsou připraveny tyto typy:
 
 Home Assistant musí mít Bluetooth LE dosah k cenovce. Pokud běží na místě, odkud na displeje nedosáhne, bude potřeba použít Bluetooth proxy nebo později samostatnou síťovou bránu.
 
-Integrace je zatím experimentální. Aktuální verze řeší hlavně instalaci přes HACS, panel v levém menu a vyhledání dostupných DRATEK eInk displejů.
+Integrace je zatím experimentální. Aktuální verze řeší instalaci přes HACS, panel v levém menu, vyhledání dostupných DRATEK eInk displejů a první verzi grafického editoru.
+
+## Aktualizace
+
+Od verze `0.0.6` budou změny vydávané jako verzované GitHub releases, aby HACS uměl nabídnout standardní aktualizaci.
