@@ -1,20 +1,54 @@
-# DRATEK eInk for Home Assistant
+# DRATEK eInk pro Home Assistant
 
-Minimal experimental Home Assistant custom integration for DRATEK/Picksmart BLE eInk price labels.
+Minimalni experimentalni integrace pro Home Assistant, ktera umi poslat text na BLE eInk cenovky DRATEK/Picksmart.
 
-## Install locally
+Projekt je zatim prvni proof of concept. Cilem je pozdeji pridat automaticke vyhledavani displeju, sablony a editor grafiky primo pro Home Assistant.
 
-Copy `custom_components/dratek_eink` to your Home Assistant `config/custom_components/` folder.
+## Instalace pres HACS
 
-Add this to `configuration.yaml`:
+1. V Home Assistantu otevri `HACS`.
+2. Vpravo nahore otevri menu se tremi teckami.
+3. Zvol `Custom repositories`.
+4. Do pole `Repository` vloz:
+
+```text
+https://github.com/dratek-cz/dratek-eink-homeassistant
+```
+
+5. Jako kategorii vyber `Integration`.
+6. Potvrd pridani repozitare.
+7. V HACS najdi `DRATEK eInk` a nainstaluj integraci.
+8. Restartuj Home Assistant.
+
+## Rucni instalace
+
+Pokud nechces pouzit HACS, zkopiruj slozku:
+
+```text
+custom_components/dratek_eink
+```
+
+do konfigurace Home Assistantu sem:
+
+```text
+config/custom_components/dratek_eink
+```
+
+Potom restartuj Home Assistant.
+
+## Zapnuti integrace
+
+Do `configuration.yaml` pridej:
 
 ```yaml
 dratek_eink:
 ```
 
-Restart Home Assistant.
+Po ulozeni restartuj Home Assistant.
 
-## First test service
+## Prvni test
+
+V Home Assistantu otevri `Developer Tools` -> `Services` a zavolej sluzbu:
 
 ```yaml
 service: dratek_eink.send_text
@@ -24,9 +58,21 @@ data:
   text: "Hello from HA"
 ```
 
-Known tested SDK types:
+Parametry:
+
+- `address`: BLE adresa cenovky.
+- `sdk_type`: typ displeje podle SDK.
+- `text`: text, ktery se ma zobrazit.
+
+## Podporovane typy displeju
+
+Zatim jsou pripraveny tyto typy:
 
 - `75`: EPA LCD 400x300 BWR
 - `267`: EPA LCD 250x122 BWR
 
-This is a first minimal proof of concept. The next steps are discovery, template rendering, and a Home Assistant designer panel.
+## Poznamky
+
+- Home Assistant musi bezet na zarizeni, ktere ma Bluetooth LE dosah k cenovce.
+- Pokud Home Assistant bezi mimo dosah, bude pozdeji potreba resit Bluetooth proxy nebo sitovy gateway.
+- Integrace je zatim experimentalni a slouzi hlavne pro overeni komunikace s displejem.
