@@ -1,5 +1,19 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.0
+
+- editor ma modernejsi trisloupcove rozhrani s ikonovou paletou nastroju
+- QR kody se generuji pres vestaveny QR encoder, ne rucne kreslenou matici
+- EAN-13 se vykresluje podle realneho EAN vzoru a cisla jsou oddelena od car
+- pri prepnuti na displej s jinym rozlisenim se pracovni plocha hned prepocita na novy rozmer
+- pri odesilani se kontroluje, ze velikost navrhu odpovida vybranemu displeji
+
+## Novinky ve verzi 0.1.1
+
+- rohy vybraneho objektu maji vetsi aktivni plochu pro snazsi chyceni mysi
+- obrazky a QR kody se pri tazeni rohu zvetsuji a zmensuji proporcne
+- kurzor na platne lepe ukazuje, kdy jde objekt presouvat nebo menit jeho velikost
+
 Integrace pro Home Assistant, která umí vyhledat dostupné BLE eInk cenovky DRATEK, zobrazit diagnostiku Bluetoothu a připravit grafický návrh přímo v Home Assistantu.
 
 Instalace je určena výhradně přes HACS. Není potřeba nic kopírovat ručně ani psát do `configuration.yaml`.
