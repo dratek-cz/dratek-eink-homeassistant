@@ -1,8 +1,8 @@
 # DRATEK eInk pro Home Assistant
 
-Minimální experimentální integrace pro Home Assistant, která umí poslat text na BLE eInk cenovky DRATEK/Picksmart.
+Integrace pro Home Assistant, která umí vyhledat dostupné BLE eInk cenovky DRATEK/Picksmart a připravuje jejich ovládání přímo z Home Assistantu.
 
-Projekt je zatím první proof of concept. Cílem je později přidat automatické vyhledávání displejů, šablony a editor grafiky přímo pro Home Assistant.
+Instalace je určena výhradně přes HACS. Není potřeba nic kopírovat ručně ani psát do `configuration.yaml`.
 
 ## Instalace přes HACS
 
@@ -17,62 +17,43 @@ https://github.com/dratek-cz/dratek-eink-homeassistant
 
 5. Jako kategorii vyber `Integration`.
 6. Potvrď přidání repozitáře.
-7. V HACS najdi `DRATEK eInk` a nainstaluj integraci.
-8. Restartuj Home Assistant.
+7. V HACS najdi `DRATEK eInk`.
+8. Nainstaluj integraci.
+9. Restartuj Home Assistant.
 
-## Ruční instalace
+## Přidání displeje v Home Assistantu
 
-Pokud nechceš použít HACS, zkopíruj složku:
+1. Otevři `Settings`.
+2. Otevři `Devices & services`.
+3. Klikni na `Add integration`.
+4. Vyhledej `DRATEK eInk`.
+5. Klikni na integraci.
+6. Home Assistant zkontroluje Bluetooth a nabídne dostupné DRATEK eInk displeje.
+7. Vyber displej ze seznamu a potvrď přidání.
 
-```text
-custom_components/dratek_eink
-```
+## Co má vyhledávání ukázat
 
-do konfigurace Home Assistantu sem:
+Pokud je Bluetooth v pořádku a v dosahu jsou DRATEK eInk displeje, zobrazí se seznam zařízení. U každého zařízení je vidět:
 
-```text
-config/custom_components/dratek_eink
-```
+- fyzický kód displeje, například `92.80.95.16`
+- BLE adresa
+- model displeje
+- RSSI
+- typ displeje podle SDK
 
-Potom restartuj Home Assistant.
+Pokud Home Assistant najde Bluetooth adaptér nebo Bluetooth proxy, ale nenajde žádnou DRATEK eInk cenovku, zobrazí informaci, kolik obecných BLE zařízení v dosahu vidí. Díky tomu jde poznat, jestli samotné BLE skenování funguje.
 
-## Zapnutí integrace
+Pokud Home Assistant nenajde žádný aktivní Bluetooth adaptér ani Bluetooth proxy, integrace zobrazí chybu, že Bluetooth není dostupné.
 
-Do `configuration.yaml` přidej:
-
-```yaml
-dratek_eink:
-```
-
-Po uložení restartuj Home Assistant.
-
-## Prvni test
-
-V Home Assistantu otevři `Developer Tools` -> `Services` a zavolej službu:
-
-```yaml
-service: dratek_eink.send_text
-data:
-  address: "FF:FF:94:20:10:78"
-  sdk_type: 75
-  text: "Hello from HA"
-```
-
-Parametry:
-
-- `address`: BLE adresa cenovky.
-- `sdk_type`: typ displeje podle SDK.
-- `text`: text, který se má zobrazit.
-
-## Podporované typy displejů
+## Podporované displeje
 
 Zatím jsou připraveny tyto typy:
 
 - `75`: EPA LCD 400x300 BWR
 - `267`: EPA LCD 250x122 BWR
 
-## Poznámky
+## Poznámky k dosahu
 
-- Home Assistant musí běžet na zařízení, které má Bluetooth LE dosah k cenovce.
-- Pokud Home Assistant běží mimo dosah, bude později potřeba řešit Bluetooth proxy nebo síťový gateway.
-- Integrace je zatím experimentální a slouží hlavně pro ověření komunikace s displejem.
+Home Assistant musí mít Bluetooth LE dosah k cenovce. Pokud běží na místě, odkud na displeje nedosáhne, bude potřeba použít Bluetooth proxy nebo později samostatnou síťovou bránu.
+
+Integrace je zatím experimentální. Aktuální verze řeší hlavně instalaci přes HACS a vyhledání dostupných DRATEK eInk displejů.
