@@ -21,6 +21,9 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedProjectId = "";
     this._projectName = "Novy navrh";
     this._variables = {};
+    this._draftSaveTimer = null;
+    this._loadingDraft = false;
+    this._restoringDraft = false;
   }
 
   set hass(hass) {
@@ -43,7 +46,7 @@ class DratekEinkPanel extends HTMLElement {
       if (this._result.devices.length) {
         const found = this._result.devices.some((device) => device.address === this._selectedDeviceAddress);
         if (!this._selectedDeviceAddress || !found) {
-          this._selectDevice(this._result.devices[0].address, { scaleDesign: false, render: false });
+          await this._selectDevice(this._result.devices[0].address, { saveCurrent: false, render: false });
         }
       }
     } catch (err) {
@@ -86,23 +89,104 @@ class DratekEinkPanel extends HTMLElement {
     this._zoom = Math.min(2.4, Math.max(0.55, Math.min(820 / size.width, 460 / size.height)));
   }
 
-  _selectDevice(address, options = {}) {
-    const { scaleDesign = true, render = true } = options;
-    const before = this._displaySize();
-    this._selectedDeviceAddress = address;
-    const after = this._displaySize();
-    if (scaleDesign && (before.width !== after.width || before.height !== after.height)) {
-      this._scaleDesign(before, after);
-      this._selectedProjectId = "";
-      this._sendResult = {
-        ok: true,
-        log: [`Pracovni plocha zmenena z ${before.width}x${before.height} na ${after.width}x${after.height}. Navrh byl prepocitan na novy displej.`],
-      };
+  async _selectDevice(address, options = {}) {
+    const { saveCurrent = true, render = true } = options;
+    if (!address) return;
+    if (address === this._selectedDeviceAddress && !options.forceLoad) {
+      if (render) {
+        this._render();
+        this._paint();
+      }
+      return;
     }
+    if (saveCurrent) await this._saveCurrentDeviceDraft();
+    this._selectedDeviceAddress = address;
+    await this._loadDeviceDraft(address);
     this._fitZoom();
     if (render) {
       this._render();
       this._paint();
+    }
+  }
+
+  _emptyDeviceDraft(device = this._device()) {
+    const size = this._displaySize(device);
+    const code = device && device.physical_code ? device.physical_code : "novy-displej";
+    return {
+      version: 1,
+      name: `Navrh ${code}`,
+      device_address: device ? device.address : this._selectedDeviceAddress,
+      sdk_type: device ? Number(device.sdk_type) : 75,
+      width: size.width,
+      height: size.height,
+      variables: {},
+      objects: [],
+    };
+  }
+
+  _applyDraft(draft) {
+    this._restoringDraft = true;
+    const device = this._device();
+    const size = this._displaySize(device);
+    const source = draft || this._emptyDeviceDraft(device);
+    this._objects = Array.isArray(source.objects) ? structuredClone(source.objects) : [];
+    this._variables = source.variables ? structuredClone(source.variables) : {};
+    this._selectedIds = [];
+    this._selectedProjectId = source.id || "";
+    this._projectName = source.name || (device && device.physical_code ? `Navrh ${device.physical_code}` : "Novy navrh");
+    this._nextId = this._nextObjectId();
+    if ((source.width && source.width !== size.width) || (source.height && source.height !== size.height)) {
+      this._scaleDesign({ width: source.width || size.width, height: source.height || size.height }, size);
+      this._selectedProjectId = "";
+    }
+    this._restoringDraft = false;
+  }
+
+  _nextObjectId() {
+    const ids = this._objects
+      .map((object) => String(object.id || "").match(/^obj-(\d+)$/))
+      .filter(Boolean)
+      .map((match) => Number(match[1]));
+    return ids.length ? Math.max(...ids) + 1 : this._objects.length + 1;
+  }
+
+  async _loadDeviceDraft(address) {
+    if (!this._hass || !address) {
+      this._applyDraft(null);
+      return;
+    }
+    this._loadingDraft = true;
+    try {
+      const result = await this._hass.callWS({ type: "dratek_eink/device_drafts/load", address });
+      this._applyDraft(result.draft || null);
+    } catch (err) {
+      this._applyDraft(null);
+      this._sendResult = { ok: false, error: `Nepodarilo se nacist navrh displeje: ${this._message(err)}`, log: [] };
+    } finally {
+      this._loadingDraft = false;
+    }
+  }
+
+  _scheduleDraftSave() {
+    if (this._restoringDraft || !this._hass || !this._selectedDeviceAddress) return;
+    window.clearTimeout(this._draftSaveTimer);
+    this._draftSaveTimer = window.setTimeout(() => this._saveCurrentDeviceDraft(), 700);
+  }
+
+  async _saveCurrentDeviceDraft() {
+    if (this._restoringDraft || !this._hass || !this._selectedDeviceAddress) return;
+    window.clearTimeout(this._draftSaveTimer);
+    this._draftSaveTimer = null;
+    const device = this._device();
+    if (!device) return;
+    try {
+      await this._hass.callWS({
+        type: "dratek_eink/device_drafts/save",
+        address: device.address,
+        draft: this._projectPayload(device),
+      });
+    } catch (err) {
+      this._error = `Nepodarilo se ulozit pracovni navrh displeje: ${this._message(err)}`;
     }
   }
 
@@ -177,6 +261,7 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedIds = [object.id];
     this._render();
     this._paint();
+    this._scheduleDraftSave();
   }
 
   _addImage(file) {
@@ -204,6 +289,7 @@ class DratekEinkPanel extends HTMLElement {
         this._selectedIds = [object.id];
         this._render();
         this._paint();
+        this._scheduleDraftSave();
       };
       img.src = reader.result;
     };
@@ -219,6 +305,7 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedIds = [];
     this._render();
     this._paint();
+    this._scheduleDraftSave();
   }
 
   _duplicateSelected() {
@@ -242,6 +329,7 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedIds = copies.map((object) => object.id);
     this._render();
     this._paint();
+    this._scheduleDraftSave();
   }
 
   _newProject() {
@@ -254,6 +342,7 @@ class DratekEinkPanel extends HTMLElement {
     this._nextId = 1;
     this._render();
     this._paint();
+    this._scheduleDraftSave();
   }
 
   _clearDesign() {
@@ -262,6 +351,7 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedIds = [];
     this._render();
     this._paint();
+    this._scheduleDraftSave();
   }
 
   _moveLayer(direction) {
@@ -271,6 +361,7 @@ class DratekEinkPanel extends HTMLElement {
     const rest = this._objects.filter((object) => !selected.has(object.id));
     this._objects = direction === "front" ? [...rest, ...moving] : [...moving, ...rest];
     this._paint();
+    this._scheduleDraftSave();
   }
 
   _rotateSelected() {
@@ -279,6 +370,7 @@ class DratekEinkPanel extends HTMLElement {
     }
     this._render();
     this._paint();
+    this._scheduleDraftSave();
   }
 
   _mirrorSelected() {
@@ -286,6 +378,7 @@ class DratekEinkPanel extends HTMLElement {
       object.flipH = !object.flipH;
     }
     this._paint();
+    this._scheduleDraftSave();
   }
 
   _alignSelected(mode) {
@@ -309,6 +402,7 @@ class DratekEinkPanel extends HTMLElement {
     }
     this._render();
     this._paint();
+    this._scheduleDraftSave();
   }
 
   _snapValue(value) {
@@ -439,6 +533,7 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _onPointerUp() {
+    if (this._drag) this._scheduleDraftSave();
     this._drag = null;
   }
 
@@ -497,13 +592,14 @@ class DratekEinkPanel extends HTMLElement {
     object.h = this._snapValue(h);
   }
 
-  _projectPayload() {
-    const device = this._device();
+  _projectPayload(device = this._device()) {
     const size = this._displaySize(device);
     return {
       id: this._selectedProjectId || undefined,
       version: 1,
       name: this._projectName || "DRATEK eInk projekt",
+      device_address: device ? device.address : this._selectedDeviceAddress,
+      physical_code: device ? device.physical_code : "",
       sdk_type: device ? Number(device.sdk_type) : 75,
       width: size.width,
       height: size.height,
@@ -537,9 +633,10 @@ class DratekEinkPanel extends HTMLElement {
       this._variables = project.variables || {};
       this._projectName = project.name || "DRATEK eInk projekt";
       this._selectedIds = [];
-      this._nextId = this._objects.length + 1;
+      this._nextId = this._nextObjectId();
       this._render();
       this._paint();
+      this._scheduleDraftSave();
     } catch (err) {
       alert(`Projekt se nepodarilo nacist: ${this._message(err)}`);
     }
@@ -564,7 +661,7 @@ class DratekEinkPanel extends HTMLElement {
         error: `Rozmer navrhu ${canvas.width}x${canvas.height} nesedi s vybranym displejem ${size.width}x${size.height}. Prepnul jsem pracovni plochu, zkuste odeslat znovu.`,
         log: [],
       };
-      this._selectDevice(device.address);
+      await this._selectDevice(device.address, { forceLoad: true });
       return;
     }
     this._sending = true;
@@ -647,6 +744,7 @@ class DratekEinkPanel extends HTMLElement {
       </div>`;
     this._bind();
     this._paint();
+    this._scheduleDraftSave();
   }
 
   _bind() {
@@ -656,7 +754,7 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#saveProject").addEventListener("click", () => this._saveProject());
     this.shadowRoot.querySelector("#loadProject").addEventListener("click", () => this._loadSelectedProject());
     this.shadowRoot.querySelector("#deleteProject").addEventListener("click", () => this._deleteProject());
-    this.shadowRoot.querySelector("#projectName").addEventListener("input", (event) => { this._projectName = event.target.value; });
+    this.shadowRoot.querySelector("#projectName").addEventListener("input", (event) => { this._projectName = event.target.value; this._scheduleDraftSave(); });
     this.shadowRoot.querySelector("#projectSelect").addEventListener("change", (event) => { this._selectedProjectId = event.target.value; const project = this._projects.find((item) => item.id === this._selectedProjectId); if (project) this._projectName = project.name; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#addImage").addEventListener("click", () => this.shadowRoot.querySelector("#imageFile").click());
     this.shadowRoot.querySelector("#imageFile").addEventListener("change", (event) => this._addImage(event.target.files[0]));
@@ -682,6 +780,7 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-variable]").forEach((input) => input.addEventListener("input", () => {
       this._variables[input.dataset.variable] = input.value;
       this._paint();
+      this._scheduleDraftSave();
     }));
     const canvas = this.shadowRoot.querySelector("#editor");
     canvas.addEventListener("pointerdown", (event) => this._onPointerDown(event));
@@ -723,6 +822,7 @@ class DratekEinkPanel extends HTMLElement {
       this._render();
     }
     this._paint();
+    this._scheduleDraftSave();
   }
 
   _syncProperties() {
