@@ -25,6 +25,20 @@ class DratekEinkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._generic_ble_count = 0
         self._scanner_count = 0
 
+    async def async_step_bluetooth(self, discovery_info: Any):
+        device = parse_picksmart_advertisement(discovery_info)
+        if device is None:
+            return self.async_abort(reason="not_dratek_eink")
+
+        await self.async_set_unique_id(device.address)
+        self._abort_if_unique_id_configured()
+
+        self.context["title_placeholders"] = {"name": f"DRATEK eInk {device.physical_code}"}
+        self._scanner_count = bluetooth.async_scanner_count(self.hass, connectable=True)
+        self._generic_ble_count = len(bluetooth.async_discovered_service_info(self.hass, connectable=True))
+        self._devices = {device.address: device}
+        return await self.async_step_pick_device()
+
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         self._scan()
 
@@ -64,7 +78,7 @@ class DratekEinkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     step_id="pick_device",
                     data_schema=self._device_schema(),
                     errors={"base": "unsupported_display_type"},
-                    description_placeholders={"sdk_type": str(device.sdk_type)},
+                    description_placeholders=self._placeholders(sdk_type=device.sdk_type),
                 )
 
             return self.async_create_entry(
@@ -86,11 +100,7 @@ class DratekEinkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="pick_device",
             data_schema=self._device_schema(),
-            description_placeholders={
-                "device_count": str(len(self._devices)),
-                "scanner_count": str(self._scanner_count),
-                "generic_ble_count": str(self._generic_ble_count),
-            },
+            description_placeholders=self._placeholders(),
         )
 
     def _scan(self) -> None:
@@ -116,3 +126,13 @@ class DratekEinkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def _device_schema(self) -> vol.Schema:
         options = {address: device.title for address, device in self._devices.items()}
         return vol.Schema({vol.Required(CONF_ADDRESS): vol.In(options)})
+
+    def _placeholders(self, **extra: Any) -> dict[str, str]:
+        placeholders = {
+            "device_count": str(len(self._devices)),
+            "scanner_count": str(self._scanner_count),
+            "generic_ble_count": str(self._generic_ble_count),
+            "sdk_type": "",
+        }
+        placeholders.update({key: str(value) for key, value in extra.items()})
+        return placeholders
