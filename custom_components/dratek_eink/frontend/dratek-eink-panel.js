@@ -72,6 +72,7 @@ class DratekEinkPanel extends HTMLElement {
     const sdk = device ? Number(device.sdk_type) : 75;
     if (sdk === 75) return { width: 400, height: 300 };
     if (sdk === 11) return { width: 212, height: 104 };
+    if (sdk === 296) return { width: 296, height: 128 };
     return { width: 250, height: 128 };
   }
 
@@ -482,7 +483,7 @@ class DratekEinkPanel extends HTMLElement {
         .card{background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;padding:14px;box-sizing:border-box}.metric{color:var(--secondary-text-color);font-size:12px;margin-bottom:5px}.value{font-size:24px;font-weight:800}
         .pill{display:inline-flex;min-height:26px;align-items:center;border-radius:999px;padding:0 10px;font-size:12px;font-weight:800}.good{background:#d7f5df;color:#0b6b2a}.warn{background:#fff2c7;color:#775500}.bad{background:#ffd9d4;color:#9d1c0f}.muted{background:var(--secondary-background-color);color:var(--secondary-text-color)}
         .status-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:12px}.projectbar{display:grid;grid-template-columns:minmax(180px,280px) minmax(180px,320px) auto;gap:8px;align-items:center;margin-bottom:12px}
-        .editor-shell{display:grid;grid-template-columns:250px minmax(0,1fr) 320px;gap:12px;align-items:start}.left,.right{position:sticky;top:12px}.tool-list{display:grid;gap:8px}.tool-list button{text-align:left}
+        .editor-shell{display:grid;grid-template-columns:250px minmax(0,1fr) 320px;gap:12px;align-items:start}.left,.right{position:sticky;top:12px}.tool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.tool-icon{min-height:70px;display:grid;grid-template-rows:28px auto;place-items:center;text-align:center;padding:10px 6px}.tool-icon .ico{font-size:24px;line-height:1}.tool-icon .txt{font-size:12px}.action-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:18px;display:grid;place-items:center}.wide-action{grid-column:span 3;font-size:13px}
         .workspace{min-height:500px;overflow:auto;display:grid;place-items:center;background:linear-gradient(45deg,var(--secondary-background-color) 25%,transparent 25%),linear-gradient(-45deg,var(--secondary-background-color) 25%,transparent 25%);background-size:18px 18px;border-radius:8px;border:1px solid var(--divider-color);padding:24px}
         canvas{background:#fff;box-shadow:0 14px 36px rgba(0,0,0,.2);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:700}.field input,.field select,.projectbar input,.projectbar select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
         table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:var(--secondary-background-color);border-radius:8px;padding:10px;font-size:12px;line-height:1.45}.send-result{margin-top:10px}
@@ -497,7 +498,7 @@ class DratekEinkPanel extends HTMLElement {
         <div class="card projectbar"><input id="projectName" value="${this._escape(this._projectName)}" placeholder="Nazev navrhu"><select id="projectSelect"><option value="">Novy / neulozeny navrh</option>${this._projects.map((project) => `<option value="${this._escape(project.id)}" ${project.id === this._selectedProjectId ? "selected" : ""}>${this._escape(project.name)} (${project.width}x${project.height})</option>`).join("")}</select><div class="toolbar"><button id="newProject" class="secondary">Novy</button><button id="saveProject">Ulozit do HA</button><button id="loadProject" class="secondary" ${this._selectedProjectId ? "" : "disabled"}>Nacist</button><button id="deleteProject" class="danger" ${this._selectedProjectId ? "" : "disabled"}>Smazat</button></div></div>
         <div class="card" style="margin-bottom:12px"><div class="toolbar"><label>Displej</label><select id="deviceSelect">${result.devices.map((item) => `<option value="${this._escape(item.address)}" ${item.address === (device && device.address) ? "selected" : ""}>${this._escape(item.physical_code)} - ${this._escape(item.model)} - RSSI ${this._escape(item.rssi)}</option>`).join("")}</select><span class="pill muted">${size.width} x ${size.height}</span><button id="sendTest" class="secondary" ${!device ? "disabled" : ""}>Odeslat dratek.cz</button><label><input id="realPreview" type="checkbox" ${this._realPreview ? "checked" : ""}> Real eInk colors</label></div>${this._renderSendResult()}</div>
         <div class="editor-shell">
-          <div class="card left"><h2>Nastroje</h2><div class="tool-list"><button data-add="text">Text</button><button data-add="rect">Rectangle</button><button data-add="line">Cara</button><button data-add="barcode">EAN</button><button data-add="qr">QR</button><button id="addImage" class="secondary">Obrazek</button><input id="imageFile" type="file" accept="image/*" hidden></div><h2 style="margin-top:18px">Upravy</h2><div class="tool-list"><button id="duplicateSelected" class="secondary" ${this._selectedIds.length ? "" : "disabled"}>Duplikovat</button><button id="rotateSelected" class="secondary" ${this._selectedIds.length ? "" : "disabled"}>Otocit 90</button><button id="mirrorSelected" class="secondary" ${this._selectedIds.length ? "" : "disabled"}>Zrcadlit</button><button id="alignLeft" class="secondary" ${this._selectedIds.length ? "" : "disabled"}>Zarovnat vlevo</button><button id="alignCenter" class="secondary" ${this._selectedIds.length ? "" : "disabled"}>Zarovnat na stred</button><button id="alignTop" class="secondary" ${this._selectedIds.length ? "" : "disabled"}>Zarovnat nahoru</button><button id="alignMiddle" class="secondary" ${this._selectedIds.length ? "" : "disabled"}>Svisly stred</button><button id="layerFront" class="secondary" ${this._selectedIds.length ? "" : "disabled"}>Do popredi</button><button id="layerBack" class="secondary" ${this._selectedIds.length ? "" : "disabled"}>Do pozadi</button><button id="deleteSelected" class="danger" ${this._selectedIds.length ? "" : "disabled"}>Smazat vybrane</button><button id="clearDesign" class="danger">Smazat vse</button></div><h2 style="margin-top:18px">Zobrazeni</h2><div class="tool-list"><button id="zoomIn" class="secondary">Priblizit</button><button id="zoomOut" class="secondary">Oddalit</button><button id="zoomFit" class="secondary">Prizpusobit</button><label><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}> Grid snap 5 px</label></div></div>
+          <div class="card left"><h2>Nastroje</h2><div class="tool-grid"><button class="tool-icon" data-add="text" title="Text"><span class="ico">T</span><span class="txt">Text</span></button><button class="tool-icon" data-add="rect" title="Rectangle"><span class="ico">▭</span><span class="txt">Rect</span></button><button class="tool-icon" data-add="line" title="Cara"><span class="ico">╱</span><span class="txt">Cara</span></button><button class="tool-icon" data-add="barcode" title="EAN"><span class="ico">▥</span><span class="txt">EAN</span></button><button class="tool-icon" data-add="qr" title="QR"><span class="ico">▦</span><span class="txt">QR</span></button><button id="addImage" class="tool-icon secondary" title="Obrazek"><span class="ico">▧</span><span class="txt">Image</span></button><input id="imageFile" type="file" accept="image/*" hidden></div><h2 style="margin-top:18px">Upravy</h2><div class="action-grid"><button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${this._selectedIds.length ? "" : "disabled"}>⧉</button><button id="rotateSelected" class="icon-btn secondary" title="Otocit 90" ${this._selectedIds.length ? "" : "disabled"}>↻</button><button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${this._selectedIds.length ? "" : "disabled"}>⇋</button><button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${this._selectedIds.length ? "" : "disabled"}>⫷</button><button id="alignCenter" class="icon-btn secondary" title="Zarovnat na stred" ${this._selectedIds.length ? "" : "disabled"}>↔</button><button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${this._selectedIds.length ? "" : "disabled"}>⫶</button><button id="alignMiddle" class="icon-btn secondary" title="Svisly stred" ${this._selectedIds.length ? "" : "disabled"}>↕</button><button id="layerFront" class="icon-btn secondary" title="Do popredi" ${this._selectedIds.length ? "" : "disabled"}>⬆</button><button id="layerBack" class="icon-btn secondary" title="Do pozadi" ${this._selectedIds.length ? "" : "disabled"}>⬇</button><button id="deleteSelected" class="wide-action danger" ${this._selectedIds.length ? "" : "disabled"}>Smazat vybrane</button><button id="clearDesign" class="wide-action danger">Smazat vse</button></div><h2 style="margin-top:18px">Zobrazeni</h2><div class="action-grid"><button id="zoomIn" class="icon-btn secondary" title="Priblizit">＋</button><button id="zoomOut" class="icon-btn secondary" title="Oddalit">－</button><button id="zoomFit" class="icon-btn secondary" title="Prizpusobit">□</button><label class="wide-action"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}> Grid snap 5 px</label></div></div>
           <div class="workspace"><canvas id="editor" width="${size.width}" height="${size.height}" style="width:${Math.round(size.width * this._zoom)}px;height:${Math.round(size.height * this._zoom)}px"></canvas></div>
           <div class="card right"><h2>Object properties</h2>${this._renderProperties(object)}</div>
         </div>
@@ -643,6 +644,8 @@ class DratekEinkPanel extends HTMLElement {
 
   _drawBarcode(ctx, object, box) {
     const text = String(object.text || "8591234567890").replace(/\D/g, "") || "0";
+    const labelHeight = Math.min(18, Math.max(12, Math.floor(box.h * 0.24)));
+    const barHeight = Math.max(8, box.h - labelHeight - 3);
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, box.w, box.h);
     ctx.fillStyle = this._color(object.color);
@@ -651,31 +654,159 @@ class DratekEinkPanel extends HTMLElement {
     for (const char of text) {
       const bits = (Number(char).toString(2).padStart(4, "0") + "101").slice(0, 7);
       for (const bit of bits) {
-        if (bit === "1") ctx.fillRect(Math.round(x), 0, Math.ceil(unit), Math.max(8, box.h - 16));
+        if (bit === "1") ctx.fillRect(Math.round(x), 0, Math.ceil(unit), barHeight);
         x += unit;
       }
     }
-    ctx.font = "12px Arial";
+    ctx.font = `${Math.max(10, labelHeight - 4)}px Arial`;
     ctx.textAlign = "center";
-    ctx.fillText(text, box.w / 2, box.h - 13);
+    ctx.textBaseline = "top";
+    ctx.fillText(text, box.w / 2, barHeight + 3);
     ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
   }
 
   _drawQr(ctx, object, box) {
     const data = String(object.text || "https://dratek.cz");
-    const cells = 21;
-    const cell = Math.max(1, Math.floor(Math.min(box.w, box.h) / cells));
+    const matrix = this._makeQrMatrix(data);
+    const cells = matrix.length;
+    const quiet = 4;
+    const cell = Math.max(1, Math.floor(Math.min(box.w, box.h) / (cells + quiet * 2)));
+    const offsetX = Math.floor((box.w - cell * (cells + quiet * 2)) / 2) + quiet * cell;
+    const offsetY = Math.floor((box.h - cell * (cells + quiet * 2)) / 2) + quiet * cell;
     ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, cell * cells, cell * cells);
+    ctx.fillRect(0, 0, box.w, box.h);
     ctx.fillStyle = this._color(object.color);
-    const hash = this._hash(data);
     for (let y = 0; y < cells; y++) {
       for (let x = 0; x < cells; x++) {
-        const finder = (x < 7 && y < 7) || (x >= 14 && y < 7) || (x < 7 && y >= 14);
-        const on = finder ? (x % 6 === 0 || y % 6 === 0 || (x % 6 >= 2 && x % 6 <= 4 && y % 6 >= 2 && y % 6 <= 4)) : ((x * 31 + y * 17 + hash) % 5 < 2);
-        if (on) ctx.fillRect(x * cell, y * cell, cell, cell);
+        if (matrix[y][x]) ctx.fillRect(offsetX + x * cell, offsetY + y * cell, cell, cell);
       }
     }
+  }
+
+  _makeQrMatrix(text) {
+    const size = 33;
+    const dataCodewords = 80;
+    const eccCodewords = 20;
+    const modules = Array.from({ length: size }, () => Array(size).fill(false));
+    const reserved = Array.from({ length: size }, () => Array(size).fill(false));
+    const set = (x, y, value, reserve = true) => {
+      if (x < 0 || y < 0 || x >= size || y >= size) return;
+      modules[y][x] = !!value;
+      if (reserve) reserved[y][x] = true;
+    };
+    const finder = (x, y) => {
+      for (let dy = -1; dy <= 7; dy++) for (let dx = -1; dx <= 7; dx++) {
+        const xx = x + dx, yy = y + dy;
+        const on = dx >= 0 && dx <= 6 && dy >= 0 && dy <= 6 && (dx === 0 || dx === 6 || dy === 0 || dy === 6 || (dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4));
+        set(xx, yy, on);
+      }
+    };
+    finder(0, 0); finder(size - 7, 0); finder(0, size - 7);
+    for (let i = 8; i < size - 8; i++) {
+      set(i, 6, i % 2 === 0);
+      set(6, i, i % 2 === 0);
+    }
+    this._qrAlignment(modules, reserved, 26, 26);
+    set(8, size - 8, true);
+    for (let i = 0; i < 9; i++) {
+      reserved[8][i] = true; reserved[i][8] = true;
+      reserved[8][size - 1 - i] = true; reserved[size - 1 - i][8] = true;
+    }
+    for (let i = 0; i < 8; i++) reserved[8][size - 8 + i] = true;
+    const bytes = new TextEncoder().encode(text).slice(0, 78);
+    const bits = [0, 1, 0, 0];
+    for (let i = 7; i >= 0; i--) bits.push((bytes.length >>> i) & 1);
+    for (const byte of bytes) for (let i = 7; i >= 0; i--) bits.push((byte >>> i) & 1);
+    for (let i = 0; i < 4 && bits.length < dataCodewords * 8; i++) bits.push(0);
+    while (bits.length % 8) bits.push(0);
+    const data = [];
+    for (let i = 0; i < bits.length; i += 8) data.push(bits.slice(i, i + 8).reduce((acc, bit) => (acc << 1) | bit, 0));
+    for (let pad = 0xec; data.length < dataCodewords; pad ^= 0xec ^ 0x11) data.push(pad);
+    const codewords = [...data, ...this._qrEcc(data, eccCodewords)];
+    const allBits = codewords.flatMap((byte) => Array.from({ length: 8 }, (_, i) => (byte >>> (7 - i)) & 1));
+    let index = 0;
+    let upward = true;
+    for (let right = size - 1; right >= 1; right -= 2) {
+      if (right === 6) right--;
+      for (let vert = 0; vert < size; vert++) {
+        const y = upward ? size - 1 - vert : vert;
+        for (let dx = 0; dx < 2; dx++) {
+          const x = right - dx;
+          if (reserved[y][x]) continue;
+          const bit = index < allBits.length ? allBits[index++] : 0;
+          modules[y][x] = !!(bit ^ this._qrMask(0, x, y));
+        }
+      }
+      upward = !upward;
+    }
+    this._qrFormat(modules, size, 0);
+    return modules;
+  }
+
+  _qrAlignment(modules, reserved, cx, cy) {
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const on = Math.max(Math.abs(dx), Math.abs(dy)) !== 1;
+      modules[cy + dy][cx + dx] = on;
+      reserved[cy + dy][cx + dx] = true;
+    }
+  }
+
+  _qrMask(mask, x, y) {
+    return mask === 0 ? (x + y) % 2 === 0 : false;
+  }
+
+  _qrFormat(modules, size, mask) {
+    let data = (1 << 3) | mask;
+    let rem = data << 10;
+    for (let i = 14; i >= 10; i--) if ((rem >>> i) & 1) rem ^= 0x537 << (i - 10);
+    const bits = ((data << 10) | rem) ^ 0x5412;
+    const get = (i) => ((bits >>> i) & 1) !== 0;
+    for (let i = 0; i <= 5; i++) modules[8][i] = get(i);
+    modules[8][7] = get(6); modules[8][8] = get(7); modules[7][8] = get(8);
+    for (let i = 9; i < 15; i++) modules[14 - i][8] = get(i);
+    for (let i = 0; i < 8; i++) modules[size - 1 - i][8] = get(i);
+    for (let i = 8; i < 15; i++) modules[8][size - 15 + i] = get(i);
+    modules[8][size - 8] = true;
+  }
+
+  _qrEcc(data, degree) {
+    const gen = this._qrGenerator(degree);
+    const result = Array(degree).fill(0);
+    for (const byte of data) {
+      const factor = byte ^ result.shift();
+      result.push(0);
+      for (let i = 0; i < degree; i++) result[i] ^= this._qrMultiply(gen[i], factor);
+    }
+    return result;
+  }
+
+  _qrGenerator(degree) {
+    let result = [1];
+    for (let i = 0; i < degree; i++) {
+      const next = Array(result.length + 1).fill(0);
+      for (let j = 0; j < result.length; j++) {
+        next[j] ^= this._qrMultiply(result[j], 1);
+        next[j + 1] ^= this._qrMultiply(result[j], this._qrPow(2, i));
+      }
+      result = next;
+    }
+    return result.slice(1);
+  }
+
+  _qrMultiply(x, y) {
+    let z = 0;
+    for (let i = 7; i >= 0; i--) {
+      z = (z << 1) ^ ((z >>> 7) * 0x11d);
+      if ((y >>> i) & 1) z ^= x;
+    }
+    return z & 0xff;
+  }
+
+  _qrPow(x, n) {
+    let result = 1;
+    for (let i = 0; i < n; i++) result = this._qrMultiply(result, x);
+    return result;
   }
 
   _drawImage(ctx, object, box) {
