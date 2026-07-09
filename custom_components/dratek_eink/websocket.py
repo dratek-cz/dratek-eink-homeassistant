@@ -2,15 +2,21 @@ from __future__ import annotations
 
 import base64
 import io
+import time
+import uuid
 from typing import Any
 
 from homeassistant.components import bluetooth, websocket_api
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.storage import Store
 from PIL import Image
 
-from .discovery import parse_picksmart_advertisement
+from .discovery import parse_dratek_advertisement
 from .render import render_text_image
 from .transfer import DratekTransfer
+
+PROJECT_STORE_KEY = "dratek_eink.projects"
+PROJECT_STORE_VERSION = 1
 
 
 @callback
@@ -18,6 +24,10 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_scan)
     websocket_api.async_register_command(hass, websocket_send_text)
     websocket_api.async_register_command(hass, websocket_send_design)
+    websocket_api.async_register_command(hass, websocket_list_projects)
+    websocket_api.async_register_command(hass, websocket_save_project)
+    websocket_api.async_register_command(hass, websocket_load_project)
+    websocket_api.async_register_command(hass, websocket_delete_project)
 
 
 @websocket_api.websocket_command({"type": "dratek_eink/scan"})
@@ -68,7 +78,7 @@ async def websocket_scan(
             }
         )
 
-        device = parse_picksmart_advertisement(service_info)
+        device = parse_dratek_advertisement(service_info)
         if device is None:
             continue
 
@@ -109,6 +119,110 @@ async def websocket_scan(
             "debug": debug,
         },
     )
+
+
+def _project_store(hass: HomeAssistant) -> Store:
+    return Store(hass, PROJECT_STORE_VERSION, PROJECT_STORE_KEY)
+
+
+async def _load_project_data(hass: HomeAssistant) -> dict[str, Any]:
+    data = await _project_store(hass).async_load()
+    if not isinstance(data, dict):
+        return {"projects": []}
+    data.setdefault("projects", [])
+    return data
+
+
+@websocket_api.websocket_command({"type": "dratek_eink/projects/list"})
+@websocket_api.async_response
+async def websocket_list_projects(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    data = await _load_project_data(hass)
+    projects = [
+        {
+            "id": project["id"],
+            "name": project["name"],
+            "width": project["width"],
+            "height": project["height"],
+            "sdk_type": project.get("sdk_type"),
+            "updated_at": project.get("updated_at"),
+        }
+        for project in data["projects"]
+    ]
+    projects.sort(key=lambda item: (item["name"] or "").lower())
+    connection.send_result(msg["id"], {"projects": projects})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/projects/save",
+        "project": dict,
+    }
+)
+@websocket_api.async_response
+async def websocket_save_project(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    project = dict(msg["project"])
+    project_id = project.get("id") or str(uuid.uuid4())
+    now = int(time.time())
+    project.update(
+        {
+            "id": project_id,
+            "name": str(project.get("name") or "DRATEK eInk projekt"),
+            "updated_at": now,
+        }
+    )
+
+    data = await _load_project_data(hass)
+    projects = [item for item in data["projects"] if item.get("id") != project_id]
+    projects.append(project)
+    data["projects"] = projects
+    await _project_store(hass).async_save(data)
+    connection.send_result(msg["id"], {"project": project})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/projects/load",
+        "project_id": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_load_project(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    data = await _load_project_data(hass)
+    project = next((item for item in data["projects"] if item.get("id") == msg["project_id"]), None)
+    if not project:
+        connection.send_error(msg["id"], "not_found", "Project was not found.")
+        return
+    connection.send_result(msg["id"], {"project": project})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/projects/delete",
+        "project_id": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_delete_project(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    data = await _load_project_data(hass)
+    data["projects"] = [item for item in data["projects"] if item.get("id") != msg["project_id"]]
+    await _project_store(hass).async_save(data)
+    connection.send_result(msg["id"], {"ok": True})
 
 
 @websocket_api.websocket_command(
