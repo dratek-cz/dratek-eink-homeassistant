@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.8";
+const DRATEK_EINK_VERSION = "0.1.9";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -83,10 +83,24 @@ class DratekEinkPanel extends HTMLElement {
 
   _baseDisplaySize(device = this._device()) {
     const sdk = device ? Number(device.sdk_type) : 75;
-    if (sdk === 75) return { width: 400, height: 300 };
-    if (sdk === 11) return { width: 212, height: 104 };
-    if ([40, 43, 46, 48, 51, 296].includes(sdk)) return { width: 296, height: 128 };
-    return { width: 250, height: 128 };
+    const sizes = {
+      8: [212, 104], 11: [212, 104],
+      40: [296, 128], 43: [296, 128], 46: [296, 128], 48: [296, 128], 51: [296, 128],
+      64: [400, 300], 66: [400, 300], 72: [400, 300], 75: [400, 300], 78: [400, 300],
+      104: [640, 384], 106: [640, 384], 122: [640, 384],
+      136: [960, 640], 139: [960, 640], 142: [960, 640], 155: [960, 640],
+      160: [250, 132], 192: [196, 96], 224: [640, 360],
+      264: [250, 128], 267: [250, 128], 270: [250, 128],
+      296: [800, 480], 299: [800, 480], 302: [800, 480], 310: [800, 480], 315: [800, 480], 318: [800, 480],
+      328: [280, 480], 379: [1360, 480], 384: [168, 384], 386: [168, 384],
+      480: [384, 168], 482: [384, 168], 552: [240, 416], 555: [240, 416], 558: [240, 416],
+      654: [528, 768], 686: [200, 200], 2635: [960, 680], 2667: [792, 272],
+      2670: [792, 272], 2699: [272, 792], 2702: [272, 792], 4408: [800, 480],
+      4412: [800, 480], 4514: [210, 480], 4556: [1024, 576], 4610: [480, 210],
+      4684: [400, 600], 4716: [1600, 1200],
+    };
+    const size = sizes[sdk] || [250, 128];
+    return { width: size[0], height: size[1] };
   }
 
   _displaySize(device = this._device()) {
@@ -97,7 +111,7 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _isPe29Device(device = this._device()) {
-    return !!device && [40, 43, 46, 48, 51, 296].includes(Number(device.sdk_type));
+    return !!device && [40, 43, 46, 48, 51].includes(Number(device.sdk_type));
   }
 
   _transformOptions() {
@@ -1216,7 +1230,7 @@ class DratekEinkPanel extends HTMLElement {
           <div class="meter-block"><label>Baterie</label><div class="battery ${this._batteryClass(battery)}"><span style="width:${this._batteryPercent(battery)}%"></span></div><strong>${Number.isFinite(battery) ? `${battery}%` : "-"}</strong></div>
           <div class="meter-block"><label>Signal</label>${this._renderSignalBars(rssi)}<strong>${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>
         </div>
-        <div class="device-meta"><span>SW ${this._escape(device.sw)}</span><span>HW ${this._escape(device.hw)}</span><span>${this._escape(device.profile)}</span></div>
+        <div class="device-meta"><span>SW ${this._escape(device.sw)}</span><span>HW ${this._escape(device.hw)}</span><span>${this._escape(device.profile)}</span><span>${device.partial_update ? "Partial update" : "Full update"}</span></div>
       </button>`;
     }).join("")}</div>`;
   }
