@@ -10,7 +10,9 @@ from homeassistant.components import bluetooth, websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.storage import Store
 from PIL import Image
+import voluptuous as vol
 
+from .const import PARTIAL_UPDATE_SDK_TYPES
 from .discovery import parse_dratek_advertisement
 from .render import render_text_image
 from .transfer import DratekTransfer
@@ -24,6 +26,7 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_scan)
     websocket_api.async_register_command(hass, websocket_send_text)
     websocket_api.async_register_command(hass, websocket_send_design)
+    websocket_api.async_register_command(hass, websocket_send_partial_design)
     websocket_api.async_register_command(hass, websocket_list_projects)
     websocket_api.async_register_command(hass, websocket_save_project)
     websocket_api.async_register_command(hass, websocket_load_project)
@@ -97,6 +100,7 @@ async def websocket_scan(
                 "sw": device.sw,
                 "hw": device.hw,
                 "model": device.model,
+                "partial_update": device.sdk_type in PARTIAL_UPDATE_SDK_TYPES,
             }
         )
 
@@ -328,6 +332,81 @@ async def websocket_send_design(
         return
 
     log("Design sent.")
+    connection.send_result(
+        msg["id"],
+        {
+            "ok": True,
+            "address": address,
+            "log": log_lines,
+        },
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/send_partial_design",
+        "address": str,
+        "sdk_type": int,
+        "image": str,
+        "x": int,
+        "y": int,
+        "width": int,
+        "height": int,
+        "clear_screen": int,
+        vol.Optional("transform"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_send_partial_design(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    address = msg["address"]
+    sdk_type = msg["sdk_type"]
+    image_data = msg["image"]
+    transform = msg.get("transform")
+    log_lines: list[str] = []
+
+    def log(message: str) -> None:
+        log_lines.append(message)
+
+    try:
+        if "," in image_data:
+            image_data = image_data.split(",", 1)[1]
+        raw = base64.b64decode(image_data)
+        image = Image.open(io.BytesIO(raw)).convert("RGB")
+        log(
+            "Sending partial editor design "
+            f"{image.width}x{image.height} to SDK type {sdk_type} at "
+            f"x={msg['x']}, y={msg['y']}."
+        )
+        transfer = DratekTransfer(log=log)
+        await transfer.send_partial_image(
+            address,
+            sdk_type,
+            image,
+            msg["x"],
+            msg["y"],
+            msg["width"],
+            msg["height"],
+            msg.get("clear_screen", 0),
+            transform,
+        )
+    except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
+        log(f"Partial send failed: {exc}")
+        connection.send_result(
+            msg["id"],
+            {
+                "ok": False,
+                "address": address,
+                "error": str(exc),
+                "log": log_lines,
+            },
+        )
+        return
+
+    log("Partial design sent.")
     connection.send_result(
         msg["id"],
         {
