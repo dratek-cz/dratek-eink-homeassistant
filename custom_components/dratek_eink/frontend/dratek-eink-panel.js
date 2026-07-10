@@ -21,6 +21,7 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedProjectId = "";
     this._projectName = "Novy navrh";
     this._variables = {};
+    this._orientation = "landscape";
     this._draftSaveTimer = null;
     this._loadingDraft = false;
     this._restoringDraft = false;
@@ -76,12 +77,19 @@ class DratekEinkPanel extends HTMLElement {
     return devices.find((device) => device.address === this._selectedDeviceAddress) || devices[0] || null;
   }
 
-  _displaySize(device = this._device()) {
+  _baseDisplaySize(device = this._device()) {
     const sdk = device ? Number(device.sdk_type) : 75;
     if (sdk === 75) return { width: 400, height: 300 };
     if (sdk === 11) return { width: 212, height: 104 };
-    if (sdk === 296) return { width: 296, height: 128 };
+    if ([40, 43, 46, 48, 51, 296].includes(sdk)) return { width: 296, height: 128 };
     return { width: 250, height: 128 };
+  }
+
+  _displaySize(device = this._device()) {
+    const size = this._baseDisplaySize(device);
+    return this._orientation === "portrait"
+      ? { width: Math.min(size.width, size.height), height: Math.max(size.width, size.height) }
+      : { width: Math.max(size.width, size.height), height: Math.min(size.width, size.height) };
   }
 
   _fitZoom() {
@@ -117,6 +125,7 @@ class DratekEinkPanel extends HTMLElement {
       name: `Navrh ${code}`,
       device_address: device ? device.address : this._selectedDeviceAddress,
       sdk_type: device ? Number(device.sdk_type) : 75,
+      orientation: this._orientation,
       width: size.width,
       height: size.height,
       variables: {},
@@ -127,8 +136,9 @@ class DratekEinkPanel extends HTMLElement {
   _applyDraft(draft) {
     this._restoringDraft = true;
     const device = this._device();
-    const size = this._displaySize(device);
     const source = draft || this._emptyDeviceDraft(device);
+    this._orientation = source.orientation === "portrait" ? "portrait" : "landscape";
+    const size = this._displaySize(device);
     this._objects = Array.isArray(source.objects) ? structuredClone(source.objects) : [];
     this._variables = source.variables ? structuredClone(source.variables) : {};
     this._selectedIds = [];
@@ -140,6 +150,21 @@ class DratekEinkPanel extends HTMLElement {
       this._selectedProjectId = "";
     }
     this._restoringDraft = false;
+  }
+
+  _setOrientation(orientation) {
+    if (!["landscape", "portrait"].includes(orientation) || orientation === this._orientation) return;
+    const before = this._displaySize();
+    this._orientation = orientation;
+    const after = this._displaySize();
+    if (before.width !== after.width || before.height !== after.height) {
+      this._scaleDesign(before, after);
+    }
+    this._selectedIds = [];
+    this._fitZoom();
+    this._render();
+    this._paint();
+    this._scheduleDraftSave();
   }
 
   _nextObjectId() {
@@ -601,6 +626,7 @@ class DratekEinkPanel extends HTMLElement {
       device_address: device ? device.address : this._selectedDeviceAddress,
       physical_code: device ? device.physical_code : "",
       sdk_type: device ? Number(device.sdk_type) : 75,
+      orientation: this._orientation,
       width: size.width,
       height: size.height,
       variables: this._variables,
@@ -624,8 +650,11 @@ class DratekEinkPanel extends HTMLElement {
     try {
       const result = await this._hass.callWS({ type: "dratek_eink/projects/load", project_id: this._selectedProjectId });
       const project = result.project;
+      const previousOrientation = this._orientation;
+      this._orientation = project.orientation === "portrait" ? "portrait" : "landscape";
       const size = this._displaySize();
       if (project.width !== size.width || project.height !== size.height) {
+        this._orientation = previousOrientation;
         alert(`Projekt je pro rozliseni ${project.width}x${project.height}, aktualni displej ma ${size.width}x${size.height}.`);
         return;
       }
@@ -672,6 +701,7 @@ class DratekEinkPanel extends HTMLElement {
         type: "dratek_eink/send_design",
         address: device.address,
         sdk_type: Number(device.sdk_type),
+        orientation: this._orientation,
         image: canvas.toDataURL("image/png"),
       });
     } catch (err) {
@@ -733,7 +763,7 @@ class DratekEinkPanel extends HTMLElement {
         </div>
         <div class="status-grid"><div class="card"><div class="metric">Stav</div><span class="pill ${status.cls}">${this._escape(status.text)}</span></div><div class="card"><div class="metric">Bluetooth adaptery / proxy</div><div class="value">${result.scanner_count}</div></div><div class="card"><div class="metric">BLE zarizeni v dosahu</div><div class="value">${result.ble_count}</div></div></div>
         <div class="card projectbar"><input id="projectName" value="${this._escape(this._projectName)}" placeholder="Nazev navrhu"><select id="projectSelect"><option value="">Novy / neulozeny navrh</option>${this._projects.map((project) => `<option value="${this._escape(project.id)}" ${project.id === this._selectedProjectId ? "selected" : ""}>${this._escape(project.name)} (${project.width}x${project.height})</option>`).join("")}</select><div class="toolbar"><button id="newProject" class="secondary">Novy</button><button id="saveProject">Ulozit do HA</button><button id="loadProject" class="secondary" ${this._selectedProjectId ? "" : "disabled"}>Nacist</button><button id="deleteProject" class="danger" ${this._selectedProjectId ? "" : "disabled"}>Smazat</button></div></div>
-        <div class="card" style="margin-bottom:12px"><div class="toolbar"><label>Displej</label><select id="deviceSelect">${result.devices.map((item) => `<option value="${this._escape(item.address)}" ${item.address === (device && device.address) ? "selected" : ""}>${this._escape(item.physical_code)} - ${this._escape(item.model)} - RSSI ${this._escape(item.rssi)}</option>`).join("")}</select><span class="pill muted">${size.width} x ${size.height}</span><button id="sendTest" class="secondary" ${!device ? "disabled" : ""}>Odeslat dratek.cz</button><label><input id="realPreview" type="checkbox" ${this._realPreview ? "checked" : ""}> Real eInk colors</label></div>${this._renderSendResult()}</div>
+        <div class="card" style="margin-bottom:12px"><div class="toolbar"><label>Displej</label><select id="deviceSelect">${result.devices.map((item) => `<option value="${this._escape(item.address)}" ${item.address === (device && device.address) ? "selected" : ""}>${this._escape(item.physical_code)} - ${this._escape(item.model)} - SDK ${this._escape(item.sdk_type)} - RSSI ${this._escape(item.rssi)}</option>`).join("")}</select><span class="pill muted">${size.width} x ${size.height}</span><button id="orientationLandscape" class="secondary" title="Na sirku" ${this._orientation === "landscape" ? "disabled" : ""}>Na sirku</button><button id="orientationPortrait" class="secondary" title="Na vysku" ${this._orientation === "portrait" ? "disabled" : ""}>Na vysku</button><button id="sendTest" class="secondary" ${!device ? "disabled" : ""}>Odeslat dratek.cz</button><label><input id="realPreview" type="checkbox" ${this._realPreview ? "checked" : ""}> Real eInk colors</label></div>${this._renderSendResult()}</div>
         ${this._renderVariables()}
         <div class="editor-shell">
           <div class="card left"><h2>Nastroje</h2><div class="tool-grid"><button class="tool-icon" data-add="text" title="Text"><span class="ico">T</span><span class="txt">Text</span></button><button class="tool-icon" data-add="rect" title="Rectangle"><span class="ico">&#9633;</span><span class="txt">Rect</span></button><button class="tool-icon" data-add="line" title="Cara"><span class="ico">&#9585;</span><span class="txt">Cara</span></button><button class="tool-icon" data-add="barcode" title="EAN"><span class="ico">&#9776;</span><span class="txt">EAN</span></button><button class="tool-icon" data-add="qr" title="QR"><span class="ico">&#9638;</span><span class="txt">QR</span></button><button id="addImage" class="tool-icon secondary" title="Obrazek"><span class="ico">&#9729;</span><span class="txt">Image</span></button><input id="imageFile" type="file" accept="image/*" hidden></div><div class="panel-divider"></div><h2>Upravy</h2><div class="action-grid"><button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${this._selectedIds.length ? "" : "disabled"}>&#10697;</button><button id="rotateSelected" class="icon-btn secondary" title="Otocit 90" ${this._selectedIds.length ? "" : "disabled"}>&#8635;</button><button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${this._selectedIds.length ? "" : "disabled"}>&#8644;</button><button id="layerFront" class="icon-btn secondary" title="Do popredi" ${this._selectedIds.length ? "" : "disabled"}>&#8679;</button><button id="layerBack" class="icon-btn secondary" title="Do pozadi" ${this._selectedIds.length ? "" : "disabled"}>&#8681;</button><button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${this._selectedIds.length ? "" : "disabled"}>&#8676;</button><button id="alignCenter" class="icon-btn secondary" title="Zarovnat na stred" ${this._selectedIds.length ? "" : "disabled"}>&#8596;</button><button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${this._selectedIds.length ? "" : "disabled"}>&#8673;</button><button id="alignMiddle" class="icon-btn secondary" title="Svisly stred" ${this._selectedIds.length ? "" : "disabled"}>&#8597;</button><button id="deleteSelected" class="wide-action danger" ${this._selectedIds.length ? "" : "disabled"}>Smazat vybrane</button><button id="clearDesign" class="wide-action danger">Smazat vse</button></div><div class="panel-divider"></div><h2>Zobrazeni</h2><div class="action-grid"><button id="zoomIn" class="icon-btn secondary" title="Priblizit">+</button><button id="zoomOut" class="icon-btn secondary" title="Oddalit">-</button><button id="zoomFit" class="icon-btn secondary" title="Prizpusobit">&#9633;</button><label class="wide-action"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}> Grid snap 5 px</label></div></div>
@@ -777,6 +807,8 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#realPreview").addEventListener("change", (event) => { this._realPreview = event.target.checked; this._paint(); });
     this.shadowRoot.querySelector("#sendTest").addEventListener("click", () => this._sendTestText());
     this.shadowRoot.querySelector("#deviceSelect").addEventListener("change", (event) => this._selectDevice(event.target.value));
+    this.shadowRoot.querySelector("#orientationLandscape").addEventListener("click", () => this._setOrientation("landscape"));
+    this.shadowRoot.querySelector("#orientationPortrait").addEventListener("click", () => this._setOrientation("portrait"));
     this.shadowRoot.querySelectorAll("[data-variable]").forEach((input) => input.addEventListener("input", () => {
       this._variables[input.dataset.variable] = input.value;
       this._paint();
