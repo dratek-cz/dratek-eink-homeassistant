@@ -1,5 +1,7 @@
 import qrcode from "./qrcode-generator.js";
 
+const DRATEK_EINK_VERSION = "0.1.8";
+
 class DratekEinkPanel extends HTMLElement {
   constructor() {
     super();
@@ -807,7 +809,7 @@ class DratekEinkPanel extends HTMLElement {
         h1{margin:0;font-size:24px;font-weight:850;letter-spacing:0}h2{margin:0;font-size:13px;text-transform:uppercase;color:var(--secondary-text-color);letter-spacing:.08em}.subtitle{color:var(--secondary-text-color);font-size:13px;margin-top:3px}
         button,select,input{font:inherit}button{border:0;border-radius:8px;background:var(--primary-color);color:var(--text-primary-color,#fff);padding:9px 12px;font-weight:760;cursor:pointer;box-shadow:0 1px 0 rgba(0,0,0,.08);display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px}button:hover:not(:disabled){filter:brightness(1.03);transform:translateY(-1px)}button:disabled{opacity:.45;cursor:not-allowed;transform:none}
         ha-icon{--mdc-icon-size:18px}.primary-action{background:#0f766e}.secondary{background:var(--card-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color)}.danger{background:#b3261e;color:#fff}.ghost{background:transparent;color:var(--primary-text-color);border:1px solid transparent;box-shadow:none}
-        .topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;padding:14px 16px;box-shadow:0 10px 30px rgba(0,0,0,.07)}.brand{display:flex;align-items:center;gap:13px}.logo{width:44px;height:44px;border-radius:8px;display:grid;place-items:center;background:#111827;color:#fff;font-weight:950;letter-spacing:.5px}.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+        .topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;padding:14px 16px;box-shadow:0 10px 30px rgba(0,0,0,.07)}.brand{display:flex;align-items:center;gap:13px}.logo{width:44px;height:44px;border-radius:8px;display:grid;place-items:center;background:#111827;color:#fff;font-weight:950;letter-spacing:.5px}.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.version-badge{display:inline-flex;align-items:center;gap:5px;margin-left:8px;padding:3px 8px;border-radius:999px;background:var(--secondary-background-color);color:var(--secondary-text-color);border:1px solid var(--divider-color);font-size:11px;font-weight:850}
         .card{background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;padding:14px;box-shadow:0 10px 28px rgba(0,0,0,.06)}.metric{color:var(--secondary-text-color);font-size:12px;margin-bottom:5px}.value{font-size:25px;font-weight:850}.pill{display:inline-flex;min-height:26px;align-items:center;border-radius:999px;padding:0 10px;font-size:12px;font-weight:800}.good{background:#d7f5df;color:#0b6b2a}.warn{background:#fff2c7;color:#775500}.bad{background:#ffd9d4;color:#9d1c0f}.muted{background:var(--secondary-background-color);color:var(--secondary-text-color)}
         .tabbar{display:flex;gap:6px;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;padding:5px;width:max-content;max-width:100%;box-shadow:0 8px 24px rgba(0,0,0,.05)}.tab{background:transparent;color:var(--secondary-text-color);box-shadow:none;border:0;border-radius:7px;padding:10px 14px}.tab.active{background:var(--primary-color);color:var(--text-primary-color,#fff)}
         .status-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}.status-tile{display:flex;align-items:center;justify-content:space-between;gap:12px}.status-icon{width:42px;height:42px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-color)}
@@ -824,7 +826,7 @@ class DratekEinkPanel extends HTMLElement {
       </style>
       <div class="page">
         <div class="topbar">
-          <div class="brand"><div class="logo">DE</div><div><h1>DRATEK eInk</h1><div class="subtitle">Editor sablon, BLE diagnostika a sprava displeju</div></div></div>
+          <div class="brand"><div class="logo">DE</div><div><h1>DRATEK eInk <span class="version-badge">v${DRATEK_EINK_VERSION}</span></h1><div class="subtitle">Editor sablon, BLE diagnostika a sprava displeju</div></div></div>
           <div class="toolbar"><button id="scan" class="secondary" ${this._loading ? "disabled" : ""}><ha-icon icon="mdi:bluetooth-searching"></ha-icon>${this._loading ? "Vyhledavam..." : "Vyhledat zarizeni"}</button><button id="sendDesign" class="primary-action" ${!device || this._sending ? "disabled" : ""}><ha-icon icon="mdi:upload"></ha-icon>${this._sending ? "Odesilam..." : "Odeslat navrh"}</button></div>
         </div>
         <div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezene displeje</button><button class="tab ${this._activeTab === "designer" ? "active" : ""}" data-tab="designer"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Designer</button></div>
@@ -1258,4 +1260,6 @@ class DratekEinkPanel extends HTMLElement {
   }
 }
 
-customElements.define("dratek-eink-panel", DratekEinkPanel);
+if (!customElements.get("dratek-eink-panel")) {
+  customElements.define("dratek-eink-panel", DratekEinkPanel);
+}
