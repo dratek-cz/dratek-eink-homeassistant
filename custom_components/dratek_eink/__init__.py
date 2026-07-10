@@ -10,14 +10,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 
-from .const import DOMAIN
+from .const import DOMAIN, PANEL_VERSION
 from .render import render_text_image
 from .transfer import DratekTransfer
 
 _LOGGER = logging.getLogger(__name__)
 PANEL_URL_PATH = "dratek-eink"
 PANEL_STATIC_PATH = f"/{DOMAIN}_panel"
-PANEL_VERSION = "0.1.8"
 
 SEND_TEXT_SCHEMA = vol.Schema(
     {
