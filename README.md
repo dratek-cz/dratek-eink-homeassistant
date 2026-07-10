@@ -29,6 +29,14 @@
 - PE29R_V4_BLE / 296x128 typy se detekuji i pres SDK typy 40, 43, 46, 48 a 51
 - pri prepnuti displeje se prekresli rozmer platna i ovladaci lista s aktualnim SDK typem a rozlisenim
 
+## Novinky ve verzi 0.1.4
+
+- PE29R_V4_BLE uz nepouziva zrcadleni obrazu urcene pro jine typy stitku
+- prepinac layoutu na sirku / na vysku je viditelny take v levem panelu editoru
+- pri zmene layoutu se objekty v navrhu otoci do nove orientace misto pouheho natazeni
+- po uspesnem odeslani do displeje se aktualni navrh hned ulozi k BLE adrese displeje
+- pracovni navrhy se ukladaji do Home Assistant storage a zustavaji zachovane i po aktualizaci integrace
+
 Integrace pro Home Assistant, která umí vyhledat dostupné BLE eInk cenovky DRATEK, zobrazit diagnostiku Bluetoothu a připravit grafický návrh přímo v Home Assistantu.
 
 Instalace je určena výhradně přes HACS. Není potřeba nic kopírovat ručně ani psát do `configuration.yaml`.
