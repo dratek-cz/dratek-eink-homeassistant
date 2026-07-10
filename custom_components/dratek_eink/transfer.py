@@ -9,7 +9,7 @@ from collections.abc import Callable
 from bleak import BleakClient
 from PIL import Image
 
-from .const import CONTROL_CHARS, WRITE_CHARS
+from .const import CONTROL_CHARS, PARTIAL_UPDATE_SDK_TYPES, WRITE_CHARS
 from .render import pack_bwr_image
 
 _LOGGER = logging.getLogger(__name__)
@@ -43,11 +43,43 @@ class DratekTransfer:
         image: Image.Image,
         transform: str | None = None,
     ) -> None:
+        await self._send_with_retries(address, sdk_type, image, transform, partial=None)
+
+    async def send_partial_image(
+        self,
+        address: str,
+        sdk_type: int,
+        image: Image.Image,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        clear_screen: int = 0,
+        transform: str | None = None,
+    ) -> None:
+        if int(sdk_type) not in PARTIAL_UPDATE_SDK_TYPES:
+            supported = ", ".join(str(item) for item in sorted(PARTIAL_UPDATE_SDK_TYPES))
+            raise RuntimeError(f"Partial update is supported by the SDK only for type(s): {supported}.")
+        if y % 8 != 0 or height % 8 != 0:
+            raise ValueError("Partial update requires y and height to be divisible by 8.")
+        if image.size != (width, height):
+            raise ValueError(f"Partial image size {image.width}x{image.height} does not match area {width}x{height}.")
+        partial = (int(x), int(y), int(width), int(height), int(clear_screen))
+        await self._send_with_retries(address, sdk_type, image, transform, partial=partial)
+
+    async def _send_with_retries(
+        self,
+        address: str,
+        sdk_type: int,
+        image: Image.Image,
+        transform: str | None = None,
+        partial: tuple[int, int, int, int, int] | None = None,
+    ) -> None:
         last_error: Exception | None = None
         for attempt in range(1, 4):
             self.log(f"Transfer attempt {attempt}/3.")
             try:
-                await self._send_once(address, sdk_type, image, transform)
+                await self._send_once(address, sdk_type, image, transform, partial)
                 self.log("Transfer completed.")
                 return
             except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
@@ -63,6 +95,7 @@ class DratekTransfer:
         sdk_type: int,
         image: Image.Image,
         transform: str | None = None,
+        partial: tuple[int, int, int, int, int] | None = None,
     ) -> None:
         payload = pack_bwr_image(sdk_type, image, transform)
         responses: queue.Queue[bytes] = queue.Queue()
@@ -95,6 +128,9 @@ class DratekTransfer:
 
             total_blocks = math.ceil(len(payload) / (block_size - 4))
             self.log(f"Block size: {block_size}. Payload: {len(payload)} bytes, {total_blocks} blocks.")
+
+            if partial is not None:
+                await self._write_partial_position(client, control_char, responses, partial)
 
             command = bytes([2]) + len(payload).to_bytes(4, "little") + bytes([1])
             await self._write_char(client, control_char, command, "prepare update")
@@ -184,6 +220,27 @@ class DratekTransfer:
             except TimeoutError:
                 self.log("No block-size response; retrying...")
         raise TimeoutError("Timed out waiting for block size response.")
+
+    async def _write_partial_position(
+        self,
+        client,
+        control_char,
+        responses: queue.Queue[bytes],
+        partial: tuple[int, int, int, int, int],
+    ) -> None:
+        x, y, width, height, clear_screen = partial
+        payload = (
+            bytes([0x60])
+            + x.to_bytes(4, "little", signed=False)
+            + y.to_bytes(4, "little", signed=False)
+            + width.to_bytes(4, "little", signed=False)
+            + height.to_bytes(4, "little", signed=False)
+            + clear_screen.to_bytes(4, "little", signed=False)
+        )
+        self._clear_queue(responses)
+        self.log(f"Partial update area: x={x}, y={y}, width={width}, height={height}, clear={clear_screen}.")
+        await self._write_char(client, control_char, payload, "partial update area")
+        await self._wait_for_response(responses, 0x60, ok_values={0}, label="partial update area")
 
     async def _wait_for_block_size(self, responses: queue.Queue[bytes], timeout: int = 10) -> int:
         deadline = asyncio.get_running_loop().time() + timeout
