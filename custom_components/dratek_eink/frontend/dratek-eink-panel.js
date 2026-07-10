@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.11";
+const DRATEK_EINK_VERSION = "0.1.12";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -488,8 +488,25 @@ class DratekEinkPanel extends HTMLElement {
     ];
   }
 
-  _tt(x, y, w, h, text, color = "black", bold = false, variableName = "") {
-    return { type: "text", x, y, w, h, text, color, fontSize: h, fontFamily: "Arial", bold, rotation: 0, variable: !!variableName, variableName };
+  _tt(x, y, w, h, text, color = "black", bold = false, variableName = "", align = "center") {
+    return {
+      type: "text",
+      x,
+      y,
+      w,
+      h,
+      text,
+      color,
+      fontSize: h,
+      fontFamily: "Roboto",
+      bold,
+      rotation: 0,
+      variable: !!variableName,
+      variableName,
+      textAlign: align,
+      verticalAlign: "middle",
+      autoFit: true,
+    };
   }
 
   _rr(x, y, w, h, fill = "none", stroke = "black", strokeWidth = 1) {
@@ -524,7 +541,7 @@ class DratekEinkPanel extends HTMLElement {
       if (next.y2 !== undefined) next.y2 = this._snapValue(Number(next.y2 || 0) * sy);
       if (next.w !== undefined) next.w = Math.max(1, this._snapValue(Number(next.w || 1) * sx));
       if (next.h !== undefined) next.h = Math.max(1, this._snapValue(Number(next.h || 1) * sy));
-      if (next.fontSize !== undefined) next.fontSize = Math.max(7, Math.round(Number(next.fontSize || 12) * sy));
+      if (next.fontSize !== undefined) next.fontSize = Math.max(7, Math.round(Number(next.fontSize || 12) * Math.min(sx, sy)));
       if (next.strokeWidth !== undefined) next.strokeWidth = Math.max(1, Math.round(Number(next.strokeWidth || 1) * Math.min(sx, sy)));
       if (next.variable && next.variableName) variables[next.variableName] = next.text || "";
       return next;
@@ -557,10 +574,13 @@ class DratekEinkPanel extends HTMLElement {
       strokeWidth: 2,
       text: type === "text" ? "Text" : type === "qr" ? "https://dratek.cz" : "8591234567890",
       fontSize: Math.max(16, Math.round(size.height * 0.16)),
-      fontFamily: "Arial",
+      fontFamily: "Roboto",
       bold: false,
       variable: false,
       variableName: "",
+      textAlign: "left",
+      verticalAlign: "middle",
+      autoFit: true,
       image: "",
       keepRatio: type === "image",
     };
@@ -1157,7 +1177,7 @@ class DratekEinkPanel extends HTMLElement {
       return `<div class="inspector-empty"><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon><p>${this._selectedIds.length > 1 ? `Vybrano ${this._selectedIds.length} objektu.` : "Vyber objekt v navrhu."}</p></div>`;
     }
     const common = `<h2>Pozice</h2><div class="row"><div class="field"><label>X</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label>Y</label><input data-prop="y" type="number" value="${object.y}"></div></div><div class="row"><div class="field"><label>Sirka</label><input data-prop="w" type="number" value="${object.w || 1}"></div><div class="field"><label>Vyska</label><input data-prop="h" type="number" value="${object.h || 1}"></div></div><h2>Vzhled</h2><div class="row"><div class="field"><label>Rotace</label><select data-prop="rotation"><option ${object.rotation === 0 ? "selected" : ""}>0</option><option ${object.rotation === 90 ? "selected" : ""}>90</option><option ${object.rotation === 180 ? "selected" : ""}>180</option><option ${object.rotation === 270 ? "selected" : ""}>270</option></select></div><div class="field"><label>Barva</label><select data-prop="color"><option value="black" ${object.color === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.color === "red" ? "selected" : ""}>Cervena</option><option value="white" ${object.color === "white" ? "selected" : ""}>Bila</option></select></div></div>`;
-    if (object.type === "text") return `${common}<div class="field"><label>Text</label><input data-prop="text" value="${this._escape(object.text)}"></div><div class="row"><div class="field"><label>Velikost textu</label><input data-prop="fontSize" type="number" value="${object.fontSize}"></div><div class="field"><label>Font</label><select data-prop="fontFamily"><option value="Arial" ${object.fontFamily === "Arial" ? "selected" : ""}>Arial</option><option value="Verdana" ${object.fontFamily === "Verdana" ? "selected" : ""}>Verdana</option><option value="Tahoma" ${object.fontFamily === "Tahoma" ? "selected" : ""}>Tahoma</option><option value="Georgia" ${object.fontFamily === "Georgia" ? "selected" : ""}>Georgia</option><option value="Courier New" ${object.fontFamily === "Courier New" ? "selected" : ""}>Courier</option></select></div></div><label><input data-prop="bold" type="checkbox" ${object.bold ? "checked" : ""}> Bold</label><label><input data-prop="variable" type="checkbox" ${object.variable ? "checked" : ""}> Promenny text</label><div class="field"><label>Nazev promenne</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="napr_teplota"></div>`;
+    if (object.type === "text") return `${common}<div class="field"><label>Text</label><input data-prop="text" value="${this._escape(object.text)}"></div><div class="row"><div class="field"><label>Velikost textu</label><input data-prop="fontSize" type="number" value="${object.fontSize}"></div><div class="field"><label>Font</label><select data-prop="fontFamily"><option value="Roboto" ${!object.fontFamily || object.fontFamily === "Roboto" ? "selected" : ""}>Roboto</option><option value="Arial" ${object.fontFamily === "Arial" ? "selected" : ""}>Arial</option><option value="Verdana" ${object.fontFamily === "Verdana" ? "selected" : ""}>Verdana</option><option value="Tahoma" ${object.fontFamily === "Tahoma" ? "selected" : ""}>Tahoma</option><option value="Courier New" ${object.fontFamily === "Courier New" ? "selected" : ""}>Courier</option></select></div></div><div class="row"><div class="field"><label>Zarovnani</label><select data-prop="textAlign"><option value="left" ${object.textAlign === "left" ? "selected" : ""}>Vlevo</option><option value="center" ${!object.textAlign || object.textAlign === "center" ? "selected" : ""}>Stred</option><option value="right" ${object.textAlign === "right" ? "selected" : ""}>Vpravo</option></select></div><div class="field"><label>Svisle</label><select data-prop="verticalAlign"><option value="top" ${object.verticalAlign === "top" ? "selected" : ""}>Nahore</option><option value="middle" ${!object.verticalAlign || object.verticalAlign === "middle" ? "selected" : ""}>Stred</option><option value="bottom" ${object.verticalAlign === "bottom" ? "selected" : ""}>Dole</option></select></div></div><label><input data-prop="autoFit" type="checkbox" ${object.autoFit !== false ? "checked" : ""}> Automaticky prizpusobit text boxu</label><label><input data-prop="bold" type="checkbox" ${object.bold ? "checked" : ""}> Bold</label><label><input data-prop="variable" type="checkbox" ${object.variable ? "checked" : ""}> Promenny text</label><div class="field"><label>Nazev promenne</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="napr_teplota"></div>`;
     if (object.type === "rect") return `${common}<div class="row"><div class="field"><label>Vypln</label><select data-prop="fill"><option value="none" ${object.fill === "none" ? "selected" : ""}>Bez vyplne</option><option value="black" ${object.fill === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.fill === "red" ? "selected" : ""}>Cervena</option><option value="white" ${object.fill === "white" ? "selected" : ""}>Bila</option></select></div><div class="field"><label>Ramecek</label><select data-prop="stroke"><option value="none" ${object.stroke === "none" ? "selected" : ""}>Bez ramecku</option><option value="black" ${object.stroke === "black" ? "selected" : ""}>Cerny</option><option value="red" ${object.stroke === "red" ? "selected" : ""}>Cerveny</option></select></div></div><div class="field"><label>Sila ramecku</label><input data-prop="strokeWidth" type="number" value="${object.strokeWidth || 0}"></div>`;
     if (object.type === "line") return `<div class="row"><div class="field"><label>X1</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label>Y1</label><input data-prop="y" type="number" value="${object.y}"></div></div><div class="row"><div class="field"><label>X2</label><input data-prop="x2" type="number" value="${object.x2}"></div><div class="field"><label>Y2</label><input data-prop="y2" type="number" value="${object.y2}"></div></div><div class="row"><div class="field"><label>Barva</label><select data-prop="color"><option value="black" ${object.color === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.color === "red" ? "selected" : ""}>Cervena</option></select></div><div class="field"><label>Sila</label><input data-prop="strokeWidth" type="number" value="${object.strokeWidth || 2}"></div></div>`;
     if (object.type === "barcode" || object.type === "qr") return `${common}<div class="field"><label>${object.type === "qr" ? "QR data" : "EAN data"}</label><input data-prop="text" value="${this._escape(object.text)}"></div>`;
@@ -1233,14 +1253,42 @@ class DratekEinkPanel extends HTMLElement {
 
   _drawText(ctx, object, box) {
     ctx.fillStyle = this._color(object.color);
-    const family = object.fontFamily || "Arial";
-    const weight = object.bold ? "700 " : "";
-    ctx.font = `${weight}${object.fontSize || 24}px ${family}, sans-serif`;
-    ctx.textBaseline = "top";
     const value = object.variable && object.variableName
       ? (this._variables[object.variableName] ?? object.text ?? "")
       : (object.text || "");
-    String(value).split("\n").forEach((line, index) => ctx.fillText(line, 0, index * (object.fontSize || 24) * 1.18, box.w));
+    const lines = String(value).split("\n");
+    const family = object.fontFamily || "Roboto";
+    const weight = object.bold ? "700 " : "500 ";
+    const padding = Math.max(0, Number(object.padding || 0));
+    const availableW = Math.max(1, box.w - padding * 2);
+    const availableH = Math.max(1, box.h - padding * 2);
+    let fontSize = Math.max(6, Number(object.fontSize || 24));
+    if (object.autoFit !== false) {
+      for (let attempt = 0; attempt < 40; attempt++) {
+        ctx.font = `${weight}${fontSize}px ${family}, Arial, sans-serif`;
+        const lineHeight = fontSize * 1.12;
+        const maxWidth = Math.max(...lines.map((line) => ctx.measureText(line || " ").width));
+        if (maxWidth <= availableW && lineHeight * lines.length <= availableH) break;
+        fontSize -= 1;
+        if (fontSize <= 6) break;
+      }
+    }
+    ctx.font = `${weight}${fontSize}px ${family}, Arial, sans-serif`;
+    ctx.textBaseline = "top";
+    ctx.textAlign = object.textAlign || "left";
+    const lineHeight = fontSize * 1.12;
+    const totalHeight = lineHeight * lines.length;
+    const startY = padding + (
+      object.verticalAlign === "bottom"
+        ? Math.max(0, availableH - totalHeight)
+        : object.verticalAlign === "middle"
+          ? Math.max(0, (availableH - totalHeight) / 2)
+          : 0
+    );
+    const x = ctx.textAlign === "center" ? box.w / 2 : ctx.textAlign === "right" ? box.w - padding : padding;
+    lines.forEach((line, index) => ctx.fillText(line, x, startY + index * lineHeight, availableW));
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
   }
 
   _drawRect(ctx, object, box) {
