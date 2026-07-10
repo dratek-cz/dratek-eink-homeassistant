@@ -1,5 +1,13 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.6
+
+- 2,9" PE29 / PE29R_V4_BLE displeje maji v designeru vlastni kalibraci mapovani obrazu
+- pro PE29 jde zvolit otoceni a zrcadleni prenosovych dat bez zmeny SDK typu
+- vybrana transformace se uklada ke konkretni BLE adrese displeje
+- odesilani navrhu posila zvolenou PE29 transformaci do backendu
+- backend umi pro PE29 zabalit obraz ve vice variantach, aby slo doladit zrcadleni nebo posun realneho displeje
+
 ## Novinky ve verzi 0.1.0
 
 - editor ma modernejsi trisloupcove rozhrani s ikonovou paletou nastroju
