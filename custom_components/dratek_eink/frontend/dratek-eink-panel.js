@@ -22,6 +22,7 @@ class DratekEinkPanel extends HTMLElement {
     this._projectName = "Novy navrh";
     this._variables = {};
     this._orientation = "landscape";
+    this._displayTransform = "rotate_cw";
     this._activeTab = "devices";
     this._draftSaveTimer = null;
     this._loadingDraft = false;
@@ -93,6 +94,31 @@ class DratekEinkPanel extends HTMLElement {
       : { width: Math.max(size.width, size.height), height: Math.min(size.width, size.height) };
   }
 
+  _isPe29Device(device = this._device()) {
+    return !!device && [40, 43, 46, 48, 51, 296].includes(Number(device.sdk_type));
+  }
+
+  _transformOptions() {
+    return [
+      ["rotate_cw", "Otočit doprava"],
+      ["rotate_ccw", "Otočit doleva"],
+      ["rotate_cw_flip_lr", "Doprava + zrcadlit vodorovně"],
+      ["rotate_cw_flip_tb", "Doprava + zrcadlit svisle"],
+      ["rotate_ccw_flip_lr", "Doleva + zrcadlit vodorovně"],
+      ["rotate_ccw_flip_tb", "Doleva + zrcadlit svisle"],
+      ["none", "Bez transformace"],
+      ["rotate_180", "Otočit o 180°"],
+      ["flip_lr", "Jen zrcadlit vodorovně"],
+      ["flip_tb", "Jen zrcadlit svisle"],
+    ];
+  }
+
+  _setDisplayTransform(transform) {
+    const valid = this._transformOptions().some(([value]) => value === transform);
+    this._displayTransform = valid ? transform : "rotate_cw";
+    this._scheduleDraftSave();
+  }
+
   _fitZoom() {
     const size = this._displaySize();
     this._zoom = Math.min(2.4, Math.max(0.55, Math.min(820 / size.width, 460 / size.height)));
@@ -127,6 +153,7 @@ class DratekEinkPanel extends HTMLElement {
       device_address: device ? device.address : this._selectedDeviceAddress,
       sdk_type: device ? Number(device.sdk_type) : 75,
       orientation: this._orientation,
+      display_transform: this._displayTransform,
       width: size.width,
       height: size.height,
       variables: {},
@@ -139,6 +166,7 @@ class DratekEinkPanel extends HTMLElement {
     const device = this._device();
     const source = draft || this._emptyDeviceDraft(device);
     this._orientation = source.orientation === "portrait" ? "portrait" : "landscape";
+    this._displayTransform = source.display_transform || "rotate_cw";
     const size = this._displaySize(device);
     this._objects = Array.isArray(source.objects) ? structuredClone(source.objects) : [];
     this._variables = source.variables ? structuredClone(source.variables) : {};
@@ -657,6 +685,7 @@ class DratekEinkPanel extends HTMLElement {
       physical_code: device ? device.physical_code : "",
       sdk_type: device ? Number(device.sdk_type) : 75,
       orientation: this._orientation,
+      display_transform: this._displayTransform,
       width: size.width,
       height: size.height,
       variables: this._variables,
@@ -681,10 +710,13 @@ class DratekEinkPanel extends HTMLElement {
       const result = await this._hass.callWS({ type: "dratek_eink/projects/load", project_id: this._selectedProjectId });
       const project = result.project;
       const previousOrientation = this._orientation;
+      const previousTransform = this._displayTransform;
       this._orientation = project.orientation === "portrait" ? "portrait" : "landscape";
+      this._displayTransform = project.display_transform || "rotate_cw";
       const size = this._displaySize();
       if (project.width !== size.width || project.height !== size.height) {
         this._orientation = previousOrientation;
+        this._displayTransform = previousTransform;
         alert(`Projekt je pro rozliseni ${project.width}x${project.height}, aktualni displej ma ${size.width}x${size.height}.`);
         return;
       }
@@ -732,6 +764,7 @@ class DratekEinkPanel extends HTMLElement {
         address: device.address,
         sdk_type: Number(device.sdk_type),
         orientation: this._orientation,
+        transform: this._displayTransform,
         image: canvas.toDataURL("image/png"),
       });
       if (this._sendResult && this._sendResult.ok) await this._saveCurrentDeviceDraft();
@@ -783,7 +816,7 @@ class DratekEinkPanel extends HTMLElement {
         .status-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:12px}.projectbar{display:grid;grid-template-columns:minmax(180px,280px) minmax(180px,320px) auto;gap:8px;align-items:center;margin-bottom:12px}
         .device-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px}.device-card{display:grid;gap:12px;text-align:left;background:var(--card-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);border-radius:8px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.07)}.device-card.selected{border-color:var(--primary-color);box-shadow:0 0 0 2px rgba(37,99,235,.16),0 12px 32px rgba(0,0,0,.1)}.device-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.device-card-top strong{display:block;font-size:19px}.device-card-top span:not(.pill){display:block;color:var(--secondary-text-color);font-size:12px;margin-top:3px}.device-model{font-size:13px;line-height:1.4;color:var(--primary-text-color)}.device-model span,.device-meta{color:var(--secondary-text-color);font-size:12px}.device-meters{display:grid;grid-template-columns:1fr 1fr;gap:12px}.meter-block{display:grid;gap:6px}.meter-block label{font-size:11px;text-transform:uppercase;color:var(--secondary-text-color);font-weight:800;letter-spacing:.08em}.battery{height:10px;border-radius:999px;background:var(--secondary-background-color);overflow:hidden;border:1px solid var(--divider-color)}.battery span{display:block;height:100%;background:#9ca3af}.battery.high span{background:#16a34a}.battery.medium span{background:#d97706}.battery.low span{background:#dc2626}.signal-bars{height:20px;display:flex;align-items:end;gap:3px}.signal-bars span{display:block;width:8px;border-radius:2px;background:var(--divider-color)}.signal-bars span:nth-child(1){height:7px}.signal-bars span:nth-child(2){height:11px}.signal-bars span:nth-child(3){height:15px}.signal-bars span:nth-child(4){height:19px}.signal-bars.level-1 .on{background:#dc2626}.signal-bars.level-2 .on{background:#d97706}.signal-bars.level-3 .on,.signal-bars.level-4 .on{background:#16a34a}.device-meta{display:flex;gap:8px;flex-wrap:wrap}.device-meta span{background:var(--secondary-background-color);border-radius:999px;padding:4px 8px}.empty-state{min-height:260px;display:grid;place-items:center;text-align:center;gap:8px;color:var(--secondary-text-color)}.empty-state h2{color:var(--primary-text-color);font-size:18px;text-transform:none;letter-spacing:0;margin:0}.empty-icon{width:58px;height:58px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);font-weight:900;color:var(--primary-color)}
         .editor-shell{display:grid;grid-template-columns:270px minmax(0,1fr) 340px;gap:12px;align-items:start}.left,.right{position:sticky;top:12px}.tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.tool-icon{min-height:78px;display:grid;grid-template-rows:34px auto;place-items:center;text-align:center;padding:10px 6px;border:1px solid var(--divider-color);background:linear-gradient(180deg,var(--card-background-color),var(--secondary-background-color));color:var(--primary-text-color)}.tool-icon .ico{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;background:rgba(37,99,235,.11);color:#2563eb;font-size:19px;font-weight:900}.tool-icon .txt{font-size:11px;font-weight:800;color:var(--secondary-text-color);text-transform:uppercase}.tool-icon:hover:not(:disabled){border-color:var(--primary-color)}
-        .action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:16px;display:grid;place-items:center}.wide-action{grid-column:span 4;font-size:13px}.panel-divider{height:1px;background:var(--divider-color);margin:14px 0}.layout-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-btn{min-height:58px;display:grid;place-items:center;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color)}.layout-btn.active{background:var(--primary-color);color:var(--text-primary-color,#fff);border-color:var(--primary-color)}.properties-panel{max-height:calc(100vh - 120px);overflow:auto}
+        .action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:16px;display:grid;place-items:center}.wide-action{grid-column:span 4;font-size:13px}.panel-divider{height:1px;background:var(--divider-color);margin:14px 0}.layout-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-btn{min-height:58px;display:grid;place-items:center;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color)}.layout-btn.active{background:var(--primary-color);color:var(--text-primary-color,#fff);border-color:var(--primary-color)}.transform-box{margin-top:10px;padding:10px;border:1px solid var(--divider-color);border-radius:8px;background:var(--secondary-background-color)}.transform-box small{display:block;color:var(--secondary-text-color);line-height:1.35;margin-top:6px}.properties-panel{max-height:calc(100vh - 120px);overflow:auto}
         .workspace{min-height:560px;overflow:auto;display:grid;place-items:center;background:linear-gradient(45deg,rgba(127,127,127,.08) 25%,transparent 25%),linear-gradient(-45deg,rgba(127,127,127,.08) 25%,transparent 25%);background-size:18px 18px;border-radius:8px;border:1px solid var(--divider-color);padding:28px}
         canvas{background:#fff;box-shadow:0 18px 46px rgba(0,0,0,.22);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:750}.field input,.field select,.projectbar input,.projectbar select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
         table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:var(--secondary-background-color);border-radius:8px;padding:10px;font-size:12px;line-height:1.45}.send-result{margin-top:10px}.variable-table input{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:7px}
@@ -806,7 +839,7 @@ class DratekEinkPanel extends HTMLElement {
         <div class="card" style="margin-bottom:12px"><div class="toolbar"><label>Displej</label><select id="deviceSelect">${result.devices.map((item) => `<option value="${this._escape(item.address)}" ${item.address === (device && device.address) ? "selected" : ""}>${this._escape(item.physical_code)} - ${this._escape(item.model)} - SDK ${this._escape(item.sdk_type)} - RSSI ${this._escape(item.rssi)}</option>`).join("")}</select><span class="pill muted">${size.width} x ${size.height}</span><button id="orientationLandscape" class="secondary" data-orientation="landscape" title="Na sirku" ${this._orientation === "landscape" ? "disabled" : ""}>Na sirku</button><button id="orientationPortrait" class="secondary" data-orientation="portrait" title="Na vysku" ${this._orientation === "portrait" ? "disabled" : ""}>Na vysku</button><button id="sendTest" class="secondary" ${!device ? "disabled" : ""}>Odeslat dratek.cz</button><label><input id="realPreview" type="checkbox" ${this._realPreview ? "checked" : ""}> Real eInk colors</label></div>${this._renderSendResult()}</div>
         ${this._renderVariables()}
         <div class="editor-shell">
-          <div class="card left"><h2>Nastroje</h2><div class="tool-grid"><button class="tool-icon" data-add="text" title="Text"><span class="ico">T</span><span class="txt">Text</span></button><button class="tool-icon" data-add="rect" title="Rectangle"><span class="ico">&#9633;</span><span class="txt">Rect</span></button><button class="tool-icon" data-add="line" title="Cara"><span class="ico">&#9585;</span><span class="txt">Cara</span></button><button class="tool-icon" data-add="barcode" title="EAN"><span class="ico">&#9776;</span><span class="txt">EAN</span></button><button class="tool-icon" data-add="qr" title="QR"><span class="ico">&#9638;</span><span class="txt">QR</span></button><button id="addImage" class="tool-icon secondary" title="Obrazek"><span class="ico">&#9729;</span><span class="txt">Image</span></button><input id="imageFile" type="file" accept="image/*" hidden></div><div class="panel-divider"></div><h2>Layout displeje</h2><div class="layout-grid"><button class="layout-btn ${this._orientation === "landscape" ? "active" : ""}" data-orientation="landscape" title="Navrh na sirku">&#9645;<br>Na sirku</button><button class="layout-btn ${this._orientation === "portrait" ? "active" : ""}" data-orientation="portrait" title="Navrh na vysku">&#9647;<br>Na vysku</button></div><div class="panel-divider"></div><h2>Upravy</h2><div class="action-grid"><button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${this._selectedIds.length ? "" : "disabled"}>&#10697;</button><button id="rotateSelected" class="icon-btn secondary" title="Otocit 90" ${this._selectedIds.length ? "" : "disabled"}>&#8635;</button><button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${this._selectedIds.length ? "" : "disabled"}>&#8644;</button><button id="layerFront" class="icon-btn secondary" title="Do popredi" ${this._selectedIds.length ? "" : "disabled"}>&#8679;</button><button id="layerBack" class="icon-btn secondary" title="Do pozadi" ${this._selectedIds.length ? "" : "disabled"}>&#8681;</button><button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${this._selectedIds.length ? "" : "disabled"}>&#8676;</button><button id="alignCenter" class="icon-btn secondary" title="Zarovnat na stred" ${this._selectedIds.length ? "" : "disabled"}>&#8596;</button><button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${this._selectedIds.length ? "" : "disabled"}>&#8673;</button><button id="alignMiddle" class="icon-btn secondary" title="Svisly stred" ${this._selectedIds.length ? "" : "disabled"}>&#8597;</button><button id="deleteSelected" class="wide-action danger" ${this._selectedIds.length ? "" : "disabled"}>Smazat vybrane</button><button id="clearDesign" class="wide-action danger">Smazat vse</button></div><div class="panel-divider"></div><h2>Zobrazeni</h2><div class="action-grid"><button id="zoomIn" class="icon-btn secondary" title="Priblizit">+</button><button id="zoomOut" class="icon-btn secondary" title="Oddalit">-</button><button id="zoomFit" class="icon-btn secondary" title="Prizpusobit">&#9633;</button><label class="wide-action"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}> Grid snap 5 px</label></div></div>
+          <div class="card left"><h2>Nastroje</h2><div class="tool-grid"><button class="tool-icon" data-add="text" title="Text"><span class="ico">T</span><span class="txt">Text</span></button><button class="tool-icon" data-add="rect" title="Rectangle"><span class="ico">&#9633;</span><span class="txt">Rect</span></button><button class="tool-icon" data-add="line" title="Cara"><span class="ico">&#9585;</span><span class="txt">Cara</span></button><button class="tool-icon" data-add="barcode" title="EAN"><span class="ico">&#9776;</span><span class="txt">EAN</span></button><button class="tool-icon" data-add="qr" title="QR"><span class="ico">&#9638;</span><span class="txt">QR</span></button><button id="addImage" class="tool-icon secondary" title="Obrazek"><span class="ico">&#9729;</span><span class="txt">Image</span></button><input id="imageFile" type="file" accept="image/*" hidden></div><div class="panel-divider"></div><h2>Layout displeje</h2><div class="layout-grid"><button class="layout-btn ${this._orientation === "landscape" ? "active" : ""}" data-orientation="landscape" title="Navrh na sirku">&#9645;<br>Na sirku</button><button class="layout-btn ${this._orientation === "portrait" ? "active" : ""}" data-orientation="portrait" title="Navrh na vysku">&#9647;<br>Na vysku</button></div>${this._renderTransformSelector(device)}<div class="panel-divider"></div><h2>Upravy</h2><div class="action-grid"><button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${this._selectedIds.length ? "" : "disabled"}>&#10697;</button><button id="rotateSelected" class="icon-btn secondary" title="Otocit 90" ${this._selectedIds.length ? "" : "disabled"}>&#8635;</button><button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${this._selectedIds.length ? "" : "disabled"}>&#8644;</button><button id="layerFront" class="icon-btn secondary" title="Do popredi" ${this._selectedIds.length ? "" : "disabled"}>&#8679;</button><button id="layerBack" class="icon-btn secondary" title="Do pozadi" ${this._selectedIds.length ? "" : "disabled"}>&#8681;</button><button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${this._selectedIds.length ? "" : "disabled"}>&#8676;</button><button id="alignCenter" class="icon-btn secondary" title="Zarovnat na stred" ${this._selectedIds.length ? "" : "disabled"}>&#8596;</button><button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${this._selectedIds.length ? "" : "disabled"}>&#8673;</button><button id="alignMiddle" class="icon-btn secondary" title="Svisly stred" ${this._selectedIds.length ? "" : "disabled"}>&#8597;</button><button id="deleteSelected" class="wide-action danger" ${this._selectedIds.length ? "" : "disabled"}>Smazat vybrane</button><button id="clearDesign" class="wide-action danger">Smazat vse</button></div><div class="panel-divider"></div><h2>Zobrazeni</h2><div class="action-grid"><button id="zoomIn" class="icon-btn secondary" title="Priblizit">+</button><button id="zoomOut" class="icon-btn secondary" title="Oddalit">-</button><button id="zoomFit" class="icon-btn secondary" title="Prizpusobit">&#9633;</button><label class="wide-action"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}> Grid snap 5 px</label></div></div>
           <div class="workspace"><canvas id="editor" width="${size.width}" height="${size.height}" style="width:${Math.round(size.width * this._zoom)}px;height:${Math.round(size.height * this._zoom)}px"></canvas></div>
           <div class="card right properties-panel"><h2>Vlastnosti objektu</h2>${this._renderProperties(object)}</div>
         </div>
@@ -860,6 +893,7 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#sendTest").addEventListener("click", () => this._sendTestText());
     this.shadowRoot.querySelector("#deviceSelect").addEventListener("change", (event) => this._selectDevice(event.target.value));
     this.shadowRoot.querySelectorAll("[data-orientation]").forEach((button) => button.addEventListener("click", () => this._setOrientation(button.dataset.orientation)));
+    this.shadowRoot.querySelector("#displayTransform")?.addEventListener("change", (event) => this._setDisplayTransform(event.target.value));
     this.shadowRoot.querySelectorAll("[data-variable]").forEach((input) => input.addEventListener("input", () => {
       this._variables[input.dataset.variable] = input.value;
       this._paint();
@@ -1147,6 +1181,14 @@ class DratekEinkPanel extends HTMLElement {
     const variables = this._variableDefs();
     if (!variables.length) return "";
     return `<div class="card" style="margin-bottom:12px"><h2>Promenne navrhu</h2><table class="variable-table"><thead><tr><th>Nazev</th><th>Default</th><th>Hodnota pro odeslani</th></tr></thead><tbody>${variables.map((variable) => `<tr><td><strong>${this._escape(variable.name)}</strong></td><td>${this._escape(variable.defaultValue)}</td><td><input data-variable="${this._escape(variable.name)}" value="${this._escape(variable.value)}"></td></tr>`).join("")}</tbody></table></div>`;
+  }
+
+  _renderTransformSelector(device) {
+    if (!this._isPe29Device(device)) return "";
+    const options = this._transformOptions()
+      .map(([value, label]) => `<option value="${this._escape(value)}" ${this._displayTransform === value ? "selected" : ""}>${this._escape(label)}</option>`)
+      .join("");
+    return `<div class="transform-box"><div class="field"><label>Mapovani 2,9&quot; displeje</label><select id="displayTransform">${options}</select></div><small>Pokud je obraz na PE29 posunuty, otoceny nebo zrcadleny, zmen tuto volbu a znovu odesli navrh. Volba se uklada ke konkretni BLE adrese displeje.</small></div>`;
   }
 
   _renderDeviceCards(devices, selectedAddress) {
