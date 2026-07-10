@@ -1,5 +1,13 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.10
+
+- designer obsahuje galerii 10 predpripravenych sablon podle domacich scenaru
+- sablony jsou editovatelne objekty, ne jen vlozene obrazky
+- pridane sablony: pocasi, cena energie, dum, odpady, fotovoltaika, pracka, obyvak, kdo je doma, Wi-Fi a kalendar
+- texty v sablonach obsahuji pripravene promenne pro pozdejsi napojeni na Home Assistant entity
+- vlozeni sablony prepne navrh na portretovy layout a prizpusobi objekty aktualnimu rozmeru displeje
+
 ## Novinky ve verzi 0.1.9
 
 - z Android SDK/AAR byla vytazena rozsahlejsi mapa typu displeju, SDK hodnot a rozliseni
