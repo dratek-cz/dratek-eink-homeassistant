@@ -48,12 +48,40 @@ def render_text_image(
     return image
 
 
-def pack_bwr_image(sdk_type: int, image: Image.Image) -> bytes:
+PE29_CODES = {40, 43, 46, 48, 51}
+
+
+def _apply_pe29_transform(image: Image.Image, transform: str | None) -> Image.Image:
+    mode = transform or "rotate_cw"
+    if mode == "none":
+        return image
+    if mode == "rotate_cw":
+        return image.rotate(90, expand=True)
+    if mode == "rotate_ccw":
+        return image.rotate(-90, expand=True)
+    if mode == "rotate_180":
+        return image.rotate(180, expand=True)
+    if mode == "rotate_cw_flip_lr":
+        return image.rotate(90, expand=True).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    if mode == "rotate_cw_flip_tb":
+        return image.rotate(90, expand=True).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+    if mode == "rotate_ccw_flip_lr":
+        return image.rotate(-90, expand=True).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    if mode == "rotate_ccw_flip_tb":
+        return image.rotate(-90, expand=True).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+    if mode == "flip_lr":
+        return image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    if mode == "flip_tb":
+        return image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+    return image.rotate(90, expand=True)
+
+
+def pack_bwr_image(sdk_type: int, image: Image.Image, transform: str | None = None) -> bytes:
     code = int(sdk_type)
     if code == 11:
         image = image.rotate(-90, expand=True)
-    elif code in (40, 43, 46, 48, 51):
-        image = image.rotate(90, expand=True)
+    elif code in PE29_CODES:
+        image = _apply_pe29_transform(image, transform)
     elif code in (264, 267, 270, 296):
         image = image.rotate(90, expand=True).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
     elif code == 75 and image.width == 300:
