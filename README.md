@@ -1,5 +1,15 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.9
+
+- z Android SDK/AAR byla vytazena rozsahlejsi mapa typu displeju, SDK hodnot a rozliseni
+- sken ted zobrazuje presnejsi modely pro vice DRATEK/Picksmart kompatibilnich typu displeju
+- opravena interpretace SDK typu `296`, ktery podle SDK znamena `EPA LCD 800x480 BW`, ne PE29
+- PE29/PE29R_V4_BLE zustava navazany na SDK typy `40`, `43`, `46`, `48` a `51`
+- backend ma pripravenou partial-update cestu pres SDK prikaz `0x60`
+- partial update je zamerne povoleny jen pro SDK typ `2635` (`EPA LCD 960x680 BWR`), protoze Android SDK pro ostatni typy vraci `not support part display`
+- karty displeju ukazuji, jestli SDK pro dany typ podporuje partial update nebo jen full update
+
 ## Novinky ve verzi 0.1.8
 
 - v horní liště panelu je vidět aktuální verze doplňku
@@ -168,7 +178,7 @@ Textový objekt může být označený jako proměnný. Každá proměnná má v
 
 V panelu `Proměnné návrhu` je možné zadat aktuální hodnoty proměnných. Náhled se po změně hodnoty překreslí hned a při odeslání návrhu do displeje se použije hodnota proměnné místo defaultního textu.
 
-Aktuální verze odesílá do displeje celý návrh. Částečné překreslení pouze změněné části displeje bude doplněno až po ověření příslušného BLE příkazu pro partial update.
+Aktuální verze posílá u běžných displejů celý bitmapový návrh. Backend už umí SDK partial-update příkaz `0x60`, ale povoluje ho jen pro SDK typ `2635`, kde Android SDK opravdu podporuje part display.
 
 QR objekt používá vestavěný QR encoder pro běžné krátké texty a URL. EAN objekt odděluje čárový kód od čísla pod ním, aby text nezasahoval do čar.
 
@@ -182,11 +192,13 @@ Panel zobrazuje i obecná BLE zařízení, která Home Assistant zachytil. Díky
 
 ## Podporované displeje
 
-Zatím jsou připraveny tyto typy:
+Integrace obsahuje mapu rozměrů a modelů vytaženou z Android SDK/AAR. Důležité typy:
 
+- `40`, `43`, `46`, `48`, `51`: PE29 / PE29R_V4_BLE 296x128
 - `75`: EPA LCD 400x300 BWR
-- `296`: PE29R_V4_BLE 296x128 BWR
-- `267`: EPA LCD 250x122 BWR
+- `267`: EPA LCD 250x128 BWR
+- `296`: EPA LCD 800x480 BW
+- `2635`: EPA LCD 960x680 BWR, jediný typ s ověřenou SDK podporou partial update
 
 ## Poznámky k dosahu
 
