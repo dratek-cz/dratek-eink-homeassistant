@@ -283,6 +283,7 @@ async def websocket_save_device_draft(
         "sdk_type": int,
         "image": str,
         "orientation": str,
+        "transform": str,
     }
 )
 @websocket_api.async_response
@@ -295,6 +296,7 @@ async def websocket_send_design(
     sdk_type = msg["sdk_type"]
     image_data = msg["image"]
     orientation = msg.get("orientation", "landscape")
+    transform = msg.get("transform")
     log_lines: list[str] = []
 
     def log(message: str) -> None:
@@ -308,8 +310,10 @@ async def websocket_send_design(
         if orientation == "portrait":
             image = image.rotate(-90, expand=True)
         log(f"Sending editor design {image.width}x{image.height} to SDK type {sdk_type}.")
+        if transform:
+            log(f"Using display transform: {transform}.")
         transfer = DratekTransfer(log=log)
-        await transfer.send_image(address, sdk_type, image)
+        await transfer.send_image(address, sdk_type, image, transform)
     except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
         log(f"Send failed: {exc}")
         connection.send_result(
