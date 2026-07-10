@@ -1,5 +1,13 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.12
+
+- texty v sablonach maji inteligentni auto-fit do sveho boxu
+- upravene skálovani fontu pri vlozeni sablony na uzke portretove displeje
+- textovy renderer respektuje vodorovne a svisle zarovnani
+- inspektor textu ma volbu fontu, zarovnani a automatickeho prizpusobeni velikosti
+- novy vychozi font v editoru je Roboto, aby navrh pusobil blize Home Assistant UI
+
 ## Novinky ve verzi 0.1.11
 
 - sablony jsou v Designeru videt ve velkem samostatnem panelu `Sablony navrhu`
