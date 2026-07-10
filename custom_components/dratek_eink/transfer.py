@@ -36,12 +36,18 @@ class DratekTransfer:
     def log(self, message: str) -> None:
         self._log(message)
 
-    async def send_image(self, address: str, sdk_type: int, image: Image.Image) -> None:
+    async def send_image(
+        self,
+        address: str,
+        sdk_type: int,
+        image: Image.Image,
+        transform: str | None = None,
+    ) -> None:
         last_error: Exception | None = None
         for attempt in range(1, 4):
             self.log(f"Transfer attempt {attempt}/3.")
             try:
-                await self._send_once(address, sdk_type, image)
+                await self._send_once(address, sdk_type, image, transform)
                 self.log("Transfer completed.")
                 return
             except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
@@ -51,8 +57,14 @@ class DratekTransfer:
                     await asyncio.sleep(2)
         raise last_error or RuntimeError("Transfer failed.")
 
-    async def _send_once(self, address: str, sdk_type: int, image: Image.Image) -> None:
-        payload = pack_bwr_image(sdk_type, image)
+    async def _send_once(
+        self,
+        address: str,
+        sdk_type: int,
+        image: Image.Image,
+        transform: str | None = None,
+    ) -> None:
+        payload = pack_bwr_image(sdk_type, image, transform)
         responses: queue.Queue[bytes] = queue.Queue()
 
         def notify_handler(_sender, data) -> None:
