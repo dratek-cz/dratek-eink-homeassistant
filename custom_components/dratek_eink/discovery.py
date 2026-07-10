@@ -26,24 +26,36 @@ class DratekAdvertisement:
         return f"{self.physical_code} - {self.model} ({self.address}{rssi})"
 
 
-SDK_TYPE_BY_RAW_TYPE = {
-    0x404B: 75,
-    0x410B: 267,
-}
-
 SDK_TYPE_BY_NAME = {
-    "PE29R_V4_BLE": 296,
-    "PE29R": 296,
+    "PE29R_V4_BLE": 43,
+    "PE29R": 43,
 }
 
 MODEL_BY_SDK_TYPE = {
     11: "EPA LCD 212x104 BWR",
+    40: "EPA LCD 296x128 BW",
+    43: "EPA LCD 296x128 BWR / PE29R_V4_BLE",
+    46: "EPA LCD 296x128 BWRY",
+    48: "EPA LCD 296x128 BW 1",
+    51: "EPA LCD 296x128 1 BWR",
     75: "EPA LCD 400x300 BWR",
     296: "DRATEK eInk PE29R 296x128 BWR",
     264: "EPA LCD 250x122 BWR",
     267: "EPA LCD 250x122 BWR",
     270: "EPA LCD 250x122 BWR",
 }
+
+
+def sdk_type_from_raw(raw_type: int) -> int:
+    if raw_type in MODEL_BY_SDK_TYPE:
+        return raw_type
+    masked_type = raw_type & 0x3FFF
+    if masked_type in MODEL_BY_SDK_TYPE:
+        return masked_type
+    low_byte = raw_type & 0xFF
+    if low_byte in MODEL_BY_SDK_TYPE:
+        return low_byte
+    return raw_type
 
 
 def physical_code_from_address(address: str) -> str:
@@ -64,7 +76,7 @@ def parse_dratek_advertisement(service_info: Any) -> DratekAdvertisement | None:
     if not isinstance(name, str) or not name:
         name = physical_code_from_address(address)
     raw_type = (data[4] << 8) | data[0]
-    sdk_type = SDK_TYPE_BY_RAW_TYPE.get(raw_type, raw_type)
+    sdk_type = sdk_type_from_raw(raw_type)
     upper_name = name.upper()
     for pattern, named_sdk_type in SDK_TYPE_BY_NAME.items():
         if pattern in upper_name:
