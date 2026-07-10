@@ -1,5 +1,11 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.11
+
+- sablony jsou v Designeru videt ve velkem samostatnem panelu `Sablony navrhu`
+- galerie sablon zustava i v levem sloupci, ale hlavni vyber je ted primo nad editorem
+- verze v UI je zvednuta na `0.1.11`, aby bylo hned videt, ze se nacetl novy frontend
+
 ## Novinky ve verzi 0.1.10
 
 - designer obsahuje galerii 10 predpripravenych sablon podle domacich scenaru
