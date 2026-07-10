@@ -282,6 +282,7 @@ async def websocket_save_device_draft(
         "address": str,
         "sdk_type": int,
         "image": str,
+        "orientation": str,
     }
 )
 @websocket_api.async_response
@@ -293,6 +294,7 @@ async def websocket_send_design(
     address = msg["address"]
     sdk_type = msg["sdk_type"]
     image_data = msg["image"]
+    orientation = msg.get("orientation", "landscape")
     log_lines: list[str] = []
 
     def log(message: str) -> None:
@@ -303,6 +305,8 @@ async def websocket_send_design(
             image_data = image_data.split(",", 1)[1]
         raw = base64.b64decode(image_data)
         image = Image.open(io.BytesIO(raw)).convert("RGB")
+        if orientation == "portrait":
+            image = image.rotate(-90, expand=True)
         log(f"Sending editor design {image.width}x{image.height} to SDK type {sdk_type}.")
         transfer = DratekTransfer(log=log)
         await transfer.send_image(address, sdk_type, image)
