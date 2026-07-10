@@ -21,6 +21,14 @@
 - pokud displej jeste vlastni navrh nema, editor zobrazi prazdnou plochu ve spravnem rozliseni daneho displeje
 - nacteny ulozeny projekt se rovnou ulozi jako pracovni navrh aktualne vybraneho displeje
 
+## Novinky ve verzi 0.1.3
+
+- editor umi prepnout layout displeje na sirku nebo na vysku
+- orientace se uklada do pracovniho navrhu konkretniho displeje
+- odesilani navrhu respektuje orientaci a portretovy layout se pred prenosem otoci do fyzickeho rozmeru displeje
+- PE29R_V4_BLE / 296x128 typy se detekuji i pres SDK typy 40, 43, 46, 48 a 51
+- pri prepnuti displeje se prekresli rozmer platna i ovladaci lista s aktualnim SDK typem a rozlisenim
+
 Integrace pro Home Assistant, která umí vyhledat dostupné BLE eInk cenovky DRATEK, zobrazit diagnostiku Bluetoothu a připravit grafický návrh přímo v Home Assistantu.
 
 Instalace je určena výhradně přes HACS. Není potřeba nic kopírovat ručně ani psát do `configuration.yaml`.
