@@ -37,6 +37,14 @@
 - po uspesnem odeslani do displeje se aktualni navrh hned ulozi k BLE adrese displeje
 - pracovni navrhy se ukladaji do Home Assistant storage a zustavaji zachovane i po aktualizaci integrace
 
+## Novinky ve verzi 0.1.5
+
+- hlavni rozhrani je rozdelene na karty `Nalezene displeje` a `Designer`
+- karta displeju zobrazuje nalezene cenovky jako prehledne karty
+- u displeju je videt baterie, RSSI signal, SDK typ, raw typ, SW/HW a profil
+- sila signalu a baterie jsou zobrazene graficky a barevne
+- klik na kartu displeje vybere displej, nacte jeho navrh a prepne do designeru
+
 Integrace pro Home Assistant, která umí vyhledat dostupné BLE eInk cenovky DRATEK, zobrazit diagnostiku Bluetoothu a připravit grafický návrh přímo v Home Assistantu.
 
 Instalace je určena výhradně přes HACS. Není potřeba nic kopírovat ručně ani psát do `configuration.yaml`.
