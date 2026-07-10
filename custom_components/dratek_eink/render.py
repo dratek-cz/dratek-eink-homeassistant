@@ -52,7 +52,9 @@ def pack_bwr_image(sdk_type: int, image: Image.Image) -> bytes:
     code = int(sdk_type)
     if code == 11:
         image = image.rotate(-90, expand=True)
-    elif code in (40, 43, 46, 48, 51, 264, 267, 270, 296):
+    elif code in (40, 43, 46, 48, 51):
+        image = image.rotate(90, expand=True)
+    elif code in (264, 267, 270, 296):
         image = image.rotate(90, expand=True).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
     elif code == 75 and image.width == 300:
         image = image.rotate(90, expand=True)
