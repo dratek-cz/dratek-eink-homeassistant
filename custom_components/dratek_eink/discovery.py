@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .const import DEVICE_SIZES, DRATEK_COMPANY_ID
+from .const import DEVICE_SIZES, DRATEK_COMPANY_ID, SDK_MODELS
 
 
 @dataclass(slots=True)
@@ -31,19 +31,7 @@ SDK_TYPE_BY_NAME = {
     "PE29R": 43,
 }
 
-MODEL_BY_SDK_TYPE = {
-    11: "EPA LCD 212x104 BWR",
-    40: "EPA LCD 296x128 BW",
-    43: "EPA LCD 296x128 BWR / PE29R_V4_BLE",
-    46: "EPA LCD 296x128 BWRY",
-    48: "EPA LCD 296x128 BW 1",
-    51: "EPA LCD 296x128 1 BWR",
-    75: "EPA LCD 400x300 BWR",
-    296: "DRATEK eInk PE29R 296x128 BWR",
-    264: "EPA LCD 250x122 BWR",
-    267: "EPA LCD 250x122 BWR",
-    270: "EPA LCD 250x122 BWR",
-}
+MODEL_BY_SDK_TYPE = SDK_MODELS
 
 
 def sdk_type_from_raw(raw_type: int) -> int:
