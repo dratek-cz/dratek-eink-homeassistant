@@ -17,6 +17,7 @@ from .transfer import DratekTransfer
 _LOGGER = logging.getLogger(__name__)
 PANEL_URL_PATH = "dratek-eink"
 PANEL_STATIC_PATH = f"/{DOMAIN}_panel"
+PANEL_VERSION = "0.1.8"
 
 SEND_TEXT_SCHEMA = vol.Schema(
     {
@@ -82,7 +83,7 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
         frontend_url_path=PANEL_URL_PATH,
         sidebar_title="DRATEK eInk",
         sidebar_icon="mdi:tag-multiple-outline",
-        module_url=f"{PANEL_STATIC_PATH}/dratek-eink-panel.js",
+        module_url=f"{PANEL_STATIC_PATH}/dratek-eink-panel.js?v={PANEL_VERSION}",
         embed_iframe=False,
         require_admin=False,
     )
