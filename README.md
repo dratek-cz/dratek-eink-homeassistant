@@ -1,5 +1,11 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.8
+
+- v horní liště panelu je vidět aktuální verze doplňku
+- JavaScript panelu se registruje s verzí v URL, aby Home Assistant a prohlížeč nenačítaly starý frontend z cache
+- web component se neregistruje podruhé, pokud HA ve stejné relaci načte nový modul vedle starého
+
 ## Novinky ve verzi 0.1.7
 
 - kompletni vizualni redesign celeho HA panelu DRATEK eInk
