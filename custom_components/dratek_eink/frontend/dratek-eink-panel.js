@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.9";
+const DRATEK_EINK_VERSION = "0.1.10";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -319,6 +319,225 @@ class DratekEinkPanel extends HTMLElement {
   _selectedObject() {
     if (this._selectedIds.length !== 1) return null;
     return this._objects.find((object) => object.id === this._selectedIds[0]) || null;
+  }
+
+  _templateDefinitions() {
+    return [
+      { id: "weather", title: "Pocasi", icon: "mdi:weather-partly-cloudy", objects: [
+        this._tt(92, 22, 66, 28, "☁", "black", true),
+        this._tt(83, 50, 86, 16, "Patek", "black", true),
+        this._tt(72, 68, 110, 14, "23. kvetna"),
+        this._ln(45, 84, 205, 84),
+        this._tt(83, 92, 88, 18, "12:45", "red", true, "cas"),
+        this._ln(45, 112, 205, 112),
+        this._tt(69, 126, 112, 30, "23°C", "black", true, "teplota"),
+        this._tt(92, 157, 70, 12, "Polojasno"),
+        this._tt(95, 171, 60, 11, "24° / 13°"),
+        this._rr(0, 195, 250, 55, "red", "none"),
+        this._tt(18, 205, 28, 11, "SO", "white"),
+        this._tt(76, 205, 28, 11, "NE", "white"),
+        this._tt(134, 205, 28, 11, "PO", "white"),
+        this._tt(195, 205, 28, 11, "UT", "white"),
+        this._tt(13, 221, 38, 16, "22°", "white", true),
+        this._tt(73, 221, 38, 16, "25°", "white", true),
+        this._tt(132, 221, 38, 16, "18°", "white", true),
+        this._tt(190, 221, 38, 16, "20°", "white", true),
+      ] },
+      { id: "energy", title: "Cena energie", icon: "mdi:lightning-bolt", objects: [
+        this._tt(18, 17, 30, 32, "⚡", "red", true),
+        this._tt(57, 20, 150, 18, "Cena elektriny", "black", true),
+        this._tt(58, 41, 72, 11, "Kc / kWh"),
+        this._ln(15, 62, 235, 62),
+        this._tt(24, 82, 132, 34, "2,45 Kc", "red", true, "cena_elektriny"),
+        this._tt(27, 123, 110, 12, "12:00 - 13:00"),
+        this._tt(27, 141, 50, 12, "Dnes"),
+        this._ln(42, 192, 58, 192, "red", 2),
+        this._ln(58, 192, 58, 180, "red", 2),
+        this._ln(58, 180, 73, 180, "red", 2),
+        this._ln(73, 180, 73, 166, "red", 2),
+        this._ln(73, 166, 91, 166, "red", 2),
+        this._ln(91, 166, 91, 151, "red", 2),
+        this._ln(91, 151, 107, 151, "red", 2),
+        this._ln(107, 151, 107, 139, "red", 2),
+        this._ln(107, 139, 126, 139, "red", 2),
+        this._ln(126, 139, 126, 130, "red", 2),
+        this._ln(126, 130, 145, 130, "red", 2),
+        this._ln(145, 130, 145, 143, "red", 2),
+        this._ln(145, 143, 167, 143, "red", 2),
+        this._ln(167, 143, 167, 154, "red", 2),
+        this._ln(167, 154, 191, 154, "red", 2),
+        this._ln(191, 154, 191, 183, "red", 2),
+        this._ln(191, 183, 212, 183, "red", 2),
+        this._rr(0, 196, 250, 54, "red", "none"),
+        this._tt(58, 207, 116, 15, "Nejlevnejsi dnes", "white", true),
+        this._tt(83, 226, 74, 20, "2,45 Kc", "white", true, "nejlevnejsi_cena"),
+        this._tt(178, 230, 60, 11, "12:00 - 13:00", "white"),
+      ] },
+      { id: "home", title: "Dum", icon: "mdi:home", objects: [
+        this._tt(19, 18, 80, 20, "Dum", "black", true),
+        this._tt(82, 57, 92, 64, "⌂", "red", true),
+        this._tt(39, 147, 20, 15, "♨", "black"),
+        this._tt(75, 147, 82, 16, "21,5 °C", "black", false, "teplota_dum"),
+        this._tt(39, 174, 20, 15, "●", "black"),
+        this._tt(75, 174, 62, 16, "45 %", "black", false, "vlhkost"),
+        this._tt(39, 201, 20, 15, "◉", "black"),
+        this._tt(75, 201, 106, 16, "3 svetla ON", "black", false, "svetla"),
+        this._tt(39, 228, 20, 15, "▣", "black"),
+        this._tt(75, 228, 104, 16, "Vse zamceno", "black", false, "zamky"),
+        this._ln(20, 267, 230, 267),
+        this._rr(31, 276, 31, 31, "red", "none"),
+        this._tt(42, 285, 26, 20, "✓", "white", true),
+        this._tt(82, 286, 126, 14, "Vsechno v poradku", "red", true, "stav_domu"),
+      ] },
+      { id: "waste", title: "Odpady", icon: "mdi:trash-can-outline", objects: [
+        this._tt(20, 18, 92, 20, "Odpady", "black", true),
+        this._tt(49, 79, 72, 54, "♜", "black", true),
+        this._tt(140, 86, 68, 22, "ZITRA", "red", true, "odpad_1_kdy"),
+        this._tt(140, 117, 60, 18, "Plast", "black", false, "odpad_1_typ"),
+        this._ln(15, 158, 235, 158),
+        this._tt(51, 194, 68, 48, "♻", "black", true),
+        this._tt(138, 200, 70, 18, "za 7 dni", "red", true, "odpad_2_kdy"),
+        this._tt(140, 230, 62, 18, "Papir", "black", false, "odpad_2_typ"),
+      ] },
+      { id: "solar", title: "Fotovoltaika", icon: "mdi:solar-power", objects: [
+        this._tt(22, 18, 34, 28, "☼", "black", false),
+        this._tt(78, 20, 142, 19, "Fotovoltaika", "black", true),
+        this._tt(80, 42, 96, 11, "Aktualni vykon"),
+        this._tt(78, 75, 96, 58, "▦", "black", true),
+        this._tt(66, 136, 132, 31, "2,35 kW", "black", true, "vykon_fve"),
+        this._ln(15, 183, 235, 183),
+        this._tt(20, 197, 70, 13, "Dnes"),
+        this._tt(165, 197, 58, 13, "8,2 kWh", "black", true, "fve_dnes"),
+        this._ln(15, 214, 235, 214),
+        this._tt(20, 228, 82, 13, "Tento mesic"),
+        this._tt(158, 228, 65, 13, "152 kWh", "black", true, "fve_mesic"),
+        this._ln(15, 245, 235, 245),
+        this._tt(20, 259, 70, 13, "Celkem"),
+        this._tt(155, 259, 70, 13, "3,45 MWh", "black", true, "fve_celkem"),
+        this._rr(0, 290, 250, 40, "red", "none"),
+        this._tt(58, 305, 132, 15, "Uspora CO2: 125 kg", "white", true, "uspora_co2"),
+      ] },
+      { id: "washer", title: "Pracka", icon: "mdi:washing-machine", objects: [
+        this._tt(18, 18, 80, 20, "Pracka", "black", true),
+        this._tt(50, 62, 94, 76, "▣", "black", true),
+        this._tt(22, 154, 54, 14, "Program"),
+        this._tt(22, 174, 112, 18, "Bavlna 60°", "red", true, "program_pracky"),
+        this._ln(15, 203, 235, 203),
+        this._tt(22, 221, 18, 15, "◷"),
+        this._tt(59, 222, 48, 13, "Zbyva"),
+        this._tt(143, 217, 70, 22, "01:15", "red", true, "pracka_zbyva"),
+        this._ln(15, 250, 235, 250),
+        this._tt(59, 267, 116, 15, "Skonci v 14:30", "black", true, "pracka_konec"),
+      ] },
+      { id: "living", title: "Obyvak", icon: "mdi:sofa-outline", objects: [
+        this._tt(20, 18, 88, 20, "Obyvak", "black", true),
+        this._tt(38, 78, 36, 50, "♨", "red", true),
+        this._tt(96, 88, 118, 32, "23,5 °C", "black", true, "teplota_obyvak"),
+        this._ln(20, 154, 230, 154),
+        this._tt(48, 188, 30, 30, "●", "black", true),
+        this._tt(94, 193, 104, 18, "Vlhkost: 40 %", "black", true, "vlhkost_obyvak"),
+        this._ln(20, 230, 230, 230),
+        this._tt(66, 267, 124, 18, "CO2: 650 ppm", "black", true, "co2_obyvak"),
+      ] },
+      { id: "presence", title: "Kdo je doma", icon: "mdi:account-group", objects: [
+        this._tt(17, 18, 124, 20, "Kdo je doma", "black", true),
+        this._tt(25, 67, 18, 18, "●"),
+        this._tt(57, 68, 80, 16, "Petr", "black", false, "petr_stav"),
+        this._tt(205, 65, 28, 22, "⌂", "red", true),
+        this._ln(15, 100, 235, 100),
+        this._tt(25, 118, 18, 18, "●"),
+        this._tt(57, 119, 80, 16, "Jana", "black", false, "jana_stav"),
+        this._tt(205, 116, 28, 22, "⌂", "red", true),
+        this._ln(15, 151, 235, 151),
+        this._tt(25, 168, 18, 18, "●"),
+        this._tt(57, 169, 80, 16, "Eliska", "black", false, "eliska_jmeno"),
+        this._tt(165, 171, 70, 15, "Ve skole", "red", true, "eliska_stav"),
+        this._rr(0, 218, 250, 54, "red", "none"),
+        this._tt(35, 229, 24, 22, "◷", "white", true),
+        this._tt(76, 229, 128, 13, "Posledni aktualizace", "white", true),
+        this._tt(76, 246, 64, 20, "12:45", "white", true, "cas_update"),
+      ] },
+      { id: "wifi", title: "Wi-Fi", icon: "mdi:wifi", objects: [
+        this._tt(17, 18, 60, 20, "Wi-Fi", "black", true),
+        this._qr(72, 58, 106, "WIFI:T:WPA;S:Home_Network;P:MyPassword123;;"),
+        this._tt(20, 181, 34, 12, "Sit"),
+        this._tt(20, 198, 130, 14, "Home_Network", "red", true, "wifi_ssid"),
+        this._ln(15, 220, 235, 220),
+        this._tt(20, 234, 48, 12, "Heslo"),
+        this._tt(20, 251, 140, 14, "MyPassword123", "red", true, "wifi_heslo"),
+        this._ln(15, 277, 235, 277),
+        this._tt(37, 293, 28, 20, "≋", "black", true),
+        this._tt(82, 297, 120, 12, "Naskenuj pro pripojeni"),
+      ] },
+      { id: "calendar", title: "Kalendar", icon: "mdi:calendar-month", objects: [
+        this._tt(19, 18, 96, 20, "Kalendar", "black", true),
+        this._tt(26, 69, 52, 45, "23", "black", true),
+        this._tt(99, 64, 68, 16, "PATEK", "red", true, "udalost_1_den"),
+        this._tt(99, 85, 72, 15, "Schuzka", "black", false, "udalost_1_nazev"),
+        this._tt(99, 104, 58, 14, "15:00", "black", false, "udalost_1_cas"),
+        this._ln(15, 137, 235, 137),
+        this._tt(26, 166, 52, 45, "24", "black", true),
+        this._tt(99, 161, 82, 16, "SOBOTA", "red", true, "udalost_2_den"),
+        this._tt(99, 182, 96, 15, "Narozeniny", "black", false, "udalost_2_nazev"),
+        this._tt(99, 201, 70, 14, "Tomas", "black", false, "udalost_2_detail"),
+        this._rr(0, 240, 250, 58, "red", "none"),
+        this._tt(34, 254, 34, 23, "♛", "white", true),
+        this._tt(78, 253, 112, 13, "Zitra ma svatek", "white"),
+        this._tt(78, 271, 70, 18, "Jana", "white", true, "svatek"),
+      ] },
+    ];
+  }
+
+  _tt(x, y, w, h, text, color = "black", bold = false, variableName = "") {
+    return { type: "text", x, y, w, h, text, color, fontSize: h, fontFamily: "Arial", bold, rotation: 0, variable: !!variableName, variableName };
+  }
+
+  _rr(x, y, w, h, fill = "none", stroke = "black", strokeWidth = 1) {
+    return { type: "rect", x, y, w, h, fill, stroke, strokeWidth, color: stroke, rotation: 0 };
+  }
+
+  _ln(x, y, x2, y2, color = "black", strokeWidth = 1) {
+    return { type: "line", x, y, x2, y2, color, strokeWidth, rotation: 0 };
+  }
+
+  _qr(x, y, side, text) {
+    return { type: "qr", x, y, w: side, h: side, text, color: "black", rotation: 0, keepRatio: true };
+  }
+
+  _applyTemplate(templateId) {
+    const template = this._templateDefinitions().find((item) => item.id === templateId);
+    if (!template) return;
+    if (this._objects.length && !confirm(`Nahradit aktualni navrh sablonou "${template.title}"?`)) return;
+    this._orientation = "portrait";
+    const size = this._displaySize();
+    const sourceWidth = Math.max(250, ...template.objects.map((object) => Math.max(Number(object.x || 0), Number(object.x2 || 0)) + Number(object.w || 0)));
+    const sourceHeight = Math.max(300, ...template.objects.map((object) => Math.max(Number(object.y || 0), Number(object.y2 || 0)) + Number(object.h || 0)));
+    const sx = size.width / sourceWidth;
+    const sy = size.height / sourceHeight;
+    const variables = {};
+    this._objects = template.objects.map((object, index) => {
+      const next = structuredClone(object);
+      next.id = `obj-${index + 1}`;
+      next.x = this._snapValue(Number(next.x || 0) * sx);
+      next.y = this._snapValue(Number(next.y || 0) * sy);
+      if (next.x2 !== undefined) next.x2 = this._snapValue(Number(next.x2 || 0) * sx);
+      if (next.y2 !== undefined) next.y2 = this._snapValue(Number(next.y2 || 0) * sy);
+      if (next.w !== undefined) next.w = Math.max(1, this._snapValue(Number(next.w || 1) * sx));
+      if (next.h !== undefined) next.h = Math.max(1, this._snapValue(Number(next.h || 1) * sy));
+      if (next.fontSize !== undefined) next.fontSize = Math.max(7, Math.round(Number(next.fontSize || 12) * sy));
+      if (next.strokeWidth !== undefined) next.strokeWidth = Math.max(1, Math.round(Number(next.strokeWidth || 1) * Math.min(sx, sy)));
+      if (next.variable && next.variableName) variables[next.variableName] = next.text || "";
+      return next;
+    });
+    this._variables = variables;
+    this._selectedIds = [];
+    this._selectedProjectId = "";
+    this._projectName = `Sablona ${template.title}`;
+    this._nextId = this._nextObjectId();
+    this._fitZoom();
+    this._render();
+    this._paint();
+    this._scheduleDraftSave();
   }
 
   _addObject(type) {
@@ -830,7 +1049,7 @@ class DratekEinkPanel extends HTMLElement {
         .projectbar{display:grid;grid-template-columns:minmax(190px,280px) minmax(210px,340px) auto;gap:10px;align-items:center}.projectbar .toolbar{justify-content:flex-end}
         .device-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}.device-card{position:relative;display:grid;gap:13px;text-align:left;background:linear-gradient(180deg,var(--card-background-color),var(--secondary-background-color));color:var(--primary-text-color);border:1px solid var(--divider-color);border-radius:8px;padding:15px;box-shadow:0 12px 32px rgba(0,0,0,.08);overflow:hidden}.device-card:before{content:"";position:absolute;inset:0 0 auto;height:3px;background:#9ca3af}.device-card.selected{border-color:var(--primary-color);box-shadow:0 0 0 2px rgba(37,99,235,.18),0 16px 38px rgba(0,0,0,.11)}.device-card.selected:before{background:var(--primary-color)}.device-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.device-card-top strong{display:block;font-size:20px;letter-spacing:.01em}.device-card-top span:not(.pill){display:block;color:var(--secondary-text-color);font-size:12px;margin-top:3px}.device-model{font-size:13px;line-height:1.45;color:var(--primary-text-color)}.device-model span,.device-meta{color:var(--secondary-text-color);font-size:12px}.device-meters{display:grid;grid-template-columns:1fr 1fr;gap:12px}.meter-block{display:grid;gap:6px}.meter-block label{font-size:11px;text-transform:uppercase;color:var(--secondary-text-color);font-weight:800;letter-spacing:.08em}.battery{height:10px;border-radius:999px;background:rgba(127,127,127,.14);overflow:hidden;border:1px solid var(--divider-color)}.battery span{display:block;height:100%;background:#9ca3af}.battery.high span{background:#16a34a}.battery.medium span{background:#d97706}.battery.low span{background:#dc2626}.signal-bars{height:20px;display:flex;align-items:end;gap:3px}.signal-bars span{display:block;width:8px;border-radius:2px;background:var(--divider-color)}.signal-bars span:nth-child(1){height:7px}.signal-bars span:nth-child(2){height:11px}.signal-bars span:nth-child(3){height:15px}.signal-bars span:nth-child(4){height:19px}.signal-bars.level-1 .on{background:#dc2626}.signal-bars.level-2 .on{background:#d97706}.signal-bars.level-3 .on,.signal-bars.level-4 .on{background:#16a34a}.device-meta{display:flex;gap:8px;flex-wrap:wrap}.device-meta span{background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:999px;padding:4px 8px}
         .empty-state{min-height:280px;display:grid;place-items:center;text-align:center;gap:9px;color:var(--secondary-text-color)}.empty-state h2{color:var(--primary-text-color);font-size:18px;text-transform:none;letter-spacing:0;margin:0}.empty-icon{width:62px;height:62px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);font-weight:950;color:var(--primary-color)}
-        .editor-shell{display:grid;grid-template-columns:276px minmax(0,1fr) 352px;gap:12px;align-items:start}.left,.right{position:sticky;top:12px}.tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.tool-icon{min-height:82px;display:grid;grid-template-rows:36px auto;place-items:center;text-align:center;padding:10px 6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.tool-icon .ico{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-color);font-size:18px;font-weight:900}.tool-icon .txt{font-size:11px;font-weight:850;color:var(--secondary-text-color);text-transform:uppercase}.tool-icon:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}
+        .editor-shell{display:grid;grid-template-columns:276px minmax(0,1fr) 352px;gap:12px;align-items:start}.left,.right{position:sticky;top:12px}.template-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:282px;overflow:auto;padding-right:2px}.template-card{min-height:76px;display:grid;grid-template-columns:34px 1fr;align-items:center;text-align:left;gap:9px;padding:9px;border:1px solid var(--divider-color);background:linear-gradient(180deg,var(--card-background-color),var(--secondary-background-color));color:var(--primary-text-color);box-shadow:none}.template-card ha-icon{color:var(--primary-color);--mdc-icon-size:26px}.template-card strong{display:block;font-size:12px;line-height:1.2}.template-card span{display:block;font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;margin-top:2px}.template-card:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}.tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.tool-icon{min-height:82px;display:grid;grid-template-rows:36px auto;place-items:center;text-align:center;padding:10px 6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.tool-icon .ico{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-color);font-size:18px;font-weight:900}.tool-icon .txt{font-size:11px;font-weight:850;color:var(--secondary-text-color);text-transform:uppercase}.tool-icon:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}
         .action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:16px;display:grid;place-items:center}.wide-action{grid-column:span 4;font-size:13px}.panel-divider{height:1px;background:var(--divider-color);margin:14px 0}.layout-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-btn{min-height:58px;display:grid;place-items:center;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.layout-btn.active{background:var(--primary-color);color:var(--text-primary-color,#fff);border-color:var(--primary-color)}.transform-box{margin-top:10px;padding:10px;border:1px solid var(--divider-color);border-radius:8px;background:var(--secondary-background-color)}.transform-box small{display:block;color:var(--secondary-text-color);line-height:1.35;margin-top:6px}.properties-panel{max-height:calc(100vh - 120px);overflow:auto}
         .workspace-card{padding:0;overflow:hidden}.canvas-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--divider-color);background:var(--card-background-color)}.canvas-meta{display:flex;align-items:center;gap:8px;color:var(--secondary-text-color);font-size:12px}.workspace{min-height:590px;overflow:auto;display:grid;place-items:center;background:linear-gradient(45deg,rgba(127,127,127,.08) 25%,transparent 25%),linear-gradient(-45deg,rgba(127,127,127,.08) 25%,transparent 25%);background-size:18px 18px;border:0;padding:34px}
         canvas{background:#fff;box-shadow:0 20px 54px rgba(0,0,0,.24);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:760}.field input,.field select,.projectbar input,.projectbar select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -863,7 +1082,7 @@ class DratekEinkPanel extends HTMLElement {
         <div class="card"><div class="toolbar"><label>Displej</label><select id="deviceSelect">${result.devices.map((item) => `<option value="${this._escape(item.address)}" ${item.address === (device && device.address) ? "selected" : ""}>${this._escape(item.physical_code)} - ${this._escape(item.model)} - SDK ${this._escape(item.sdk_type)} - RSSI ${this._escape(item.rssi)}</option>`).join("")}</select><span class="pill muted">${size.width} x ${size.height}</span><button id="orientationLandscape" class="secondary" data-orientation="landscape" title="Na sirku" ${this._orientation === "landscape" ? "disabled" : ""}><ha-icon icon="mdi:phone-landscape"></ha-icon>Na sirku</button><button id="orientationPortrait" class="secondary" data-orientation="portrait" title="Na vysku" ${this._orientation === "portrait" ? "disabled" : ""}><ha-icon icon="mdi:phone-portrait"></ha-icon>Na vysku</button><button id="sendTest" class="secondary" ${!device ? "disabled" : ""}><ha-icon icon="mdi:send-check-outline"></ha-icon>Test dratek.cz</button><label class="pill muted"><input id="realPreview" type="checkbox" ${this._realPreview ? "checked" : ""}> Real eInk colors</label></div>${this._renderSendResult()}</div>
         ${this._renderVariables()}
         <div class="editor-shell">
-          <div class="card left"><div class="section-title"><h2>Nastroje</h2><span class="pill muted">${this._selectedIds.length} vybrano</span></div><div class="tool-grid"><button class="tool-icon" data-add="text" title="Text"><span class="ico"><ha-icon icon="mdi:format-text"></ha-icon></span><span class="txt">Text</span></button><button class="tool-icon" data-add="rect" title="Rectangle"><span class="ico"><ha-icon icon="mdi:rectangle-outline"></ha-icon></span><span class="txt">Rect</span></button><button class="tool-icon" data-add="line" title="Cara"><span class="ico"><ha-icon icon="mdi:vector-line"></ha-icon></span><span class="txt">Cara</span></button><button class="tool-icon" data-add="barcode" title="EAN"><span class="ico"><ha-icon icon="mdi:barcode"></ha-icon></span><span class="txt">EAN</span></button><button class="tool-icon" data-add="qr" title="QR"><span class="ico"><ha-icon icon="mdi:qrcode"></ha-icon></span><span class="txt">QR</span></button><button id="addImage" class="tool-icon secondary" title="Obrazek"><span class="ico"><ha-icon icon="mdi:image-plus"></ha-icon></span><span class="txt">Image</span></button><input id="imageFile" type="file" accept="image/*" hidden></div><div class="panel-divider"></div><h2>Layout displeje</h2><div class="layout-grid"><button class="layout-btn ${this._orientation === "landscape" ? "active" : ""}" data-orientation="landscape" title="Navrh na sirku"><ha-icon icon="mdi:phone-landscape"></ha-icon>Na sirku</button><button class="layout-btn ${this._orientation === "portrait" ? "active" : ""}" data-orientation="portrait" title="Navrh na vysku"><ha-icon icon="mdi:phone-portrait"></ha-icon>Na vysku</button></div>${this._renderTransformSelector(device)}<div class="panel-divider"></div><h2>Upravy</h2><div class="action-grid"><button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:content-duplicate"></ha-icon></button><button id="rotateSelected" class="icon-btn secondary" title="Otocit 90" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:rotate-right"></ha-icon></button><button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:flip-horizontal"></ha-icon></button><button id="layerFront" class="icon-btn secondary" title="Do popredi" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:arrange-bring-forward"></ha-icon></button><button id="layerBack" class="icon-btn secondary" title="Do pozadi" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:arrange-send-backward"></ha-icon></button><button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-left"></ha-icon></button><button id="alignCenter" class="icon-btn secondary" title="Zarovnat na stred" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-center"></ha-icon></button><button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-top"></ha-icon></button><button id="alignMiddle" class="icon-btn secondary" title="Svisly stred" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-middle"></ha-icon></button><button id="deleteSelected" class="wide-action danger" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat vybrane</button><button id="clearDesign" class="wide-action danger"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Smazat vse</button></div><div class="panel-divider"></div><h2>Zobrazeni</h2><div class="action-grid"><button id="zoomIn" class="icon-btn secondary" title="Priblizit"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></button><button id="zoomOut" class="icon-btn secondary" title="Oddalit"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon></button><button id="zoomFit" class="icon-btn secondary" title="Prizpusobit"><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon></button><label class="wide-action pill muted"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}> Grid snap 5 px</label></div></div>
+          <div class="card left"><div class="section-title"><h2>Sablony</h2><span class="pill muted">10</span></div><div class="template-grid">${this._renderTemplates()}</div><div class="panel-divider"></div><div class="section-title"><h2>Nastroje</h2><span class="pill muted">${this._selectedIds.length} vybrano</span></div><div class="tool-grid"><button class="tool-icon" data-add="text" title="Text"><span class="ico"><ha-icon icon="mdi:format-text"></ha-icon></span><span class="txt">Text</span></button><button class="tool-icon" data-add="rect" title="Rectangle"><span class="ico"><ha-icon icon="mdi:rectangle-outline"></ha-icon></span><span class="txt">Rect</span></button><button class="tool-icon" data-add="line" title="Cara"><span class="ico"><ha-icon icon="mdi:vector-line"></ha-icon></span><span class="txt">Cara</span></button><button class="tool-icon" data-add="barcode" title="EAN"><span class="ico"><ha-icon icon="mdi:barcode"></ha-icon></span><span class="txt">EAN</span></button><button class="tool-icon" data-add="qr" title="QR"><span class="ico"><ha-icon icon="mdi:qrcode"></ha-icon></span><span class="txt">QR</span></button><button id="addImage" class="tool-icon secondary" title="Obrazek"><span class="ico"><ha-icon icon="mdi:image-plus"></ha-icon></span><span class="txt">Image</span></button><input id="imageFile" type="file" accept="image/*" hidden></div><div class="panel-divider"></div><h2>Layout displeje</h2><div class="layout-grid"><button class="layout-btn ${this._orientation === "landscape" ? "active" : ""}" data-orientation="landscape" title="Navrh na sirku"><ha-icon icon="mdi:phone-landscape"></ha-icon>Na sirku</button><button class="layout-btn ${this._orientation === "portrait" ? "active" : ""}" data-orientation="portrait" title="Navrh na vysku"><ha-icon icon="mdi:phone-portrait"></ha-icon>Na vysku</button></div>${this._renderTransformSelector(device)}<div class="panel-divider"></div><h2>Upravy</h2><div class="action-grid"><button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:content-duplicate"></ha-icon></button><button id="rotateSelected" class="icon-btn secondary" title="Otocit 90" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:rotate-right"></ha-icon></button><button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:flip-horizontal"></ha-icon></button><button id="layerFront" class="icon-btn secondary" title="Do popredi" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:arrange-bring-forward"></ha-icon></button><button id="layerBack" class="icon-btn secondary" title="Do pozadi" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:arrange-send-backward"></ha-icon></button><button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-left"></ha-icon></button><button id="alignCenter" class="icon-btn secondary" title="Zarovnat na stred" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-center"></ha-icon></button><button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-top"></ha-icon></button><button id="alignMiddle" class="icon-btn secondary" title="Svisly stred" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-middle"></ha-icon></button><button id="deleteSelected" class="wide-action danger" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat vybrane</button><button id="clearDesign" class="wide-action danger"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Smazat vse</button></div><div class="panel-divider"></div><h2>Zobrazeni</h2><div class="action-grid"><button id="zoomIn" class="icon-btn secondary" title="Priblizit"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></button><button id="zoomOut" class="icon-btn secondary" title="Oddalit"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon></button><button id="zoomFit" class="icon-btn secondary" title="Prizpusobit"><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon></button><label class="wide-action pill muted"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}> Grid snap 5 px</label></div></div>
           <div class="card workspace-card"><div class="canvas-head"><div class="canvas-meta"><ha-icon icon="mdi:checkerboard"></ha-icon><strong>${size.width} x ${size.height}</strong><span>${this._orientation === "portrait" ? "Na vysku" : "Na sirku"}</span></div><div class="canvas-meta"><span>Zoom ${Math.round(this._zoom * 100)}%</span><span>${this._realPreview ? "Real eInk colors" : "RGB nahled"}</span></div></div><div class="workspace"><canvas id="editor" width="${size.width}" height="${size.height}" style="width:${Math.round(size.width * this._zoom)}px;height:${Math.round(size.height * this._zoom)}px"></canvas></div></div>
           <div class="card right properties-panel"><div class="section-title"><h2>Inspector</h2><span class="pill muted">${object ? this._escape(object.type) : "bez vyberu"}</span></div>${this._renderProperties(object)}</div>
         </div>
@@ -898,6 +1117,7 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#addImage").addEventListener("click", () => this.shadowRoot.querySelector("#imageFile").click());
     this.shadowRoot.querySelector("#imageFile").addEventListener("change", (event) => this._addImage(event.target.files[0]));
     this.shadowRoot.querySelectorAll("[data-add]").forEach((button) => button.addEventListener("click", () => this._addObject(button.dataset.add)));
+    this.shadowRoot.querySelectorAll("[data-template]").forEach((button) => button.addEventListener("click", () => this._applyTemplate(button.dataset.template)));
     this.shadowRoot.querySelector("#duplicateSelected").addEventListener("click", () => this._duplicateSelected());
     this.shadowRoot.querySelector("#deleteSelected").addEventListener("click", () => this._deleteSelected());
     this.shadowRoot.querySelector("#clearDesign").addEventListener("click", () => this._clearDesign());
@@ -1199,6 +1419,15 @@ class DratekEinkPanel extends HTMLElement {
     const cls = this._sendResult.ok ? "good" : "bad";
     const text = this._sendResult.ok ? "Odeslano do displeje." : `Odeslani selhalo: ${this._sendResult.error || "neznama chyba"}`;
     return `<div class="send-result"><span class="pill ${cls}">${this._escape(text)}</span>${(this._sendResult.log || []).length ? `<pre>${this._escape(this._sendResult.log.join("\n"))}</pre>` : ""}</div>`;
+  }
+
+  _renderTemplates() {
+    return this._templateDefinitions().map((template) => `
+      <button class="template-card" data-template="${this._escape(template.id)}" title="Pouzit sablonu ${this._escape(template.title)}">
+        <ha-icon icon="${this._escape(template.icon)}"></ha-icon>
+        <div><strong>${this._escape(template.title)}</strong><span>vlozit layout</span></div>
+      </button>
+    `).join("");
   }
 
   _renderVariables() {
