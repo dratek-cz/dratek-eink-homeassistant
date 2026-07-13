@@ -1,5 +1,12 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.15
+
+- knihovna symbolu je vyrazne rozsirena
+- nove kategorie: bezpecnost, zdravi, media, jidlo, obchod a priroda
+- doplnene symboly pro pocasi, domacnost, energie, senzory, stavove indikace, lidi, cas, dopravu, finance, sipky a obecne znacky
+- symboly jsou zamerne vybrane tak, aby mely sanci byt citelne i na malem eInk bitmapovem displeji
+
 ## Novinky ve verzi 0.1.14
 
 - pridana brand ikona `brand/icon.png` a `brand/logo.png` pro Home Assistant / HACS
