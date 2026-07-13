@@ -8,6 +8,8 @@ Aktualni stav:
 - HTTP status endpoint `GET /api/status`
 - BLE scan endpoint `GET /api/scan?seconds=8`
 - zakladni detekce DRATEK eInk reklam podle manufacturer id `0x5053`
+- mDNS discovery sluzba `_dratek-eink-gateway._tcp.local`
+- ulozeni Wi-Fi konfigurace do ESP32 NVS pameti pres USB serial
 
 Pripravene dalsi kroky:
 
@@ -18,11 +20,10 @@ Pripravene dalsi kroky:
 
 ## Nastaveni Wi-Fi
 
-Pro rychly vyvoj uprav `src/main.cpp`:
+Firmware je univerzalni. Wi-Fi se nezapisuje do zdrojoveho kodu. Po flashi ceka ESP32 na JSON konfiguraci pres USB serial:
 
-```cpp
-static const char* WIFI_SSID = "TvojeWifi";
-static const char* WIFI_PASSWORD = "TvojeHeslo";
+```json
+{"ssid":"TvojeWifi","password":"TvojeHeslo","hostname":"dratek-eink-gateway"}
 ```
 
-Pozdeji bude Wi-Fi konfigurace doplnene primo do flashovaciho pruvodce v Home Assistant panelu.
+Home Assistant panel tuto konfiguraci posila automaticky po uspesnem flashi.
