@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.16";
+const DRATEK_EINK_VERSION = "0.1.17";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -325,6 +325,14 @@ class DratekEinkPanel extends HTMLElement {
 
   _onKeyDown(event) {
     if (this._activeTab !== "designer" || this._isTypingEvent(event)) return;
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key) && this._selectedIds.length) {
+      event.preventDefault();
+      const step = event.shiftKey ? 10 : 1;
+      const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+      const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+      this._moveSelectedByKeyboard(dx, dy);
+      return;
+    }
     if ((event.key === "Delete" || event.key === "Backspace") && this._selectedIds.length) {
       event.preventDefault();
       this._deleteSelected();
@@ -339,6 +347,22 @@ class DratekEinkPanel extends HTMLElement {
       event.preventDefault();
       this._redo();
     }
+  }
+
+  _moveSelectedByKeyboard(dx, dy) {
+    if (!this._selectedIds.length || (!dx && !dy)) return;
+    this._pushHistory();
+    for (const object of this._objects.filter((item) => this._selectedIds.includes(item.id))) {
+      object.x = Math.round(Number(object.x || 0) + dx);
+      object.y = Math.round(Number(object.y || 0) + dy);
+      if (object.type === "line") {
+        object.x2 = Math.round(Number(object.x2 || 0) + dx);
+        object.y2 = Math.round(Number(object.y2 || 0) + dy);
+      }
+    }
+    this._paint();
+    this._syncProperties();
+    this._scheduleDraftSave();
   }
 
   async _loadDeviceDraft(address) {
@@ -1374,7 +1398,7 @@ class DratekEinkPanel extends HTMLElement {
     canvas.addEventListener("pointermove", (event) => this._onPointerMove(event));
     canvas.addEventListener("pointerup", () => this._onPointerUp());
     canvas.addEventListener("pointerleave", () => this._onPointerUp());
-    this.shadowRoot.querySelectorAll("[data-prop]").forEach((input) => input.addEventListener("input", () => this._readProperties()));
+    this.shadowRoot.querySelectorAll("[data-prop]").forEach((input) => input.addEventListener("input", (event) => this._readProperties(event)));
   }
 
   _renderProperties(object) {
@@ -1389,10 +1413,13 @@ class DratekEinkPanel extends HTMLElement {
     return `${common}<label><input data-prop="keepRatio" type="checkbox" ${object.keepRatio ? "checked" : ""}> Zachovat pomer stran</label>`;
   }
 
-  _readProperties() {
+  _readProperties(event = null) {
     const object = this._selectedObject();
     if (!object) return;
     const oldFontSize = Number(object.fontSize || 0);
+    const changedProp = event && event.target ? event.target.dataset.prop : "";
+    const wasVariable = !!object.variable;
+    const oldVariableName = object.variableName || "";
     if (!this._propertyEditActive) {
       this._pushHistory();
       this._propertyEditActive = true;
@@ -1422,7 +1449,9 @@ class DratekEinkPanel extends HTMLElement {
         delete this._variables[object.variableName];
         object.variableName = "";
       }
-      this._render();
+      if (changedProp === "variable" || changedProp === "variableName" || wasVariable !== !!object.variable || oldVariableName !== (object.variableName || "")) {
+        this._render();
+      }
     }
     this._paint();
     this._scheduleDraftSave();
