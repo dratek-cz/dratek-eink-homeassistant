@@ -27,3 +27,8 @@ Firmware je univerzalni. Wi-Fi se nezapisuje do zdrojoveho kodu. Po flashi ceka 
 ```
 
 Home Assistant panel tuto konfiguraci posila automaticky po uspesnem flashi.
+
+## Build targety
+
+- `esp32dev` pro klasicke ESP32 / ESP32-WROOM
+- `esp32-s3-devkitc-1` pro ESP32-S3
