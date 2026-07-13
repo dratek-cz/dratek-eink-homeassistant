@@ -14,6 +14,14 @@ import voluptuous as vol
 
 from .const import PARTIAL_UPDATE_SDK_TYPES
 from .discovery import parse_dratek_advertisement
+from .gateway import (
+    async_add_gateway,
+    async_delete_gateway,
+    async_load_gateways,
+    async_refresh_all_gateways,
+    async_refresh_gateway,
+    async_scan_gateway,
+)
 from .render import render_text_image
 from .transfer import DratekTransfer
 
@@ -33,6 +41,11 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_delete_project)
     websocket_api.async_register_command(hass, websocket_load_device_draft)
     websocket_api.async_register_command(hass, websocket_save_device_draft)
+    websocket_api.async_register_command(hass, websocket_list_gateways)
+    websocket_api.async_register_command(hass, websocket_add_gateway)
+    websocket_api.async_register_command(hass, websocket_delete_gateway)
+    websocket_api.async_register_command(hass, websocket_refresh_gateway)
+    websocket_api.async_register_command(hass, websocket_scan_gateway)
 
 
 @websocket_api.websocket_command({"type": "dratek_eink/scan"})
@@ -142,6 +155,95 @@ async def _load_project_data(hass: HomeAssistant) -> dict[str, Any]:
 
 def _normalize_address(address: str) -> str:
     return address.upper()
+
+
+@websocket_api.websocket_command({"type": "dratek_eink/gateways/list"})
+@websocket_api.async_response
+async def websocket_list_gateways(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    gateways = await async_load_gateways(hass)
+    connection.send_result(msg["id"], {"gateways": gateways})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/gateways/add",
+        "name": str,
+        "host": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_add_gateway(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    gateway = await async_add_gateway(hass, msg["name"], msg["host"])
+    gateway = await async_refresh_gateway(hass, gateway["id"]) or gateway
+    connection.send_result(msg["id"], {"gateway": gateway})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/gateways/delete",
+        "gateway_id": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_delete_gateway(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    deleted = await async_delete_gateway(hass, msg["gateway_id"])
+    connection.send_result(msg["id"], {"ok": deleted})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/gateways/refresh",
+        vol.Optional("gateway_id"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_refresh_gateway(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    gateway_id = msg.get("gateway_id")
+    if gateway_id:
+        gateway = await async_refresh_gateway(hass, gateway_id)
+        if not gateway:
+            connection.send_error(msg["id"], "not_found", "Gateway was not found.")
+            return
+        connection.send_result(msg["id"], {"gateways": [gateway]})
+        return
+    gateways = await async_refresh_all_gateways(hass)
+    connection.send_result(msg["id"], {"gateways": gateways})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/gateways/scan",
+        "gateway_id": str,
+        vol.Optional("seconds", default=8): int,
+    }
+)
+@websocket_api.async_response
+async def websocket_scan_gateway(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    result = await async_scan_gateway(hass, msg["gateway_id"], msg.get("seconds", 8))
+    if result is None:
+        connection.send_error(msg["id"], "not_found", "Gateway was not found.")
+        return
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.websocket_command({"type": "dratek_eink/projects/list"})
