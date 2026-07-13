@@ -19,10 +19,25 @@ GATEWAY_STORE_VERSION = 1
 DEFAULT_TIMEOUT = 8
 DISCOVERY_SERVICE = "_dratek-eink-gateway._tcp.local."
 FIRMWARE_DIR = Path(__file__).parent / "firmware"
-FLASH_FILES = {
-    "bootloader": FIRMWARE_DIR / "dratek-eink-gateway-bootloader.bin",
-    "partitions": FIRMWARE_DIR / "dratek-eink-gateway-partitions.bin",
-    "app": FIRMWARE_DIR / "dratek-eink-gateway.bin",
+FLASH_PROFILES = {
+    "esp32": {
+        "label": "ESP32 / ESP32-WROOM",
+        "chip": "esp32",
+        "files": {
+            "bootloader": (0x1000, FIRMWARE_DIR / "dratek-eink-gateway-esp32-bootloader.bin"),
+            "partitions": (0x8000, FIRMWARE_DIR / "dratek-eink-gateway-esp32-partitions.bin"),
+            "app": (0x10000, FIRMWARE_DIR / "dratek-eink-gateway-esp32.bin"),
+        },
+    },
+    "esp32s3": {
+        "label": "ESP32-S3",
+        "chip": "esp32s3",
+        "files": {
+            "bootloader": (0x0, FIRMWARE_DIR / "dratek-eink-gateway-esp32s3-bootloader.bin"),
+            "partitions": (0x8000, FIRMWARE_DIR / "dratek-eink-gateway-esp32s3-partitions.bin"),
+            "app": (0x10000, FIRMWARE_DIR / "dratek-eink-gateway-esp32s3.bin"),
+        },
+    },
 }
 
 
@@ -222,9 +237,11 @@ async def async_list_serial_ports(hass: HomeAssistant) -> list[dict[str, Any]]:
     return await hass.async_add_executor_job(_list_serial_ports_sync)
 
 
-def _flash_gateway_sync(port: str, ssid: str, password: str, hostname: str) -> dict[str, Any]:
+def _flash_gateway_sync(port: str, ssid: str, password: str, hostname: str, chip: str) -> dict[str, Any]:
     log: list[str] = []
-    missing = [str(path.name) for path in FLASH_FILES.values() if not path.exists()]
+    profile = FLASH_PROFILES.get(chip) or FLASH_PROFILES["esp32"]
+    files = profile["files"]
+    missing = [str(path.name) for _offset, path in files.values() if not path.exists()]
     if missing:
         return {
             "ok": False,
@@ -241,21 +258,18 @@ def _flash_gateway_sync(port: str, ssid: str, password: str, hostname: str) -> d
         "-m",
         "esptool",
         "--chip",
-        "esp32",
+        profile["chip"],
         "--port",
         port,
         "--baud",
         "460800",
         "write_flash",
         "-z",
-        "0x1000",
-        str(FLASH_FILES["bootloader"]),
-        "0x8000",
-        str(FLASH_FILES["partitions"]),
-        "0x10000",
-        str(FLASH_FILES["app"]),
     ]
-    log.append("Flashing ESP32 firmware...")
+    for key in ("bootloader", "partitions", "app"):
+        offset, path = files[key]
+        esptool_cmd.extend([hex(offset), str(path)])
+    log.append(f"Flashing {profile['label']} firmware...")
     try:
         proc = subprocess.run(esptool_cmd, capture_output=True, text=True, timeout=180, check=False)
     except Exception as exc:
@@ -294,5 +308,6 @@ async def async_flash_gateway(
     ssid: str,
     password: str,
     hostname: str,
+    chip: str = "esp32",
 ) -> dict[str, Any]:
-    return await hass.async_add_executor_job(_flash_gateway_sync, port, ssid, password, hostname)
+    return await hass.async_add_executor_job(_flash_gateway_sync, port, ssid, password, hostname, chip)
