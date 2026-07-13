@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.18";
+const DRATEK_EINK_VERSION = "0.1.19";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -29,7 +29,11 @@ class DratekEinkPanel extends HTMLElement {
     this._gateways = [];
     this._gatewayResult = null;
     this._gatewayBusy = false;
+    this._gatewayDiscovery = [];
+    this._serialPorts = [];
     this._gatewayForm = { name: "DRATEK eInk gateway", host: "dratek-eink-gateway.local" };
+    this._flashForm = { port: "", ssid: "", password: "", hostname: "dratek-eink-gateway" };
+    this._flashResult = null;
     this._draftSaveTimer = null;
     this._loadingDraft = false;
     this._restoringDraft = false;
@@ -61,6 +65,7 @@ class DratekEinkPanel extends HTMLElement {
       this._scan();
       this._loadProjects();
       this._loadGateways();
+      this._loadSerialPorts();
     }
   }
 
@@ -96,6 +101,75 @@ class DratekEinkPanel extends HTMLElement {
       this._gatewayResult = { ok: true, message: `Gateway ${result.gateway.name} ulozena.` };
     } catch (err) {
       this._gatewayResult = { ok: false, error: this._message(err) };
+    } finally {
+      this._gatewayBusy = false;
+      this._render();
+      this._paint();
+    }
+  }
+
+  async _discoverGateways() {
+    if (!this._hass || this._gatewayBusy) return;
+    this._gatewayBusy = true;
+    this._gatewayResult = null;
+    this._render();
+    try {
+      const result = await this._hass.callWS({ type: "dratek_eink/gateways/discover", seconds: 5 });
+      this._gatewayDiscovery = result.discovered || [];
+      this._gatewayResult = result.ok
+        ? { ok: true, message: `Discovery dokonceno. Nalezeno ${this._gatewayDiscovery.length} gatewayi.` }
+        : { ok: false, error: result.error || "Discovery selhalo." };
+    } catch (err) {
+      this._gatewayResult = { ok: false, error: this._message(err) };
+    } finally {
+      this._gatewayBusy = false;
+      this._render();
+      this._paint();
+    }
+  }
+
+  async _addDiscoveredGateway(index) {
+    const discovered = this._gatewayDiscovery[Number(index)];
+    if (!discovered) return;
+    this._gatewayForm = {
+      name: discovered.name || "DRATEK eInk gateway",
+      host: discovered.server || discovered.host,
+    };
+    await this._addGateway();
+  }
+
+  async _loadSerialPorts() {
+    if (!this._hass) return;
+    try {
+      const result = await this._hass.callWS({ type: "dratek_eink/gateways/serial_ports" });
+      this._serialPorts = result.ports || [];
+      if (!this._flashForm.port && this._serialPorts.length) this._flashForm.port = this._serialPorts[0].device;
+    } catch (err) {
+      this._flashResult = { ok: false, error: this._message(err), log: [] };
+    }
+    this._render();
+    this._paint();
+  }
+
+  async _flashGateway() {
+    if (!this._hass || this._gatewayBusy) return;
+    this._gatewayBusy = true;
+    this._flashResult = null;
+    this._render();
+    try {
+      this._flashResult = await this._hass.callWS({
+        type: "dratek_eink/gateways/flash",
+        port: this._flashForm.port,
+        ssid: this._flashForm.ssid,
+        password: this._flashForm.password,
+        hostname: this._flashForm.hostname || "dratek-eink-gateway",
+      });
+      if (this._flashResult.ok) {
+        this._gatewayBusy = false;
+        await this._discoverGateways();
+      }
+    } catch (err) {
+      this._flashResult = { ok: false, error: this._message(err), log: [] };
     } finally {
       this._gatewayBusy = false;
       this._render();
@@ -1413,10 +1487,10 @@ class DratekEinkPanel extends HTMLElement {
             <div class="card status-tile"><div><div class="metric">Online</div><div class="value">${this._gateways.filter((gateway) => gateway.status && gateway.status.ok).length}</div></div><div class="status-icon"><ha-icon icon="mdi:lan-connect"></ha-icon></div></div>
             <div class="card status-tile"><div><div class="metric">Firmware</div><span class="pill muted">vlastni DRATEK gateway API</span></div><div class="status-icon"><ha-icon icon="mdi:chip"></ha-icon></div></div>
           </div>
-          <div class="card projectbar"><input id="gatewayName" value="${this._escape(this._gatewayForm.name)}" placeholder="Nazev gateway"><input id="gatewayHost" value="${this._escape(this._gatewayForm.host)}" placeholder="IP nebo .local hostname"><div class="toolbar"><button id="addGateway" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:plus-network-outline"></ha-icon>Pridat gateway</button><button id="refreshGateways" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Obnovit stav</button></div></div>
+          <div class="card"><div class="section-title"><h2>Vyhledani v siti</h2><div class="toolbar"><button id="discoverGateways" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:access-point-network"></ha-icon>${this._gatewayBusy ? "Pracuji..." : "Vyhledat gatewaye v siti"}</button><button id="refreshGateways" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Obnovit stav ulozenych</button></div></div>${this._renderDiscoveredGateways()}</div>
           ${this._renderGatewayResult()}
           <div class="card"><div class="section-title"><h2>Sprava opakovacu signalu</h2><span class="pill muted">ESP32 pres Wi-Fi</span></div>${this._renderGateways()}</div>
-          <div class="card debug-card"><div class="section-title"><h2>Vytvorit gateway</h2><span class="pill warn">pripraveno pro flashovani</span></div><p>Prvni verze pocita s vlastnim firmwarem v adresari <code>firmware/dratek-eink-gateway</code>. Gateway po nahrani poskytuje HTTP API <code>/api/status</code> a <code>/api/scan</code>. Automaticke flashovani z HA panelu bude dalsi krok, protoze pristup k USB/serial portum se lisi podle typu instalace Home Assistantu.</p></div>
+          <div class="card"><div class="section-title"><h2>Vytvorit gateway</h2><div class="toolbar"><button id="refreshSerialPorts" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:usb-port"></ha-icon>Nacist porty</button><button id="flashGateway" ${this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid ? "disabled" : ""}><ha-icon icon="mdi:chip"></ha-icon>Flashnout ESP32</button></div></div><div class="row"><div class="field"><label>USB / serial port</label><select id="flashPort">${this._serialPorts.length ? this._serialPorts.map((port) => `<option value="${this._escape(port.device)}" ${port.device === this._flashForm.port ? "selected" : ""}>${this._escape(port.device)} - ${this._escape(port.description || port.name || "")}</option>`).join("") : `<option value="">Zadny port nenalezen</option>`}</select></div><div class="field"><label>Hostname gatewaye</label><input id="flashHostname" value="${this._escape(this._flashForm.hostname)}" placeholder="dratek-eink-gateway"></div></div><div class="row"><div class="field"><label>Wi-Fi SSID</label><input id="flashSsid" value="${this._escape(this._flashForm.ssid)}" placeholder="Nazev Wi-Fi"></div><div class="field"><label>Wi-Fi heslo</label><input id="flashPassword" type="password" value="${this._escape(this._flashForm.password)}" placeholder="Heslo"></div></div>${this._renderFlashResult()}</div>
         </div>
       </div>
       ${this._renderSymbolDialog()}`;
@@ -1432,6 +1506,25 @@ class DratekEinkPanel extends HTMLElement {
       : `Gateway chyba: ${this._gatewayResult.error || "neznamy problem"}`;
     const devices = this._gatewayResult.devices || [];
     return `<div class="card send-result"><span class="pill ${cls}">${this._escape(message)}</span>${devices.length ? `<div class="panel-divider"></div>${this._renderGatewayDevices(devices)}` : ""}</div>`;
+  }
+
+  _renderDiscoveredGateways() {
+    if (!this._gatewayDiscovery.length) {
+      return `<div class="inspector-empty"><ha-icon icon="mdi:access-point-network"></ha-icon><p>Klikni na vyhledani. Gatewaye se hledaji pres mDNS sluzbu v lokalni siti.</p></div>`;
+    }
+    return `<div class="device-grid">${this._gatewayDiscovery.map((gateway, index) => `<div class="device-card">
+      <div class="device-card-top"><div><strong>${this._escape(gateway.name || "DRATEK eInk gateway")}</strong><span>${this._escape(gateway.server || gateway.host)}</span></div><span class="pill good">Nalezena</span></div>
+      <div class="device-meta"><span>IP ${this._escape(gateway.host || "-")}</span><span>FW ${this._escape(gateway.firmware || "-")}</span><span>ID ${this._escape(gateway.gateway_id || "-")}</span></div>
+      <div class="toolbar"><button data-add-discovered-gateway="${index}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:plus-network-outline"></ha-icon>Pridat</button></div>
+    </div>`).join("")}</div>`;
+  }
+
+  _renderFlashResult() {
+    if (!this._flashResult) return "";
+    const cls = this._flashResult.ok ? "good" : "bad";
+    const message = this._flashResult.ok ? "ESP32 gateway byla flashnuta a Wi-Fi konfigurace odeslana." : `Flash selhal: ${this._flashResult.error || "neznamy problem"}`;
+    const log = (this._flashResult.log || []).join("\n");
+    return `<div class="send-result"><span class="pill ${cls}">${this._escape(message)}</span>${log ? `<pre>${this._escape(log)}</pre>` : ""}</div>`;
   }
 
   _renderGateways() {
@@ -1465,10 +1558,19 @@ class DratekEinkPanel extends HTMLElement {
   _bind() {
     this.shadowRoot.querySelector("#scan").addEventListener("click", () => this._scan());
     this.shadowRoot.querySelector("#scanDevicesTab")?.addEventListener("click", () => this._scan());
-    this.shadowRoot.querySelector("#gatewayName")?.addEventListener("input", (event) => { this._gatewayForm.name = event.target.value; });
-    this.shadowRoot.querySelector("#gatewayHost")?.addEventListener("input", (event) => { this._gatewayForm.host = event.target.value; });
-    this.shadowRoot.querySelector("#addGateway")?.addEventListener("click", () => this._addGateway());
+    this.shadowRoot.querySelector("#discoverGateways")?.addEventListener("click", () => this._discoverGateways());
     this.shadowRoot.querySelector("#refreshGateways")?.addEventListener("click", () => this._loadGateways(true));
+    this.shadowRoot.querySelectorAll("[data-add-discovered-gateway]").forEach((button) => button.addEventListener("click", () => this._addDiscoveredGateway(button.dataset.addDiscoveredGateway)));
+    const syncFlashButton = () => {
+      const button = this.shadowRoot.querySelector("#flashGateway");
+      if (button) button.disabled = this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid;
+    };
+    this.shadowRoot.querySelector("#refreshSerialPorts")?.addEventListener("click", async () => { await this._loadSerialPorts(); this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#flashPort")?.addEventListener("change", (event) => { this._flashForm.port = event.target.value; syncFlashButton(); });
+    this.shadowRoot.querySelector("#flashSsid")?.addEventListener("input", (event) => { this._flashForm.ssid = event.target.value; syncFlashButton(); });
+    this.shadowRoot.querySelector("#flashPassword")?.addEventListener("input", (event) => { this._flashForm.password = event.target.value; });
+    this.shadowRoot.querySelector("#flashHostname")?.addEventListener("input", (event) => { this._flashForm.hostname = event.target.value; });
+    this.shadowRoot.querySelector("#flashGateway")?.addEventListener("click", () => this._flashGateway());
     this.shadowRoot.querySelectorAll("[data-gateway-scan]").forEach((button) => button.addEventListener("click", () => this._scanGateway(button.dataset.gatewayScan)));
     this.shadowRoot.querySelectorAll("[data-gateway-refresh]").forEach((button) => button.addEventListener("click", async () => {
       this._gatewayBusy = true;
