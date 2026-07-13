@@ -1,5 +1,14 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.18
+
+- pridana karta `Gatewaye` pro pripravu vlastnich ESP32 DRATEK eInk opakovacu
+- gatewaye lze ulozit podle IP adresy nebo `.local` hostname
+- panel umi overit stav gatewaye pres HTTP endpoint `/api/status`
+- panel umi spustit BLE scan pres gateway endpoint `/api/scan`
+- v repozitari je prvni vlastni ESP32 firmware v `firmware/dratek-eink-gateway`
+- firmware zatim umi Wi-Fi, status API a BLE scan; prenos obrazku do cenovek bude dalsi krok
+
 ## Novinky ve verzi 0.1.17
 
 - opraveno skakani stranky nahoru pri psani textu v inspectoru
