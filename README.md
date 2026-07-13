@@ -1,5 +1,15 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.14
+
+- pridana brand ikona `brand/icon.png` a `brand/logo.png` pro Home Assistant / HACS
+- `Real eInk colors` je ve vychozim stavu vypnute
+- sablony jsou v editoru zobrazene jen jednou
+- inspector textu uz nezobrazuje minimalni velikost, pouziva ji jen interne jako hranici citelnosti
+- zmena velikosti textu v inspectoru se projevi rovnou v canvasu
+- pridany nastroj `Symbol` s vyhledavanim a kategoriemi symbolu
+- sablony pri vlozeni lepe zarovnavaji mensi popisky a dlouhe texty
+
 ## Novinky ve verzi 0.1.13
 
 - textovy renderer je prepracovany na citelnost pro nizka eInk rozliseni
