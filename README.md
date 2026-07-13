@@ -1,5 +1,16 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.19
+
+- gatewaye se uz nemusi pridavat rucne, panel je umi hledat v siti pres mDNS
+- karta `Gatewaye` ma tlacitko `Vyhledat gatewaye v siti`
+- pridany flash pruvodce pro ESP32 primo v Home Assistant panelu
+- flash pruvodce umi nacist USB/serial porty
+- pri flashovani lze zadat Wi-Fi SSID, heslo a hostname gatewaye
+- firmware po flashi dostane Wi-Fi konfiguraci pres USB serial a ulozi si ji do ESP32 pameti
+- firmware se v siti hlasi jako mDNS sluzba `_dratek-eink-gateway._tcp.local`
+- do integrace jsou pribalene binarky firmwaru pro ESP32 DevKit / ESP32-WROOM
+
 ## Novinky ve verzi 0.1.18
 
 - pridana karta `Gatewaye` pro pripravu vlastnich ESP32 DRATEK eInk opakovacu
