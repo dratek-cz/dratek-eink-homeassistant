@@ -294,6 +294,7 @@ async def websocket_gateway_serial_ports(
         "ssid": str,
         "password": str,
         vol.Optional("hostname", default="dratek-eink-gateway"): str,
+        vol.Optional("chip", default="esp32"): vol.In(["esp32", "esp32s3"]),
     }
 )
 @websocket_api.async_response
@@ -308,6 +309,7 @@ async def websocket_flash_gateway(
         msg["ssid"],
         msg["password"],
         msg.get("hostname", "dratek-eink-gateway"),
+        msg.get("chip", "esp32"),
     )
     connection.send_result(msg["id"], result)
 
