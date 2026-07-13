@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.13";
+const DRATEK_EINK_VERSION = "0.1.14";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -16,7 +16,7 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedIds = [];
     this._drag = null;
     this._nextId = 1;
-    this._realPreview = true;
+    this._realPreview = false;
     this._zoom = 1;
     this._snap = true;
     this._projects = [];
@@ -29,6 +29,9 @@ class DratekEinkPanel extends HTMLElement {
     this._draftSaveTimer = null;
     this._loadingDraft = false;
     this._restoringDraft = false;
+    this._symbolPickerOpen = false;
+    this._symbolSearch = "";
+    this._symbolCategory = "all";
   }
 
   set hass(hass) {
@@ -523,6 +526,70 @@ class DratekEinkPanel extends HTMLElement {
     return { type: "qr", x, y, w: side, h: side, text, color: "black", rotation: 0, keepRatio: true };
   }
 
+  _symbolCategories() {
+    return [
+      ["all", "Vse"],
+      ["weather", "Pocasi"],
+      ["home", "Domacnost"],
+      ["energy", "Energie"],
+      ["tech", "Technika"],
+      ["status", "Stavy"],
+      ["people", "Lide"],
+      ["time", "Cas"],
+      ["transport", "Doprava"],
+      ["finance", "Finance"],
+      ["arrows", "Sipky"],
+      ["symbols", "Znacky"],
+    ];
+  }
+
+  _symbolCatalog() {
+    return [
+      ["weather", "slunce", "☀"], ["weather", "mrak", "☁"], ["weather", "dest", "☂"], ["weather", "snih", "❄"], ["weather", "blesk", "⚡"], ["weather", "teplota", "℃"], ["weather", "vitr", "≋"], ["weather", "noc", "☾"],
+      ["home", "dum", "⌂"], ["home", "zamek", "▣"], ["home", "klic", "⚿"], ["home", "svetlo", "◉"], ["home", "voda", "●"], ["home", "odpad", "♜"], ["home", "recyklace", "♻"], ["home", "pracka", "▣"],
+      ["energy", "blesk", "⚡"], ["energy", "solar", "▦"], ["energy", "uspora", "✓"], ["energy", "leaf", "♧"], ["energy", "graf", "▥"], ["energy", "baterie", "▰"], ["energy", "zasuvka", "⌁"],
+      ["tech", "wifi", "≋"], ["tech", "signal", "▂"], ["tech", "qr", "▦"], ["tech", "server", "▤"], ["tech", "senzor", "◌"], ["tech", "chip", "▣"], ["tech", "bluetooth", "฿"], ["tech", "mobil", "▯"],
+      ["status", "ok", "✓"], ["status", "chyba", "✕"], ["status", "varovani", "!"], ["status", "info", "i"], ["status", "nahoru", "▲"], ["status", "dolu", "▼"], ["status", "zapnuto", "●"], ["status", "vypnuto", "○"],
+      ["people", "osoba", "●"], ["people", "doma", "⌂"], ["people", "prace", "▣"], ["people", "skola", "▥"], ["people", "srdce", "♥"], ["people", "hvezda", "★"],
+      ["time", "hodiny", "◷"], ["time", "kalendar", "▣"], ["time", "den", "☀"], ["time", "noc", "☾"], ["time", "alarm", "!"], ["time", "pauza", "Ⅱ"],
+      ["transport", "auto", "▰"], ["transport", "bus", "▣"], ["transport", "vlak", "▤"], ["transport", "kolo", "○"], ["transport", "nabijeni", "⚡"], ["transport", "parkovani", "P"],
+      ["finance", "koruna", "Kč"], ["finance", "euro", "€"], ["finance", "procenta", "%"], ["finance", "tag", "◆"], ["finance", "nahoru", "▲"], ["finance", "dolu", "▼"],
+      ["arrows", "vpravo", "→"], ["arrows", "vlevo", "←"], ["arrows", "nahoru", "↑"], ["arrows", "dolu", "↓"], ["arrows", "obnovit", "↻"], ["arrows", "enter", "↵"],
+      ["symbols", "check", "✓"], ["symbols", "cross", "✕"], ["symbols", "plus", "+"], ["symbols", "minus", "−"], ["symbols", "star", "★"], ["symbols", "heart", "♥"], ["symbols", "circle", "●"], ["symbols", "square", "■"],
+    ].map(([category, label, symbol]) => ({ category, label, symbol }));
+  }
+
+  _addSymbol(symbol) {
+    const size = this._displaySize();
+    const object = {
+      id: `obj-${this._nextId++}`,
+      type: "text",
+      x: this._snapValue(size.width * 0.42),
+      y: this._snapValue(size.height * 0.38),
+      w: this._snapValue(Math.max(36, size.width * 0.16)),
+      h: this._snapValue(Math.max(36, size.height * 0.16)),
+      rotation: 0,
+      flipH: false,
+      color: "black",
+      text: symbol,
+      fontSize: Math.max(26, Math.round(Math.min(size.width, size.height) * 0.12)),
+      fontFamily: "Arial",
+      minFontSize: 18,
+      bold: true,
+      variable: false,
+      variableName: "",
+      textAlign: "center",
+      verticalAlign: "middle",
+      autoFit: true,
+    };
+    this._objects.push(object);
+    this._selectedIds = [object.id];
+    this._symbolPickerOpen = false;
+    this._render();
+    this._paint();
+    this._scheduleDraftSave();
+  }
+
   _applyTemplate(templateId) {
     const template = this._templateDefinitions().find((item) => item.id === templateId);
     if (!template) return;
@@ -546,6 +613,9 @@ class DratekEinkPanel extends HTMLElement {
       if (next.fontSize !== undefined) next.fontSize = Math.max(7, Math.round(Number(next.fontSize || 12) * Math.min(sx, sy)));
       if (next.minFontSize !== undefined) next.minFontSize = Math.max(11, Math.round(Number(next.minFontSize || 11) * Math.min(sx, sy)));
       if (next.strokeWidth !== undefined) next.strokeWidth = Math.max(1, Math.round(Number(next.strokeWidth || 1) * Math.min(sx, sy)));
+      if (next.type === "text" && Number(next.fontSize || 0) <= 16 && Number(next.w || 0) >= 48) {
+        next.textAlign = "left";
+      }
       if (next.variable && next.variableName) variables[next.variableName] = next.text || "";
       return next;
     });
@@ -1077,7 +1147,7 @@ class DratekEinkPanel extends HTMLElement {
         .action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:16px;display:grid;place-items:center}.wide-action{grid-column:span 4;font-size:13px}.panel-divider{height:1px;background:var(--divider-color);margin:14px 0}.layout-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-btn{min-height:58px;display:grid;place-items:center;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.layout-btn.active{background:var(--primary-color);color:var(--text-primary-color,#fff);border-color:var(--primary-color)}.transform-box{margin-top:10px;padding:10px;border:1px solid var(--divider-color);border-radius:8px;background:var(--secondary-background-color)}.transform-box small{display:block;color:var(--secondary-text-color);line-height:1.35;margin-top:6px}.properties-panel{max-height:calc(100vh - 120px);overflow:auto}
         .workspace-card{padding:0;overflow:hidden}.canvas-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--divider-color);background:var(--card-background-color)}.canvas-meta{display:flex;align-items:center;gap:8px;color:var(--secondary-text-color);font-size:12px}.workspace{min-height:590px;overflow:auto;display:grid;place-items:center;background:linear-gradient(45deg,rgba(127,127,127,.08) 25%,transparent 25%),linear-gradient(-45deg,rgba(127,127,127,.08) 25%,transparent 25%);background-size:18px 18px;border:0;padding:34px}
         canvas{background:#fff;box-shadow:0 20px 54px rgba(0,0,0,.24);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:760}.field input,.field select,.projectbar input,.projectbar select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-        table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:#111827;color:#e5e7eb;border-radius:8px;padding:12px;font-size:12px;line-height:1.45}.send-result{margin-top:10px}.variable-table input{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:7px}
+        table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:#111827;color:#e5e7eb;border-radius:8px;padding:12px;font-size:12px;line-height:1.45}.send-result{margin-top:10px}.variable-table input{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:7px}.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:20;display:grid;place-items:center;padding:24px}.symbol-dialog{width:min(920px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:16px}.symbol-search{display:grid;grid-template-columns:1fr auto;gap:10px;margin:12px 0}.symbol-search input{width:100%;border:1px solid var(--divider-color);border-radius:7px;background:var(--secondary-background-color);color:var(--primary-text-color);padding:10px}.category-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}.category-row button{min-height:32px;padding:6px 10px}.category-row button.active{background:var(--primary-color);color:var(--text-primary-color,#fff)}.symbol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}.symbol-tile{min-height:78px;display:grid;grid-template-rows:32px auto;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.symbol-tile strong{font-size:29px;line-height:1}.symbol-tile span{font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;text-align:center}
         .section-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}.debug-card details{margin-top:10px}.debug-card summary{cursor:pointer;color:var(--primary-color);font-weight:760}.inspector-empty{padding:18px;border:1px dashed var(--divider-color);border-radius:8px;color:var(--secondary-text-color);text-align:center;background:var(--secondary-background-color)}
         @media(max-width:1180px){.editor-shell,.status-grid,.projectbar{grid-template-columns:1fr}.left,.right{position:static}.tabbar{width:100%}.tab{flex:1}.workspace{min-height:420px}}
       </style>
@@ -1107,13 +1177,14 @@ class DratekEinkPanel extends HTMLElement {
         ${this._renderVariables()}
         <div class="card template-hero"><div class="section-title"><h2>Sablony navrhu</h2><span class="pill good">Vyber sablonu kliknutim</span></div><div class="template-grid">${this._renderTemplates()}</div></div>
         <div class="editor-shell">
-          <div class="card left"><div class="section-title"><h2>Sablony</h2><span class="pill muted">10</span></div><div class="template-grid">${this._renderTemplates()}</div><div class="panel-divider"></div><div class="section-title"><h2>Nastroje</h2><span class="pill muted">${this._selectedIds.length} vybrano</span></div><div class="tool-grid"><button class="tool-icon" data-add="text" title="Text"><span class="ico"><ha-icon icon="mdi:format-text"></ha-icon></span><span class="txt">Text</span></button><button class="tool-icon" data-add="rect" title="Rectangle"><span class="ico"><ha-icon icon="mdi:rectangle-outline"></ha-icon></span><span class="txt">Rect</span></button><button class="tool-icon" data-add="line" title="Cara"><span class="ico"><ha-icon icon="mdi:vector-line"></ha-icon></span><span class="txt">Cara</span></button><button class="tool-icon" data-add="barcode" title="EAN"><span class="ico"><ha-icon icon="mdi:barcode"></ha-icon></span><span class="txt">EAN</span></button><button class="tool-icon" data-add="qr" title="QR"><span class="ico"><ha-icon icon="mdi:qrcode"></ha-icon></span><span class="txt">QR</span></button><button id="addImage" class="tool-icon secondary" title="Obrazek"><span class="ico"><ha-icon icon="mdi:image-plus"></ha-icon></span><span class="txt">Image</span></button><input id="imageFile" type="file" accept="image/*" hidden></div><div class="panel-divider"></div><h2>Layout displeje</h2><div class="layout-grid"><button class="layout-btn ${this._orientation === "landscape" ? "active" : ""}" data-orientation="landscape" title="Navrh na sirku"><ha-icon icon="mdi:phone-landscape"></ha-icon>Na sirku</button><button class="layout-btn ${this._orientation === "portrait" ? "active" : ""}" data-orientation="portrait" title="Navrh na vysku"><ha-icon icon="mdi:phone-portrait"></ha-icon>Na vysku</button></div>${this._renderTransformSelector(device)}<div class="panel-divider"></div><h2>Upravy</h2><div class="action-grid"><button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:content-duplicate"></ha-icon></button><button id="rotateSelected" class="icon-btn secondary" title="Otocit 90" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:rotate-right"></ha-icon></button><button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:flip-horizontal"></ha-icon></button><button id="layerFront" class="icon-btn secondary" title="Do popredi" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:arrange-bring-forward"></ha-icon></button><button id="layerBack" class="icon-btn secondary" title="Do pozadi" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:arrange-send-backward"></ha-icon></button><button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-left"></ha-icon></button><button id="alignCenter" class="icon-btn secondary" title="Zarovnat na stred" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-center"></ha-icon></button><button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-top"></ha-icon></button><button id="alignMiddle" class="icon-btn secondary" title="Svisly stred" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-middle"></ha-icon></button><button id="deleteSelected" class="wide-action danger" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat vybrane</button><button id="clearDesign" class="wide-action danger"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Smazat vse</button></div><div class="panel-divider"></div><h2>Zobrazeni</h2><div class="action-grid"><button id="zoomIn" class="icon-btn secondary" title="Priblizit"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></button><button id="zoomOut" class="icon-btn secondary" title="Oddalit"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon></button><button id="zoomFit" class="icon-btn secondary" title="Prizpusobit"><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon></button><label class="wide-action pill muted"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}> Grid snap 5 px</label></div></div>
+          <div class="card left"><div class="section-title"><h2>Nastroje</h2><span class="pill muted">${this._selectedIds.length} vybrano</span></div><div class="tool-grid"><button class="tool-icon" data-add="text" title="Text"><span class="ico"><ha-icon icon="mdi:format-text"></ha-icon></span><span class="txt">Text</span></button><button id="openSymbols" class="tool-icon" title="Symboly"><span class="ico"><ha-icon icon="mdi:shape-plus"></ha-icon></span><span class="txt">Symbol</span></button><button class="tool-icon" data-add="rect" title="Rectangle"><span class="ico"><ha-icon icon="mdi:rectangle-outline"></ha-icon></span><span class="txt">Rect</span></button><button class="tool-icon" data-add="line" title="Cara"><span class="ico"><ha-icon icon="mdi:vector-line"></ha-icon></span><span class="txt">Cara</span></button><button class="tool-icon" data-add="barcode" title="EAN"><span class="ico"><ha-icon icon="mdi:barcode"></ha-icon></span><span class="txt">EAN</span></button><button class="tool-icon" data-add="qr" title="QR"><span class="ico"><ha-icon icon="mdi:qrcode"></ha-icon></span><span class="txt">QR</span></button><button id="addImage" class="tool-icon secondary" title="Obrazek"><span class="ico"><ha-icon icon="mdi:image-plus"></ha-icon></span><span class="txt">Image</span></button><input id="imageFile" type="file" accept="image/*" hidden></div><div class="panel-divider"></div><h2>Layout displeje</h2><div class="layout-grid"><button class="layout-btn ${this._orientation === "landscape" ? "active" : ""}" data-orientation="landscape" title="Navrh na sirku"><ha-icon icon="mdi:phone-landscape"></ha-icon>Na sirku</button><button class="layout-btn ${this._orientation === "portrait" ? "active" : ""}" data-orientation="portrait" title="Navrh na vysku"><ha-icon icon="mdi:phone-portrait"></ha-icon>Na vysku</button></div>${this._renderTransformSelector(device)}<div class="panel-divider"></div><h2>Upravy</h2><div class="action-grid"><button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:content-duplicate"></ha-icon></button><button id="rotateSelected" class="icon-btn secondary" title="Otocit 90" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:rotate-right"></ha-icon></button><button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:flip-horizontal"></ha-icon></button><button id="layerFront" class="icon-btn secondary" title="Do popredi" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:arrange-bring-forward"></ha-icon></button><button id="layerBack" class="icon-btn secondary" title="Do pozadi" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:arrange-send-backward"></ha-icon></button><button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-left"></ha-icon></button><button id="alignCenter" class="icon-btn secondary" title="Zarovnat na stred" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-center"></ha-icon></button><button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-top"></ha-icon></button><button id="alignMiddle" class="icon-btn secondary" title="Svisly stred" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-middle"></ha-icon></button><button id="deleteSelected" class="wide-action danger" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat vybrane</button><button id="clearDesign" class="wide-action danger"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Smazat vse</button></div><div class="panel-divider"></div><h2>Zobrazeni</h2><div class="action-grid"><button id="zoomIn" class="icon-btn secondary" title="Priblizit"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></button><button id="zoomOut" class="icon-btn secondary" title="Oddalit"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon></button><button id="zoomFit" class="icon-btn secondary" title="Prizpusobit"><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon></button><label class="wide-action pill muted"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}> Grid snap 5 px</label></div></div>
           <div class="card workspace-card"><div class="canvas-head"><div class="canvas-meta"><ha-icon icon="mdi:checkerboard"></ha-icon><strong>${size.width} x ${size.height}</strong><span>${this._orientation === "portrait" ? "Na vysku" : "Na sirku"}</span></div><div class="canvas-meta"><span>Zoom ${Math.round(this._zoom * 100)}%</span><span>${this._realPreview ? "Real eInk colors" : "RGB nahled"}</span></div></div><div class="workspace"><canvas id="editor" width="${size.width}" height="${size.height}" style="width:${Math.round(size.width * this._zoom)}px;height:${Math.round(size.height * this._zoom)}px"></canvas></div></div>
           <div class="card right properties-panel"><div class="section-title"><h2>Inspector</h2><span class="pill muted">${object ? this._escape(object.type) : "bez vyberu"}</span></div>${this._renderProperties(object)}</div>
         </div>
         <div class="card debug-card"><div class="section-title"><h2>Debug</h2><span class="pill muted">${result.ble_devices.length} BLE</span></div><pre>${this._escape((result.debug || []).join("\n"))}</pre><details><summary>Vsechna BLE zarizeni</summary>${this._renderBleDevices(result.ble_devices)}</details></div>
         </div>
-      </div>`;
+      </div>
+      ${this._renderSymbolDialog()}`;
     this._bind();
     this._paint();
   }
@@ -1139,6 +1210,11 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#deleteProject").addEventListener("click", () => this._deleteProject());
     this.shadowRoot.querySelector("#projectName").addEventListener("input", (event) => { this._projectName = event.target.value; this._scheduleDraftSave(); });
     this.shadowRoot.querySelector("#projectSelect").addEventListener("change", (event) => { this._selectedProjectId = event.target.value; const project = this._projects.find((item) => item.id === this._selectedProjectId); if (project) this._projectName = project.name; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#openSymbols")?.addEventListener("click", () => { this._symbolPickerOpen = true; this._symbolSearch = ""; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#closeSymbols")?.addEventListener("click", () => { this._symbolPickerOpen = false; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#symbolSearch")?.addEventListener("input", (event) => { this._symbolSearch = event.target.value; this._render(); this._paint(); });
+    this.shadowRoot.querySelectorAll("[data-symbol-category]").forEach((button) => button.addEventListener("click", () => { this._symbolCategory = button.dataset.symbolCategory; this._render(); this._paint(); }));
+    this.shadowRoot.querySelectorAll("[data-symbol]").forEach((button) => button.addEventListener("click", () => this._addSymbol(button.dataset.symbol)));
     this.shadowRoot.querySelector("#addImage").addEventListener("click", () => this.shadowRoot.querySelector("#imageFile").click());
     this.shadowRoot.querySelector("#imageFile").addEventListener("change", (event) => this._addImage(event.target.files[0]));
     this.shadowRoot.querySelectorAll("[data-add]").forEach((button) => button.addEventListener("click", () => this._addObject(button.dataset.add)));
@@ -1181,7 +1257,7 @@ class DratekEinkPanel extends HTMLElement {
       return `<div class="inspector-empty"><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon><p>${this._selectedIds.length > 1 ? `Vybrano ${this._selectedIds.length} objektu.` : "Vyber objekt v navrhu."}</p></div>`;
     }
     const common = `<h2>Pozice</h2><div class="row"><div class="field"><label>X</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label>Y</label><input data-prop="y" type="number" value="${object.y}"></div></div><div class="row"><div class="field"><label>Sirka</label><input data-prop="w" type="number" value="${object.w || 1}"></div><div class="field"><label>Vyska</label><input data-prop="h" type="number" value="${object.h || 1}"></div></div><h2>Vzhled</h2><div class="row"><div class="field"><label>Rotace</label><select data-prop="rotation"><option ${object.rotation === 0 ? "selected" : ""}>0</option><option ${object.rotation === 90 ? "selected" : ""}>90</option><option ${object.rotation === 180 ? "selected" : ""}>180</option><option ${object.rotation === 270 ? "selected" : ""}>270</option></select></div><div class="field"><label>Barva</label><select data-prop="color"><option value="black" ${object.color === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.color === "red" ? "selected" : ""}>Cervena</option><option value="white" ${object.color === "white" ? "selected" : ""}>Bila</option></select></div></div>`;
-    if (object.type === "text") return `${common}<div class="field"><label>Text</label><input data-prop="text" value="${this._escape(object.text)}"></div><div class="row"><div class="field"><label>Velikost textu</label><input data-prop="fontSize" type="number" value="${object.fontSize}"></div><div class="field"><label>Minimalni citelna velikost</label><input data-prop="minFontSize" type="number" value="${object.minFontSize || 12}"></div></div><div class="field"><label>Font pro eInk</label><input value="Arial - pevne nastaveny kvuli citelnosti" disabled></div><div class="row"><div class="field"><label>Zarovnani</label><select data-prop="textAlign"><option value="left" ${object.textAlign === "left" ? "selected" : ""}>Vlevo</option><option value="center" ${!object.textAlign || object.textAlign === "center" ? "selected" : ""}>Stred</option><option value="right" ${object.textAlign === "right" ? "selected" : ""}>Vpravo</option></select></div><div class="field"><label>Svisle</label><select data-prop="verticalAlign"><option value="top" ${object.verticalAlign === "top" ? "selected" : ""}>Nahore</option><option value="middle" ${!object.verticalAlign || object.verticalAlign === "middle" ? "selected" : ""}>Stred</option><option value="bottom" ${object.verticalAlign === "bottom" ? "selected" : ""}>Dole</option></select></div></div><label><input data-prop="autoFit" type="checkbox" ${object.autoFit !== false ? "checked" : ""}> Prizpusobit bez zmenseni pod minimum</label><label><input data-prop="bold" type="checkbox" ${object.bold ? "checked" : ""}> Bold</label><label><input data-prop="variable" type="checkbox" ${object.variable ? "checked" : ""}> Promenny text</label><div class="field"><label>Nazev promenne</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="napr_teplota"></div>`;
+    if (object.type === "text") return `${common}<div class="field"><label>Text</label><input data-prop="text" value="${this._escape(object.text)}"></div><div class="row"><div class="field"><label>Velikost textu</label><input data-prop="fontSize" type="number" min="${this._textMinFontSize(object)}" value="${object.fontSize}"></div><div class="field"><label>Font pro eInk</label><input value="Arial" disabled></div></div><div class="row"><div class="field"><label>Zarovnani</label><select data-prop="textAlign"><option value="left" ${object.textAlign === "left" ? "selected" : ""}>Vlevo</option><option value="center" ${!object.textAlign || object.textAlign === "center" ? "selected" : ""}>Stred</option><option value="right" ${object.textAlign === "right" ? "selected" : ""}>Vpravo</option></select></div><div class="field"><label>Svisle</label><select data-prop="verticalAlign"><option value="top" ${object.verticalAlign === "top" ? "selected" : ""}>Nahore</option><option value="middle" ${!object.verticalAlign || object.verticalAlign === "middle" ? "selected" : ""}>Stred</option><option value="bottom" ${object.verticalAlign === "bottom" ? "selected" : ""}>Dole</option></select></div></div><label><input data-prop="autoFit" type="checkbox" ${object.autoFit !== false ? "checked" : ""}> Prizpusobit velikost podle boxu</label><label><input data-prop="bold" type="checkbox" ${object.bold ? "checked" : ""}> Bold</label><label><input data-prop="variable" type="checkbox" ${object.variable ? "checked" : ""}> Promenny text</label><div class="field"><label>Nazev promenne</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="napr_teplota"></div>`;
     if (object.type === "rect") return `${common}<div class="row"><div class="field"><label>Vypln</label><select data-prop="fill"><option value="none" ${object.fill === "none" ? "selected" : ""}>Bez vyplne</option><option value="black" ${object.fill === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.fill === "red" ? "selected" : ""}>Cervena</option><option value="white" ${object.fill === "white" ? "selected" : ""}>Bila</option></select></div><div class="field"><label>Ramecek</label><select data-prop="stroke"><option value="none" ${object.stroke === "none" ? "selected" : ""}>Bez ramecku</option><option value="black" ${object.stroke === "black" ? "selected" : ""}>Cerny</option><option value="red" ${object.stroke === "red" ? "selected" : ""}>Cerveny</option></select></div></div><div class="field"><label>Sila ramecku</label><input data-prop="strokeWidth" type="number" value="${object.strokeWidth || 0}"></div>`;
     if (object.type === "line") return `<div class="row"><div class="field"><label>X1</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label>Y1</label><input data-prop="y" type="number" value="${object.y}"></div></div><div class="row"><div class="field"><label>X2</label><input data-prop="x2" type="number" value="${object.x2}"></div><div class="field"><label>Y2</label><input data-prop="y2" type="number" value="${object.y2}"></div></div><div class="row"><div class="field"><label>Barva</label><select data-prop="color"><option value="black" ${object.color === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.color === "red" ? "selected" : ""}>Cervena</option></select></div><div class="field"><label>Sila</label><input data-prop="strokeWidth" type="number" value="${object.strokeWidth || 2}"></div></div>`;
     if (object.type === "barcode" || object.type === "qr") return `${common}<div class="field"><label>${object.type === "qr" ? "QR data" : "EAN data"}</label><input data-prop="text" value="${this._escape(object.text)}"></div>`;
@@ -1191,6 +1267,7 @@ class DratekEinkPanel extends HTMLElement {
   _readProperties() {
     const object = this._selectedObject();
     if (!object) return;
+    const oldFontSize = Number(object.fontSize || 0);
     this.shadowRoot.querySelectorAll("[data-prop]").forEach((input) => {
       const key = input.dataset.prop;
       if (input.type === "checkbox") object[key] = input.checked;
@@ -1198,6 +1275,12 @@ class DratekEinkPanel extends HTMLElement {
       else object[key] = input.value;
     });
     if (object.type === "text") {
+      object.minFontSize = this._textMinFontSize(object);
+      object.fontSize = Math.max(object.minFontSize, Number(object.fontSize || object.minFontSize));
+      if (object.fontSize !== oldFontSize) {
+        const lineCount = String(object.text || "").split("\n").length || 1;
+        object.h = Math.max(Number(object.h || 1), Math.ceil(object.fontSize * 1.18 * lineCount));
+      }
       if (object.variable) {
         object.variableName = this._uniqueVariableName(object.variableName || object.text || "variable", object.id);
         if (this._variables[object.variableName] === undefined) this._variables[object.variableName] = object.text || "";
@@ -1209,6 +1292,11 @@ class DratekEinkPanel extends HTMLElement {
     }
     this._paint();
     this._scheduleDraftSave();
+  }
+
+  _textMinFontSize(object = null) {
+    if (object && Number.isFinite(Number(object.minFontSize))) return Math.max(10, Number(object.minFontSize));
+    return this._readableMinFontSize();
   }
 
   _syncProperties() {
@@ -1520,6 +1608,24 @@ class DratekEinkPanel extends HTMLElement {
     const cls = this._sendResult.ok ? "good" : "bad";
     const text = this._sendResult.ok ? "Odeslano do displeje." : `Odeslani selhalo: ${this._sendResult.error || "neznama chyba"}`;
     return `<div class="send-result"><span class="pill ${cls}">${this._escape(text)}</span>${(this._sendResult.log || []).length ? `<pre>${this._escape(this._sendResult.log.join("\n"))}</pre>` : ""}</div>`;
+  }
+
+  _renderSymbolDialog() {
+    if (!this._symbolPickerOpen) return "";
+    const query = this._symbolSearch.trim().toLowerCase();
+    const symbols = this._symbolCatalog().filter((item) => {
+      const categoryMatch = this._symbolCategory === "all" || item.category === this._symbolCategory;
+      const queryMatch = !query || item.label.toLowerCase().includes(query) || item.symbol.includes(query);
+      return categoryMatch && queryMatch;
+    });
+    return `<div class="modal-backdrop">
+      <div class="symbol-dialog">
+        <div class="section-title"><h2>Vlozit symbol</h2><button id="closeSymbols" class="secondary"><ha-icon icon="mdi:close"></ha-icon>Zavrit</button></div>
+        <div class="symbol-search"><input id="symbolSearch" value="${this._escape(this._symbolSearch)}" placeholder="Hledat symbol, napriklad wifi, teplota, svetlo..."><span class="pill muted">${symbols.length} symbolu</span></div>
+        <div class="category-row">${this._symbolCategories().map(([id, label]) => `<button class="secondary ${this._symbolCategory === id ? "active" : ""}" data-symbol-category="${this._escape(id)}">${this._escape(label)}</button>`).join("")}</div>
+        <div class="symbol-grid">${symbols.map((item) => `<button class="symbol-tile" data-symbol="${this._escape(item.symbol)}" title="${this._escape(item.label)}"><strong>${this._escape(item.symbol)}</strong><span>${this._escape(item.label)}</span></button>`).join("")}</div>
+      </div>
+    </div>`;
   }
 
   _renderTemplates() {
