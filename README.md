@@ -1,5 +1,13 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.16
+
+- vybrane objekty v designeru jdou smazat klavesou `Delete` nebo `Backspace`
+- pridana vicekrokova historie zmen pro navrh
+- pridana tlacitka `Zpet` a `Dopredu` v panelu uprav
+- funguje `Ctrl+Z`, `Ctrl+Y` a `Ctrl+Shift+Z`
+- historie se uklada pro objekty, vyber, promenne, layout a nastaveni transformace displeje
+
 ## Novinky ve verzi 0.1.15
 
 - knihovna symbolu je vyrazne rozsirena
