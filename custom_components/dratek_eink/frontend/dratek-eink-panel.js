@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.17";
+const DRATEK_EINK_VERSION = "0.1.18";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -26,6 +26,10 @@ class DratekEinkPanel extends HTMLElement {
     this._orientation = "landscape";
     this._displayTransform = "rotate_cw";
     this._activeTab = "devices";
+    this._gateways = [];
+    this._gatewayResult = null;
+    this._gatewayBusy = false;
+    this._gatewayForm = { name: "DRATEK eInk gateway", host: "dratek-eink-gateway.local" };
     this._draftSaveTimer = null;
     this._loadingDraft = false;
     this._restoringDraft = false;
@@ -56,6 +60,79 @@ class DratekEinkPanel extends HTMLElement {
       this._render();
       this._scan();
       this._loadProjects();
+      this._loadGateways();
+    }
+  }
+
+  async _loadGateways(refresh = false) {
+    if (!this._hass) return;
+    this._gatewayBusy = true;
+    this._render();
+    try {
+      const result = await this._hass.callWS({ type: refresh ? "dratek_eink/gateways/refresh" : "dratek_eink/gateways/list" });
+      this._gateways = result.gateways || [];
+      this._gatewayResult = null;
+    } catch (err) {
+      this._gatewayResult = { ok: false, error: this._message(err) };
+    } finally {
+      this._gatewayBusy = false;
+      this._render();
+      this._paint();
+    }
+  }
+
+  async _addGateway() {
+    if (!this._hass || this._gatewayBusy) return;
+    this._gatewayBusy = true;
+    this._gatewayResult = null;
+    this._render();
+    try {
+      const result = await this._hass.callWS({
+        type: "dratek_eink/gateways/add",
+        name: this._gatewayForm.name,
+        host: this._gatewayForm.host,
+      });
+      await this._loadGateways(false);
+      this._gatewayResult = { ok: true, message: `Gateway ${result.gateway.name} ulozena.` };
+    } catch (err) {
+      this._gatewayResult = { ok: false, error: this._message(err) };
+    } finally {
+      this._gatewayBusy = false;
+      this._render();
+      this._paint();
+    }
+  }
+
+  async _deleteGateway(gatewayId) {
+    if (!this._hass || !gatewayId || this._gatewayBusy || !confirm("Smazat tuto gateway?")) return;
+    this._gatewayBusy = true;
+    this._render();
+    try {
+      await this._hass.callWS({ type: "dratek_eink/gateways/delete", gateway_id: gatewayId });
+      await this._loadGateways(false);
+      this._gatewayResult = { ok: true, message: "Gateway smazana." };
+    } catch (err) {
+      this._gatewayResult = { ok: false, error: this._message(err) };
+    } finally {
+      this._gatewayBusy = false;
+      this._render();
+      this._paint();
+    }
+  }
+
+  async _scanGateway(gatewayId) {
+    if (!this._hass || !gatewayId || this._gatewayBusy) return;
+    this._gatewayBusy = true;
+    this._gatewayResult = null;
+    this._render();
+    try {
+      this._gatewayResult = await this._hass.callWS({ type: "dratek_eink/gateways/scan", gateway_id: gatewayId, seconds: 8 });
+    } catch (err) {
+      this._gatewayResult = { ok: false, error: this._message(err), devices: [] };
+    } finally {
+      this._gatewayBusy = false;
+      this._render();
+      this._paint();
     }
   }
 
@@ -1303,7 +1380,7 @@ class DratekEinkPanel extends HTMLElement {
           <div class="brand"><div class="logo">DE</div><div><h1>DRATEK eInk <span class="version-badge">v${DRATEK_EINK_VERSION}</span></h1><div class="subtitle">Editor sablon, BLE diagnostika a sprava displeju</div></div></div>
           <div class="toolbar"><button id="scan" class="secondary" ${this._loading ? "disabled" : ""}><ha-icon icon="mdi:bluetooth-searching"></ha-icon>${this._loading ? "Vyhledavam..." : "Vyhledat zarizeni"}</button><button id="sendDesign" class="primary-action" ${!device || this._sending ? "disabled" : ""}><ha-icon icon="mdi:upload"></ha-icon>${this._sending ? "Odesilam..." : "Odeslat navrh"}</button></div>
         </div>
-        <div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezene displeje</button><button class="tab ${this._activeTab === "designer" ? "active" : ""}" data-tab="designer"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Designer</button></div>
+        <div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezene displeje</button><button class="tab ${this._activeTab === "designer" ? "active" : ""}" data-tab="designer"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Designer</button><button class="tab ${this._activeTab === "gateways" ? "active" : ""}" data-tab="gateways"><ha-icon icon="mdi:router-wireless"></ha-icon>Gatewaye</button></div>
         <div style="${this._activeTab === "devices" ? "" : "display:none"}">
           <div class="status-grid">
             <div class="card status-tile"><div><div class="metric">Stav systemu</div><span class="pill ${status.cls}">${this._escape(status.text)}</span></div><div class="status-icon"><ha-icon icon="mdi:access-point"></ha-icon></div></div>
@@ -1330,15 +1407,85 @@ class DratekEinkPanel extends HTMLElement {
         </div>
         <div class="card debug-card"><div class="section-title"><h2>Debug</h2><span class="pill muted">${result.ble_devices.length} BLE</span></div><pre>${this._escape((result.debug || []).join("\n"))}</pre><details><summary>Vsechna BLE zarizeni</summary>${this._renderBleDevices(result.ble_devices)}</details></div>
         </div>
+        <div style="${this._activeTab === "gateways" ? "" : "display:none"}">
+          <div class="status-grid">
+            <div class="card status-tile"><div><div class="metric">DRATEK eInk gatewaye</div><div class="value">${this._gateways.length}</div></div><div class="status-icon"><ha-icon icon="mdi:router-wireless"></ha-icon></div></div>
+            <div class="card status-tile"><div><div class="metric">Online</div><div class="value">${this._gateways.filter((gateway) => gateway.status && gateway.status.ok).length}</div></div><div class="status-icon"><ha-icon icon="mdi:lan-connect"></ha-icon></div></div>
+            <div class="card status-tile"><div><div class="metric">Firmware</div><span class="pill muted">vlastni DRATEK gateway API</span></div><div class="status-icon"><ha-icon icon="mdi:chip"></ha-icon></div></div>
+          </div>
+          <div class="card projectbar"><input id="gatewayName" value="${this._escape(this._gatewayForm.name)}" placeholder="Nazev gateway"><input id="gatewayHost" value="${this._escape(this._gatewayForm.host)}" placeholder="IP nebo .local hostname"><div class="toolbar"><button id="addGateway" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:plus-network-outline"></ha-icon>Pridat gateway</button><button id="refreshGateways" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Obnovit stav</button></div></div>
+          ${this._renderGatewayResult()}
+          <div class="card"><div class="section-title"><h2>Sprava opakovacu signalu</h2><span class="pill muted">ESP32 pres Wi-Fi</span></div>${this._renderGateways()}</div>
+          <div class="card debug-card"><div class="section-title"><h2>Vytvorit gateway</h2><span class="pill warn">pripraveno pro flashovani</span></div><p>Prvni verze pocita s vlastnim firmwarem v adresari <code>firmware/dratek-eink-gateway</code>. Gateway po nahrani poskytuje HTTP API <code>/api/status</code> a <code>/api/scan</code>. Automaticke flashovani z HA panelu bude dalsi krok, protoze pristup k USB/serial portum se lisi podle typu instalace Home Assistantu.</p></div>
+        </div>
       </div>
       ${this._renderSymbolDialog()}`;
     this._bind();
     this._paint();
   }
 
+  _renderGatewayResult() {
+    if (!this._gatewayResult) return "";
+    const cls = this._gatewayResult.ok ? "good" : "bad";
+    const message = this._gatewayResult.ok
+      ? (this._gatewayResult.message || `Scan dokoncen. Nalezeno ${this._gatewayResult.devices ? this._gatewayResult.devices.length : 0} BLE zarizeni.`)
+      : `Gateway chyba: ${this._gatewayResult.error || "neznamy problem"}`;
+    const devices = this._gatewayResult.devices || [];
+    return `<div class="card send-result"><span class="pill ${cls}">${this._escape(message)}</span>${devices.length ? `<div class="panel-divider"></div>${this._renderGatewayDevices(devices)}` : ""}</div>`;
+  }
+
+  _renderGateways() {
+    if (!this._gateways.length) {
+      return `<div class="empty-state"><div class="empty-icon">GW</div><h2>Zadne gatewaye</h2><p>Pripoj ESP32 s DRATEK eInk firmwarem do Wi-Fi a pridej jeho IP adresu nebo .local hostname.</p></div>`;
+    }
+    return `<div class="device-grid">${this._gateways.map((gateway) => {
+      const status = gateway.status || {};
+      const online = status.ok === true;
+      const unknown = status.ok === null || status.ok === undefined;
+      const cls = online ? "good" : unknown ? "warn" : "bad";
+      const text = online ? "Online" : unknown ? "Neovereno" : "Offline";
+      return `<div class="device-card">
+        <div class="device-card-top"><div><strong>${this._escape(gateway.name)}</strong><span>${this._escape(gateway.host)}</span></div><span class="pill ${cls}">${text}</span></div>
+        <div class="device-model">${this._escape(status.message || "")}</div>
+        <div class="device-meta">
+          <span>FW ${this._escape(status.firmware || "-")}</span>
+          <span>IP ${this._escape(status.ip || "-")}</span>
+          <span>RSSI ${this._escape(status.wifi_rssi ?? "-")}</span>
+          <span>Heap ${this._escape(status.free_heap ?? "-")}</span>
+        </div>
+        <div class="toolbar"><button data-gateway-scan="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:radar"></ha-icon>BLE scan</button><button class="secondary" data-gateway-refresh="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Status</button><button class="danger" data-gateway-delete="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat</button></div>
+      </div>`;
+    }).join("")}</div>`;
+  }
+
+  _renderGatewayDevices(devices) {
+    return `<table><thead><tr><th>Adresa</th><th>Nazev</th><th>RSSI</th><th>DRATEK</th></tr></thead><tbody>${devices.map((device) => `<tr><td>${this._escape(device.address || "")}</td><td>${this._escape(device.name || "")}</td><td>${this._escape(device.rssi ?? "")}</td><td>${device.dratek ? "ano" : "ne"}</td></tr>`).join("")}</tbody></table>`;
+  }
+
   _bind() {
     this.shadowRoot.querySelector("#scan").addEventListener("click", () => this._scan());
     this.shadowRoot.querySelector("#scanDevicesTab")?.addEventListener("click", () => this._scan());
+    this.shadowRoot.querySelector("#gatewayName")?.addEventListener("input", (event) => { this._gatewayForm.name = event.target.value; });
+    this.shadowRoot.querySelector("#gatewayHost")?.addEventListener("input", (event) => { this._gatewayForm.host = event.target.value; });
+    this.shadowRoot.querySelector("#addGateway")?.addEventListener("click", () => this._addGateway());
+    this.shadowRoot.querySelector("#refreshGateways")?.addEventListener("click", () => this._loadGateways(true));
+    this.shadowRoot.querySelectorAll("[data-gateway-scan]").forEach((button) => button.addEventListener("click", () => this._scanGateway(button.dataset.gatewayScan)));
+    this.shadowRoot.querySelectorAll("[data-gateway-refresh]").forEach((button) => button.addEventListener("click", async () => {
+      this._gatewayBusy = true;
+      this._render();
+      try {
+        const result = await this._hass.callWS({ type: "dratek_eink/gateways/refresh", gateway_id: button.dataset.gatewayRefresh });
+        const updated = result.gateways && result.gateways[0];
+        if (updated) this._gateways = this._gateways.map((gateway) => gateway.id === updated.id ? updated : gateway);
+      } catch (err) {
+        this._gatewayResult = { ok: false, error: this._message(err) };
+      } finally {
+        this._gatewayBusy = false;
+        this._render();
+        this._paint();
+      }
+    }));
+    this.shadowRoot.querySelectorAll("[data-gateway-delete]").forEach((button) => button.addEventListener("click", () => this._deleteGateway(button.dataset.gatewayDelete)));
     this.shadowRoot.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", () => {
       this._activeTab = button.dataset.tab;
       this._render();
