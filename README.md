@@ -1,5 +1,13 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.13
+
+- textovy renderer je prepracovany na citelnost pro nizka eInk rozliseni
+- editor pouziva jeden pevny font `Arial`, ktery je na malych bitmapach citelnejsi a predvidatelnejsi
+- text uz se pri auto-fit nezmensuje pod citelne minimum
+- dlouhy text se po dosazeni minima radsi lehce zuzi nebo zkrati, nez aby byl necitelny
+- v inspektoru textu je nastavitelna minimalni citelna velikost
+
 ## Novinky ve verzi 0.1.12
 
 - texty v sablonach maji inteligentni auto-fit do sveho boxu
