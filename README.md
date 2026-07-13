@@ -1,5 +1,12 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.17
+
+- opraveno skakani stranky nahoru pri psani textu v inspectoru
+- vybrane objekty jde posouvat sipkami na klavesnici
+- `Shift` + sipka posune vybrane objekty o 10 px
+- posun sipkami funguje i pro vice vybranych objektu a pro cary vcetne koncoveho bodu
+
 ## Novinky ve verzi 0.1.16
 
 - vybrane objekty v designeru jdou smazat klavesou `Delete` nebo `Backspace`
