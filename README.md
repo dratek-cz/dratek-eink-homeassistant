@@ -1,5 +1,11 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.20
+
+- pokud flash pruvodce nenajde zadny USB/serial port, zobrazi jasne varovani
+- varovani vysvetluje, ze ESP32 musi byt pripojene primo k hardwaru, na kterem bezi Home Assistant
+- doplneno upozorneni, ze ESP32 pripojene do jineho PC v siti nejde z HA flashnout
+
 ## Novinky ve verzi 0.1.19
 
 - gatewaye se uz nemusi pridavat rucne, panel je umi hledat v siti pres mDNS
