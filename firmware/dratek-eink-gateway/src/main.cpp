@@ -6,7 +6,7 @@
 #include <WebServer.h>
 #include <WiFi.h>
 
-static const char* FIRMWARE_VERSION = "0.1.19-gateway";
+static const char* FIRMWARE_VERSION = "0.1.21-gateway";
 static const uint16_t DRATEK_COMPANY_ID = 0x5053;
 
 WebServer server(80);
