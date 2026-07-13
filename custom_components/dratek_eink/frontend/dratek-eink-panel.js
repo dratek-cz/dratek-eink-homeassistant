@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.19";
+const DRATEK_EINK_VERSION = "0.1.20";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -31,6 +31,7 @@ class DratekEinkPanel extends HTMLElement {
     this._gatewayBusy = false;
     this._gatewayDiscovery = [];
     this._serialPorts = [];
+    this._serialPortsLoaded = false;
     this._gatewayForm = { name: "DRATEK eInk gateway", host: "dratek-eink-gateway.local" };
     this._flashForm = { port: "", ssid: "", password: "", hostname: "dratek-eink-gateway" };
     this._flashResult = null;
@@ -143,8 +144,10 @@ class DratekEinkPanel extends HTMLElement {
     try {
       const result = await this._hass.callWS({ type: "dratek_eink/gateways/serial_ports" });
       this._serialPorts = result.ports || [];
+      this._serialPortsLoaded = true;
       if (!this._flashForm.port && this._serialPorts.length) this._flashForm.port = this._serialPorts[0].device;
     } catch (err) {
+      this._serialPortsLoaded = true;
       this._flashResult = { ok: false, error: this._message(err), log: [] };
     }
     this._render();
@@ -1490,7 +1493,7 @@ class DratekEinkPanel extends HTMLElement {
           <div class="card"><div class="section-title"><h2>Vyhledani v siti</h2><div class="toolbar"><button id="discoverGateways" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:access-point-network"></ha-icon>${this._gatewayBusy ? "Pracuji..." : "Vyhledat gatewaye v siti"}</button><button id="refreshGateways" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Obnovit stav ulozenych</button></div></div>${this._renderDiscoveredGateways()}</div>
           ${this._renderGatewayResult()}
           <div class="card"><div class="section-title"><h2>Sprava opakovacu signalu</h2><span class="pill muted">ESP32 pres Wi-Fi</span></div>${this._renderGateways()}</div>
-          <div class="card"><div class="section-title"><h2>Vytvorit gateway</h2><div class="toolbar"><button id="refreshSerialPorts" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:usb-port"></ha-icon>Nacist porty</button><button id="flashGateway" ${this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid ? "disabled" : ""}><ha-icon icon="mdi:chip"></ha-icon>Flashnout ESP32</button></div></div><div class="row"><div class="field"><label>USB / serial port</label><select id="flashPort">${this._serialPorts.length ? this._serialPorts.map((port) => `<option value="${this._escape(port.device)}" ${port.device === this._flashForm.port ? "selected" : ""}>${this._escape(port.device)} - ${this._escape(port.description || port.name || "")}</option>`).join("") : `<option value="">Zadny port nenalezen</option>`}</select></div><div class="field"><label>Hostname gatewaye</label><input id="flashHostname" value="${this._escape(this._flashForm.hostname)}" placeholder="dratek-eink-gateway"></div></div><div class="row"><div class="field"><label>Wi-Fi SSID</label><input id="flashSsid" value="${this._escape(this._flashForm.ssid)}" placeholder="Nazev Wi-Fi"></div><div class="field"><label>Wi-Fi heslo</label><input id="flashPassword" type="password" value="${this._escape(this._flashForm.password)}" placeholder="Heslo"></div></div>${this._renderFlashResult()}</div>
+          <div class="card"><div class="section-title"><h2>Vytvorit gateway</h2><div class="toolbar"><button id="refreshSerialPorts" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:usb-port"></ha-icon>Nacist porty</button><button id="flashGateway" ${this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid ? "disabled" : ""}><ha-icon icon="mdi:chip"></ha-icon>Flashnout ESP32</button></div></div>${this._renderNoSerialPortsWarning()}<div class="row"><div class="field"><label>USB / serial port</label><select id="flashPort">${this._serialPorts.length ? this._serialPorts.map((port) => `<option value="${this._escape(port.device)}" ${port.device === this._flashForm.port ? "selected" : ""}>${this._escape(port.device)} - ${this._escape(port.description || port.name || "")}</option>`).join("") : `<option value="">Zadny port nenalezen</option>`}</select></div><div class="field"><label>Hostname gatewaye</label><input id="flashHostname" value="${this._escape(this._flashForm.hostname)}" placeholder="dratek-eink-gateway"></div></div><div class="row"><div class="field"><label>Wi-Fi SSID</label><input id="flashSsid" value="${this._escape(this._flashForm.ssid)}" placeholder="Nazev Wi-Fi"></div><div class="field"><label>Wi-Fi heslo</label><input id="flashPassword" type="password" value="${this._escape(this._flashForm.password)}" placeholder="Heslo"></div></div>${this._renderFlashResult()}</div>
         </div>
       </div>
       ${this._renderSymbolDialog()}`;
@@ -1525,6 +1528,11 @@ class DratekEinkPanel extends HTMLElement {
     const message = this._flashResult.ok ? "ESP32 gateway byla flashnuta a Wi-Fi konfigurace odeslana." : `Flash selhal: ${this._flashResult.error || "neznamy problem"}`;
     const log = (this._flashResult.log || []).join("\n");
     return `<div class="send-result"><span class="pill ${cls}">${this._escape(message)}</span>${log ? `<pre>${this._escape(log)}</pre>` : ""}</div>`;
+  }
+
+  _renderNoSerialPortsWarning() {
+    if (!this._serialPortsLoaded || this._serialPorts.length) return "";
+    return `<div class="send-result"><span class="pill bad">Nebyl nalezen zadny USB / serial port</span><p><strong>Pozor:</strong> ESP32 musi byt pripojene primo do hardwaru, na kterem bezi Home Assistant. Nestaci pripojit ESP32 do jineho pocitace v siti, ze ktereho Home Assistant jen spravujes. Pro flash firmware do gateway musi byt ESP32 fyzicky zapojene do USB portu HA stroje.</p></div>`;
   }
 
   _renderGateways() {
