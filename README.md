@@ -1,5 +1,12 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.21
+
+- pridana podpora flashovani gateway firmwaru do ESP32-S3
+- flash pruvodce ma volbu `Typ ESP32`: `ESP32-S3` nebo `ESP32 / ESP32-WROOM`
+- pro ESP32-S3 se pouziva spravny esptool chip `esp32s3` a samostatne S3 binarky
+- opravena chyba `This chip is ESP32-S3, not ESP32. Wrong chip argument?`
+
 ## Novinky ve verzi 0.1.20
 
 - pokud flash pruvodce nenajde zadny USB/serial port, zobrazi jasne varovani
