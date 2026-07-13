@@ -1,16 +1,19 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <ESPmDNS.h>
 #include <NimBLEDevice.h>
+#include <Preferences.h>
 #include <WebServer.h>
 #include <WiFi.h>
 
-static const char* WIFI_SSID = "CHANGE_ME";
-static const char* WIFI_PASSWORD = "CHANGE_ME";
-static const char* FIRMWARE_VERSION = "0.1.18-gateway";
+static const char* FIRMWARE_VERSION = "0.1.19-gateway";
 static const uint16_t DRATEK_COMPANY_ID = 0x5053;
 
 WebServer server(80);
+Preferences prefs;
 String gatewayId;
+String hostname;
+String serialLine;
 
 String macId() {
   String mac = WiFi.macAddress();
@@ -29,6 +32,7 @@ void handleStatus() {
   JsonDocument doc;
   doc["ok"] = true;
   doc["gateway_id"] = gatewayId;
+  doc["hostname"] = hostname;
   doc["firmware"] = FIRMWARE_VERSION;
   doc["ip"] = WiFi.localIP().toString();
   doc["mac"] = WiFi.macAddress();
@@ -82,23 +86,107 @@ void handleSendPlaceholder() {
   sendJson(doc, 501);
 }
 
+bool saveWifiConfig(const char* ssid, const char* password, const char* nextHostname) {
+  if (!ssid || strlen(ssid) == 0) return false;
+  prefs.begin("dratek", false);
+  prefs.putString("ssid", ssid);
+  prefs.putString("password", password ? password : "");
+  if (nextHostname && strlen(nextHostname) > 0) {
+    prefs.putString("hostname", nextHostname);
+  }
+  prefs.end();
+  return true;
+}
+
+bool readSerialConfigLine(const String& line) {
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, line);
+  if (error) return false;
+  const char* ssid = doc["ssid"] | "";
+  const char* password = doc["password"] | "";
+  const char* nextHostname = doc["hostname"] | hostname.c_str();
+  if (!saveWifiConfig(ssid, password, nextHostname)) return false;
+  Serial.println("{\"ok\":true,\"message\":\"wifi_config_saved\"}");
+  delay(500);
+  ESP.restart();
+  return true;
+}
+
+void handleSerialConfig() {
+  while (Serial.available()) {
+    char c = static_cast<char>(Serial.read());
+    if (c == '\n') {
+      serialLine.trim();
+      if (serialLine.length()) {
+        if (!readSerialConfigLine(serialLine)) {
+          Serial.println("{\"ok\":false,\"error\":\"invalid_wifi_config\"}");
+        }
+      }
+      serialLine = "";
+      continue;
+    }
+    if (serialLine.length() < 512) serialLine += c;
+  }
+}
+
+void startMdns() {
+  if (!MDNS.begin(hostname.c_str())) {
+    Serial.println("mDNS start failed.");
+    return;
+  }
+  MDNS.addService("dratek-eink-gateway", "tcp", 80);
+  MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "id", gatewayId.c_str());
+  MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "fw", FIRMWARE_VERSION);
+  Serial.print("mDNS: ");
+  Serial.print(hostname);
+  Serial.println(".local");
+}
+
 void connectWifi() {
+  prefs.begin("dratek", true);
+  String ssid = prefs.getString("ssid", "");
+  String password = prefs.getString("password", "");
+  hostname = prefs.getString("hostname", gatewayId);
+  prefs.end();
+
+  if (ssid.length() == 0) {
+    Serial.println("No Wi-Fi config. Send JSON over serial:");
+    Serial.println("{\"ssid\":\"YourWifi\",\"password\":\"YourPassword\",\"hostname\":\"dratek-eink-gateway\"}");
+    while (true) {
+      handleSerialConfig();
+      delay(20);
+    }
+  }
+
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.setHostname(hostname.c_str());
+  WiFi.begin(ssid.c_str(), password.c_str());
   Serial.print("Connecting to Wi-Fi");
-  while (WiFi.status() != WL_CONNECTED) {
+  unsigned long started = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - started < 30000) {
     delay(500);
     Serial.print(".");
+    handleSerialConfig();
+  }
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println();
+    Serial.println("Wi-Fi connection failed. Send new JSON config over serial.");
+    while (true) {
+      handleSerialConfig();
+      delay(20);
+    }
   }
   Serial.println();
   Serial.print("IP: ");
   Serial.println(WiFi.localIP());
+  startMdns();
 }
 
 void setup() {
   Serial.begin(115200);
   delay(300);
   gatewayId = "dratek-eink-gateway-" + macId();
+  hostname = gatewayId;
 
   connectWifi();
   NimBLEDevice::init(gatewayId.c_str());
@@ -117,5 +205,6 @@ void setup() {
 }
 
 void loop() {
+  handleSerialConfig();
   server.handleClient();
 }
