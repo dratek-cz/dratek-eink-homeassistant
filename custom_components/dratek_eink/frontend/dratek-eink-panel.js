@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.15";
+const DRATEK_EINK_VERSION = "0.1.16";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -32,6 +32,21 @@ class DratekEinkPanel extends HTMLElement {
     this._symbolPickerOpen = false;
     this._symbolSearch = "";
     this._symbolCategory = "all";
+    this._undoStack = [];
+    this._redoStack = [];
+    this._historyLimit = 60;
+    this._propertyEditActive = false;
+    this._propertyEditTimer = null;
+    this._handleKeyDown = (event) => this._onKeyDown(event);
+  }
+
+  connectedCallback() {
+    window.addEventListener("keydown", this._handleKeyDown);
+  }
+
+  disconnectedCallback() {
+    window.removeEventListener("keydown", this._handleKeyDown);
+    window.clearTimeout(this._propertyEditTimer);
   }
 
   set hass(hass) {
@@ -250,6 +265,80 @@ class DratekEinkPanel extends HTMLElement {
       .filter(Boolean)
       .map((match) => Number(match[1]));
     return ids.length ? Math.max(...ids) + 1 : this._objects.length + 1;
+  }
+
+  _historySnapshot() {
+    return {
+      objects: this._objects.map(({ _img, ...object }) => structuredClone(object)),
+      selectedIds: [...this._selectedIds],
+      variables: structuredClone(this._variables),
+      orientation: this._orientation,
+      displayTransform: this._displayTransform,
+      projectName: this._projectName,
+      selectedProjectId: this._selectedProjectId,
+      nextId: this._nextId,
+    };
+  }
+
+  _pushHistory() {
+    const snapshot = this._historySnapshot();
+    const last = this._undoStack[this._undoStack.length - 1];
+    if (last && JSON.stringify(last) === JSON.stringify(snapshot)) return;
+    this._undoStack.push(snapshot);
+    if (this._undoStack.length > this._historyLimit) this._undoStack.shift();
+    this._redoStack = [];
+  }
+
+  _restoreHistory(snapshot) {
+    this._objects = structuredClone(snapshot.objects || []);
+    this._selectedIds = [...(snapshot.selectedIds || [])];
+    this._variables = structuredClone(snapshot.variables || {});
+    this._orientation = snapshot.orientation || "landscape";
+    this._displayTransform = snapshot.displayTransform || "rotate_cw";
+    this._projectName = snapshot.projectName || "Novy navrh";
+    this._selectedProjectId = snapshot.selectedProjectId || "";
+    this._nextId = snapshot.nextId || this._nextObjectId();
+    this._fitZoom();
+    this._render();
+    this._paint();
+    this._scheduleDraftSave();
+  }
+
+  _undo() {
+    if (!this._undoStack.length) return;
+    this._redoStack.push(this._historySnapshot());
+    this._restoreHistory(this._undoStack.pop());
+  }
+
+  _redo() {
+    if (!this._redoStack.length) return;
+    this._undoStack.push(this._historySnapshot());
+    this._restoreHistory(this._redoStack.pop());
+  }
+
+  _isTypingEvent(event) {
+    return event.composedPath().some((node) => {
+      const tag = String(node.tagName || "").toLowerCase();
+      return tag === "input" || tag === "textarea" || tag === "select" || node.isContentEditable;
+    });
+  }
+
+  _onKeyDown(event) {
+    if (this._activeTab !== "designer" || this._isTypingEvent(event)) return;
+    if ((event.key === "Delete" || event.key === "Backspace") && this._selectedIds.length) {
+      event.preventDefault();
+      this._deleteSelected();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !event.shiftKey) {
+      event.preventDefault();
+      this._undo();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z"))) {
+      event.preventDefault();
+      this._redo();
+    }
   }
 
   async _loadDeviceDraft(address) {
@@ -572,6 +661,7 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _addSymbol(symbol) {
+    this._pushHistory();
     const size = this._displaySize();
     const object = {
       id: `obj-${this._nextId++}`,
@@ -606,6 +696,7 @@ class DratekEinkPanel extends HTMLElement {
     const template = this._templateDefinitions().find((item) => item.id === templateId);
     if (!template) return;
     if (this._objects.length && !confirm(`Nahradit aktualni navrh sablonou "${template.title}"?`)) return;
+    this._pushHistory();
     this._orientation = "portrait";
     const size = this._displaySize();
     const sourceWidth = Math.max(250, ...template.objects.map((object) => Math.max(Number(object.x || 0), Number(object.x2 || 0)) + Number(object.w || 0)));
@@ -643,6 +734,7 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _addObject(type) {
+    this._pushHistory();
     const size = this._displaySize();
     const object = {
       id: `obj-${this._nextId++}`,
@@ -697,6 +789,7 @@ class DratekEinkPanel extends HTMLElement {
         const size = this._displaySize();
         const maxW = Math.round(size.width * 0.45);
         const scale = Math.min(1, maxW / img.width);
+        this._pushHistory();
         const object = {
           id: `obj-${this._nextId++}`,
           type: "image",
@@ -721,6 +814,8 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _deleteSelected() {
+    if (!this._selectedIds.length) return;
+    this._pushHistory();
     const selected = new Set(this._selectedIds);
     for (const object of this._objects.filter((object) => selected.has(object.id))) {
       if (object.variableName) delete this._variables[object.variableName];
@@ -733,6 +828,8 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _duplicateSelected() {
+    if (!this._selectedIds.length) return;
+    this._pushHistory();
     const selected = new Set(this._selectedIds);
     const copies = this._objects.filter((object) => selected.has(object.id)).map(({ _img, ...object }) => {
       const copy = {
@@ -758,6 +855,7 @@ class DratekEinkPanel extends HTMLElement {
 
   _newProject() {
     if (this._objects.length && !confirm("Vytvorit novy prazdny navrh?")) return;
+    this._pushHistory();
     this._objects = [];
     this._selectedIds = [];
     this._variables = {};
@@ -771,6 +869,7 @@ class DratekEinkPanel extends HTMLElement {
 
   _clearDesign() {
     if (!this._objects.length || !confirm("Smazat vsechny objekty?")) return;
+    this._pushHistory();
     this._objects = [];
     this._selectedIds = [];
     this._render();
@@ -780,6 +879,7 @@ class DratekEinkPanel extends HTMLElement {
 
   _moveLayer(direction) {
     if (!this._selectedIds.length) return;
+    this._pushHistory();
     const selected = new Set(this._selectedIds);
     const moving = this._objects.filter((object) => selected.has(object.id));
     const rest = this._objects.filter((object) => !selected.has(object.id));
@@ -789,6 +889,8 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _rotateSelected() {
+    if (!this._selectedIds.length) return;
+    this._pushHistory();
     for (const object of this._objects.filter((item) => this._selectedIds.includes(item.id))) {
       object.rotation = (Number(object.rotation || 0) + 90) % 360;
     }
@@ -798,6 +900,8 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _mirrorSelected() {
+    if (!this._selectedIds.length) return;
+    this._pushHistory();
     for (const object of this._objects.filter((item) => this._selectedIds.includes(item.id))) {
       object.flipH = !object.flipH;
     }
@@ -806,6 +910,8 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _alignSelected(mode) {
+    if (!this._selectedIds.length) return;
+    this._pushHistory();
     const size = this._displaySize();
     for (const object of this._objects.filter((item) => this._selectedIds.includes(item.id))) {
       const box = this._box(object);
@@ -923,6 +1029,7 @@ class DratekEinkPanel extends HTMLElement {
       mode: handle ? "resize" : "move",
       handle: handle ? handle.name : "",
       start: point,
+      historyPushed: false,
       snapshots: this._objects.filter((item) => this._selectedIds.includes(item.id)).map((item) => ({ ...item })),
     };
     event.preventDefault();
@@ -938,6 +1045,10 @@ class DratekEinkPanel extends HTMLElement {
     const point = this._canvasPoint(event);
     const dx = point.x - this._drag.start.x;
     const dy = point.y - this._drag.start.y;
+    if (!this._drag.historyPushed && (Math.abs(dx) > 0 || Math.abs(dy) > 0)) {
+      this._pushHistory();
+      this._drag.historyPushed = true;
+    }
     for (const snapshot of this._drag.snapshots) {
       const object = this._objects.find((item) => item.id === snapshot.id);
       if (!object) continue;
@@ -1189,7 +1300,7 @@ class DratekEinkPanel extends HTMLElement {
         ${this._renderVariables()}
         <div class="card template-hero"><div class="section-title"><h2>Sablony navrhu</h2><span class="pill good">Vyber sablonu kliknutim</span></div><div class="template-grid">${this._renderTemplates()}</div></div>
         <div class="editor-shell">
-          <div class="card left"><div class="section-title"><h2>Nastroje</h2><span class="pill muted">${this._selectedIds.length} vybrano</span></div><div class="tool-grid"><button class="tool-icon" data-add="text" title="Text"><span class="ico"><ha-icon icon="mdi:format-text"></ha-icon></span><span class="txt">Text</span></button><button id="openSymbols" class="tool-icon" title="Symboly"><span class="ico"><ha-icon icon="mdi:shape-plus"></ha-icon></span><span class="txt">Symbol</span></button><button class="tool-icon" data-add="rect" title="Rectangle"><span class="ico"><ha-icon icon="mdi:rectangle-outline"></ha-icon></span><span class="txt">Rect</span></button><button class="tool-icon" data-add="line" title="Cara"><span class="ico"><ha-icon icon="mdi:vector-line"></ha-icon></span><span class="txt">Cara</span></button><button class="tool-icon" data-add="barcode" title="EAN"><span class="ico"><ha-icon icon="mdi:barcode"></ha-icon></span><span class="txt">EAN</span></button><button class="tool-icon" data-add="qr" title="QR"><span class="ico"><ha-icon icon="mdi:qrcode"></ha-icon></span><span class="txt">QR</span></button><button id="addImage" class="tool-icon secondary" title="Obrazek"><span class="ico"><ha-icon icon="mdi:image-plus"></ha-icon></span><span class="txt">Image</span></button><input id="imageFile" type="file" accept="image/*" hidden></div><div class="panel-divider"></div><h2>Layout displeje</h2><div class="layout-grid"><button class="layout-btn ${this._orientation === "landscape" ? "active" : ""}" data-orientation="landscape" title="Navrh na sirku"><ha-icon icon="mdi:phone-landscape"></ha-icon>Na sirku</button><button class="layout-btn ${this._orientation === "portrait" ? "active" : ""}" data-orientation="portrait" title="Navrh na vysku"><ha-icon icon="mdi:phone-portrait"></ha-icon>Na vysku</button></div>${this._renderTransformSelector(device)}<div class="panel-divider"></div><h2>Upravy</h2><div class="action-grid"><button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:content-duplicate"></ha-icon></button><button id="rotateSelected" class="icon-btn secondary" title="Otocit 90" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:rotate-right"></ha-icon></button><button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:flip-horizontal"></ha-icon></button><button id="layerFront" class="icon-btn secondary" title="Do popredi" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:arrange-bring-forward"></ha-icon></button><button id="layerBack" class="icon-btn secondary" title="Do pozadi" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:arrange-send-backward"></ha-icon></button><button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-left"></ha-icon></button><button id="alignCenter" class="icon-btn secondary" title="Zarovnat na stred" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-center"></ha-icon></button><button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-top"></ha-icon></button><button id="alignMiddle" class="icon-btn secondary" title="Svisly stred" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-middle"></ha-icon></button><button id="deleteSelected" class="wide-action danger" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat vybrane</button><button id="clearDesign" class="wide-action danger"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Smazat vse</button></div><div class="panel-divider"></div><h2>Zobrazeni</h2><div class="action-grid"><button id="zoomIn" class="icon-btn secondary" title="Priblizit"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></button><button id="zoomOut" class="icon-btn secondary" title="Oddalit"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon></button><button id="zoomFit" class="icon-btn secondary" title="Prizpusobit"><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon></button><label class="wide-action pill muted"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}> Grid snap 5 px</label></div></div>
+          <div class="card left"><div class="section-title"><h2>Nastroje</h2><span class="pill muted">${this._selectedIds.length} vybrano</span></div><div class="tool-grid"><button class="tool-icon" data-add="text" title="Text"><span class="ico"><ha-icon icon="mdi:format-text"></ha-icon></span><span class="txt">Text</span></button><button id="openSymbols" class="tool-icon" title="Symboly"><span class="ico"><ha-icon icon="mdi:shape-plus"></ha-icon></span><span class="txt">Symbol</span></button><button class="tool-icon" data-add="rect" title="Rectangle"><span class="ico"><ha-icon icon="mdi:rectangle-outline"></ha-icon></span><span class="txt">Rect</span></button><button class="tool-icon" data-add="line" title="Cara"><span class="ico"><ha-icon icon="mdi:vector-line"></ha-icon></span><span class="txt">Cara</span></button><button class="tool-icon" data-add="barcode" title="EAN"><span class="ico"><ha-icon icon="mdi:barcode"></ha-icon></span><span class="txt">EAN</span></button><button class="tool-icon" data-add="qr" title="QR"><span class="ico"><ha-icon icon="mdi:qrcode"></ha-icon></span><span class="txt">QR</span></button><button id="addImage" class="tool-icon secondary" title="Obrazek"><span class="ico"><ha-icon icon="mdi:image-plus"></ha-icon></span><span class="txt">Image</span></button><input id="imageFile" type="file" accept="image/*" hidden></div><div class="panel-divider"></div><h2>Layout displeje</h2><div class="layout-grid"><button class="layout-btn ${this._orientation === "landscape" ? "active" : ""}" data-orientation="landscape" title="Navrh na sirku"><ha-icon icon="mdi:phone-landscape"></ha-icon>Na sirku</button><button class="layout-btn ${this._orientation === "portrait" ? "active" : ""}" data-orientation="portrait" title="Navrh na vysku"><ha-icon icon="mdi:phone-portrait"></ha-icon>Na vysku</button></div>${this._renderTransformSelector(device)}<div class="panel-divider"></div><h2>Upravy</h2><div class="action-grid"><button id="undoAction" class="icon-btn secondary" title="Zpet" ${this._undoStack.length ? "" : "disabled"}><ha-icon icon="mdi:undo"></ha-icon></button><button id="redoAction" class="icon-btn secondary" title="Dopredu" ${this._redoStack.length ? "" : "disabled"}><ha-icon icon="mdi:redo"></ha-icon></button><button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:content-duplicate"></ha-icon></button><button id="rotateSelected" class="icon-btn secondary" title="Otocit 90" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:rotate-right"></ha-icon></button><button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:flip-horizontal"></ha-icon></button><button id="layerFront" class="icon-btn secondary" title="Do popredi" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:arrange-bring-forward"></ha-icon></button><button id="layerBack" class="icon-btn secondary" title="Do pozadi" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:arrange-send-backward"></ha-icon></button><button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-left"></ha-icon></button><button id="alignCenter" class="icon-btn secondary" title="Zarovnat na stred" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-center"></ha-icon></button><button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-top"></ha-icon></button><button id="alignMiddle" class="icon-btn secondary" title="Svisly stred" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-middle"></ha-icon></button><button id="deleteSelected" class="wide-action danger" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat vybrane</button><button id="clearDesign" class="wide-action danger"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Smazat vse</button></div><div class="panel-divider"></div><h2>Zobrazeni</h2><div class="action-grid"><button id="zoomIn" class="icon-btn secondary" title="Priblizit"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></button><button id="zoomOut" class="icon-btn secondary" title="Oddalit"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon></button><button id="zoomFit" class="icon-btn secondary" title="Prizpusobit"><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon></button><label class="wide-action pill muted"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}> Grid snap 5 px</label></div></div>
           <div class="card workspace-card"><div class="canvas-head"><div class="canvas-meta"><ha-icon icon="mdi:checkerboard"></ha-icon><strong>${size.width} x ${size.height}</strong><span>${this._orientation === "portrait" ? "Na vysku" : "Na sirku"}</span></div><div class="canvas-meta"><span>Zoom ${Math.round(this._zoom * 100)}%</span><span>${this._realPreview ? "Real eInk colors" : "RGB nahled"}</span></div></div><div class="workspace"><canvas id="editor" width="${size.width}" height="${size.height}" style="width:${Math.round(size.width * this._zoom)}px;height:${Math.round(size.height * this._zoom)}px"></canvas></div></div>
           <div class="card right properties-panel"><div class="section-title"><h2>Inspector</h2><span class="pill muted">${object ? this._escape(object.type) : "bez vyberu"}</span></div>${this._renderProperties(object)}</div>
         </div>
@@ -1231,6 +1342,8 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#imageFile").addEventListener("change", (event) => this._addImage(event.target.files[0]));
     this.shadowRoot.querySelectorAll("[data-add]").forEach((button) => button.addEventListener("click", () => this._addObject(button.dataset.add)));
     this.shadowRoot.querySelectorAll("[data-template]").forEach((button) => button.addEventListener("click", () => this._applyTemplate(button.dataset.template)));
+    this.shadowRoot.querySelector("#undoAction").addEventListener("click", () => this._undo());
+    this.shadowRoot.querySelector("#redoAction").addEventListener("click", () => this._redo());
     this.shadowRoot.querySelector("#duplicateSelected").addEventListener("click", () => this._duplicateSelected());
     this.shadowRoot.querySelector("#deleteSelected").addEventListener("click", () => this._deleteSelected());
     this.shadowRoot.querySelector("#clearDesign").addEventListener("click", () => this._clearDesign());
@@ -1280,6 +1393,15 @@ class DratekEinkPanel extends HTMLElement {
     const object = this._selectedObject();
     if (!object) return;
     const oldFontSize = Number(object.fontSize || 0);
+    if (!this._propertyEditActive) {
+      this._pushHistory();
+      this._propertyEditActive = true;
+      window.clearTimeout(this._propertyEditTimer);
+    }
+    window.clearTimeout(this._propertyEditTimer);
+    this._propertyEditTimer = window.setTimeout(() => {
+      this._propertyEditActive = false;
+    }, 700);
     this.shadowRoot.querySelectorAll("[data-prop]").forEach((input) => {
       const key = input.dataset.prop;
       if (input.type === "checkbox") object[key] = input.checked;
