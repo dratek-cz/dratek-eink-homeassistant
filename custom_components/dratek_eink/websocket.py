@@ -17,6 +17,9 @@ from .discovery import parse_dratek_advertisement
 from .gateway import (
     async_add_gateway,
     async_delete_gateway,
+    async_discover_gateways,
+    async_flash_gateway,
+    async_list_serial_ports,
     async_load_gateways,
     async_refresh_all_gateways,
     async_refresh_gateway,
@@ -46,6 +49,9 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_delete_gateway)
     websocket_api.async_register_command(hass, websocket_refresh_gateway)
     websocket_api.async_register_command(hass, websocket_scan_gateway)
+    websocket_api.async_register_command(hass, websocket_discover_gateways)
+    websocket_api.async_register_command(hass, websocket_gateway_serial_ports)
+    websocket_api.async_register_command(hass, websocket_flash_gateway)
 
 
 @websocket_api.websocket_command({"type": "dratek_eink/scan"})
@@ -243,6 +249,66 @@ async def websocket_scan_gateway(
     if result is None:
         connection.send_error(msg["id"], "not_found", "Gateway was not found.")
         return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/gateways/discover",
+        vol.Optional("seconds", default=4): int,
+    }
+)
+@websocket_api.async_response
+async def websocket_discover_gateways(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    try:
+        discovered = await async_discover_gateways(hass, msg.get("seconds", 4))
+    except Exception as exc:
+        connection.send_result(msg["id"], {"ok": False, "error": str(exc), "discovered": []})
+        return
+    connection.send_result(msg["id"], {"ok": True, "discovered": discovered})
+
+
+@websocket_api.websocket_command({"type": "dratek_eink/gateways/serial_ports"})
+@websocket_api.async_response
+async def websocket_gateway_serial_ports(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    try:
+        ports = await async_list_serial_ports(hass)
+    except Exception as exc:
+        connection.send_result(msg["id"], {"ok": False, "error": str(exc), "ports": []})
+        return
+    connection.send_result(msg["id"], {"ok": True, "ports": ports})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/gateways/flash",
+        "port": str,
+        "ssid": str,
+        "password": str,
+        vol.Optional("hostname", default="dratek-eink-gateway"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_flash_gateway(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    result = await async_flash_gateway(
+        hass,
+        msg["port"],
+        msg["ssid"],
+        msg["password"],
+        msg.get("hostname", "dratek-eink-gateway"),
+    )
     connection.send_result(msg["id"], result)
 
 
