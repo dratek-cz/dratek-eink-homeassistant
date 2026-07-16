@@ -1,5 +1,14 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.24
+
+- flashovaci log gatewaye drzi scroll dole, aby byla videt ziva data
+- v designeru lze vybrat ulozenou gateway a poslat navrh pres ni
+- firmware gatewaye ma prvni implementaci `POST /api/send` pro BLE prenos payloadu do DRATEK eInk displeje
+- na portu 80 bezi jednoducha administrace gatewaye
+- administrace umi zobrazit stav gatewaye a ulozit Wi-Fi/static IP nastaveni
+- `/api/config` umoznuje cist a menit sitovou konfiguraci gatewaye
+
 ## Novinky ve verzi 0.1.22
 
 - flash ESP32 gatewaye ma prubezny log primo v panelu

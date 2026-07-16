@@ -25,6 +25,7 @@ from .gateway import (
     async_refresh_all_gateways,
     async_refresh_gateway,
     async_scan_gateway,
+    async_send_gateway_payload,
     async_serial_gateway_status,
     async_serial_gateway_wifi,
     async_start_flash_gateway,
@@ -53,6 +54,7 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_delete_gateway)
     websocket_api.async_register_command(hass, websocket_refresh_gateway)
     websocket_api.async_register_command(hass, websocket_scan_gateway)
+    websocket_api.async_register_command(hass, websocket_send_gateway_design)
     websocket_api.async_register_command(hass, websocket_discover_gateways)
     websocket_api.async_register_command(hass, websocket_gateway_serial_ports)
     websocket_api.async_register_command(hass, websocket_flash_gateway)
@@ -256,6 +258,53 @@ async def websocket_scan_gateway(
     result = await async_scan_gateway(hass, msg["gateway_id"], msg.get("seconds", 8))
     if result is None:
         connection.send_error(msg["id"], "not_found", "Gateway was not found.")
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/gateways/send_design",
+        "gateway_id": str,
+        "address": str,
+        "sdk_type": int,
+        "image": str,
+        "orientation": str,
+        "transform": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_send_gateway_design(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    image_data = msg["image"]
+    log_lines: list[str] = []
+    try:
+        if "," in image_data:
+            image_data = image_data.split(",", 1)[1]
+        raw = base64.b64decode(image_data)
+        image = Image.open(io.BytesIO(raw)).convert("RGB")
+        if msg.get("orientation", "landscape") == "portrait":
+            image = image.rotate(-90, expand=True)
+        result = await async_send_gateway_payload(
+            hass,
+            msg["gateway_id"],
+            msg["address"],
+            msg["sdk_type"],
+            image,
+            msg.get("transform"),
+        )
+        if result is None:
+            connection.send_result(
+                msg["id"],
+                {"ok": False, "error": "Gateway nebyla nalezena.", "log": log_lines},
+            )
+            return
+    except Exception as exc:
+        log_lines.append(f"Gateway send failed: {exc}")
+        connection.send_result(msg["id"], {"ok": False, "error": str(exc), "log": log_lines})
         return
     connection.send_result(msg["id"], result)
 

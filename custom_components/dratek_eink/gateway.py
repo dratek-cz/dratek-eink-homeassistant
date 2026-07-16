@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 from pathlib import Path
 import socket
@@ -13,6 +14,9 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
+from PIL import Image
+
+from .render import pack_bwr_image
 
 GATEWAY_STORE_KEY = "dratek_eink.gateways"
 GATEWAY_STORE_VERSION = 1
@@ -167,6 +171,50 @@ async def async_scan_gateway(hass: HomeAssistant, gateway_id: str, seconds: int 
         "devices": payload.get("devices", []),
         "raw": payload,
     }
+
+
+async def async_send_gateway_payload(
+    hass: HomeAssistant,
+    gateway_id: str,
+    address: str,
+    sdk_type: int,
+    image: Image.Image,
+    transform: str | None = None,
+) -> dict[str, Any] | None:
+    gateways = await async_load_gateways(hass)
+    gateway = next((item for item in gateways if item.get("id") == gateway_id), None)
+    if not gateway:
+        return None
+
+    log: list[str] = []
+
+    def add_log(message: str) -> None:
+        log.append(message)
+
+    try:
+        add_log(f"Packing image {image.width}x{image.height} for SDK type {sdk_type}.")
+        payload = await hass.async_add_executor_job(pack_bwr_image, sdk_type, image, transform)
+        add_log(f"Payload size: {len(payload)} bytes.")
+        body = {
+            "address": address,
+            "payload": base64.b64encode(payload).decode("ascii"),
+        }
+        session = async_get_clientsession(hass)
+        url = f"{_gateway_base_url(gateway)}/api/send"
+        add_log(f"Sending payload to gateway {gateway.get('host')}.")
+        async with session.post(url, json=body, timeout=90) as response:
+            data = await response.json(content_type=None)
+            for line in data.get("log", []) or []:
+                add_log(str(line))
+            if response.status >= 400 or not data.get("ok"):
+                error = data.get("error") or f"HTTP {response.status}"
+                return {"ok": False, "error": error, "log": log, "raw": data}
+    except Exception as exc:
+        add_log(f"Gateway send failed: {exc}")
+        return {"ok": False, "error": str(exc), "log": log}
+
+    add_log("Gateway transfer finished.")
+    return {"ok": True, "gateway_id": gateway_id, "address": address, "log": log}
 
 
 def _discover_gateways_sync(seconds: int) -> list[dict[str, Any]]:
