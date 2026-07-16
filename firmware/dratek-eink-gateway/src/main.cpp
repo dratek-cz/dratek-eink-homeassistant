@@ -8,7 +8,7 @@
 #include <mbedtls/base64.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.24-gateway";
+static const char* FIRMWARE_VERSION = "0.1.25-gateway";
 static const uint16_t DRATEK_COMPANY_ID = 0x5053;
 static const char* TRANSFER_UUIDS[][3] = {
   {"0000fef0-0000-1000-8000-00805f9b34fb", "0000fef1-0000-1000-8000-00805f9b34fb", "0000fef2-0000-1000-8000-00805f9b34fb"},
@@ -340,6 +340,34 @@ void handleSend() {
   sendJson(doc, ok ? 200 : 502);
 }
 
+void handleSendBinary() {
+  JsonDocument doc;
+  JsonArray log = doc["log"].to<JsonArray>();
+  String address = server.arg("address");
+  if (address.length() == 0) {
+    doc["ok"] = false;
+    doc["error"] = "missing_address";
+    sendJson(doc, 400);
+    return;
+  }
+  if (!server.hasArg("plain")) {
+    doc["ok"] = false;
+    doc["error"] = "missing_binary_body";
+    sendJson(doc, 400);
+    return;
+  }
+  String body = server.arg("plain");
+  std::vector<uint8_t> payload(body.length());
+  memcpy(payload.data(), body.c_str(), body.length());
+  addLog(log, "Received binary payload " + String(payload.size()) + " bytes.");
+  addLog(log, "Free heap before BLE transfer: " + String(ESP.getFreeHeap()) + ".");
+  bool ok = sendPayloadToDisplay(address, payload, log);
+  addLog(log, "Free heap after BLE transfer: " + String(ESP.getFreeHeap()) + ".");
+  doc["ok"] = ok;
+  if (!ok) doc["error"] = "ble_transfer_failed";
+  sendJson(doc, ok ? 200 : 502);
+}
+
 void handleRoot() {
   String body = "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>";
   body += "<title>DRATEK eInk gateway</title><style>body{font-family:Arial,sans-serif;margin:24px;line-height:1.4;background:#f6f7f9;color:#111}main{max-width:980px;margin:auto}section{background:#fff;border:1px solid #ddd;border-radius:8px;padding:16px;margin:12px 0}input,button{font:inherit;padding:9px;margin:4px 0;width:100%;box-sizing:border-box}button{background:#111827;color:#fff;border:0;border-radius:6px;cursor:pointer}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.pill{display:inline-block;background:#eef2ff;border-radius:999px;padding:5px 10px;margin:3px}</style></head><body><main>";
@@ -349,6 +377,7 @@ void handleRoot() {
   body += "<label>Hostname<input name='hostname' value='" + hostname + "'></label><label>SSID<input name='ssid'></label><label>Heslo<input name='password' type='password'></label>";
   body += "<label>Static IP<input name='ip' placeholder='prazdne = DHCP'></label><label>Gateway<input name='gateway' placeholder='192.168.1.1'></label><label>Subnet<input name='subnet' placeholder='255.255.255.0'></label><label>DNS<input name='dns' placeholder='192.168.1.1'></label>";
   body += "</div><button>Ulozit a restartovat</button></form></section><section><h2>API</h2><p><code>/api/status</code>, <code>/api/scan?seconds=8</code>, <code>/api/send</code>, <code>/api/config</code></p></section>";
+  body += "<p>Binary send endpoint: <code>/api/send-bin?address=XX:XX:XX:XX:XX:XX</code></p>";
   body += "</main></body></html>";
   server.send(200, "text/html; charset=utf-8", body);
 }
@@ -581,6 +610,7 @@ void setup() {
   server.on("/api/status", HTTP_GET, handleStatus);
   server.on("/api/scan", HTTP_GET, handleScan);
   server.on("/api/send", HTTP_POST, handleSend);
+  server.on("/api/send-bin", HTTP_POST, handleSendBinary);
   server.on("/api/config", HTTP_GET, handleConfig);
   server.on("/api/config", HTTP_POST, handleConfig);
   server.on("/", HTTP_GET, handleRoot);

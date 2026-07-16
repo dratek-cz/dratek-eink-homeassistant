@@ -1,5 +1,11 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.25
+
+- odesilani pres gateway uz neposila velky base64 JSON, ale binarni payload pres `/api/send-bin`
+- tim se vyrazne snizuje narocnost na RAM v ESP32 pri prenosu navrhu do displeje
+- firmware gatewaye loguje volnou heap pamet pred a po BLE prenosu
+
 ## Novinky ve verzi 0.1.24
 
 - flashovaci log gatewaye drzi scroll dole, aby byla videt ziva data

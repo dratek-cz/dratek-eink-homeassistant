@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 from pathlib import Path
 import socket
@@ -10,6 +9,7 @@ import sys
 import time
 import uuid
 from typing import Any
+from urllib.parse import quote
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -195,14 +195,15 @@ async def async_send_gateway_payload(
         add_log(f"Packing image {image.width}x{image.height} for SDK type {sdk_type}.")
         payload = await hass.async_add_executor_job(pack_bwr_image, sdk_type, image, transform)
         add_log(f"Payload size: {len(payload)} bytes.")
-        body = {
-            "address": address,
-            "payload": base64.b64encode(payload).decode("ascii"),
-        }
         session = async_get_clientsession(hass)
-        url = f"{_gateway_base_url(gateway)}/api/send"
-        add_log(f"Sending payload to gateway {gateway.get('host')}.")
-        async with session.post(url, json=body, timeout=90) as response:
+        url = f"{_gateway_base_url(gateway)}/api/send-bin?address={quote(address, safe='')}"
+        add_log(f"Sending binary payload to gateway {gateway.get('host')}.")
+        async with session.post(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/octet-stream"},
+            timeout=120,
+        ) as response:
             data = await response.json(content_type=None)
             for line in data.get("log", []) or []:
                 add_log(str(line))
