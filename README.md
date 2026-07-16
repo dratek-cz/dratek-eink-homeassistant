@@ -1,5 +1,11 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.28
+
+- gateway pred pripojenim k displeji udela kratky BLE scan cilove adresy
+- BLE connect pres gateway ma tri pokusy a detailnejsi log
+- pokud gateway displej uvidi ve scanu, pripojuje se pres nalezeny advertised device
+
 ## Novinky ve verzi 0.1.27
 
 - opraven UTF-8 BOM na zacatku manifestu a frontend souboru, ktery mohl shodit HACS update/install hlaskou `unexpected character: line 1 column 1`

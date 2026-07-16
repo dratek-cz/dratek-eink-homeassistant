@@ -8,7 +8,7 @@
 #include <mbedtls/base64.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.26-gateway";
+static const char* FIRMWARE_VERSION = "0.1.28-gateway";
 static const uint16_t DRATEK_COMPANY_ID = 0x5053;
 static const char* TRANSFER_UUIDS[][3] = {
   {"0000fef0-0000-1000-8000-00805f9b34fb", "0000fef1-0000-1000-8000-00805f9b34fb", "0000fef2-0000-1000-8000-00805f9b34fb"},
@@ -182,14 +182,44 @@ bool findTransferChars(
   return false;
 }
 
+bool connectToDisplay(NimBLEClient* client, const String& address, JsonArray& log) {
+  String target = address;
+  target.toLowerCase();
+  for (int attempt = 1; attempt <= 3; attempt++) {
+    addLog(log, "BLE connect attempt " + String(attempt) + "/3.");
+    NimBLEScan* scan = NimBLEDevice::getScan();
+    scan->setActiveScan(true);
+    scan->setInterval(80);
+    scan->setWindow(60);
+    NimBLEScanResults results = scan->start(4, false);
+    for (int i = 0; i < results.getCount(); i++) {
+      NimBLEAdvertisedDevice device = results.getDevice(i);
+      String found = device.getAddress().toString().c_str();
+      found.toLowerCase();
+      if (found != target) continue;
+      addLog(log, "Target display seen in scan, RSSI " + String(device.getRSSI()) + ".");
+      bool connected = client->connect(&device);
+      scan->clearResults();
+      if (connected) return true;
+      addLog(log, "Connect via advertised device failed.");
+      break;
+    }
+    scan->clearResults();
+    addLog(log, "Trying direct address connect.");
+    if (client->connect(NimBLEAddress(address.c_str()))) return true;
+    delay(700);
+  }
+  return false;
+}
+
 bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& payload, JsonArray& log) {
   NimBLEClient* client = NimBLEDevice::createClient();
   client->setConnectTimeout(18);
   addLog(log, "Connecting to display " + address + ".");
-  bool connected = client->connect(NimBLEAddress(address.c_str()));
+  bool connected = connectToDisplay(client, address, log);
   if (!connected) {
     NimBLEDevice::deleteClient(client);
-    addLog(log, "BLE connection failed.");
+    addLog(log, "BLE connection failed after retries.");
     return false;
   }
 

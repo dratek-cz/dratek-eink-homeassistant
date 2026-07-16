@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.27";
+const DRATEK_EINK_VERSION = "0.1.28";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
