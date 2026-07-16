@@ -6,7 +6,7 @@
 #include <WebServer.h>
 #include <WiFi.h>
 
-static const char* FIRMWARE_VERSION = "0.1.21-gateway";
+static const char* FIRMWARE_VERSION = "0.1.22-gateway";
 static const uint16_t DRATEK_COMPANY_ID = 0x5053;
 
 WebServer server(80);
@@ -98,10 +98,38 @@ bool saveWifiConfig(const char* ssid, const char* password, const char* nextHost
   return true;
 }
 
+void printSerialStatus() {
+  prefs.begin("dratek", true);
+  String ssid = prefs.getString("ssid", "");
+  String storedHostname = prefs.getString("hostname", hostname);
+  prefs.end();
+
+  JsonDocument doc;
+  doc["ok"] = true;
+  doc["message"] = "status";
+  doc["gateway_id"] = gatewayId;
+  doc["firmware"] = FIRMWARE_VERSION;
+  doc["hostname"] = hostname;
+  doc["stored_hostname"] = storedHostname;
+  doc["stored_ssid"] = ssid;
+  doc["wifi_connected"] = WiFi.status() == WL_CONNECTED;
+  doc["ip"] = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "";
+  doc["wifi_rssi"] = WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0;
+  doc["mac"] = WiFi.macAddress();
+  doc["uptime_ms"] = millis();
+  serializeJson(doc, Serial);
+  Serial.println();
+}
+
 bool readSerialConfigLine(const String& line) {
   JsonDocument doc;
   DeserializationError error = deserializeJson(doc, line);
   if (error) return false;
+  const char* cmd = doc["cmd"] | "";
+  if (strcmp(cmd, "status") == 0) {
+    printSerialStatus();
+    return true;
+  }
   const char* ssid = doc["ssid"] | "";
   const char* password = doc["password"] | "";
   const char* nextHostname = doc["hostname"] | hostname.c_str();

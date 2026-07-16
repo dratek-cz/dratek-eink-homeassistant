@@ -19,6 +19,7 @@ GATEWAY_STORE_VERSION = 1
 DEFAULT_TIMEOUT = 8
 DISCOVERY_SERVICE = "_dratek-eink-gateway._tcp.local."
 FIRMWARE_DIR = Path(__file__).parent / "firmware"
+FLASH_JOBS_KEY = "dratek_eink_flash_jobs"
 FLASH_PROFILES = {
     "esp32": {
         "label": "ESP32 / ESP32-WROOM",
@@ -237,12 +238,36 @@ async def async_list_serial_ports(hass: HomeAssistant) -> list[dict[str, Any]]:
     return await hass.async_add_executor_job(_list_serial_ports_sync)
 
 
-def _flash_gateway_sync(port: str, ssid: str, password: str, hostname: str, chip: str) -> dict[str, Any]:
-    log: list[str] = []
+def _safe_log_line(line: str, password: str) -> str:
+    return line.replace(password, "********") if password else line
+
+
+def _flash_gateway_sync(
+    port: str,
+    ssid: str,
+    password: str,
+    hostname: str,
+    chip: str,
+    job: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    log: list[str] = [] if job is None else job["log"]
+
+    def add_log(line: str) -> None:
+        log.append(_safe_log_line(line, password))
+        if job is not None:
+            job["updated_at"] = int(time.time())
+
+    if job is not None:
+        job["status"] = "running"
+        job["ok"] = None
     profile = FLASH_PROFILES.get(chip) or FLASH_PROFILES["esp32"]
     files = profile["files"]
     missing = [str(path.name) for _offset, path in files.values() if not path.exists()]
     if missing:
+        if job is not None:
+            job["status"] = "failed"
+            job["ok"] = False
+            job["error"] = "missing_firmware_binary"
         return {
             "ok": False,
             "error": "missing_firmware_binary",
@@ -269,17 +294,44 @@ def _flash_gateway_sync(port: str, ssid: str, password: str, hostname: str, chip
     for key in ("bootloader", "partitions", "app"):
         offset, path = files[key]
         esptool_cmd.extend([hex(offset), str(path)])
-    log.append(f"Flashing {profile['label']} firmware...")
+    add_log(f"Flashing {profile['label']} firmware...")
     try:
-        proc = subprocess.run(esptool_cmd, capture_output=True, text=True, timeout=180, check=False)
+        proc = subprocess.Popen(
+            esptool_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        started = time.time()
+        assert proc.stdout is not None
+        while True:
+            line = proc.stdout.readline()
+            if line:
+                add_log(line.strip())
+            if proc.poll() is not None:
+                break
+            if time.time() - started > 180:
+                proc.kill()
+                raise TimeoutError("esptool timed out")
+        for line in proc.stdout.read().splitlines():
+            if line.strip():
+                add_log(line.strip())
     except Exception as exc:
+        if job is not None:
+            job["status"] = "failed"
+            job["ok"] = False
+            job["error"] = str(exc)
         return {"ok": False, "error": str(exc), "log": log}
 
-    log.extend(line for line in (proc.stdout + "\n" + proc.stderr).splitlines() if line.strip())
     if proc.returncode != 0:
+        if job is not None:
+            job["status"] = "failed"
+            job["ok"] = False
+            job["error"] = f"esptool exited with {proc.returncode}"
         return {"ok": False, "error": f"esptool exited with {proc.returncode}", "log": log}
 
-    log.append("Firmware flashed. Sending Wi-Fi configuration over serial...")
+    add_log("Firmware flashed. Sending Wi-Fi configuration over serial...")
     try:
         import serial
 
@@ -292,13 +344,24 @@ def _flash_gateway_sync(port: str, ssid: str, password: str, hostname: str, chip
             while time.time() < deadline:
                 line = ser.readline().decode(errors="ignore").strip()
                 if line:
-                    safe_line = line.replace(password, "********") if password else line
-                    log.append(safe_line)
+                    add_log(line)
                     if "wifi_config_saved" in line:
+                        if job is not None:
+                            job["status"] = "done"
+                            job["ok"] = True
+                            job["completed_at"] = int(time.time())
                         return {"ok": True, "log": log}
     except Exception as exc:
+        if job is not None:
+            job["status"] = "failed"
+            job["ok"] = False
+            job["error"] = f"Wi-Fi provisioning failed: {exc}"
         return {"ok": False, "error": f"Wi-Fi provisioning failed: {exc}", "log": log}
 
+    if job is not None:
+        job["status"] = "failed"
+        job["ok"] = False
+        job["error"] = "Wi-Fi provisioning acknowledgement timed out."
     return {"ok": False, "error": "Wi-Fi provisioning acknowledgement timed out.", "log": log}
 
 
@@ -311,3 +374,92 @@ async def async_flash_gateway(
     chip: str = "esp32",
 ) -> dict[str, Any]:
     return await hass.async_add_executor_job(_flash_gateway_sync, port, ssid, password, hostname, chip)
+
+
+async def async_start_flash_gateway(
+    hass: HomeAssistant,
+    port: str,
+    ssid: str,
+    password: str,
+    hostname: str,
+    chip: str = "esp32",
+) -> dict[str, Any]:
+    jobs = hass.data.setdefault(FLASH_JOBS_KEY, {})
+    job_id = str(uuid.uuid4())
+    job = {
+        "job_id": job_id,
+        "status": "queued",
+        "ok": None,
+        "error": "",
+        "log": ["Flash job queued."],
+        "created_at": int(time.time()),
+        "updated_at": int(time.time()),
+    }
+    jobs[job_id] = job
+
+    async def runner() -> None:
+        await hass.async_add_executor_job(_flash_gateway_sync, port, ssid, password, hostname, chip, job)
+
+    hass.async_create_task(runner())
+    return job
+
+
+def async_get_flash_job(hass: HomeAssistant, job_id: str) -> dict[str, Any] | None:
+    return hass.data.setdefault(FLASH_JOBS_KEY, {}).get(job_id)
+
+
+def _serial_gateway_command_sync(
+    port: str,
+    command: dict[str, Any],
+    password: str = "",
+    read_seconds: int = 8,
+) -> dict[str, Any]:
+    log: list[str] = []
+    try:
+        import serial
+
+        with serial.Serial(port, 115200, timeout=1) as ser:
+            ser.reset_input_buffer()
+            if command:
+                ser.write((json.dumps(command) + "\n").encode())
+                ser.flush()
+            deadline = time.time() + max(1, min(20, read_seconds))
+            while time.time() < deadline:
+                line = ser.readline().decode(errors="ignore").strip()
+                if line:
+                    log.append(_safe_log_line(line, password))
+                    if line.startswith("{") and line.endswith("}"):
+                        try:
+                            payload = json.loads(line)
+                            return {"ok": bool(payload.get("ok", True)), "payload": payload, "log": log}
+                        except json.JSONDecodeError:
+                            pass
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "log": log}
+    return {"ok": False, "error": "No JSON response from ESP32 over serial.", "log": log}
+
+
+async def async_serial_gateway_status(hass: HomeAssistant, port: str) -> dict[str, Any]:
+    return await hass.async_add_executor_job(
+        _serial_gateway_command_sync,
+        port,
+        {"cmd": "status"},
+        "",
+        8,
+    )
+
+
+async def async_serial_gateway_wifi(
+    hass: HomeAssistant,
+    port: str,
+    ssid: str,
+    password: str,
+    hostname: str,
+) -> dict[str, Any]:
+    return await hass.async_add_executor_job(
+        _serial_gateway_command_sync,
+        port,
+        {"cmd": "wifi", "ssid": ssid, "password": password, "hostname": hostname},
+        password,
+        12,
+    )

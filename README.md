@@ -1,5 +1,14 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.22
+
+- flash ESP32 gatewaye ma prubezny log primo v panelu
+- flash bezi jako job a panel si log aktualizuje kazdou sekundu
+- pridana USB diagnostika ESP32 gatewaye pres serial port
+- tlacitko `USB status` zobrazi firmware, ulozene SSID, stav Wi-Fi, IP adresu a RSSI
+- tlacitko `Poslat Wi-Fi` umozni znovu poslat Wi-Fi konfiguraci do uz flashnute ESP32 gatewaye
+- firmware gatewaye umi odpovedet na serial prikaz `status`
+
 ## Novinky ve verzi 0.1.21
 
 - pridana podpora flashovani gateway firmwaru do ESP32-S3

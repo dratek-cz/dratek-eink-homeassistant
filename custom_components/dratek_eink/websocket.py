@@ -19,11 +19,15 @@ from .gateway import (
     async_delete_gateway,
     async_discover_gateways,
     async_flash_gateway,
+    async_get_flash_job,
     async_list_serial_ports,
     async_load_gateways,
     async_refresh_all_gateways,
     async_refresh_gateway,
     async_scan_gateway,
+    async_serial_gateway_status,
+    async_serial_gateway_wifi,
+    async_start_flash_gateway,
 )
 from .render import render_text_image
 from .transfer import DratekTransfer
@@ -52,6 +56,10 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_discover_gateways)
     websocket_api.async_register_command(hass, websocket_gateway_serial_ports)
     websocket_api.async_register_command(hass, websocket_flash_gateway)
+    websocket_api.async_register_command(hass, websocket_start_flash_gateway)
+    websocket_api.async_register_command(hass, websocket_flash_gateway_job)
+    websocket_api.async_register_command(hass, websocket_gateway_serial_status)
+    websocket_api.async_register_command(hass, websocket_gateway_serial_wifi)
 
 
 @websocket_api.websocket_command({"type": "dratek_eink/scan"})
@@ -310,6 +318,93 @@ async def websocket_flash_gateway(
         msg["password"],
         msg.get("hostname", "dratek-eink-gateway"),
         msg.get("chip", "esp32"),
+    )
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/gateways/flash_start",
+        "port": str,
+        "ssid": str,
+        "password": str,
+        vol.Optional("hostname", default="dratek-eink-gateway"): str,
+        vol.Optional("chip", default="esp32"): vol.In(["esp32", "esp32s3"]),
+    }
+)
+@websocket_api.async_response
+async def websocket_start_flash_gateway(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    job = await async_start_flash_gateway(
+        hass,
+        msg["port"],
+        msg["ssid"],
+        msg["password"],
+        msg.get("hostname", "dratek-eink-gateway"),
+        msg.get("chip", "esp32"),
+    )
+    connection.send_result(msg["id"], {"job": job})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/gateways/flash_job",
+        "job_id": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_flash_gateway_job(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    job = async_get_flash_job(hass, msg["job_id"])
+    if not job:
+        connection.send_error(msg["id"], "not_found", "Flash job was not found.")
+        return
+    connection.send_result(msg["id"], {"job": job})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/gateways/serial_status",
+        "port": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_gateway_serial_status(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    result = await async_serial_gateway_status(hass, msg["port"])
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/gateways/serial_wifi",
+        "port": str,
+        "ssid": str,
+        "password": str,
+        vol.Optional("hostname", default="dratek-eink-gateway"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_gateway_serial_wifi(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    result = await async_serial_gateway_wifi(
+        hass,
+        msg["port"],
+        msg["ssid"],
+        msg["password"],
+        msg.get("hostname", "dratek-eink-gateway"),
     )
     connection.send_result(msg["id"], result)
 

@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.21";
+const DRATEK_EINK_VERSION = "0.1.22";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -35,6 +35,9 @@ class DratekEinkPanel extends HTMLElement {
     this._gatewayForm = { name: "DRATEK eInk gateway", host: "dratek-eink-gateway.local" };
     this._flashForm = { port: "", ssid: "", password: "", hostname: "dratek-eink-gateway", chip: "esp32s3" };
     this._flashResult = null;
+    this._flashJobId = "";
+    this._flashPollTimer = null;
+    this._serialResult = null;
     this._draftSaveTimer = null;
     this._loadingDraft = false;
     this._restoringDraft = false;
@@ -56,6 +59,7 @@ class DratekEinkPanel extends HTMLElement {
   disconnectedCallback() {
     window.removeEventListener("keydown", this._handleKeyDown);
     window.clearTimeout(this._propertyEditTimer);
+    window.clearTimeout(this._flashPollTimer);
   }
 
   set hass(hass) {
@@ -157,23 +161,88 @@ class DratekEinkPanel extends HTMLElement {
   async _flashGateway() {
     if (!this._hass || this._gatewayBusy) return;
     this._gatewayBusy = true;
-    this._flashResult = null;
+    this._flashResult = { ok: null, status: "queued", log: ["Zakladam flash job..."] };
+    this._flashJobId = "";
     this._render();
     try {
-      this._flashResult = await this._hass.callWS({
-        type: "dratek_eink/gateways/flash",
+      const result = await this._hass.callWS({
+        type: "dratek_eink/gateways/flash_start",
         port: this._flashForm.port,
         ssid: this._flashForm.ssid,
         password: this._flashForm.password,
         hostname: this._flashForm.hostname || "dratek-eink-gateway",
         chip: this._flashForm.chip || "esp32s3",
       });
-      if (this._flashResult.ok) {
-        this._gatewayBusy = false;
+      this._flashJobId = result.job.job_id;
+      this._flashResult = result.job;
+      this._scheduleFlashPoll();
+    } catch (err) {
+      this._flashResult = { ok: false, error: this._message(err), log: [] };
+      this._gatewayBusy = false;
+    } finally {
+      this._render();
+      this._paint();
+    }
+  }
+
+  _scheduleFlashPoll() {
+    window.clearTimeout(this._flashPollTimer);
+    this._flashPollTimer = window.setTimeout(() => this._pollFlashJob(), 1000);
+  }
+
+  async _pollFlashJob() {
+    if (!this._hass || !this._flashJobId) return;
+    try {
+      const result = await this._hass.callWS({ type: "dratek_eink/gateways/flash_job", job_id: this._flashJobId });
+      this._flashResult = result.job;
+      const done = ["done", "failed"].includes(result.job.status);
+      this._gatewayBusy = !done;
+      this._render();
+      this._paint();
+      if (!done) {
+        this._scheduleFlashPoll();
+      } else if (result.job.ok) {
         await this._discoverGateways();
       }
     } catch (err) {
-      this._flashResult = { ok: false, error: this._message(err), log: [] };
+      this._flashResult = { ok: false, error: this._message(err), log: this._flashResult?.log || [] };
+      this._gatewayBusy = false;
+      this._render();
+      this._paint();
+    }
+  }
+
+  async _serialGatewayStatus() {
+    if (!this._hass || !this._flashForm.port || this._gatewayBusy) return;
+    this._gatewayBusy = true;
+    this._serialResult = { ok: null, log: ["Ctu stav ESP32 pres USB serial..."] };
+    this._render();
+    try {
+      this._serialResult = await this._hass.callWS({ type: "dratek_eink/gateways/serial_status", port: this._flashForm.port });
+    } catch (err) {
+      this._serialResult = { ok: false, error: this._message(err), log: [] };
+    } finally {
+      this._gatewayBusy = false;
+      this._render();
+      this._paint();
+    }
+  }
+
+  async _serialGatewayWifi() {
+    if (!this._hass || !this._flashForm.port || !this._flashForm.ssid || this._gatewayBusy) return;
+    this._gatewayBusy = true;
+    this._serialResult = { ok: null, log: ["Posilam Wi-Fi konfiguraci do ESP32 pres USB serial..."] };
+    this._render();
+    try {
+      this._serialResult = await this._hass.callWS({
+        type: "dratek_eink/gateways/serial_wifi",
+        port: this._flashForm.port,
+        ssid: this._flashForm.ssid,
+        password: this._flashForm.password,
+        hostname: this._flashForm.hostname || "dratek-eink-gateway",
+      });
+    } catch (err) {
+      this._serialResult = { ok: false, error: this._message(err), log: [] };
     } finally {
       this._gatewayBusy = false;
       this._render();
@@ -1494,7 +1563,7 @@ class DratekEinkPanel extends HTMLElement {
           <div class="card"><div class="section-title"><h2>Vyhledani v siti</h2><div class="toolbar"><button id="discoverGateways" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:access-point-network"></ha-icon>${this._gatewayBusy ? "Pracuji..." : "Vyhledat gatewaye v siti"}</button><button id="refreshGateways" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Obnovit stav ulozenych</button></div></div>${this._renderDiscoveredGateways()}</div>
           ${this._renderGatewayResult()}
           <div class="card"><div class="section-title"><h2>Sprava opakovacu signalu</h2><span class="pill muted">ESP32 pres Wi-Fi</span></div>${this._renderGateways()}</div>
-          <div class="card"><div class="section-title"><h2>Vytvorit gateway</h2><div class="toolbar"><button id="refreshSerialPorts" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:usb-port"></ha-icon>Nacist porty</button><button id="flashGateway" ${this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid ? "disabled" : ""}><ha-icon icon="mdi:chip"></ha-icon>Flashnout ESP32</button></div></div>${this._renderNoSerialPortsWarning()}<div class="row"><div class="field"><label>USB / serial port</label><select id="flashPort">${this._serialPorts.length ? this._serialPorts.map((port) => `<option value="${this._escape(port.device)}" ${port.device === this._flashForm.port ? "selected" : ""}>${this._escape(port.device)} - ${this._escape(port.description || port.name || "")}</option>`).join("") : `<option value="">Zadny port nenalezen</option>`}</select></div><div class="field"><label>Typ ESP32</label><select id="flashChip"><option value="esp32s3" ${this._flashForm.chip === "esp32s3" ? "selected" : ""}>ESP32-S3</option><option value="esp32" ${this._flashForm.chip === "esp32" ? "selected" : ""}>ESP32 / ESP32-WROOM</option></select></div></div><div class="row"><div class="field"><label>Hostname gatewaye</label><input id="flashHostname" value="${this._escape(this._flashForm.hostname)}" placeholder="dratek-eink-gateway"></div><div class="field"><label>Wi-Fi SSID</label><input id="flashSsid" value="${this._escape(this._flashForm.ssid)}" placeholder="Nazev Wi-Fi"></div></div><div class="row"><div class="field"><label>Wi-Fi heslo</label><input id="flashPassword" type="password" value="${this._escape(this._flashForm.password)}" placeholder="Heslo"></div><div class="field"><label>Firmware</label><input value="${this._flashForm.chip === "esp32s3" ? "ESP32-S3 build" : "ESP32 build"}" disabled></div></div>${this._renderFlashResult()}</div>
+          <div class="card"><div class="section-title"><h2>Vytvorit gateway</h2><div class="toolbar"><button id="refreshSerialPorts" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:usb-port"></ha-icon>Nacist porty</button><button id="serialStatus" class="secondary" ${this._gatewayBusy || !this._flashForm.port ? "disabled" : ""}><ha-icon icon="mdi:console"></ha-icon>USB status</button><button id="serialWifi" class="secondary" ${this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid ? "disabled" : ""}><ha-icon icon="mdi:wifi-cog"></ha-icon>Poslat Wi-Fi</button><button id="flashGateway" ${this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid ? "disabled" : ""}><ha-icon icon="mdi:chip"></ha-icon>Flashnout ESP32</button></div></div>${this._renderNoSerialPortsWarning()}<div class="row"><div class="field"><label>USB / serial port</label><select id="flashPort">${this._serialPorts.length ? this._serialPorts.map((port) => `<option value="${this._escape(port.device)}" ${port.device === this._flashForm.port ? "selected" : ""}>${this._escape(port.device)} - ${this._escape(port.description || port.name || "")}</option>`).join("") : `<option value="">Zadny port nenalezen</option>`}</select></div><div class="field"><label>Typ ESP32</label><select id="flashChip"><option value="esp32s3" ${this._flashForm.chip === "esp32s3" ? "selected" : ""}>ESP32-S3</option><option value="esp32" ${this._flashForm.chip === "esp32" ? "selected" : ""}>ESP32 / ESP32-WROOM</option></select></div></div><div class="row"><div class="field"><label>Hostname gatewaye</label><input id="flashHostname" value="${this._escape(this._flashForm.hostname)}" placeholder="dratek-eink-gateway"></div><div class="field"><label>Wi-Fi SSID</label><input id="flashSsid" value="${this._escape(this._flashForm.ssid)}" placeholder="Nazev Wi-Fi"></div></div><div class="row"><div class="field"><label>Wi-Fi heslo</label><input id="flashPassword" type="password" value="${this._escape(this._flashForm.password)}" placeholder="Heslo"></div><div class="field"><label>Firmware</label><input value="${this._flashForm.chip === "esp32s3" ? "ESP32-S3 build" : "ESP32 build"}" disabled></div></div>${this._renderFlashResult()}${this._renderSerialResult()}</div>
         </div>
       </div>
       ${this._renderSymbolDialog()}`;
@@ -1525,10 +1594,28 @@ class DratekEinkPanel extends HTMLElement {
 
   _renderFlashResult() {
     if (!this._flashResult) return "";
-    const cls = this._flashResult.ok ? "good" : "bad";
-    const message = this._flashResult.ok ? "ESP32 gateway byla flashnuta a Wi-Fi konfigurace odeslana." : `Flash selhal: ${this._flashResult.error || "neznamy problem"}`;
+    const running = this._flashResult.ok === null || ["queued", "running"].includes(this._flashResult.status);
+    const cls = running ? "warn" : this._flashResult.ok ? "good" : "bad";
+    const message = running
+      ? `Flash probiha: ${this._flashResult.status || "running"}`
+      : this._flashResult.ok ? "ESP32 gateway byla flashnuta a Wi-Fi konfigurace odeslana." : `Flash selhal: ${this._flashResult.error || "neznamy problem"}`;
     const log = (this._flashResult.log || []).join("\n");
     return `<div class="send-result"><span class="pill ${cls}">${this._escape(message)}</span>${log ? `<pre>${this._escape(log)}</pre>` : ""}</div>`;
+  }
+
+  _renderSerialResult() {
+    if (!this._serialResult) return "";
+    const running = this._serialResult.ok === null;
+    const cls = running ? "warn" : this._serialResult.ok ? "good" : "bad";
+    const payload = this._serialResult.payload || {};
+    const message = running
+      ? "Cekam na odpoved ESP32 pres USB serial..."
+      : this._serialResult.ok ? "ESP32 odpovedelo pres USB serial." : `USB diagnostika selhala: ${this._serialResult.error || "bez odpovedi"}`;
+    const facts = payload && Object.keys(payload).length
+      ? `<div class="device-meta"><span>FW ${this._escape(payload.firmware || "-")}</span><span>SSID ${this._escape(payload.stored_ssid || "-")}</span><span>Wi-Fi ${payload.wifi_connected ? "pripojeno" : "nepripojeno"}</span><span>IP ${this._escape(payload.ip || "-")}</span><span>RSSI ${this._escape(payload.wifi_rssi ?? "-")}</span></div>`
+      : "";
+    const log = (this._serialResult.log || []).join("\n");
+    return `<div class="send-result"><span class="pill ${cls}">${this._escape(message)}</span>${facts}${log ? `<pre>${this._escape(log)}</pre>` : ""}</div>`;
   }
 
   _renderNoSerialPortsWarning() {
@@ -1571,8 +1658,12 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#refreshGateways")?.addEventListener("click", () => this._loadGateways(true));
     this.shadowRoot.querySelectorAll("[data-add-discovered-gateway]").forEach((button) => button.addEventListener("click", () => this._addDiscoveredGateway(button.dataset.addDiscoveredGateway)));
     const syncFlashButton = () => {
-      const button = this.shadowRoot.querySelector("#flashGateway");
-      if (button) button.disabled = this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid;
+      const flashButton = this.shadowRoot.querySelector("#flashGateway");
+      const statusButton = this.shadowRoot.querySelector("#serialStatus");
+      const wifiButton = this.shadowRoot.querySelector("#serialWifi");
+      if (flashButton) flashButton.disabled = this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid;
+      if (statusButton) statusButton.disabled = this._gatewayBusy || !this._flashForm.port;
+      if (wifiButton) wifiButton.disabled = this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid;
     };
     this.shadowRoot.querySelector("#refreshSerialPorts")?.addEventListener("click", async () => { await this._loadSerialPorts(); this._render(); this._paint(); });
     this.shadowRoot.querySelector("#flashPort")?.addEventListener("change", (event) => { this._flashForm.port = event.target.value; syncFlashButton(); });
@@ -1581,6 +1672,8 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#flashPassword")?.addEventListener("input", (event) => { this._flashForm.password = event.target.value; });
     this.shadowRoot.querySelector("#flashHostname")?.addEventListener("input", (event) => { this._flashForm.hostname = event.target.value; });
     this.shadowRoot.querySelector("#flashGateway")?.addEventListener("click", () => this._flashGateway());
+    this.shadowRoot.querySelector("#serialStatus")?.addEventListener("click", () => this._serialGatewayStatus());
+    this.shadowRoot.querySelector("#serialWifi")?.addEventListener("click", () => this._serialGatewayWifi());
     this.shadowRoot.querySelectorAll("[data-gateway-scan]").forEach((button) => button.addEventListener("click", () => this._scanGateway(button.dataset.gatewayScan)));
     this.shadowRoot.querySelectorAll("[data-gateway-refresh]").forEach((button) => button.addEventListener("click", async () => {
       this._gatewayBusy = true;
