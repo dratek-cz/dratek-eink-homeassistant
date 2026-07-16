@@ -1,5 +1,12 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.26
+
+- opraveno zkraceni payloadu pri gateway odesilani do displeje
+- gateway ted pouziva `/api/send-b64`, tedy base64 telo bez velkeho JSON obalu
+- v logu gatewaye je videt delka prijateho base64 a skutecny pocet dekodovanych bajtu
+- cerveny nebo poskozeny obraz po gateway prenosu byl zpusoben nekompletnim payloadem
+
 ## Novinky ve verzi 0.1.25
 
 - odesilani pres gateway uz neposila velky base64 JSON, ale binarni payload pres `/api/send-bin`
