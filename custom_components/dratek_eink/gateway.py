@@ -242,6 +242,58 @@ def _safe_log_line(line: str, password: str) -> str:
     return line.replace(password, "********") if password else line
 
 
+def _extract_json_object(text: str) -> dict[str, Any] | None:
+    start = text.find("{")
+    while start >= 0:
+        depth = 0
+        in_string = False
+        escaped = False
+        for index in range(start, len(text)):
+            char = text[index]
+            if escaped:
+                escaped = False
+                continue
+            if char == "\\":
+                escaped = True
+                continue
+            if char == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = text[start : index + 1]
+                    try:
+                        payload = json.loads(candidate)
+                    except json.JSONDecodeError:
+                        break
+                    return payload if isinstance(payload, dict) else None
+        start = text.find("{", start + 1)
+    return None
+
+
+def _safe_network_hostname(hostname: str) -> str:
+    value = str(hostname or "").strip().lower().replace("_", "-")
+    safe = []
+    previous_dash = False
+    for char in value:
+        valid = char.isalnum() or char == "-"
+        next_char = char if valid else "-"
+        if next_char == "-":
+            if previous_dash:
+                continue
+            previous_dash = True
+        else:
+            previous_dash = False
+        safe.append(next_char)
+    normalized = "".join(safe).strip("-")
+    return (normalized or "dratek-eink-gateway")[:63].strip("-") or "dratek-eink-gateway"
+
+
 def _flash_gateway_sync(
     port: str,
     ssid: str,
@@ -337,7 +389,7 @@ def _flash_gateway_sync(
 
         time.sleep(2)
         with serial.Serial(port, 115200, timeout=8) as ser:
-            payload = json.dumps({"ssid": ssid, "password": password, "hostname": hostname or "dratek-eink-gateway"})
+            payload = json.dumps({"ssid": ssid, "password": password, "hostname": _safe_network_hostname(hostname)})
             ser.write((payload + "\n").encode())
             ser.flush()
             deadline = time.time() + 12
@@ -428,12 +480,9 @@ def _serial_gateway_command_sync(
                 line = ser.readline().decode(errors="ignore").strip()
                 if line:
                     log.append(_safe_log_line(line, password))
-                    if line.startswith("{") and line.endswith("}"):
-                        try:
-                            payload = json.loads(line)
-                            return {"ok": bool(payload.get("ok", True)), "payload": payload, "log": log}
-                        except json.JSONDecodeError:
-                            pass
+                    payload = _extract_json_object(line)
+                    if payload is not None:
+                        return {"ok": bool(payload.get("ok", True)), "payload": payload, "log": log}
     except Exception as exc:
         return {"ok": False, "error": str(exc), "log": log}
     return {"ok": False, "error": "No JSON response from ESP32 over serial.", "log": log}
@@ -459,7 +508,7 @@ async def async_serial_gateway_wifi(
     return await hass.async_add_executor_job(
         _serial_gateway_command_sync,
         port,
-        {"cmd": "wifi", "ssid": ssid, "password": password, "hostname": hostname},
+        {"cmd": "wifi", "ssid": ssid, "password": password, "hostname": _safe_network_hostname(hostname)},
         password,
         12,
     )

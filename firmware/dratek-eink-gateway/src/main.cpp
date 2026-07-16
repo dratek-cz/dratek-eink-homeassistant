@@ -6,7 +6,7 @@
 #include <WebServer.h>
 #include <WiFi.h>
 
-static const char* FIRMWARE_VERSION = "0.1.22-gateway";
+static const char* FIRMWARE_VERSION = "0.1.23-gateway";
 static const uint16_t DRATEK_COMPANY_ID = 0x5053;
 
 WebServer server(80);
@@ -20,6 +20,12 @@ String macId() {
   mac.replace(":", "");
   mac.toLowerCase();
   return mac;
+}
+
+String shortBleName() {
+  String id = macId();
+  if (id.length() > 6) id = id.substring(id.length() - 6);
+  return "DEGW-" + id;
 }
 
 void sendJson(JsonDocument& doc, int status = 200) {
@@ -217,7 +223,7 @@ void setup() {
   hostname = gatewayId;
 
   connectWifi();
-  NimBLEDevice::init(gatewayId.c_str());
+  NimBLEDevice::init(shortBleName().c_str());
 
   server.on("/api/status", HTTP_GET, handleStatus);
   server.on("/api/scan", HTTP_GET, handleScan);
