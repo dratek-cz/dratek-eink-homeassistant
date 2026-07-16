@@ -8,7 +8,7 @@
 #include <mbedtls/base64.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.28-gateway";
+static const char* FIRMWARE_VERSION = "0.1.29-gateway";
 static const uint16_t DRATEK_COMPANY_ID = 0x5053;
 static const char* TRANSFER_UUIDS[][3] = {
   {"0000fef0-0000-1000-8000-00805f9b34fb", "0000fef1-0000-1000-8000-00805f9b34fb", "0000fef2-0000-1000-8000-00805f9b34fb"},
@@ -182,7 +182,7 @@ bool findTransferChars(
   return false;
 }
 
-bool connectToDisplay(NimBLEClient* client, const String& address, JsonArray& log) {
+bool connectToDisplay(NimBLEClient*& client, const String& address, JsonArray& log) {
   String target = address;
   target.toLowerCase();
   for (int attempt = 1; attempt <= 3; attempt++) {
@@ -191,7 +191,7 @@ bool connectToDisplay(NimBLEClient* client, const String& address, JsonArray& lo
     scan->setActiveScan(true);
     scan->setInterval(80);
     scan->setWindow(60);
-    NimBLEScanResults results = scan->start(4, false);
+    NimBLEScanResults results = scan->start(6, false);
     for (int i = 0; i < results.getCount(); i++) {
       NimBLEAdvertisedDevice device = results.getDevice(i);
       String found = device.getAddress().toString().c_str();
@@ -207,6 +207,10 @@ bool connectToDisplay(NimBLEClient* client, const String& address, JsonArray& lo
     scan->clearResults();
     addLog(log, "Trying direct address connect.");
     if (client->connect(NimBLEAddress(address.c_str()))) return true;
+    NimBLEDevice::deleteClient(client);
+    delay(250);
+    client = NimBLEDevice::createClient();
+    client->setConnectTimeout(18);
     delay(700);
   }
   return false;

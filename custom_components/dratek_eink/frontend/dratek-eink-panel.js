@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.28";
+const DRATEK_EINK_VERSION = "0.1.29";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -146,7 +146,7 @@ class DratekEinkPanel extends HTMLElement {
     if (!discovered) return;
     this._gatewayForm = {
       name: discovered.name || "DRATEK eInk gateway",
-      host: discovered.server || discovered.host,
+      host: discovered.host || discovered.server,
     };
     await this._addGateway();
   }

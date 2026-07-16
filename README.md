@@ -1,5 +1,13 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.29
+
+- gateway odesilani v HA preferuje posledni znamou IP adresu gatewaye misto `.local`
+- pridani gatewaye z vyhledani ted uklada IP adresu, ne mDNS hostname
+- HTTP odeslani pres gateway ma jeden retry pri vypadku spojeni
+- firmware gatewaye po neuspesnem BLE connect pokusu vytvori novy BLE klient
+- BLE scan pred connectem je prodlouzeny na 6 sekund
+
 ## Novinky ve verzi 0.1.28
 
 - gateway pred pripojenim k displeji udela kratky BLE scan cilove adresy

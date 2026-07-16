@@ -74,6 +74,22 @@ def _gateway_base_url(gateway: dict[str, Any]) -> str:
     return f"http://{host}"
 
 
+def _looks_like_ip(host: str) -> bool:
+    try:
+        socket.inet_aton(host)
+    except OSError:
+        return False
+    return host.count(".") == 3
+
+
+def _gateway_send_base_url(gateway: dict[str, Any]) -> str:
+    status = gateway.get("status") if isinstance(gateway.get("status"), dict) else {}
+    status_ip = _normalize_host(str(status.get("ip") or ""))
+    if _looks_like_ip(status_ip):
+        return f"http://{status_ip}"
+    return _gateway_base_url(gateway)
+
+
 async def async_add_gateway(hass: HomeAssistant, name: str, host: str) -> dict[str, Any]:
     gateways = await async_load_gateways(hass)
     normalized_host = _normalize_host(host)
@@ -197,20 +213,34 @@ async def async_send_gateway_payload(
         payload = await hass.async_add_executor_job(pack_bwr_image, sdk_type, image, transform)
         add_log(f"Payload size: {len(payload)} bytes.")
         session = async_get_clientsession(hass)
-        url = f"{_gateway_base_url(gateway)}/api/send-b64?address={quote(address, safe='')}"
-        add_log(f"Sending base64 payload to gateway {gateway.get('host')}.")
-        async with session.post(
-            url,
-            data=base64.b64encode(payload).decode("ascii"),
-            headers={"Content-Type": "text/plain"},
-            timeout=120,
-        ) as response:
-            data = await response.json(content_type=None)
-            for line in data.get("log", []) or []:
-                add_log(str(line))
-            if response.status >= 400 or not data.get("ok"):
-                error = data.get("error") or f"HTTP {response.status}"
-                return {"ok": False, "error": error, "log": log, "raw": data}
+        encoded = base64.b64encode(payload).decode("ascii")
+        url = f"{_gateway_send_base_url(gateway)}/api/send-b64?address={quote(address, safe='')}"
+        add_log(f"Sending base64 payload to gateway {_gateway_send_base_url(gateway).removeprefix('http://')}.")
+        last_error = ""
+        for attempt in range(1, 3):
+            try:
+                if attempt > 1:
+                    add_log(f"HTTP gateway send retry {attempt}/2.")
+                async with session.post(
+                    url,
+                    data=encoded,
+                    headers={"Content-Type": "text/plain"},
+                    timeout=120,
+                ) as response:
+                    data = await response.json(content_type=None)
+                    for line in data.get("log", []) or []:
+                        add_log(str(line))
+                    if response.status >= 400 or not data.get("ok"):
+                        error = data.get("error") or f"HTTP {response.status}"
+                        return {"ok": False, "error": error, "log": log, "raw": data}
+                    last_error = ""
+                    break
+            except Exception as exc:
+                last_error = str(exc)
+                add_log(f"Gateway HTTP attempt {attempt}/2 failed: {exc}")
+                await asyncio.sleep(1)
+        if last_error:
+            return {"ok": False, "error": last_error, "log": log}
     except Exception as exc:
         add_log(f"Gateway send failed: {exc}")
         return {"ok": False, "error": str(exc), "log": log}
