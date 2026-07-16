@@ -1,8 +1,8 @@
-﻿DOMAIN = "dratek_eink"
+DOMAIN = "dratek_eink"
 
 DRATEK_COMPANY_ID = 0x5053
 
-PANEL_VERSION = "0.1.26"
+PANEL_VERSION = "0.1.27"
 
 CONTROL_CHARS = {
     "0000fef1-0000-1000-8000-00805f9b34fb",

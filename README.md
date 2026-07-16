@@ -1,5 +1,9 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.27
+
+- opraven UTF-8 BOM na zacatku manifestu a frontend souboru, ktery mohl shodit HACS update/install hlaskou `unexpected character: line 1 column 1`
+
 ## Novinky ve verzi 0.1.26
 
 - opraveno zkraceni payloadu pri gateway odesilani do displeje
