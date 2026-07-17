@@ -1,5 +1,15 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.40
+
+- seznam displeju spojuje integrovane Bluetooth v Home Assistantu a vsechny ulozene gatewaye
+- u kazdeho displeje je videt dostupna cesta, jeji signal a automaticky vybrana nejlepsi cesta
+- nova graficka mapa zobrazuje vazby mezi Home Assistantem, pojmenovanymi gatewayemi a displeji
+- sprava gatewayi je rozdelena na samostatne karty pro spravu, vyhledani v siti a vytvoreni gatewaye
+- gateway lze kdykoliv prejmenovat, napr. na `Gateway chodba` nebo `Gateway patro`
+- sprava gatewayi zobrazuje graficky Wi-Fi signal a stav BLE sluzby
+- firmware gatewaye vraci kompletni vyrobni BLE data, takze HA rozpozna model i u displeje dostupneho pouze pres gateway
+
 ## Novinky ve verzi 0.1.39
 
 - kompletne prepracovana webova administrace gatewaye na portu 80

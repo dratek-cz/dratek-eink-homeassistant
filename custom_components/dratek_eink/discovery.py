@@ -59,8 +59,23 @@ def parse_dratek_advertisement(service_info: Any) -> DratekAdvertisement | None:
     if not data or len(data) < 5:
         return None
 
-    address = getattr(service_info, "address", "")
-    name = getattr(service_info, "name", None) or getattr(service_info, "device", None)
+    return parse_dratek_manufacturer_data(
+        address=getattr(service_info, "address", ""),
+        name=getattr(service_info, "name", None) or getattr(service_info, "device", None),
+        rssi=getattr(service_info, "rssi", None),
+        data=data,
+    )
+
+
+def parse_dratek_manufacturer_data(
+    address: str,
+    name: Any,
+    rssi: int | None,
+    data: bytes | bytearray,
+) -> DratekAdvertisement | None:
+    """Parse the Picksmart payload as exposed by HA or a DRATEK gateway."""
+    if len(data) < 5:
+        return None
     if not isinstance(name, str) or not name:
         name = physical_code_from_address(address)
     raw_type = (data[4] << 8) | data[0]
@@ -76,7 +91,7 @@ def parse_dratek_advertisement(service_info: Any) -> DratekAdvertisement | None:
         address=address,
         name=name,
         physical_code=physical_code_from_address(address),
-        rssi=getattr(service_info, "rssi", None),
+        rssi=rssi,
         raw_type=raw_type,
         sdk_type=sdk_type,
         profile=data[4],

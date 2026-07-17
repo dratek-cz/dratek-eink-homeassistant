@@ -118,6 +118,21 @@ async def async_delete_gateway(hass: HomeAssistant, gateway_id: str) -> bool:
     return len(next_gateways) != len(gateways)
 
 
+async def async_rename_gateway(hass: HomeAssistant, gateway_id: str, name: str) -> dict[str, Any] | None:
+    gateways = await async_load_gateways(hass)
+    normalized_name = str(name or "").strip()
+    if not normalized_name:
+        raise ValueError("Gateway name cannot be empty.")
+    for gateway in gateways:
+        if gateway.get("id") != gateway_id:
+            continue
+        gateway["name"] = normalized_name
+        gateway["updated_at"] = int(time.time())
+        await async_save_gateways(hass, gateways)
+        return gateway
+    return None
+
+
 async def async_gateway_status(hass: HomeAssistant, gateway: dict[str, Any]) -> dict[str, Any]:
     session = async_get_clientsession(hass)
     url = f"{_gateway_base_url(gateway)}/api/status"

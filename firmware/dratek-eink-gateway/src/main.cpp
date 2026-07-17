@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.39-gateway";
+static const char* FIRMWARE_VERSION = "0.1.40-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -229,6 +229,17 @@ void handleScan() {
     item["name"] = device.haveName() ? device.getName().c_str() : "";
     item["rssi"] = device.getRSSI();
     item["dratek"] = hasDratekManufacturer(&device);
+    if (device.haveManufacturerData()) {
+      std::string manufacturer = device.getManufacturerData();
+      String manufacturerHex;
+      manufacturerHex.reserve(manufacturer.size() * 2);
+      const char* hex = "0123456789ABCDEF";
+      for (uint8_t value : manufacturer) {
+        manufacturerHex += hex[value >> 4];
+        manufacturerHex += hex[value & 0x0F];
+      }
+      item["manufacturer_data"] = manufacturerHex;
+    }
     if (item["dratek"]) {
       lastScanDevices.push_back(device.getAddress().toString().c_str());
     }

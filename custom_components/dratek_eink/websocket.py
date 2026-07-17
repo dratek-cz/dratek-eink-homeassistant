@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import asyncio
 import io
 import time
 import uuid
@@ -13,7 +14,7 @@ from PIL import Image
 import voluptuous as vol
 
 from .const import PANEL_VERSION, PARTIAL_UPDATE_SDK_TYPES
-from .discovery import parse_dratek_advertisement
+from .discovery import parse_dratek_advertisement, parse_dratek_manufacturer_data
 from .gateway import (
     async_add_gateway,
     async_delete_gateway,
@@ -23,6 +24,7 @@ from .gateway import (
     async_get_flash_job,
     async_list_serial_ports,
     async_load_gateways,
+    async_rename_gateway,
     async_refresh_all_gateways,
     async_refresh_gateway,
     async_scan_gateway,
@@ -54,6 +56,7 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_list_gateways)
     websocket_api.async_register_command(hass, websocket_add_gateway)
     websocket_api.async_register_command(hass, websocket_delete_gateway)
+    websocket_api.async_register_command(hass, websocket_rename_gateway)
     websocket_api.async_register_command(hass, websocket_refresh_gateway)
     websocket_api.async_register_command(hass, websocket_scan_gateway)
     websocket_api.async_register_command(hass, websocket_send_gateway_design)
@@ -75,29 +78,23 @@ async def websocket_scan(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
+    local_scan_error = ""
     try:
         scanner_count = bluetooth.async_scanner_count(hass, connectable=True)
         service_infos = bluetooth.async_discovered_service_info(hass, connectable=True)
     except Exception as exc:  # noqa: BLE availability can differ by HA installation
-        connection.send_result(
-            msg["id"],
-            {
-                "ok": False,
-                "scanner_count": 0,
-                "ble_count": 0,
-                "devices": [],
-                "ble_devices": [],
-                "debug": [f"Bluetooth scan failed: {exc}"],
-            },
-        )
-        return
+        scanner_count = 0
+        service_infos = []
+        local_scan_error = str(exc)
 
-    devices = []
+    devices_by_address: dict[str, dict[str, Any]] = {}
     ble_devices = []
     debug = [
         f"Bluetooth scanners detected: {scanner_count}",
         f"BLE advertisements currently cached by Home Assistant: {len(service_infos)}",
     ]
+    if local_scan_error:
+        debug.append(f"Integrated Bluetooth scan failed: {local_scan_error}")
 
     for service_info in service_infos:
         address = getattr(service_info, "address", "")
@@ -120,8 +117,8 @@ async def websocket_scan(
         if device is None:
             continue
 
-        devices.append(
-            {
+        normalized_address = device.address.upper()
+        devices_by_address[normalized_address] = {
                 "address": device.address,
                 "name": device.name,
                 "physical_code": device.physical_code,
@@ -134,8 +131,84 @@ async def websocket_scan(
                 "hw": device.hw,
                 "model": device.model,
                 "partial_update": device.sdk_type in PARTIAL_UPDATE_SDK_TYPES,
+                "paths": [{
+                    "type": "local",
+                    "id": "local",
+                    "name": "Home Assistant Bluetooth",
+                    "rssi": device.rssi,
+                }],
             }
+
+    gateways = await async_load_gateways(hass)
+    gateway_results = await asyncio.gather(
+        *(async_scan_gateway(hass, gateway["id"], 5) for gateway in gateways),
+        return_exceptions=True,
+    )
+    for gateway, scan_result in zip(gateways, gateway_results, strict=False):
+        gateway_name = gateway.get("name") or "DRATEK eInk gateway"
+        if isinstance(scan_result, Exception):
+            debug.append(f"Gateway {gateway_name}: scan failed: {scan_result}")
+            continue
+        if not scan_result or not scan_result.get("ok"):
+            debug.append(f"Gateway {gateway_name}: scan failed: {(scan_result or {}).get('error', 'offline')}")
+            continue
+        remote_devices = scan_result.get("devices", [])
+        debug.append(f"Gateway {gateway_name}: {len(remote_devices)} BLE advertisements")
+        for remote in remote_devices:
+            if not remote.get("dratek"):
+                continue
+            address = str(remote.get("address") or "").upper()
+            if not address:
+                continue
+            parsed = None
+            manufacturer_hex = str(remote.get("manufacturer_data") or "")
+            try:
+                manufacturer = bytes.fromhex(manufacturer_hex)
+                if len(manufacturer) >= 2 and int.from_bytes(manufacturer[:2], "little") == 0x5053:
+                    manufacturer = manufacturer[2:]
+                parsed = parse_dratek_manufacturer_data(
+                    address, remote.get("name"), remote.get("rssi"), manufacturer
+                )
+            except ValueError:
+                debug.append(f"Gateway {gateway_name}: invalid manufacturer data for {address}")
+
+            path = {
+                "type": "gateway",
+                "id": gateway["id"],
+                "name": gateway_name,
+                "host": gateway.get("host"),
+                "rssi": remote.get("rssi"),
+            }
+            existing = devices_by_address.get(address)
+            if existing:
+                existing["paths"].append(path)
+                continue
+            if parsed is None:
+                continue
+            devices_by_address[address] = {
+                "address": parsed.address.upper(),
+                "name": parsed.name,
+                "physical_code": parsed.physical_code,
+                "rssi": parsed.rssi,
+                "raw_type": parsed.raw_type,
+                "sdk_type": parsed.sdk_type,
+                "profile": f"0x{parsed.profile:02X}",
+                "battery": parsed.battery,
+                "sw": parsed.sw,
+                "hw": parsed.hw,
+                "model": parsed.model,
+                "partial_update": parsed.sdk_type in PARTIAL_UPDATE_SDK_TYPES,
+                "paths": [path],
+            }
+
+    devices = list(devices_by_address.values())
+    for device in devices:
+        device["paths"].sort(
+            key=lambda path: path.get("rssi") if isinstance(path.get("rssi"), (int, float)) else -999,
+            reverse=True,
         )
+        device["preferred_path"] = device["paths"][0]
+        device["rssi"] = device["preferred_path"].get("rssi")
 
     devices.sort(key=lambda item: item["physical_code"])
     ble_devices.sort(key=lambda item: (item["name"] or "", item["address"]))
@@ -220,6 +293,30 @@ async def websocket_delete_gateway(
 ) -> None:
     deleted = await async_delete_gateway(hass, msg["gateway_id"])
     connection.send_result(msg["id"], {"ok": deleted})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/gateways/rename",
+        "gateway_id": str,
+        "name": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_rename_gateway(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    try:
+        gateway = await async_rename_gateway(hass, msg["gateway_id"], msg["name"])
+    except ValueError as exc:
+        connection.send_error(msg["id"], "invalid_name", str(exc))
+        return
+    if not gateway:
+        connection.send_error(msg["id"], "not_found", "Gateway was not found.")
+        return
+    connection.send_result(msg["id"], {"gateway": gateway})
 
 
 @websocket_api.websocket_command(
