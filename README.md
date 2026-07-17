@@ -1,5 +1,13 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.36
+
+- bloky se odesilaji request-driven podle originalniho Picksmart SDK protokolu
+- gateway po kazdem bloku ceka na `05 00` pozadavek displeje na konkretni dalsi blok
+- displej muze vyzadat opakovani ztraceneho bloku a gateway ho automaticky posle znovu
+- kontroluje se navratova hodnota BLE write fronty a neuspesny zapis ma az pet pokusu
+- po poslednim bloku se na fyzicke prekresleni a potvrzeni `05 08` ceka az 60 sekund
+
 ## Novinky ve verzi 0.1.35
 
 - opraven restart ESP32 zpusobeny zakazanym `WiFi.setSleep(false)` pri soucasne aktivnim BLE

@@ -10,7 +10,7 @@
 #include <mbedtls/base64.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.35-gateway";
+static const char* FIRMWARE_VERSION = "0.1.36-gateway";
 static const size_t MAX_TRANSFER_LOG_LINES = 80;
 static const size_t MAX_UPLOAD_PAYLOAD_BYTES = 128UL * 1024UL;
 static const uint32_t MDNS_REFRESH_INTERVAL_MS = 5UL * 60UL * 1000UL;
@@ -428,33 +428,74 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
   addLog(log, "Starting at block " + String(firstBlock) + ".");
 
   std::vector<uint8_t> block(blockSize);
-  for (int blockNumber = firstBlock; blockNumber < totalBlocks; blockNumber++) {
-    int startOffset = blockNumber * chunkSize;
-    int dataLen = min(chunkSize, (int)payload.size() - startOffset);
-    block[0] = blockNumber & 0xFF;
-    block[1] = (blockNumber >> 8) & 0xFF;
-    block[2] = (blockNumber >> 16) & 0xFF;
-    block[3] = (blockNumber >> 24) & 0xFF;
-    memcpy(block.data() + 4, payload.data() + startOffset, dataLen);
-    writeChar->writeValue(block.data(), dataLen + 4, false);
-    delay(20);
-    if (blockNumber == firstBlock || blockNumber % 10 == 0 || blockNumber == totalBlocks - 1) {
-      int percent = ((blockNumber - firstBlock + 1) * 100) / max(1, totalBlocks - firstBlock);
-      addLog(log, "Sent block " + String(blockNumber + 1) + "/" + String(totalBlocks) + " (" + String(percent) + "%).");
-    }
-  }
+  int requestedBlock = firstBlock;
+  int timeoutRetries = 0;
+  while (true) {
+    if (requestedBlock < totalBlocks) {
+      int startOffset = requestedBlock * chunkSize;
+      int dataLen = min(chunkSize, (int)payload.size() - startOffset);
+      block[0] = requestedBlock & 0xFF;
+      block[1] = (requestedBlock >> 8) & 0xFF;
+      block[2] = (requestedBlock >> 16) & 0xFF;
+      block[3] = (requestedBlock >> 24) & 0xFF;
+      memcpy(block.data() + 4, payload.data() + startOffset, dataLen);
 
-  uint32_t deadline = millis() + 30000;
-  while (millis() < deadline) {
-    if (waitForPacket(0x05, packet, 1000, totalBlocks)) {
-      addLog(log, "Notification: " + hexPacket(packet));
-      if (packet.size() > 1 && packet[1] == 0x08) {
+      bool queued = false;
+      for (int writeAttempt = 1; writeAttempt <= 5; writeAttempt++) {
+        queued = writeChar->writeValue(block.data(), dataLen + 4, false);
+        if (queued) break;
+        addLog(log, "BLE queue rejected block " + String(requestedBlock) + ", retry " + String(writeAttempt) + "/5.");
+        delay(50);
+      }
+      if (!queued) {
         client->disconnect();
         NimBLEDevice::deleteClient(client);
-        addLog(log, "Display confirmed transfer complete.");
-        return true;
+        addLog(log, "Unable to queue image block " + String(requestedBlock) + ".");
+        return false;
+      }
+
+      if (requestedBlock == firstBlock || requestedBlock % 10 == 0 || requestedBlock == totalBlocks - 1) {
+        int percent = ((requestedBlock + 1) * 100) / max(1, totalBlocks);
+        addLog(log, "Sent requested block " + String(requestedBlock + 1) + "/" + String(totalBlocks) + " (" + String(percent) + "%).");
       }
     }
+
+    uint32_t responseTimeout = requestedBlock >= totalBlocks - 1 ? 60000 : 15000;
+    if (!waitForPacket(0x05, packet, responseTimeout)) {
+      if (requestedBlock < totalBlocks && timeoutRetries < 2) {
+        timeoutRetries++;
+        addLog(log, "No response after block " + String(requestedBlock) + "; resending it (" + String(timeoutRetries) + "/2).");
+        continue;
+      }
+      break;
+    }
+
+    addLog(log, "Notification: " + hexPacket(packet));
+    timeoutRetries = 0;
+    if (packet.size() > 1 && packet[1] == 0x08) {
+      client->disconnect();
+      NimBLEDevice::deleteClient(client);
+      addLog(log, "Display confirmed transfer complete.");
+      return true;
+    }
+    if (packet.size() < 6 || packet[1] != 0) {
+      client->disconnect();
+      NimBLEDevice::deleteClient(client);
+      addLog(log, "Display rejected image transfer: " + hexPacket(packet));
+      return false;
+    }
+
+    int nextBlock = (int)packet[2] | ((int)packet[3] << 8) | ((int)packet[4] << 16) | ((int)packet[5] << 24);
+    if (nextBlock < 0 || nextBlock > totalBlocks) {
+      client->disconnect();
+      NimBLEDevice::deleteClient(client);
+      addLog(log, "Display requested invalid block " + String(nextBlock) + "/" + String(totalBlocks) + ".");
+      return false;
+    }
+    if (nextBlock <= requestedBlock && nextBlock < totalBlocks) {
+      addLog(log, "Display requested retransmission from block " + String(nextBlock) + ".");
+    }
+    requestedBlock = nextBlock;
   }
   client->disconnect();
   NimBLEDevice::deleteClient(client);
