@@ -10,7 +10,7 @@
 #include <mbedtls/base64.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.31-gateway";
+static const char* FIRMWARE_VERSION = "0.1.32-gateway";
 static const size_t MAX_TRANSFER_LOG_LINES = 80;
 static const uint32_t MDNS_REFRESH_INTERVAL_MS = 5UL * 60UL * 1000UL;
 static const uint32_t WIFI_RECONNECT_INTERVAL_MS = 15UL * 1000UL;
@@ -47,6 +47,7 @@ bool transferTaskActive = false;
 uint32_t transferSequence = 0;
 bool mdnsStarted = false;
 bool wifiWasConnected = false;
+bool bleInitialized = false;
 uint32_t lastMdnsStartMs = 0;
 uint32_t lastWifiReconnectMs = 0;
 
@@ -139,6 +140,15 @@ bool rejectIfTransferBusy() {
   return true;
 }
 
+void ensureBleInitialized() {
+  if (bleInitialized) return;
+  Serial.print("Initializing BLE as ");
+  Serial.println(shortBleName());
+  NimBLEDevice::init(shortBleName().c_str());
+  bleInitialized = true;
+  Serial.println("BLE initialized.");
+}
+
 void appendLocalLog(JsonDocument& doc, const LocalTransferLog& source) {
   JsonArray target = doc["log"].to<JsonArray>();
   for (const String& line : source.lines) target.add(line);
@@ -163,6 +173,8 @@ void handleStatus() {
   doc["minimum_free_heap"] = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
   doc["largest_free_block"] = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
   doc["reset_reason"] = resetReasonName();
+  doc["ble_initialized"] = bleInitialized;
+  doc["mdns_started"] = mdnsStarted;
   if (transferMutex) {
     xSemaphoreTake(transferMutex, portMAX_DELAY);
     doc["transfer_status"] = transferJob.status;
@@ -193,6 +205,7 @@ void handleScan() {
   }
   int seconds = server.hasArg("seconds") ? server.arg("seconds").toInt() : 8;
   seconds = max(1, min(30, seconds));
+  ensureBleInitialized();
 
   NimBLEScan* scan = NimBLEDevice::getScan();
   scan->setActiveScan(true);
@@ -668,6 +681,7 @@ void transferTask(void*) {
   xSemaphoreGive(transferMutex);
 
   JobTransferLog log(jobId);
+  ensureBleInitialized();
   addLog(log, "Transfer job " + jobId + " started.");
   addLog(log, "Payload " + String(payload.size()) + " bytes loaded; free heap " + String(ESP.getFreeHeap()) + ".");
   addLog(log, "Largest free memory block " + String(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)) + " bytes.");
@@ -994,7 +1008,6 @@ void setup() {
   }
 
   connectWifi();
-  NimBLEDevice::init(shortBleName().c_str());
 
   server.on("/api/status", HTTP_GET, handleStatus);
   server.on("/api/scan", HTTP_GET, handleScan);
@@ -1014,7 +1027,7 @@ void setup() {
     sendJson(doc, 404);
   });
   server.begin();
-  Serial.println("DRATEK eInk gateway ready.");
+  Serial.println("DRATEK eInk gateway network services ready. BLE will initialize on first use.");
 }
 
 void loop() {

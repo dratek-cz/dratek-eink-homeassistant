@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.31";
+const DRATEK_EINK_VERSION = "0.1.32";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -1692,6 +1692,8 @@ class DratekEinkPanel extends HTMLElement {
           <span>Min heap ${this._escape(status.minimum_free_heap ?? "-")}</span>
           <span>Nejvetsi blok ${this._escape(status.largest_free_block ?? "-")}</span>
           <span>Restart ${this._escape(status.reset_reason || "-")}</span>
+          <span>mDNS ${status.mdns_started === true ? "aktivni" : status.mdns_started === false ? "neaktivni" : "-"}</span>
+          <span>BLE ${status.ble_initialized === true ? "aktivni" : status.ble_initialized === false ? "ceka" : "-"}</span>
           <span>Prenos ${this._escape(status.transfer_status || "-")}</span>
         </div>
         <div class="toolbar"><button data-gateway-scan="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:radar"></ha-icon>BLE scan</button><button class="secondary" data-gateway-refresh="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Status</button><button class="danger" data-gateway-delete="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat</button></div>

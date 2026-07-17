@@ -1,5 +1,13 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.32
+
+- BLE se inicializuje az pri prvnim BLE scanu nebo prenosu, ne pred spustenim sitovych sluzeb
+- HTTP administrace a mDNS jsou tak dostupne i v pripade problemu inicializace Bluetooth
+- `/api/status` ukazuje samostatne stav mDNS a inicializace BLE
+- USB status cte seriovy vystup 12 sekund a zachyti cely start i pripadny pad po prvni JSON odpovedi
+- vyhledavani zustava ciste pres mDNS; IP scan nebyl pridan
+
 ## Novinky ve verzi 0.1.31
 
 - mDNS oznameni gatewaye se automaticky obnovi po vypadku a navratu Wi-Fi

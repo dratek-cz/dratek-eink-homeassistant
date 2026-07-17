@@ -145,6 +145,8 @@ async def async_gateway_status(hass: HomeAssistant, gateway: dict[str, Any]) -> 
         "minimum_free_heap": payload.get("minimum_free_heap"),
         "largest_free_block": payload.get("largest_free_block"),
         "reset_reason": payload.get("reset_reason"),
+        "mdns_started": payload.get("mdns_started"),
+        "ble_initialized": payload.get("ble_initialized"),
         "transfer_status": payload.get("transfer_status"),
         "transfer_job_id": payload.get("transfer_job_id"),
     }
@@ -610,8 +612,10 @@ def _serial_gateway_command_sync(
     command: dict[str, Any],
     password: str = "",
     read_seconds: int = 8,
+    continue_after_json: bool = False,
 ) -> dict[str, Any]:
     log: list[str] = []
+    result_payload: dict[str, Any] | None = None
     try:
         import serial
 
@@ -627,9 +631,13 @@ def _serial_gateway_command_sync(
                     log.append(_safe_log_line(line, password))
                     payload = _extract_json_object(line)
                     if payload is not None:
-                        return {"ok": bool(payload.get("ok", True)), "payload": payload, "log": log}
+                        result_payload = payload
+                        if not continue_after_json:
+                            return {"ok": bool(payload.get("ok", True)), "payload": payload, "log": log}
     except Exception as exc:
         return {"ok": False, "error": str(exc), "log": log}
+    if result_payload is not None:
+        return {"ok": bool(result_payload.get("ok", True)), "payload": result_payload, "log": log}
     return {"ok": False, "error": "No JSON response from ESP32 over serial.", "log": log}
 
 
@@ -639,7 +647,8 @@ async def async_serial_gateway_status(hass: HomeAssistant, port: str) -> dict[st
         port,
         {"cmd": "status"},
         "",
-        8,
+        12,
+        True,
     )
 
 
