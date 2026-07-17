@@ -10,7 +10,7 @@
 #include <mbedtls/base64.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.33-gateway";
+static const char* FIRMWARE_VERSION = "0.1.34-gateway";
 static const size_t MAX_TRANSFER_LOG_LINES = 80;
 static const size_t MAX_UPLOAD_PAYLOAD_BYTES = 128UL * 1024UL;
 static const uint32_t MDNS_REFRESH_INTERVAL_MS = 5UL * 60UL * 1000UL;
@@ -100,12 +100,6 @@ String macId() {
   return mac;
 }
 
-String shortBleName() {
-  String id = macId();
-  if (id.length() > 6) id = id.substring(id.length() - 6);
-  return "DEGW-" + id;
-}
-
 void sendJson(JsonDocument& doc, int status = 200) {
   String body;
   serializeJson(doc, body);
@@ -148,9 +142,8 @@ bool rejectIfTransferBusy() {
 
 void ensureBleInitialized() {
   if (bleInitialized) return;
-  Serial.print("Initializing BLE as ");
-  Serial.println(shortBleName());
-  NimBLEDevice::init(shortBleName().c_str());
+  Serial.println("Initializing BLE central stack.");
+  NimBLEDevice::init("");
   bleInitialized = true;
   Serial.println("BLE initialized.");
 }
@@ -811,7 +804,8 @@ void transferTask(void*) {
 void startQueuedTransfer() {
   if (!transferMutex) return;
   xSemaphoreTake(transferMutex, portMAX_DELAY);
-  bool shouldStart = transferJob.status == "queued" && !transferTaskActive;
+  bool shouldStart = transferJob.status == "queued" && !transferTaskActive
+    && millis() - transferJob.createdMs >= 1000;
   if (shouldStart) transferTaskActive = true;
   xSemaphoreGive(transferMutex);
   if (!shouldStart) return;
@@ -1114,6 +1108,8 @@ void setup() {
     ESP.restart();
   }
 
+  Serial.println("Initializing BLE before Wi-Fi and payload allocation.");
+  ensureBleInitialized();
   connectWifi();
 
   server.on("/api/status", HTTP_GET, handleStatus);

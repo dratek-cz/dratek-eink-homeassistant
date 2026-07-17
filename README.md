@@ -1,5 +1,13 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.34
+
+- NimBLE se inicializuje pred Wi-Fi, mDNS, webserverem a alokaci obrazoveho payloadu
+- gateway firmware zapina pouze BLE role central a observer a omezuje pocet BLE spojeni na jedno
+- BLE GAP jmeno gatewaye je prazdne, protoze gateway jako central zadne reklamni jmeno nepotrebuje
+- prenosova uloha startuje az sekundu po HTTP potvrzeni uploadu
+- po `Connection reset by peer` HA automaticky nacte reset reason, uptime, heap a stav BLE gatewaye
+
 ## Novinky ve verzi 0.1.33
 
 - obraz se do gatewaye nahrava jako streamovany binarni multipart misto base64 textu

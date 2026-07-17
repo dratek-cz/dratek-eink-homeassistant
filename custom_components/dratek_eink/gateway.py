@@ -261,8 +261,20 @@ async def async_send_gateway_payload(
                 upload_error = str(exc)
                 add_log(f"Gateway upload attempt {attempt}/2 failed: {exc}")
                 if attempt < 2:
+                    await asyncio.sleep(2)
+                    try:
+                        async with session.get(f"{base_url}/api/status", timeout=8) as status_response:
+                            status_data = await status_response.json(content_type=None)
+                        add_log(
+                            "Gateway status after disconnect: "
+                            f"reset={status_data.get('reset_reason', '?')}, "
+                            f"uptime={status_data.get('uptime_ms', '?')} ms, "
+                            f"heap={status_data.get('free_heap', '?')}, "
+                            f"BLE={status_data.get('ble_initialized', '?')}."
+                        )
+                    except Exception as status_exc:
+                        add_log(f"Gateway status after disconnect is unavailable: {status_exc}")
                     add_log("Retrying the same idempotent transfer job.")
-                    await asyncio.sleep(1)
         if upload_error:
             return {"ok": False, "error": upload_error, "log": log}
 
