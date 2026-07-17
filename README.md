@@ -1,5 +1,12 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.35
+
+- opraven restart ESP32 zpusobeny zakazanym `WiFi.setSleep(false)` pri soucasne aktivnim BLE
+- Wi-Fi modem sleep je znovu zapnuty, jak vyzaduje ESP32 Wi-Fi/Bluetooth coexistence
+- odstraneny neskodne NVS `NOT_FOUND` chyby pro dosud nenastavenou statickou IP, gateway, masku a DNS
+- oprava resi boot loop s hlaskou `Should enable WiFi modem sleep when both WiFi and Bluetooth are enabled`
+
 ## Novinky ve verzi 0.1.34
 
 - NimBLE se inicializuje pred Wi-Fi, mDNS, webserverem a alokaci obrazoveho payloadu

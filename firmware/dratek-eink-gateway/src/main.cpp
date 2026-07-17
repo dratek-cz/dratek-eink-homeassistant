@@ -10,7 +10,7 @@
 #include <mbedtls/base64.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.34-gateway";
+static const char* FIRMWARE_VERSION = "0.1.35-gateway";
 static const size_t MAX_TRANSFER_LOG_LINES = 80;
 static const size_t MAX_UPLOAD_PAYLOAD_BYTES = 128UL * 1024UL;
 static const uint32_t MDNS_REFRESH_INTERVAL_MS = 5UL * 60UL * 1000UL;
@@ -156,7 +156,7 @@ void appendLocalLog(JsonDocument& doc, const LocalTransferLog& source) {
 void handleStatus() {
   prefs.begin("dratek", true);
   bool dhcp = prefs.getBool("dhcp", true);
-  String staticIp = prefs.getString("ip", "");
+  String staticIp = prefs.isKey("ip") ? prefs.getString("ip", "") : "";
   prefs.end();
 
   JsonDocument doc;
@@ -1042,10 +1042,10 @@ void connectWifi() {
   String password = prefs.getString("password", "");
   hostname = prefs.getString("hostname", gatewayId);
   bool dhcp = prefs.getBool("dhcp", true);
-  String staticIp = prefs.getString("ip", "");
-  String gatewayIp = prefs.getString("gateway", "");
-  String subnetIp = prefs.getString("subnet", "");
-  String dnsIp = prefs.getString("dns", "");
+  String staticIp = prefs.isKey("ip") ? prefs.getString("ip", "") : "";
+  String gatewayIp = prefs.isKey("gateway") ? prefs.getString("gateway", "") : "";
+  String subnetIp = prefs.isKey("subnet") ? prefs.getString("subnet", "") : "";
+  String dnsIp = prefs.isKey("dns") ? prefs.getString("dns", "") : "";
   prefs.end();
 
   if (ssid.length() == 0) {
@@ -1058,7 +1058,7 @@ void connectWifi() {
   }
 
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
+  WiFi.setSleep(true);
   WiFi.setAutoReconnect(true);
   WiFi.persistent(false);
   WiFi.setHostname(hostname.c_str());
