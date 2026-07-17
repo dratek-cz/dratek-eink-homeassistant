@@ -35,6 +35,7 @@ from .gateway import (
     async_start_gateway_ota,
 )
 from .render import render_text_image
+from .queue import get_transfer_queue
 from .transfer import DratekTransfer
 
 PROJECT_STORE_KEY = "dratek_eink.projects"
@@ -69,6 +70,7 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_gateway_serial_wifi)
     websocket_api.async_register_command(hass, websocket_start_gateway_ota)
     websocket_api.async_register_command(hass, websocket_gateway_ota_job)
+    websocket_api.async_register_command(hass, websocket_transfer_queue)
 
 
 @websocket_api.websocket_command({"type": "dratek_eink/scan"})
@@ -389,13 +391,34 @@ async def websocket_send_gateway_design(
         image = Image.open(io.BytesIO(raw)).convert("RGB")
         if msg.get("orientation", "landscape") == "portrait":
             image = image.rotate(-90, expand=True)
-        result = await async_send_gateway_payload(
-            hass,
-            msg["gateway_id"],
-            msg["address"],
-            msg["sdk_type"],
-            image,
-            msg.get("transform"),
+        gateways = await async_load_gateways(hass)
+        gateway = next((item for item in gateways if item.get("id") == msg["gateway_id"]), None)
+        if gateway is None:
+            connection.send_result(
+                msg["id"],
+                {"ok": False, "error": "Gateway nebyla nalezena.", "log": log_lines},
+            )
+            return
+
+        async def run_transfer(add_log) -> dict[str, Any]:
+            add_log(f"Zapis pres gateway {gateway.get('name') or gateway.get('host')} zarazen do zpracovani.")
+            transfer_result = await async_send_gateway_payload(
+                hass,
+                msg["gateway_id"],
+                msg["address"],
+                msg["sdk_type"],
+                image,
+                msg.get("transform"),
+            )
+            return transfer_result or {"ok": False, "error": "Gateway nebyla nalezena.", "log": []}
+
+        result = await get_transfer_queue(hass).async_submit(
+            resource=f"gateway:{msg['gateway_id']}",
+            transport_type="gateway",
+            transport_name=str(gateway.get("name") or gateway.get("host") or "DRATEK eInk gateway"),
+            address=msg["address"],
+            operation="design",
+            runner=run_transfer,
         )
         if result is None:
             connection.send_result(
@@ -408,6 +431,16 @@ async def websocket_send_gateway_design(
         connection.send_result(msg["id"], {"ok": False, "error": str(exc), "log": log_lines})
         return
     connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command({"type": "dratek_eink/queue/list"})
+@websocket_api.async_response
+async def websocket_transfer_queue(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    connection.send_result(msg["id"], await get_transfer_queue(hass).async_snapshot())
 
 
 @websocket_api.websocket_command(
@@ -770,11 +803,23 @@ async def websocket_send_design(
         image = Image.open(io.BytesIO(raw)).convert("RGB")
         if orientation == "portrait":
             image = image.rotate(-90, expand=True)
-        log(f"Sending editor design {image.width}x{image.height} to SDK type {sdk_type}.")
-        if transform:
-            log(f"Using display transform: {transform}.")
-        transfer = DratekTransfer(log=log)
-        await transfer.send_image(address, sdk_type, image, transform)
+        async def run_transfer(add_log) -> dict[str, Any]:
+            add_log(f"Sending editor design {image.width}x{image.height} to SDK type {sdk_type}.")
+            if transform:
+                add_log(f"Using display transform: {transform}.")
+            transfer = DratekTransfer(log=add_log)
+            await transfer.send_image(address, sdk_type, image, transform)
+            add_log("Design sent.")
+            return {"ok": True, "address": address, "log": []}
+
+        result = await get_transfer_queue(hass).async_submit(
+            resource="local",
+            transport_type="local",
+            transport_name="Home Assistant Bluetooth",
+            address=address,
+            operation="design",
+            runner=run_transfer,
+        )
     except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
         log(f"Send failed: {exc}")
         connection.send_result(
@@ -788,15 +833,7 @@ async def websocket_send_design(
         )
         return
 
-    log("Design sent.")
-    connection.send_result(
-        msg["id"],
-        {
-            "ok": True,
-            "address": address,
-            "log": log_lines,
-        },
-    )
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.websocket_command(
@@ -833,22 +870,34 @@ async def websocket_send_partial_design(
             image_data = image_data.split(",", 1)[1]
         raw = base64.b64decode(image_data)
         image = Image.open(io.BytesIO(raw)).convert("RGB")
-        log(
-            "Sending partial editor design "
-            f"{image.width}x{image.height} to SDK type {sdk_type} at "
-            f"x={msg['x']}, y={msg['y']}."
-        )
-        transfer = DratekTransfer(log=log)
-        await transfer.send_partial_image(
-            address,
-            sdk_type,
-            image,
-            msg["x"],
-            msg["y"],
-            msg["width"],
-            msg["height"],
-            msg.get("clear_screen", 0),
-            transform,
+        async def run_transfer(add_log) -> dict[str, Any]:
+            add_log(
+                "Sending partial editor design "
+                f"{image.width}x{image.height} to SDK type {sdk_type} at "
+                f"x={msg['x']}, y={msg['y']}."
+            )
+            transfer = DratekTransfer(log=add_log)
+            await transfer.send_partial_image(
+                address,
+                sdk_type,
+                image,
+                msg["x"],
+                msg["y"],
+                msg["width"],
+                msg["height"],
+                msg.get("clear_screen", 0),
+                transform,
+            )
+            add_log("Partial design sent.")
+            return {"ok": True, "address": address, "log": []}
+
+        result = await get_transfer_queue(hass).async_submit(
+            resource="local",
+            transport_type="local",
+            transport_name="Home Assistant Bluetooth",
+            address=address,
+            operation="partial_design",
+            runner=run_transfer,
         )
     except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
         log(f"Partial send failed: {exc}")
@@ -863,15 +912,7 @@ async def websocket_send_partial_design(
         )
         return
 
-    log("Partial design sent.")
-    connection.send_result(
-        msg["id"],
-        {
-            "ok": True,
-            "address": address,
-            "log": log_lines,
-        },
-    )
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.websocket_command(
@@ -897,10 +938,23 @@ async def websocket_send_text(
         log_lines.append(message)
 
     try:
-        log(f"Rendering text '{text}' for SDK type {sdk_type}.")
         image = await hass.async_add_executor_job(render_text_image, sdk_type, text, None, "black")
-        transfer = DratekTransfer(log=log)
-        await transfer.send_image(address, sdk_type, image)
+
+        async def run_transfer(add_log) -> dict[str, Any]:
+            add_log(f"Rendering text '{text}' for SDK type {sdk_type}.")
+            transfer = DratekTransfer(log=add_log)
+            await transfer.send_image(address, sdk_type, image)
+            add_log("Text sent.")
+            return {"ok": True, "address": address, "text": text, "log": []}
+
+        result = await get_transfer_queue(hass).async_submit(
+            resource="local",
+            transport_type="local",
+            transport_name="Home Assistant Bluetooth",
+            address=address,
+            operation="text",
+            runner=run_transfer,
+        )
     except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
         log(f"Send failed: {exc}")
         connection.send_result(
@@ -915,13 +969,4 @@ async def websocket_send_text(
         )
         return
 
-    log("Text sent.")
-    connection.send_result(
-        msg["id"],
-        {
-            "ok": True,
-            "address": address,
-            "text": text,
-            "log": log_lines,
-        },
-    )
+    connection.send_result(msg["id"], result)

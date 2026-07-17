@@ -12,6 +12,7 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN, PANEL_VERSION
 from .render import render_text_image
+from .queue import get_transfer_queue
 from .transfer import DratekTransfer
 
 _LOGGER = logging.getLogger(__name__)
@@ -45,8 +46,21 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         color = call.data["color"]
 
         image = await hass.async_add_executor_job(render_text_image, sdk_type, text, font_size, color)
-        transfer = DratekTransfer(log=_LOGGER.info)
-        await transfer.send_image(address, sdk_type, image)
+        async def run_transfer(add_log):
+            transfer = DratekTransfer(log=add_log)
+            await transfer.send_image(address, sdk_type, image)
+            return {"ok": True, "address": address, "log": []}
+
+        result = await get_transfer_queue(hass).async_submit(
+            resource="local",
+            transport_type="local",
+            transport_name="Home Assistant Bluetooth",
+            address=address,
+            operation="service_text",
+            runner=run_transfer,
+        )
+        if not result.get("ok"):
+            raise RuntimeError(result.get("error") or "DRATEK eInk transfer failed.")
 
     hass.services.async_register(DOMAIN, "send_text", handle_send_text, schema=SEND_TEXT_SCHEMA)
     return True

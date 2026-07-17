@@ -1,5 +1,15 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.41
+
+- pridana hlavni karta Fronta zapisu s zivym stavem cekajicich a probihajicich prenosu
+- zapisy se serializuji samostatne pro Home Assistant Bluetooth a pro kazdou DRATEK gateway
+- poslednich 20 vysledku se uklada interne v Home Assistantu vcetne cesty, casu, vysledku a chyby
+- karta nalezenych displeju se jiz sama neskenuje a obsahuje pouze rucni scan, displeje a mapu pripojeni
+- mapa pripojeni je pod seznamem displeju a RSSI je zobrazeno graficky i barevne
+- odstraneny souhrnne Bluetooth metriky a technicky Bluetooth debug z uzivatelskeho rozhrani
+- doplneny brand assety pro svetly i tmavy motiv Home Assistantu a HACS
+
 ## Novinky ve verzi 0.1.40
 
 - seznam displeju spojuje integrovane Bluetooth v Home Assistantu a vsechny ulozene gatewaye

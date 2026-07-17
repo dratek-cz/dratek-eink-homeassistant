@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.40";
+const DRATEK_EINK_VERSION = "0.1.41";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -26,6 +26,8 @@ class DratekEinkPanel extends HTMLElement {
     this._orientation = "landscape";
     this._displayTransform = "rotate_cw";
     this._activeTab = "devices";
+    this._queue = { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0 };
+    this._queuePollTimer = null;
     this._gateways = [];
     this._gatewayResult = null;
     this._gatewayBusy = false;
@@ -75,6 +77,7 @@ class DratekEinkPanel extends HTMLElement {
     window.clearTimeout(this._propertyEditTimer);
     window.clearTimeout(this._flashPollTimer);
     window.clearTimeout(this._otaPollTimer);
+    window.clearTimeout(this._queuePollTimer);
   }
 
   set hass(hass) {
@@ -82,10 +85,26 @@ class DratekEinkPanel extends HTMLElement {
     if (!this._rendered) {
       this._rendered = true;
       this._render();
-      this._scan();
       this._loadProjects();
       this._loadGateways();
       this._loadSerialPorts();
+    }
+  }
+
+  async _loadQueue(render = true) {
+    if (!this._hass) return;
+    try {
+      this._queue = await this._hass.callWS({ type: "dratek_eink/queue/list" });
+    } catch (err) {
+      this._queue = { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0, error: this._message(err) };
+    }
+    if (render) {
+      this._render();
+      this._paint();
+    }
+    window.clearTimeout(this._queuePollTimer);
+    if (this._activeTab === "queue") {
+      this._queuePollTimer = window.setTimeout(() => this._loadQueue(true), 1500);
     }
   }
 
@@ -347,9 +366,14 @@ class DratekEinkPanel extends HTMLElement {
     try {
       const result = await this._hass.callWS({ type: "dratek_eink/gateways/rename", gateway_id: gatewayId, name });
       this._gateways = this._gateways.map((gateway) => gateway.id === gatewayId ? result.gateway : gateway);
+      if (this._result?.devices) {
+        this._result.devices.forEach((device) => {
+          (device.paths || []).forEach((path) => { if (path.id === gatewayId) path.name = name; });
+          if (device.preferred_path?.id === gatewayId) device.preferred_path.name = name;
+        });
+      }
       this._editingGatewayId = "";
       this._gatewayResult = { ok: true, message: `Gateway byla prejmenovana na ${name}.` };
-      await this._scan();
     } catch (err) {
       this._gatewayResult = { ok: false, error: this._message(err) };
     } finally {
@@ -1577,6 +1601,7 @@ class DratekEinkPanel extends HTMLElement {
       this._sendResult = { ok: false, address: device.address, error: this._message(err), log: [] };
     } finally {
       this._sending = false;
+      await this._loadQueue(false);
       this._render();
       this._paint();
     }
@@ -1608,6 +1633,7 @@ class DratekEinkPanel extends HTMLElement {
       this._sendResult = { ok: false, address: device.address, error: this._message(err), log: [] };
     } finally {
       this._sending = false;
+      await this._loadQueue(false);
       this._render();
       this._paint();
     }
@@ -1625,6 +1651,7 @@ class DratekEinkPanel extends HTMLElement {
       this._sendResult = { ok: false, error: this._message(err), log: [] };
     } finally {
       this._sending = false;
+      await this._loadQueue(false);
       this._render();
       this._paint();
     }
@@ -1658,24 +1685,19 @@ class DratekEinkPanel extends HTMLElement {
         canvas{background:#fff;box-shadow:0 20px 54px rgba(0,0,0,.24);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:760}.field input,.field select,.projectbar input,.projectbar select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
         table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:#111827;color:#e5e7eb;border-radius:8px;padding:12px;font-size:12px;line-height:1.45;max-height:320px;white-space:pre-wrap}.gateway-log{max-height:260px;min-height:96px;overflow-y:auto}.send-result{margin-top:10px}.ota-progress{height:9px;background:var(--secondary-background-color);border:1px solid var(--divider-color);border-radius:999px;overflow:hidden;margin:11px 0}.ota-progress span{display:block;height:100%;background:#0f766e;transition:width .25s ease}.variable-table input{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:7px}.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:20;display:grid;place-items:center;padding:24px}.symbol-dialog{width:min(920px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:16px}.symbol-search{display:grid;grid-template-columns:1fr auto;gap:10px;margin:12px 0}.symbol-search input{width:100%;border:1px solid var(--divider-color);border-radius:7px;background:var(--secondary-background-color);color:var(--primary-text-color);padding:10px}.category-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}.category-row button{min-height:32px;padding:6px 10px}.category-row button.active{background:var(--primary-color);color:var(--text-primary-color,#fff)}.symbol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}.symbol-tile{min-height:78px;display:grid;grid-template-rows:32px auto;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.symbol-tile strong{font-size:29px;line-height:1}.symbol-tile span{font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;text-align:center}
         .section-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}.debug-card details{margin-top:10px}.debug-card summary{cursor:pointer;color:var(--primary-color);font-weight:760}.inspector-empty{padding:18px;border:1px dashed var(--divider-color);border-radius:8px;color:var(--secondary-text-color);text-align:center;background:var(--secondary-background-color)}
-        @media(max-width:1180px){.editor-shell,.status-grid,.projectbar{grid-template-columns:1fr}.left,.right{position:static}.tabbar,.subtabs{width:100%}.tab,.subtab{flex:1}.workspace{min-height:420px}}
-        @media(max-width:720px){.topology-row{grid-template-columns:1fr}.topology-link{width:2px;height:26px;justify-self:center}.topology-link:after{right:-4px;top:auto;bottom:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #0f766e}.topology-link span{white-space:normal}.route{grid-template-columns:auto minmax(0,1fr) auto}.route-rssi{grid-column:2}.gateway-health{grid-template-columns:1fr}}
+        .queue-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.queue-stat{display:flex;align-items:center;gap:12px}.queue-stat ha-icon{--mdc-icon-size:26px;color:var(--primary-color)}.queue-stat strong{display:block;font-size:23px}.queue-stat span{color:var(--secondary-text-color);font-size:12px}.queue-list{display:grid;gap:8px}.queue-row{display:grid;grid-template-columns:auto minmax(150px,1fr) minmax(170px,1fr) auto auto;align-items:center;gap:12px;padding:11px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color)}.queue-row.writing{border-color:#d97706;background:rgba(217,119,6,.07)}.queue-row.failed{border-color:#dc2626}.queue-icon{width:38px;height:38px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color)}.queue-main strong,.queue-route strong{display:block}.queue-main small,.queue-route small{display:block;color:var(--secondary-text-color);margin-top:3px}.signal-value{font-weight:850}.signal-value.good-signal{color:#16803c}.signal-value.warn-signal{color:#b06000}.signal-value.bad-signal{color:#c62828}
+        @media(max-width:1180px){.editor-shell,.status-grid,.projectbar{grid-template-columns:1fr}.queue-summary{grid-template-columns:1fr 1fr}.left,.right{position:static}.tabbar,.subtabs{width:100%}.tab,.subtab{flex:1}.workspace{min-height:420px}}
+        @media(max-width:720px){.topology-row,.queue-row{grid-template-columns:1fr}.queue-summary{grid-template-columns:1fr}.topology-link{width:2px;height:26px;justify-self:center}.topology-link:after{right:-4px;top:auto;bottom:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #0f766e}.topology-link span{white-space:normal}.route{grid-template-columns:auto minmax(0,1fr) auto}.route-rssi{grid-column:2}.gateway-health{grid-template-columns:1fr}}
       </style>
       <div class="page">
         <div class="topbar">
           <div class="brand"><div class="logo">DE</div><div><h1>DRATEK eInk <span class="version-badge">v${DRATEK_EINK_VERSION}</span></h1><div class="subtitle">Editor sablon, BLE diagnostika a sprava displeju</div></div></div>
-          <div class="toolbar"><button id="scan" class="secondary" ${this._loading ? "disabled" : ""}><ha-icon icon="mdi:bluetooth-searching"></ha-icon>${this._loading ? "Vyhledavam..." : "Vyhledat zarizeni"}</button><button id="sendDesign" class="primary-action" ${!device || this._sending ? "disabled" : ""}><ha-icon icon="mdi:upload"></ha-icon>${this._sending ? "Odesilam..." : "Odeslat navrh"}</button></div>
+          <div class="toolbar"><button id="sendDesign" class="primary-action" ${!device || this._sending ? "disabled" : ""}><ha-icon icon="mdi:upload"></ha-icon>${this._sending ? "Odesilam..." : "Odeslat navrh"}</button></div>
         </div>
-        <div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezene displeje</button><button class="tab ${this._activeTab === "designer" ? "active" : ""}" data-tab="designer"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Designer</button><button class="tab ${this._activeTab === "gateways" ? "active" : ""}" data-tab="gateways"><ha-icon icon="mdi:router-wireless"></ha-icon>Gatewaye</button></div>
+        <div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezene displeje</button><button class="tab ${this._activeTab === "designer" ? "active" : ""}" data-tab="designer"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Designer</button><button class="tab ${this._activeTab === "queue" ? "active" : ""}" data-tab="queue"><ha-icon icon="mdi:tray-full"></ha-icon>Fronta zapisu${this._queue.queued || this._queue.writing ? `<span class="pill warn">${this._queue.queued + this._queue.writing}</span>` : ""}</button><button class="tab ${this._activeTab === "gateways" ? "active" : ""}" data-tab="gateways"><ha-icon icon="mdi:router-wireless"></ha-icon>Gatewaye</button></div>
         <div style="${this._activeTab === "devices" ? "" : "display:none"}">
-          <div class="status-grid">
-            <div class="card status-tile"><div><div class="metric">Stav systemu</div><span class="pill ${status.cls}">${this._escape(status.text)}</span></div><div class="status-icon"><ha-icon icon="mdi:access-point"></ha-icon></div></div>
-            <div class="card status-tile"><div><div class="metric">Bluetooth adaptery / proxy</div><div class="value">${result.scanner_count}</div></div><div class="status-icon"><ha-icon icon="mdi:bluetooth"></ha-icon></div></div>
-            <div class="card status-tile"><div><div class="metric">BLE zarizeni v dosahu</div><div class="value">${result.ble_count}</div></div><div class="status-icon"><ha-icon icon="mdi:radar"></ha-icon></div></div>
-          </div>
+          <div class="card"><div class="toolbar" style="margin-bottom:12px"><button id="scanDevicesTab" ${this._loading ? "disabled" : ""}><ha-icon icon="mdi:bluetooth-searching"></ha-icon>${this._loading ? "Vyhledavam..." : "Spustit scan"}</button></div>${this._renderDeviceCards(result.devices, device && device.address)}</div>
           <div class="card"><div class="section-title"><h2>Mapa pripojeni</h2><span class="pill muted">${result.devices.reduce((sum, item) => sum + (item.paths || []).length, 0)} dostupnych cest</span></div>${this._renderTopology(result.devices)}</div>
-          <div class="card"><div class="section-title"><h2>DRATEK eInk displeje</h2><button id="scanDevicesTab" ${this._loading ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>${this._loading ? "Vyhledavam..." : "Spustit scan"}</button></div>${this._renderDeviceCards(result.devices, device && device.address)}</div>
-          <div class="card debug-card"><div class="section-title"><h2>Bluetooth debug</h2><span class="pill muted">${result.ble_devices.length} BLE</span></div><pre>${this._escape((result.debug || []).join("\n"))}</pre><details><summary>Vsechna BLE zarizeni</summary>${this._renderBleDevices(result.ble_devices)}</details></div>
         </div>
         <div style="${this._activeTab === "designer" ? "" : "display:none"}">
         <div class="status-grid">
@@ -1692,8 +1714,8 @@ class DratekEinkPanel extends HTMLElement {
           <div class="card workspace-card"><div class="canvas-head"><div class="canvas-meta"><ha-icon icon="mdi:checkerboard"></ha-icon><strong>${size.width} x ${size.height}</strong><span>${this._orientation === "portrait" ? "Na vysku" : "Na sirku"}</span></div><div class="canvas-meta"><span>Zoom ${Math.round(this._zoom * 100)}%</span><span>${this._realPreview ? "Real eInk colors" : "RGB nahled"}</span></div></div><div class="workspace"><canvas id="editor" width="${size.width}" height="${size.height}" style="width:${Math.round(size.width * this._zoom)}px;height:${Math.round(size.height * this._zoom)}px"></canvas></div></div>
           <div class="card right properties-panel"><div class="section-title"><h2>Inspector</h2><span class="pill muted">${object ? this._escape(object.type) : "bez vyberu"}</span></div>${this._renderProperties(object)}</div>
         </div>
-        <div class="card debug-card"><div class="section-title"><h2>Debug</h2><span class="pill muted">${result.ble_devices.length} BLE</span></div><pre>${this._escape((result.debug || []).join("\n"))}</pre><details><summary>Vsechna BLE zarizeni</summary>${this._renderBleDevices(result.ble_devices)}</details></div>
         </div>
+        <div style="${this._activeTab === "queue" ? "" : "display:none"}">${this._renderQueue()}</div>
         <div style="${this._activeTab === "gateways" ? "" : "display:none"}">
           <div class="status-grid">
             <div class="card status-tile"><div><div class="metric">DRATEK eInk gatewaye</div><div class="value">${this._gateways.length}</div></div><div class="status-icon"><ha-icon icon="mdi:router-wireless"></ha-icon></div></div>
@@ -1716,6 +1738,34 @@ class DratekEinkPanel extends HTMLElement {
       : `Gateway chyba: ${this._gatewayResult.error || "neznamy problem"}`;
     const devices = this._gatewayResult.devices || [];
     return `<div class="card send-result"><span class="pill ${cls}">${this._escape(message)}</span>${devices.length ? `<div class="panel-divider"></div>${this._renderGatewayDevices(devices)}` : ""}</div>`;
+  }
+
+  _renderQueue() {
+    const queue = this._queue || { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0 };
+    const jobs = queue.jobs || [];
+    const stat = (icon, value, label, cls = "") => `<div class="card queue-stat"><ha-icon icon="${icon}"></ha-icon><div><strong class="${cls}">${value || 0}</strong><span>${label}</span></div></div>`;
+    return `<div class="queue-summary">
+      ${stat("mdi:tray-full", queue.queued, "Ve fronte")}
+      ${stat("mdi:progress-upload", queue.writing, "Prave zapisuje", queue.writing ? "warn-signal" : "")}
+      ${stat("mdi:check-circle-outline", queue.succeeded, "Uspesne", "good-signal")}
+      ${stat("mdi:alert-circle-outline", queue.failed, "Neuspesne", queue.failed ? "bad-signal" : "")}
+    </div>
+    <div class="card"><div class="section-title"><h2>Fronta a poslednich 20 zapisu</h2><button id="refreshQueue" class="secondary"><ha-icon icon="mdi:refresh"></ha-icon>Obnovit</button></div>
+      ${queue.error ? `<div class="pill bad">${this._escape(queue.error)}</div>` : ""}
+      ${jobs.length ? `<div class="queue-list">${jobs.map((job) => {
+        const labels = { queued: "Ve fronte", writing: "Zapisuji", succeeded: "Dokonceno", failed: "Selhalo" };
+        const classes = { queued: "muted", writing: "warn", succeeded: "good", failed: "bad" };
+        const icons = { queued: "mdi:tray-arrow-down", writing: "mdi:progress-upload", succeeded: "mdi:check", failed: "mdi:alert-circle-outline" };
+        const operation = { design: "Navrh", partial_design: "Castecny zapis", text: "Text", service_text: "HA sluzba" }[job.operation] || job.operation;
+        return `<div class="queue-row ${this._escape(job.status)}">
+          <div class="queue-icon"><ha-icon icon="${icons[job.status] || "mdi:help"}"></ha-icon></div>
+          <div class="queue-main"><strong>${this._escape(job.address)}</strong><small>${this._escape(operation)} | ${this._formatTime(job.created_at)}</small></div>
+          <div class="queue-route"><strong>${this._escape(job.transport_name)}</strong><small>${job.transport_type === "gateway" ? "DRATEK gateway" : "Home Assistant Bluetooth"}</small></div>
+          <span class="pill ${classes[job.status] || "muted"}">${labels[job.status] || this._escape(job.status)}</span>
+          ${job.error ? `<span class="bad-signal">${this._escape(job.error)}</span>` : `<span>${job.finished_at ? this._formatDuration(job.started_at, job.finished_at) : ""}</span>`}
+        </div>`;
+      }).join("")}</div>` : `<div class="inspector-empty"><ha-icon icon="mdi:tray"></ha-icon><p>Fronta je prazdna. Zapisy z designeru a automatizaci se zde objevi automaticky.</p></div>`}
+    </div>`;
   }
 
   _renderGatewayWorkspace() {
@@ -1743,7 +1793,7 @@ class DratekEinkPanel extends HTMLElement {
       const preferred = device.preferred_path?.type === path.type && device.preferred_path?.id === path.id;
       return `<div class="topology-row">
         <div class="topology-node"><ha-icon icon="${local ? "mdi:home-assistant" : "mdi:router-wireless"}"></ha-icon><div><strong>${this._escape(path.name)}</strong><small>${local ? "Integrovane BLE / proxy" : this._escape(path.host || "Wi-Fi gateway")}</small></div></div>
-        <div class="topology-link"><span>${this._escape(path.rssi ?? "-")} dBm${preferred ? " | nejlepsi cesta" : ""}</span></div>
+        <div class="topology-link"><span class="signal-value ${this._signalClass(Number(path.rssi))}">${this._escape(path.rssi ?? "-")} dBm${preferred ? " | nejlepsi cesta" : ""}</span></div>
         <div class="topology-node"><ha-icon icon="mdi:tablet-dashboard"></ha-icon><div><strong>${this._escape(device.physical_code)}</strong><small>${this._escape(device.model)}</small></div></div>
       </div>`;
     }).join("")}</div>`;
@@ -1853,8 +1903,9 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _bind() {
-    this.shadowRoot.querySelector("#scan").addEventListener("click", () => this._scan());
+    this.shadowRoot.querySelector("#scan")?.addEventListener("click", () => this._scan());
     this.shadowRoot.querySelector("#scanDevicesTab")?.addEventListener("click", () => this._scan());
+    this.shadowRoot.querySelector("#refreshQueue")?.addEventListener("click", () => this._loadQueue(true));
     this.shadowRoot.querySelector("#discoverGateways")?.addEventListener("click", () => this._discoverGateways());
     this.shadowRoot.querySelector("#refreshGateways")?.addEventListener("click", () => this._loadGateways(true));
     this.shadowRoot.querySelectorAll("[data-gateway-tab]").forEach((button) => button.addEventListener("click", () => {
@@ -1910,8 +1961,13 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-gateway-name-input]").forEach((input) => input.addEventListener("input", (event) => { this._gatewayNameDraft = event.target.value; }));
     this.shadowRoot.querySelectorAll("[data-gateway-name-save]").forEach((button) => button.addEventListener("click", () => this._renameGateway(button.dataset.gatewayNameSave)));
     this.shadowRoot.querySelectorAll("[data-gateway-name-cancel]").forEach((button) => button.addEventListener("click", () => { this._editingGatewayId = ""; this._render(); this._paint(); }));
-    this.shadowRoot.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", () => {
+    this.shadowRoot.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", async () => {
       this._activeTab = button.dataset.tab;
+      window.clearTimeout(this._queuePollTimer);
+      if (this._activeTab === "queue") {
+        await this._loadQueue(true);
+        return;
+      }
       this._render();
       this._paint();
     }));
@@ -2389,7 +2445,7 @@ class DratekEinkPanel extends HTMLElement {
 
   _renderDeviceCards(devices, selectedAddress) {
     if (!devices.length) {
-      return `<div class="empty-state"><div class="empty-icon">DE</div><h2>Zadne DRATEK eInk displeje</h2><p>Spust scan a over, ze je v Home Assistantu aktivni Bluetooth integrace nebo Bluetooth proxy.</p></div>`;
+      return `<div class="empty-state"><div class="empty-icon">DE</div><h2>Zatim nejsou naskenovane zadne displeje</h2><p>Pro vyhledani displeju pouzij tlacitko Spustit scan.</p></div>`;
     }
     return `<div class="device-grid">${devices.map((device) => {
       const selected = device.address === selectedAddress;
@@ -2403,7 +2459,7 @@ class DratekEinkPanel extends HTMLElement {
           <div class="meter-block"><label>Baterie</label><div class="battery ${this._batteryClass(battery)}"><span style="width:${this._batteryPercent(battery)}%"></span></div><strong>${Number.isFinite(battery) ? `${battery}%` : "-"}</strong></div>
           <div class="meter-block"><label>Signal</label>${this._renderSignalBars(rssi)}<strong>${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>
         </div>
-        <div class="route-list">${paths.map((path, index) => `<div class="route ${index === 0 ? "preferred" : ""}"><ha-icon icon="${path.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon><span class="route-name">${this._escape(path.name)}</span><span class="route-rssi">${this._escape(path.rssi ?? "-")} dBm</span>${index === 0 ? `<span class="pill good">Aktivni cesta</span>` : ""}</div>`).join("")}</div>
+        <div class="route-list">${paths.map((path, index) => `<div class="route ${index === 0 ? "preferred" : ""}"><ha-icon icon="${path.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon><span class="route-name">${this._escape(path.name)}</span><span class="route-rssi signal-value ${this._signalClass(Number(path.rssi))}">${this._escape(path.rssi ?? "-")} dBm</span>${index === 0 ? `<span class="pill good">Aktivni cesta</span>` : ""}</div>`).join("")}</div>
         <div class="device-meta"><span>SW ${this._escape(device.sw)}</span><span>HW ${this._escape(device.hw)}</span><span>${this._escape(device.profile)}</span><span>${device.partial_update ? "Partial update" : "Full update"}</span></div>
       </button>`;
     }).join("")}</div>`;
@@ -2427,6 +2483,23 @@ class DratekEinkPanel extends HTMLElement {
     if (rssi >= -68) return 3;
     if (rssi >= -80) return 2;
     return 1;
+  }
+
+  _signalClass(rssi) {
+    const level = this._signalLevel(rssi);
+    if (level >= 3) return "good-signal";
+    if (level === 2) return "warn-signal";
+    return "bad-signal";
+  }
+
+  _formatTime(timestamp) {
+    if (!timestamp) return "-";
+    return new Date(Number(timestamp) * 1000).toLocaleString("cs-CZ", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+
+  _formatDuration(started, finished) {
+    if (!started || !finished) return "";
+    return `${Math.max(0, Number(finished) - Number(started))} s`;
   }
 
   _renderSignalBars(rssi) {
