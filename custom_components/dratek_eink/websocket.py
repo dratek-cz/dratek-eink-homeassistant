@@ -312,7 +312,7 @@ async def websocket_send_gateway_design(
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/gateways/discover",
-        vol.Optional("seconds", default=4): int,
+        vol.Optional("seconds", default=10): int,
     }
 )
 @websocket_api.async_response
@@ -322,7 +322,7 @@ async def websocket_discover_gateways(
     msg: dict[str, Any],
 ) -> None:
     try:
-        discovered = await async_discover_gateways(hass, msg.get("seconds", 4))
+        discovered = await async_discover_gateways(hass, msg.get("seconds", 10))
     except Exception as exc:
         connection.send_result(msg["id"], {"ok": False, "error": str(exc), "discovered": []})
         return

@@ -1,5 +1,13 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.31
+
+- mDNS oznameni gatewaye se automaticky obnovi po vypadku a navratu Wi-Fi
+- firmware zapina automaticke znovupripojeni Wi-Fi a periodicky obnovuje mDNS registraci
+- gateway se oznamuje jako vlastni sluzba `_dratek-eink-gateway._tcp` i standardni HTTP sluzba
+- vyhledavani gatewayi v Home Assistantu ceka na mDNS 10 sekund misto 5
+- odesilani dat nadale pouziva nalezenou IP adresu, aby mDNS neovlivnovalo stabilitu prenosu
+
 ## Novinky ve verzi 0.1.30
 
 - odesilani pres gateway pouziva asynchronni prenosove ulohy misto jednoho dlouheho HTTP spojeni

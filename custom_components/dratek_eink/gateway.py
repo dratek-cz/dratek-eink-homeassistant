@@ -356,7 +356,7 @@ def _discover_gateways_sync(seconds: int) -> list[dict[str, Any]]:
     return list(found.values())
 
 
-async def async_discover_gateways(hass: HomeAssistant, seconds: int = 4) -> list[dict[str, Any]]:
+async def async_discover_gateways(hass: HomeAssistant, seconds: int = 10) -> list[dict[str, Any]]:
     return await hass.async_add_executor_job(_discover_gateways_sync, seconds)
 
 

@@ -10,8 +10,10 @@
 #include <mbedtls/base64.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.30-gateway";
+static const char* FIRMWARE_VERSION = "0.1.31-gateway";
 static const size_t MAX_TRANSFER_LOG_LINES = 80;
+static const uint32_t MDNS_REFRESH_INTERVAL_MS = 5UL * 60UL * 1000UL;
+static const uint32_t WIFI_RECONNECT_INTERVAL_MS = 15UL * 1000UL;
 static const uint16_t DRATEK_COMPANY_ID = 0x5053;
 static const char* TRANSFER_UUIDS[][3] = {
   {"0000fef0-0000-1000-8000-00805f9b34fb", "0000fef1-0000-1000-8000-00805f9b34fb", "0000fef2-0000-1000-8000-00805f9b34fb"},
@@ -43,6 +45,10 @@ std::vector<uint8_t> queuedPayload;
 SemaphoreHandle_t transferMutex = nullptr;
 bool transferTaskActive = false;
 uint32_t transferSequence = 0;
+bool mdnsStarted = false;
+bool wifiWasConnected = false;
+uint32_t lastMdnsStartMs = 0;
+uint32_t lastWifiReconnectMs = 0;
 
 class TransferLogSink {
  public:
@@ -864,16 +870,55 @@ void handleSerialConfig() {
 }
 
 void startMdns() {
+  if (mdnsStarted) {
+    MDNS.end();
+    mdnsStarted = false;
+    delay(50);
+  }
   if (!MDNS.begin(hostname.c_str())) {
     Serial.println("mDNS start failed.");
     return;
   }
+  MDNS.setInstanceName("DRATEK eInk gateway");
   MDNS.addService("dratek-eink-gateway", "tcp", 80);
   MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "id", gatewayId.c_str());
   MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "fw", FIRMWARE_VERSION);
+  MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "ip", WiFi.localIP().toString());
+  MDNS.addService("http", "tcp", 80);
+  MDNS.addServiceTxt("http", "tcp", "model", "DRATEK eInk gateway");
+  mdnsStarted = true;
+  lastMdnsStartMs = millis();
   Serial.print("mDNS: ");
   Serial.print(hostname);
   Serial.println(".local");
+}
+
+void maintainNetworkServices() {
+  bool connected = WiFi.status() == WL_CONNECTED;
+  if (connected && !wifiWasConnected) {
+    Serial.print("Wi-Fi restored, IP: ");
+    Serial.println(WiFi.localIP());
+    startMdns();
+  } else if (!connected && wifiWasConnected) {
+    Serial.println("Wi-Fi disconnected; waiting to restore mDNS.");
+    if (mdnsStarted) MDNS.end();
+    mdnsStarted = false;
+  }
+
+  if (!connected && millis() - lastWifiReconnectMs >= WIFI_RECONNECT_INTERVAL_MS) {
+    lastWifiReconnectMs = millis();
+    Serial.println("Trying to reconnect Wi-Fi.");
+    WiFi.reconnect();
+  }
+
+  if (
+    connected && mdnsStarted && !transferIsBusy()
+    && millis() - lastMdnsStartMs >= MDNS_REFRESH_INTERVAL_MS
+  ) {
+    Serial.println("Refreshing mDNS advertisement.");
+    startMdns();
+  }
+  wifiWasConnected = connected;
 }
 
 void connectWifi() {
@@ -899,6 +944,8 @@ void connectWifi() {
 
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(false);
   WiFi.setHostname(hostname.c_str());
   if (!dhcp && staticIp.length()) {
     IPAddress local;
@@ -931,6 +978,7 @@ void connectWifi() {
   Serial.print("IP: ");
   Serial.println(WiFi.localIP());
   startMdns();
+  wifiWasConnected = true;
 }
 
 void setup() {
@@ -973,5 +1021,6 @@ void loop() {
   handleSerialConfig();
   server.handleClient();
   startQueuedTransfer();
+  maintainNetworkServices();
   delay(2);
 }

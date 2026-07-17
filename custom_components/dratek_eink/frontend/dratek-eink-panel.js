@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.30";
+const DRATEK_EINK_VERSION = "0.1.31";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -127,7 +127,7 @@ class DratekEinkPanel extends HTMLElement {
     this._gatewayResult = null;
     this._render();
     try {
-      const result = await this._hass.callWS({ type: "dratek_eink/gateways/discover", seconds: 5 });
+      const result = await this._hass.callWS({ type: "dratek_eink/gateways/discover", seconds: 10 });
       this._gatewayDiscovery = result.discovered || [];
       this._gatewayResult = result.ok
         ? { ok: true, message: `Discovery dokonceno. Nalezeno ${this._gatewayDiscovery.length} gatewayi.` }
