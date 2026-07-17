@@ -142,6 +142,11 @@ async def async_gateway_status(hass: HomeAssistant, gateway: dict[str, Any]) -> 
         "wifi_rssi": payload.get("wifi_rssi"),
         "uptime_ms": payload.get("uptime_ms"),
         "free_heap": payload.get("free_heap"),
+        "minimum_free_heap": payload.get("minimum_free_heap"),
+        "largest_free_block": payload.get("largest_free_block"),
+        "reset_reason": payload.get("reset_reason"),
+        "transfer_status": payload.get("transfer_status"),
+        "transfer_job_id": payload.get("transfer_job_id"),
     }
 
 
@@ -214,33 +219,93 @@ async def async_send_gateway_payload(
         add_log(f"Payload size: {len(payload)} bytes.")
         session = async_get_clientsession(hass)
         encoded = base64.b64encode(payload).decode("ascii")
-        url = f"{_gateway_send_base_url(gateway)}/api/send-b64?address={quote(address, safe='')}"
-        add_log(f"Sending base64 payload to gateway {_gateway_send_base_url(gateway).removeprefix('http://')}.")
-        last_error = ""
+        base_url = _gateway_send_base_url(gateway)
+        request_id = uuid.uuid4().hex[:16]
+        start_url = (
+            f"{base_url}/api/transfer/start?address={quote(address, safe='')}"
+            f"&id={request_id}"
+        )
+        add_log(f"Uploading transfer job to gateway {base_url.removeprefix('http://')}.")
+        data: dict[str, Any] = {}
+        upload_error = ""
         for attempt in range(1, 3):
             try:
-                if attempt > 1:
-                    add_log(f"HTTP gateway send retry {attempt}/2.")
                 async with session.post(
-                    url,
+                    start_url,
                     data=encoded,
                     headers={"Content-Type": "text/plain"},
-                    timeout=120,
+                    timeout=30,
                 ) as response:
                     data = await response.json(content_type=None)
-                    for line in data.get("log", []) or []:
-                        add_log(str(line))
-                    if response.status >= 400 or not data.get("ok"):
+                    if response.status == 404:
+                        return {
+                            "ok": False,
+                            "error": "gateway_firmware_update_required",
+                            "log": log
+                            + ["Gateway firmware 0.1.30 or newer is required. Reflash the ESP32 gateway."],
+                            "raw": data,
+                        }
+                    if response.status >= 400 or not data.get("job_id"):
                         error = data.get("error") or f"HTTP {response.status}"
                         return {"ok": False, "error": error, "log": log, "raw": data}
-                    last_error = ""
-                    break
+                upload_error = ""
+                break
             except Exception as exc:
-                last_error = str(exc)
-                add_log(f"Gateway HTTP attempt {attempt}/2 failed: {exc}")
-                await asyncio.sleep(1)
-        if last_error:
-            return {"ok": False, "error": last_error, "log": log}
+                upload_error = str(exc)
+                add_log(f"Gateway upload attempt {attempt}/2 failed: {exc}")
+                if attempt < 2:
+                    add_log("Retrying the same idempotent transfer job.")
+                    await asyncio.sleep(1)
+        if upload_error:
+            return {"ok": False, "error": upload_error, "log": log}
+
+        job_id = str(data["job_id"])
+        add_log(
+            f"Gateway accepted transfer job {job_id}; "
+            f"free heap {data.get('free_heap', '?')} bytes."
+        )
+        status_url = f"{base_url}/api/transfer/status?id={quote(job_id, safe='')}"
+        deadline = time.monotonic() + 180
+        seen_log_lines = 0
+        poll_errors = 0
+        final_data: dict[str, Any] = {}
+
+        while time.monotonic() < deadline:
+            await asyncio.sleep(1)
+            try:
+                async with session.get(status_url, timeout=10) as response:
+                    final_data = await response.json(content_type=None)
+                    if response.status == 404:
+                        add_log("Gateway lost the transfer job, most likely because it restarted.")
+                        return {
+                            "ok": False,
+                            "error": "gateway_transfer_lost_after_restart",
+                            "log": log,
+                            "raw": final_data,
+                        }
+                    if response.status >= 400:
+                        raise RuntimeError(final_data.get("error") or f"HTTP {response.status}")
+                poll_errors = 0
+            except Exception as exc:
+                poll_errors += 1
+                if poll_errors == 1 or poll_errors % 5 == 0:
+                    add_log(f"Gateway status temporarily unavailable ({poll_errors}): {exc}")
+                continue
+
+            remote_log = final_data.get("log", []) or []
+            for line in remote_log[seen_log_lines:]:
+                add_log(str(line))
+            seen_log_lines = len(remote_log)
+            status = final_data.get("status")
+            if status == "succeeded":
+                add_log("Gateway transfer job completed successfully.")
+                break
+            if status == "failed":
+                error = final_data.get("error") or "ble_transfer_failed"
+                return {"ok": False, "error": error, "log": log, "raw": final_data}
+        else:
+            add_log("Timed out waiting for the gateway transfer job.")
+            return {"ok": False, "error": "gateway_transfer_timeout", "log": log, "raw": final_data}
     except Exception as exc:
         add_log(f"Gateway send failed: {exc}")
         return {"ok": False, "error": str(exc), "log": log}

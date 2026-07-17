@@ -5,10 +5,13 @@
 #include <Preferences.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <esp_heap_caps.h>
+#include <esp_system.h>
 #include <mbedtls/base64.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.29-gateway";
+static const char* FIRMWARE_VERSION = "0.1.30-gateway";
+static const size_t MAX_TRANSFER_LOG_LINES = 80;
 static const uint16_t DRATEK_COMPANY_ID = 0x5053;
 static const char* TRANSFER_UUIDS[][3] = {
   {"0000fef0-0000-1000-8000-00805f9b34fb", "0000fef1-0000-1000-8000-00805f9b34fb", "0000fef2-0000-1000-8000-00805f9b34fb"},
@@ -24,6 +27,58 @@ String hostname;
 String serialLine;
 std::vector<String> lastScanDevices;
 std::vector<std::vector<uint8_t>> notifications;
+
+struct TransferJob {
+  String id;
+  String address;
+  String status = "idle";
+  String error;
+  std::vector<String> log;
+  uint32_t createdMs = 0;
+  uint32_t updatedMs = 0;
+};
+
+TransferJob transferJob;
+std::vector<uint8_t> queuedPayload;
+SemaphoreHandle_t transferMutex = nullptr;
+bool transferTaskActive = false;
+uint32_t transferSequence = 0;
+
+class TransferLogSink {
+ public:
+  virtual void add(const String& line) = 0;
+  virtual ~TransferLogSink() = default;
+};
+
+class LocalTransferLog : public TransferLogSink {
+ public:
+  std::vector<String> lines;
+
+  void add(const String& line) override {
+    if (lines.size() >= MAX_TRANSFER_LOG_LINES) lines.erase(lines.begin());
+    lines.push_back(line);
+  }
+};
+
+class JobTransferLog : public TransferLogSink {
+ public:
+  explicit JobTransferLog(const String& jobId) : jobId_(jobId) {}
+
+  void add(const String& line) override {
+    if (!transferMutex) return;
+    xSemaphoreTake(transferMutex, portMAX_DELAY);
+    if (transferJob.id == jobId_) {
+      if (transferJob.log.size() >= MAX_TRANSFER_LOG_LINES) transferJob.log.erase(transferJob.log.begin());
+      transferJob.log.push_back(line);
+      transferJob.updatedMs = millis();
+    }
+    xSemaphoreGive(transferMutex);
+    Serial.println(line);
+  }
+
+ private:
+  String jobId_;
+};
 
 String macId() {
   String mac = WiFi.macAddress();
@@ -44,6 +99,45 @@ void sendJson(JsonDocument& doc, int status = 200) {
   server.send(status, "application/json", body);
 }
 
+String resetReasonName() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON: return "power_on";
+    case ESP_RST_EXT: return "external";
+    case ESP_RST_SW: return "software";
+    case ESP_RST_PANIC: return "panic";
+    case ESP_RST_INT_WDT: return "interrupt_watchdog";
+    case ESP_RST_TASK_WDT: return "task_watchdog";
+    case ESP_RST_WDT: return "watchdog";
+    case ESP_RST_DEEPSLEEP: return "deep_sleep";
+    case ESP_RST_BROWNOUT: return "brownout";
+    case ESP_RST_SDIO: return "sdio";
+    default: return "unknown";
+  }
+}
+
+bool transferIsBusy() {
+  if (!transferMutex) return false;
+  xSemaphoreTake(transferMutex, portMAX_DELAY);
+  bool busy = transferJob.status == "queued" || transferJob.status == "running";
+  xSemaphoreGive(transferMutex);
+  return busy;
+}
+
+bool rejectIfTransferBusy() {
+  if (!transferIsBusy()) return false;
+  JsonDocument doc;
+  doc["ok"] = false;
+  doc["error"] = "gateway_busy";
+  doc["message"] = "A display transfer is currently running.";
+  sendJson(doc, 409);
+  return true;
+}
+
+void appendLocalLog(JsonDocument& doc, const LocalTransferLog& source) {
+  JsonArray target = doc["log"].to<JsonArray>();
+  for (const String& line : source.lines) target.add(line);
+}
+
 void handleStatus() {
   prefs.begin("dratek", true);
   bool dhcp = prefs.getBool("dhcp", true);
@@ -60,6 +154,15 @@ void handleStatus() {
   doc["wifi_rssi"] = WiFi.RSSI();
   doc["uptime_ms"] = millis();
   doc["free_heap"] = ESP.getFreeHeap();
+  doc["minimum_free_heap"] = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
+  doc["largest_free_block"] = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  doc["reset_reason"] = resetReasonName();
+  if (transferMutex) {
+    xSemaphoreTake(transferMutex, portMAX_DELAY);
+    doc["transfer_status"] = transferJob.status;
+    doc["transfer_job_id"] = transferJob.id;
+    xSemaphoreGive(transferMutex);
+  }
   doc["dhcp"] = dhcp;
   doc["static_ip"] = staticIp;
   doc["last_scan_devices"] = lastScanDevices.size();
@@ -74,6 +177,14 @@ bool hasDratekManufacturer(NimBLEAdvertisedDevice* device) {
 }
 
 void handleScan() {
+  if (transferIsBusy()) {
+    JsonDocument doc;
+    doc["ok"] = false;
+    doc["error"] = "gateway_busy";
+    doc["message"] = "A display transfer is currently running.";
+    sendJson(doc, 409);
+    return;
+  }
   int seconds = server.hasArg("seconds") ? server.arg("seconds").toInt() : 8;
   seconds = max(1, min(30, seconds));
 
@@ -142,7 +253,6 @@ bool waitForPacket(uint8_t prefix, std::vector<uint8_t>& out, uint32_t timeoutMs
       return true;
     }
     delay(20);
-    server.handleClient();
   }
   return false;
 }
@@ -159,7 +269,7 @@ bool decodeBase64(const String& input, std::vector<uint8_t>& output) {
   return true;
 }
 
-void addLog(JsonArray& log, const String& line) {
+void addLog(TransferLogSink& log, const String& line) {
   log.add(line);
 }
 
@@ -182,7 +292,7 @@ bool findTransferChars(
   return false;
 }
 
-bool connectToDisplay(NimBLEClient*& client, const String& address, JsonArray& log) {
+bool connectToDisplay(NimBLEClient*& client, const String& address, TransferLogSink& log) {
   String target = address;
   target.toLowerCase();
   for (int attempt = 1; attempt <= 3; attempt++) {
@@ -216,7 +326,7 @@ bool connectToDisplay(NimBLEClient*& client, const String& address, JsonArray& l
   return false;
 }
 
-bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& payload, JsonArray& log) {
+bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& payload, TransferLogSink& log) {
   NimBLEClient* client = NimBLEDevice::createClient();
   client->setConnectTimeout(18);
   addLog(log, "Connecting to display " + address + ".");
@@ -335,8 +445,9 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
 }
 
 void handleSend() {
+  if (rejectIfTransferBusy()) return;
   JsonDocument doc;
-  JsonArray log = doc["log"].to<JsonArray>();
+  LocalTransferLog log;
   if (!server.hasArg("plain")) {
     doc["ok"] = false;
     doc["error"] = "missing_body";
@@ -371,12 +482,14 @@ void handleSend() {
   bool ok = sendPayloadToDisplay(address, payload, log);
   doc["ok"] = ok;
   if (!ok) doc["error"] = "ble_transfer_failed";
+  appendLocalLog(doc, log);
   sendJson(doc, ok ? 200 : 502);
 }
 
 void handleSendBinary() {
+  if (rejectIfTransferBusy()) return;
   JsonDocument doc;
-  JsonArray log = doc["log"].to<JsonArray>();
+  LocalTransferLog log;
   String address = server.arg("address");
   if (address.length() == 0) {
     doc["ok"] = false;
@@ -399,12 +512,14 @@ void handleSendBinary() {
   addLog(log, "Free heap after BLE transfer: " + String(ESP.getFreeHeap()) + ".");
   doc["ok"] = ok;
   if (!ok) doc["error"] = "ble_transfer_failed";
+  appendLocalLog(doc, log);
   sendJson(doc, ok ? 200 : 502);
 }
 
 void handleSendBase64() {
+  if (rejectIfTransferBusy()) return;
   JsonDocument doc;
-  JsonArray log = doc["log"].to<JsonArray>();
+  LocalTransferLog log;
   String address = server.arg("address");
   if (address.length() == 0) {
     doc["ok"] = false;
@@ -433,7 +548,158 @@ void handleSendBase64() {
   addLog(log, "Free heap after BLE transfer: " + String(ESP.getFreeHeap()) + ".");
   doc["ok"] = ok;
   if (!ok) doc["error"] = "ble_transfer_failed";
+  appendLocalLog(doc, log);
   sendJson(doc, ok ? 200 : 502);
+}
+
+void handleTransferStart() {
+  JsonDocument doc;
+  String address = server.arg("address");
+  String requestedId = server.arg("id");
+  if (address.length() == 0) {
+    doc["ok"] = false;
+    doc["error"] = "missing_address";
+    sendJson(doc, 400);
+    return;
+  }
+  if (!server.hasArg("plain")) {
+    doc["ok"] = false;
+    doc["error"] = "missing_base64_body";
+    sendJson(doc, 400);
+    return;
+  }
+  if (requestedId.length() && transferMutex) {
+    xSemaphoreTake(transferMutex, portMAX_DELAY);
+    bool existing = requestedId == transferJob.id;
+    String existingStatus = transferJob.status;
+    xSemaphoreGive(transferMutex);
+    if (existing) {
+      doc["ok"] = true;
+      doc["job_id"] = requestedId;
+      doc["status"] = existingStatus;
+      doc["duplicate"] = true;
+      sendJson(doc, 202);
+      return;
+    }
+  }
+  if (transferIsBusy()) {
+    doc["ok"] = false;
+    doc["error"] = "gateway_busy";
+    xSemaphoreTake(transferMutex, portMAX_DELAY);
+    doc["job_id"] = transferJob.id;
+    xSemaphoreGive(transferMutex);
+    sendJson(doc, 409);
+    return;
+  }
+
+  const String& encoded = server.arg("plain");
+  std::vector<uint8_t> payload;
+  if (!decodeBase64(encoded, payload)) {
+    doc["ok"] = false;
+    doc["error"] = "invalid_base64_payload";
+    sendJson(doc, 400);
+    return;
+  }
+
+  String jobId = requestedId.length() ? requestedId : String(millis(), HEX) + "-" + String(++transferSequence, HEX);
+  xSemaphoreTake(transferMutex, portMAX_DELAY);
+  queuedPayload.swap(payload);
+  transferJob.id = jobId;
+  transferJob.address = address;
+  transferJob.status = "queued";
+  transferJob.error = "";
+  transferJob.log.clear();
+  transferJob.createdMs = millis();
+  transferJob.updatedMs = transferJob.createdMs;
+  xSemaphoreGive(transferMutex);
+
+  doc["ok"] = true;
+  doc["job_id"] = jobId;
+  doc["status"] = "queued";
+  doc["payload_bytes"] = queuedPayload.size();
+  doc["free_heap"] = ESP.getFreeHeap();
+  doc["largest_free_block"] = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  sendJson(doc, 202);
+}
+
+void handleTransferStatus() {
+  JsonDocument doc;
+  String requestedId = server.arg("id");
+  xSemaphoreTake(transferMutex, portMAX_DELAY);
+  if (requestedId.length() == 0 || requestedId != transferJob.id) {
+    xSemaphoreGive(transferMutex);
+    doc["ok"] = false;
+    doc["error"] = "transfer_job_not_found";
+    sendJson(doc, 404);
+    return;
+  }
+  doc["ok"] = transferJob.status == "succeeded";
+  doc["job_id"] = transferJob.id;
+  doc["status"] = transferJob.status;
+  doc["error"] = transferJob.error;
+  doc["address"] = transferJob.address;
+  doc["created_ms"] = transferJob.createdMs;
+  doc["updated_ms"] = transferJob.updatedMs;
+  JsonArray log = doc["log"].to<JsonArray>();
+  for (const String& line : transferJob.log) log.add(line);
+  xSemaphoreGive(transferMutex);
+  doc["free_heap"] = ESP.getFreeHeap();
+  doc["minimum_free_heap"] = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
+  doc["largest_free_block"] = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  sendJson(doc);
+}
+
+void transferTask(void*) {
+  String jobId;
+  String address;
+  std::vector<uint8_t> payload;
+  xSemaphoreTake(transferMutex, portMAX_DELAY);
+  jobId = transferJob.id;
+  address = transferJob.address;
+  payload.swap(queuedPayload);
+  transferJob.status = "running";
+  transferJob.updatedMs = millis();
+  xSemaphoreGive(transferMutex);
+
+  JobTransferLog log(jobId);
+  addLog(log, "Transfer job " + jobId + " started.");
+  addLog(log, "Payload " + String(payload.size()) + " bytes loaded; free heap " + String(ESP.getFreeHeap()) + ".");
+  addLog(log, "Largest free memory block " + String(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)) + " bytes.");
+  bool ok = sendPayloadToDisplay(address, payload, log);
+  payload.clear();
+  payload.shrink_to_fit();
+  addLog(log, "Payload released; free heap " + String(ESP.getFreeHeap()) + ".");
+
+  xSemaphoreTake(transferMutex, portMAX_DELAY);
+  if (transferJob.id == jobId) {
+    transferJob.status = ok ? "succeeded" : "failed";
+    transferJob.error = ok ? "" : "ble_transfer_failed";
+    transferJob.updatedMs = millis();
+  }
+  transferTaskActive = false;
+  xSemaphoreGive(transferMutex);
+  vTaskDelete(nullptr);
+}
+
+void startQueuedTransfer() {
+  if (!transferMutex) return;
+  xSemaphoreTake(transferMutex, portMAX_DELAY);
+  bool shouldStart = transferJob.status == "queued" && !transferTaskActive;
+  if (shouldStart) transferTaskActive = true;
+  xSemaphoreGive(transferMutex);
+  if (!shouldStart) return;
+
+  BaseType_t created = xTaskCreate(transferTask, "dratek-transfer", 12288, nullptr, 1, nullptr);
+  if (created == pdPASS) return;
+
+  xSemaphoreTake(transferMutex, portMAX_DELAY);
+  transferTaskActive = false;
+  transferJob.status = "failed";
+  transferJob.error = "transfer_task_start_failed";
+  transferJob.updatedMs = millis();
+  queuedPayload.clear();
+  queuedPayload.shrink_to_fit();
+  xSemaphoreGive(transferMutex);
 }
 
 void handleRoot() {
@@ -445,7 +711,7 @@ void handleRoot() {
   body += "<label>Hostname<input name='hostname' value='" + hostname + "'></label><label>SSID<input name='ssid'></label><label>Heslo<input name='password' type='password'></label>";
   body += "<label>Static IP<input name='ip' placeholder='prazdne = DHCP'></label><label>Gateway<input name='gateway' placeholder='192.168.1.1'></label><label>Subnet<input name='subnet' placeholder='255.255.255.0'></label><label>DNS<input name='dns' placeholder='192.168.1.1'></label>";
   body += "</div><button>Ulozit a restartovat</button></form></section><section><h2>API</h2><p><code>/api/status</code>, <code>/api/scan?seconds=8</code>, <code>/api/send</code>, <code>/api/config</code></p></section>";
-  body += "<p>Send endpoints: <code>/api/send-b64?address=XX:XX:XX:XX:XX:XX</code>, <code>/api/send-bin?address=XX:XX:XX:XX:XX:XX</code></p>";
+  body += "<p>Transfer API: <code>POST /api/transfer/start?address=XX:XX:XX:XX:XX:XX</code> and <code>GET /api/transfer/status?id=...</code></p>";
   body += "</main></body></html>";
   server.send(200, "text/html; charset=utf-8", body);
 }
@@ -632,6 +898,7 @@ void connectWifi() {
   }
 
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
   WiFi.setHostname(hostname.c_str());
   if (!dhcp && staticIp.length()) {
     IPAddress local;
@@ -671,6 +938,12 @@ void setup() {
   delay(300);
   gatewayId = "dratek-eink-gateway-" + macId();
   hostname = gatewayId;
+  transferMutex = xSemaphoreCreateMutex();
+  if (!transferMutex) {
+    Serial.println("Unable to create transfer mutex.");
+    delay(1000);
+    ESP.restart();
+  }
 
   connectWifi();
   NimBLEDevice::init(shortBleName().c_str());
@@ -680,6 +953,8 @@ void setup() {
   server.on("/api/send", HTTP_POST, handleSend);
   server.on("/api/send-bin", HTTP_POST, handleSendBinary);
   server.on("/api/send-b64", HTTP_POST, handleSendBase64);
+  server.on("/api/transfer/start", HTTP_POST, handleTransferStart);
+  server.on("/api/transfer/status", HTTP_GET, handleTransferStatus);
   server.on("/api/config", HTTP_GET, handleConfig);
   server.on("/api/config", HTTP_POST, handleConfig);
   server.on("/", HTTP_GET, handleRoot);
@@ -697,4 +972,6 @@ void setup() {
 void loop() {
   handleSerialConfig();
   server.handleClient();
+  startQueuedTransfer();
+  delay(2);
 }

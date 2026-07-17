@@ -1,5 +1,15 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.30
+
+- odesilani pres gateway pouziva asynchronni prenosove ulohy misto jednoho dlouheho HTTP spojeni
+- gateway potvrdi prijeti obrazku okamzite a Home Assistant pak prubezne nacita stav a log prenosu
+- odstranena rekurzivni obsluha HTTP serveru uvnitr BLE prenosu, ktera mohla zpusobit `Server disconnected`
+- base64 payload se zbytecne nekopiruje a prenosovy log ma omezenou velikost
+- BLE scan a dalsi prenos jsou pri obsazene gatewayi bezpecne odmitnuty chybou `gateway_busy`
+- diagnostika gatewaye ukazuje duvod restartu, minimalni volnou heap a nejvetsi souvisly blok pameti
+- Wi-Fi uspavani je behem provozu gatewaye vypnute kvuli stabilite soubezneho Wi-Fi a BLE provozu
+
 ## Novinky ve verzi 0.1.29
 
 - gateway odesilani v HA preferuje posledni znamou IP adresu gatewaye misto `.local`
