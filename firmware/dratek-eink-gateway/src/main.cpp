@@ -10,8 +10,9 @@
 #include <mbedtls/base64.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.32-gateway";
+static const char* FIRMWARE_VERSION = "0.1.33-gateway";
 static const size_t MAX_TRANSFER_LOG_LINES = 80;
+static const size_t MAX_UPLOAD_PAYLOAD_BYTES = 128UL * 1024UL;
 static const uint32_t MDNS_REFRESH_INTERVAL_MS = 5UL * 60UL * 1000UL;
 static const uint32_t WIFI_RECONNECT_INTERVAL_MS = 15UL * 1000UL;
 static const uint16_t DRATEK_COMPANY_ID = 0x5053;
@@ -42,6 +43,11 @@ struct TransferJob {
 
 TransferJob transferJob;
 std::vector<uint8_t> queuedPayload;
+std::vector<uint8_t> uploadPayload;
+String uploadAddress;
+String uploadJobId;
+String uploadError;
+bool uploadDuplicate = false;
 SemaphoreHandle_t transferMutex = nullptr;
 bool transferTaskActive = false;
 uint32_t transferSequence = 0;
@@ -641,6 +647,107 @@ void handleTransferStart() {
   sendJson(doc, 202);
 }
 
+void handleTransferUploadChunk() {
+  HTTPUpload& upload = server.upload();
+  if (upload.status == UPLOAD_FILE_START) {
+    uploadPayload.clear();
+    uploadPayload.shrink_to_fit();
+    uploadAddress = server.arg("address");
+    uploadJobId = server.arg("id");
+    uploadError = "";
+    uploadDuplicate = false;
+
+    if (uploadAddress.length() == 0) {
+      uploadError = "missing_address";
+      return;
+    }
+    if (uploadJobId.length() && transferMutex) {
+      xSemaphoreTake(transferMutex, portMAX_DELAY);
+      uploadDuplicate = uploadJobId == transferJob.id;
+      xSemaphoreGive(transferMutex);
+    }
+    if (!uploadDuplicate && transferIsBusy()) {
+      uploadError = "gateway_busy";
+    }
+    return;
+  }
+
+  if (upload.status == UPLOAD_FILE_WRITE) {
+    if (uploadError.length() || uploadDuplicate) return;
+    size_t nextSize = uploadPayload.size() + upload.currentSize;
+    if (nextSize > MAX_UPLOAD_PAYLOAD_BYTES) {
+      uploadError = "payload_too_large";
+      uploadPayload.clear();
+      uploadPayload.shrink_to_fit();
+      return;
+    }
+    uploadPayload.insert(uploadPayload.end(), upload.buf, upload.buf + upload.currentSize);
+    return;
+  }
+
+  if (upload.status == UPLOAD_FILE_ABORTED) {
+    uploadError = "upload_aborted";
+    uploadPayload.clear();
+    uploadPayload.shrink_to_fit();
+  }
+}
+
+void handleTransferUploadComplete() {
+  JsonDocument doc;
+  if (uploadDuplicate) {
+    xSemaphoreTake(transferMutex, portMAX_DELAY);
+    String existingStatus = transferJob.status;
+    xSemaphoreGive(transferMutex);
+    doc["ok"] = true;
+    doc["job_id"] = uploadJobId;
+    doc["status"] = existingStatus;
+    doc["duplicate"] = true;
+    sendJson(doc, 202);
+    return;
+  }
+  if (uploadError.length()) {
+    doc["ok"] = false;
+    doc["error"] = uploadError;
+    int status = uploadError == "gateway_busy" ? 409 : 400;
+    sendJson(doc, status);
+    return;
+  }
+  if (uploadPayload.empty()) {
+    doc["ok"] = false;
+    doc["error"] = "empty_payload";
+    sendJson(doc, 400);
+    return;
+  }
+  if (transferIsBusy()) {
+    doc["ok"] = false;
+    doc["error"] = "gateway_busy";
+    sendJson(doc, 409);
+    return;
+  }
+
+  String jobId = uploadJobId.length() ? uploadJobId : String(millis(), HEX) + "-" + String(++transferSequence, HEX);
+  size_t payloadBytes = uploadPayload.size();
+  xSemaphoreTake(transferMutex, portMAX_DELAY);
+  queuedPayload.swap(uploadPayload);
+  transferJob.id = jobId;
+  transferJob.address = uploadAddress;
+  transferJob.status = "queued";
+  transferJob.error = "";
+  transferJob.log.clear();
+  transferJob.createdMs = millis();
+  transferJob.updatedMs = transferJob.createdMs;
+  xSemaphoreGive(transferMutex);
+
+  doc["ok"] = true;
+  doc["job_id"] = jobId;
+  doc["status"] = "queued";
+  doc["payload_bytes"] = payloadBytes;
+  doc["transport"] = "multipart_binary";
+  doc["free_heap"] = ESP.getFreeHeap();
+  doc["largest_free_block"] = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  sendJson(doc, 202);
+}
+
 void handleTransferStatus() {
   JsonDocument doc;
   String requestedId = server.arg("id");
@@ -731,7 +838,7 @@ void handleRoot() {
   body += "<label>Hostname<input name='hostname' value='" + hostname + "'></label><label>SSID<input name='ssid'></label><label>Heslo<input name='password' type='password'></label>";
   body += "<label>Static IP<input name='ip' placeholder='prazdne = DHCP'></label><label>Gateway<input name='gateway' placeholder='192.168.1.1'></label><label>Subnet<input name='subnet' placeholder='255.255.255.0'></label><label>DNS<input name='dns' placeholder='192.168.1.1'></label>";
   body += "</div><button>Ulozit a restartovat</button></form></section><section><h2>API</h2><p><code>/api/status</code>, <code>/api/scan?seconds=8</code>, <code>/api/send</code>, <code>/api/config</code></p></section>";
-  body += "<p>Transfer API: <code>POST /api/transfer/start?address=XX:XX:XX:XX:XX:XX</code> and <code>GET /api/transfer/status?id=...</code></p>";
+  body += "<p>Transfer API: <code>POST multipart /api/transfer/upload?address=XX:XX:XX:XX:XX:XX</code> and <code>GET /api/transfer/status?id=...</code></p>";
   body += "</main></body></html>";
   server.send(200, "text/html; charset=utf-8", body);
 }
@@ -1015,6 +1122,7 @@ void setup() {
   server.on("/api/send-bin", HTTP_POST, handleSendBinary);
   server.on("/api/send-b64", HTTP_POST, handleSendBase64);
   server.on("/api/transfer/start", HTTP_POST, handleTransferStart);
+  server.on("/api/transfer/upload", HTTP_POST, handleTransferUploadComplete, handleTransferUploadChunk);
   server.on("/api/transfer/status", HTTP_GET, handleTransferStatus);
   server.on("/api/config", HTTP_GET, handleConfig);
   server.on("/api/config", HTTP_POST, handleConfig);

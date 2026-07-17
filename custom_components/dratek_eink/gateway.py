@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 from pathlib import Path
 import socket
@@ -12,6 +11,7 @@ import uuid
 from typing import Any
 from urllib.parse import quote
 
+from aiohttp import FormData
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
@@ -220,22 +220,27 @@ async def async_send_gateway_payload(
         payload = await hass.async_add_executor_job(pack_bwr_image, sdk_type, image, transform)
         add_log(f"Payload size: {len(payload)} bytes.")
         session = async_get_clientsession(hass)
-        encoded = base64.b64encode(payload).decode("ascii")
         base_url = _gateway_send_base_url(gateway)
         request_id = uuid.uuid4().hex[:16]
         start_url = (
-            f"{base_url}/api/transfer/start?address={quote(address, safe='')}"
+            f"{base_url}/api/transfer/upload?address={quote(address, safe='')}"
             f"&id={request_id}"
         )
-        add_log(f"Uploading transfer job to gateway {base_url.removeprefix('http://')}.")
+        add_log(f"Streaming binary transfer job to gateway {base_url.removeprefix('http://')}.")
         data: dict[str, Any] = {}
         upload_error = ""
         for attempt in range(1, 3):
             try:
+                form = FormData()
+                form.add_field(
+                    "payload",
+                    payload,
+                    filename="display.bin",
+                    content_type="application/octet-stream",
+                )
                 async with session.post(
                     start_url,
-                    data=encoded,
-                    headers={"Content-Type": "text/plain"},
+                    data=form,
                     timeout=30,
                 ) as response:
                     data = await response.json(content_type=None)
@@ -244,7 +249,7 @@ async def async_send_gateway_payload(
                             "ok": False,
                             "error": "gateway_firmware_update_required",
                             "log": log
-                            + ["Gateway firmware 0.1.30 or newer is required. Reflash the ESP32 gateway."],
+                            + ["Gateway firmware 0.1.33 or newer is required. Reflash the ESP32 gateway."],
                             "raw": data,
                         }
                     if response.status >= 400 or not data.get("job_id"):

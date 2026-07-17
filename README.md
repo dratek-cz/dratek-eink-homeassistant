@@ -1,5 +1,13 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.33
+
+- obraz se do gatewaye nahrava jako streamovany binarni multipart misto base64 textu
+- ESP32 uz pri uploadu nedrzi velkou textovou a dekodovanou kopii stejneho obrazku
+- upload se zpracovava po blocich a ma ochranu proti prilis velkemu payloadu
+- retry pouziva stejne ID ulohy a nemuze omylem spustit duplicitni BLE prenos
+- oprava cilí na `Connection reset by peer` pri nahravani prenosove ulohy
+
 ## Novinky ve verzi 0.1.32
 
 - BLE se inicializuje az pri prvnim BLE scanu nebo prenosu, ne pred spustenim sitovych sluzeb
