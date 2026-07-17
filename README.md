@@ -1,5 +1,14 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.39
+
+- kompletne prepracovana webova administrace gatewaye na portu 80
+- prehledny dashboard pro Wi-Fi, BLE, pamet, firmware, prenosy, mDNS a OTA
+- BLE scan lze spustit primo z webu a vysledky se zobrazuji v tabulce se silou signalu
+- sitove nastaveni je oddelene, podporuje DHCP i statickou IP a pouziva JSON API
+- stranka je responzivni, funguje bez internetu a nacita se primo z flash pameti
+- odstraneno stare formulare API `/config-form`
+
 ## Novinky ve verzi 0.1.38
 
 - pridana aktualizace firmware gatewaye pres sit primo z Home Assistantu

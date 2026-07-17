@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.38-gateway";
+static const char* FIRMWARE_VERSION = "0.1.39-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -752,18 +752,53 @@ void startQueuedTransfer() {
   xSemaphoreGive(transferMutex);
 }
 
+static const char ADMIN_PAGE[] PROGMEM = R"HTML(<!doctype html>
+<html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DRATEK eInk Gateway</title>
+<style>
+:root{color-scheme:light;--bg:#f3f5f7;--surface:#fff;--text:#17202a;--muted:#66717d;--line:#dfe4e8;--brand:#d71920;--dark:#20262d;--green:#16834b;--amber:#b46a00;--red:#b42318;--shadow:0 10px 28px rgba(20,28,38,.08)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 Arial,sans-serif}button,input{font:inherit}button{min-height:40px;border:0;border-radius:7px;padding:9px 14px;background:var(--dark);color:#fff;font-weight:700;cursor:pointer}button:hover:not(:disabled){background:#0d1117}button:disabled{opacity:.5;cursor:not-allowed}.secondary{background:#fff;color:var(--text);border:1px solid var(--line)}.danger{background:var(--brand)}
+.shell{max-width:1180px;margin:auto;padding:20px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}.brand{display:flex;align-items:center;gap:12px}.mark{width:44px;height:44px;border-radius:8px;background:var(--brand);display:grid;place-items:center;color:#fff;font-size:18px;font-weight:900}.brand h1{font-size:21px;margin:0}.brand p{margin:2px 0 0;color:var(--muted);font-size:12px}.actions{display:flex;align-items:center;gap:8px}.online{display:inline-flex;align-items:center;gap:7px;font-weight:700}.dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(22,131,75,.12)}
+.notice{display:none;margin-bottom:14px;border:1px solid #efb5b5;background:#fff0f0;color:var(--red);padding:11px 13px;border-radius:7px}.notice.show{display:block}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}.metric{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:15px;box-shadow:var(--shadow);min-width:0}.metric-label{font-size:11px;text-transform:uppercase;font-weight:800;color:var(--muted);margin-bottom:8px}.metric-value{font-size:20px;font-weight:800;overflow-wrap:anywhere}.metric-sub{font-size:12px;color:var(--muted);margin-top:4px}
+.grid{display:grid;grid-template-columns:1.25fr .75fr;gap:14px}.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;box-shadow:var(--shadow);margin-bottom:14px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.panel h2{font-size:15px;margin:0}.panel p{color:var(--muted)}.badges{display:flex;flex-wrap:wrap;gap:7px}.badge{display:inline-flex;align-items:center;min-height:27px;padding:4px 9px;border-radius:999px;background:#eef1f4;color:#43505c;font-size:12px;font-weight:700}.badge.good{background:#e3f5eb;color:#11663c}.badge.warn{background:#fff1d9;color:#865000}
+.operation{display:grid;grid-template-columns:1fr 1fr;gap:10px}.operation-item{border-left:3px solid var(--line);padding:7px 10px}.operation-item strong{display:block;margin-bottom:3px}.operation-item span{color:var(--muted);font-size:12px}.scan-empty{padding:28px 12px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:7px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px 7px;border-bottom:1px solid var(--line)}th{font-size:10px;text-transform:uppercase;color:var(--muted)}.signal{font-weight:800}.signal.good{color:var(--green)}.signal.warn{color:var(--amber)}.signal.bad{color:var(--red)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:grid;gap:5px}.field.full{grid-column:1/-1}.field label{font-size:12px;font-weight:700;color:#394550}.field input{width:100%;min-height:40px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;background:#fff;color:var(--text)}.field input:focus{outline:2px solid rgba(215,25,32,.16);border-color:var(--brand)}.check{display:flex;align-items:center;gap:8px}.check input{width:17px;height:17px}.form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}.static-fields.hidden{display:none}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:8px 15px;margin:0}.facts dt{color:var(--muted)}.facts dd{margin:0;text-align:right;font-weight:700;overflow-wrap:anywhere}details{border-top:1px solid var(--line);margin-top:14px;padding-top:12px}summary{cursor:pointer;font-weight:700}.footer{display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-size:11px;padding:3px 2px 20px}.spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:850px){.metrics{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}}@media(max-width:520px){.shell{padding:12px}.topbar{align-items:flex-start}.actions .online{display:none}.metrics,.form-grid,.operation{grid-template-columns:1fr}.field.full{grid-column:auto}.panel-head{align-items:flex-start;flex-direction:column}.footer{flex-direction:column}}
+</style></head>
+<body><main class="shell">
+<header class="topbar"><div class="brand"><div class="mark">DE</div><div><h1>DRATEK eInk Gateway</h1><p id="identity">Nacitam identitu zarizeni...</p></div></div><div class="actions"><span class="online"><i class="dot"></i><span id="onlineText">Online</span></span><button id="refresh" class="secondary" type="button">Obnovit</button></div></header>
+<div id="notice" class="notice"></div>
+<section class="metrics">
+<article class="metric"><div class="metric-label">Sit</div><div id="ip" class="metric-value">-</div><div id="wifi" class="metric-sub">Wi-Fi se nacita</div></article>
+<article class="metric"><div class="metric-label">Bluetooth LE</div><div id="ble" class="metric-value">-</div><div id="scanCount" class="metric-sub">Posledni scan: -</div></article>
+<article class="metric"><div class="metric-label">Volna pamet</div><div id="heap" class="metric-value">-</div><div id="heapBlock" class="metric-sub">Nejvetsi blok: -</div></article>
+<article class="metric"><div class="metric-label">Firmware</div><div id="firmware" class="metric-value">-</div><div id="chip" class="metric-sub">-</div></article>
+</section>
+<div class="grid"><div>
+<section class="panel"><div class="panel-head"><div><h2>Provozni stav</h2><p>Aktualni cinnost gatewaye a pripravenost sluzeb.</p></div><div class="badges"><span id="mdnsBadge" class="badge">mDNS</span><span id="otaBadge" class="badge">OTA</span></div></div><div class="operation"><div class="operation-item"><strong>Prenos do displeje</strong><span id="transfer">-</span></div><div class="operation-item"><strong>Aktualizace gatewaye</strong><span id="otaStatus">-</span></div></div></section>
+<section class="panel"><div class="panel-head"><div><h2>BLE zarizeni v dosahu</h2><p>Aktivni scan trva osm sekund a docasne pozastavi ostatni BLE operace.</p></div><button id="scan" type="button">Spustit BLE scan</button></div><div id="scanResult" class="scan-empty">Scan zatim nebyl spusten.</div></section>
+</div><aside>
+<section class="panel"><div class="panel-head"><div><h2>Sitove nastaveni</h2><p>Zmena konfigurace vyvola restart gatewaye.</p></div></div><form id="networkForm"><div class="form-grid"><div class="field full"><label for="hostname">Nazev gatewaye</label><input id="hostname" maxlength="63" autocomplete="off"></div><div class="field"><label for="ssid">Wi-Fi SSID</label><input id="ssid" autocomplete="off"></div><div class="field"><label for="password">Nove heslo</label><input id="password" type="password" placeholder="Prazdne = beze zmeny"></div><div class="field full"><label class="check"><input id="dhcp" type="checkbox">Pouzit automatickou adresu DHCP</label></div></div><div id="staticFields" class="static-fields"><div class="form-grid"><div class="field"><label for="staticIp">IP adresa</label><input id="staticIp" placeholder="192.168.1.180"></div><div class="field"><label for="gateway">Vychozi brana</label><input id="gateway" placeholder="192.168.1.1"></div><div class="field"><label for="subnet">Maska site</label><input id="subnet" placeholder="255.255.255.0"></div><div class="field"><label for="dns">DNS server</label><input id="dns" placeholder="192.168.1.1"></div></div></div><div class="form-actions"><button id="saveNetwork" class="danger" type="submit">Ulozit a restartovat</button></div></form></section>
+<section class="panel"><div class="panel-head"><div><h2>Diagnostika</h2><p>Technicke informace pro kontrolu provozu.</p></div></div><dl class="facts"><dt>Doba behu</dt><dd id="uptime">-</dd><dt>MAC</dt><dd id="mac">-</dd><dt>Posledni restart</dt><dd id="reset">-</dd><dt>Velikost firmware</dt><dd id="firmwareSize">-</dd><dt>OTA oddil</dt><dd id="otaSize">-</dd></dl><details><summary>API rozhrani</summary><p><code>GET /api/status</code><br><code>GET /api/scan?seconds=8</code><br><code>GET/POST /api/config</code></p></details></section>
+</aside></div>
+<footer class="footer"><span>DRATEK eInk Gateway</span><span>Stav se automaticky obnovuje kazdych 10 sekund.</span></footer>
+</main>
+<script>
+const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const bytes=n=>{n=Number(n)||0;return n>=1048576?(n/1048576).toFixed(1)+' MB':Math.round(n/1024)+' kB'},uptime=ms=>{let s=Math.floor((Number(ms)||0)/1000),d=Math.floor(s/86400);s%=86400;let h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return(d?d+' d ':'')+h+' h '+m+' min'};
+function notice(text){$('notice').textContent=text||'';$('notice').classList.toggle('show',!!text)}
+async function loadStatus(){try{const r=await fetch('/api/status',{cache:'no-store'}),s=await r.json();if(!r.ok)throw Error(s.error||'Status neni dostupny');notice('');$('onlineText').textContent='Online';$('identity').textContent=s.hostname+' | '+s.gateway_id;$('ip').textContent=s.ip||'-';$('wifi').textContent='RSSI '+s.wifi_rssi+' dBm | '+(s.dhcp?'DHCP':'Staticka IP');$('ble').textContent=s.ble_initialized?'Aktivni':'Priprava';$('scanCount').textContent='Posledni scan: '+s.last_scan_devices+' DRATEK';$('heap').textContent=bytes(s.free_heap);$('heapBlock').textContent='Nejvetsi blok: '+bytes(s.largest_free_block);$('firmware').textContent=s.firmware;$('chip').textContent=String(s.chip||'').toUpperCase();$('transfer').textContent=s.transfer_status||'idle';$('otaStatus').textContent=s.ota_status||'idle';$('mdnsBadge').className='badge '+(s.mdns_started?'good':'warn');$('mdnsBadge').textContent='mDNS '+(s.mdns_started?'aktivni':'neaktivni');$('otaBadge').className='badge '+(s.ota_supported?'good':'warn');$('otaBadge').textContent='OTA '+(s.ota_supported?'pripraveno':'nedostupne');$('uptime').textContent=uptime(s.uptime_ms);$('mac').textContent=s.mac||'-';$('reset').textContent=s.reset_reason||'-';$('firmwareSize').textContent=bytes(s.firmware_size);$('otaSize').textContent=bytes(s.update_partition_size)}catch(e){$('onlineText').textContent='Nedostupna';notice('Stav gatewaye se nepodarilo nacist: '+e.message)}}
+async function loadConfig(){try{const r=await fetch('/api/config',{cache:'no-store'}),c=await r.json();$('hostname').value=c.hostname||'';$('ssid').value=c.ssid||'';$('dhcp').checked=c.dhcp!==false;$('staticIp').value=c.ip||'';$('gateway').value=c.gateway||'';$('subnet').value=c.subnet||'';$('dns').value=c.dns||'';toggleStatic()}catch(e){notice('Sitovou konfiguraci se nepodarilo nacist: '+e.message)}}
+function toggleStatic(){$('staticFields').classList.toggle('hidden',$('dhcp').checked)}
+$('refresh').onclick=loadStatus;$('dhcp').onchange=toggleStatic;
+$('scan').onclick=async()=>{const b=$('scan');b.disabled=true;b.innerHTML='<span class="spinner"></span> Skenuji';$('scanResult').className='scan-empty';$('scanResult').textContent='Probiha BLE scan...';try{const r=await fetch('/api/scan?seconds=8'),j=await r.json();if(!r.ok)throw Error(j.error||'Scan selhal');const list=j.devices||[];if(!list.length){$('scanResult').textContent='V dosahu nebylo nalezeno zadne BLE zarizeni.'}else{$('scanResult').className='';$('scanResult').innerHTML='<table><thead><tr><th>Zarizeni</th><th>Adresa</th><th>Signal</th><th>Typ</th></tr></thead><tbody>'+list.sort((a,b)=>b.rssi-a.rssi).map(d=>{const c=d.rssi>-65?'good':d.rssi>-80?'warn':'bad';return'<tr><td>'+esc(d.name||'Bez nazvu')+'</td><td>'+esc(d.address)+'</td><td class="signal '+c+'">'+esc(d.rssi)+' dBm</td><td>'+(d.dratek?'<span class="badge good">DRATEK eInk</span>':'BLE')+'</td></tr>'}).join('')+'</tbody></table>'}}catch(e){$('scanResult').textContent='Scan selhal: '+e.message}finally{b.disabled=false;b.textContent='Spustit BLE scan';loadStatus()}};
+$('networkForm').onsubmit=async e=>{e.preventDefault();if(!confirm('Ulozit sitove nastaveni a restartovat gateway?'))return;const b=$('saveNetwork');b.disabled=true;b.innerHTML='<span class="spinner"></span> Ukladam';const data={hostname:$('hostname').value.trim(),ssid:$('ssid').value.trim(),password:$('password').value,ip:$('dhcp').checked?'':$('staticIp').value.trim(),gateway:$('gateway').value.trim(),subnet:$('subnet').value.trim(),dns:$('dns').value.trim()};try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),j=await r.json();if(!r.ok)throw Error(j.error||'Ulozeni selhalo');notice('Nastaveni bylo ulozeno. Gateway se restartuje...')}catch(e){notice('Nastaveni se nepodarilo ulozit: '+e.message);b.disabled=false;b.textContent='Ulozit a restartovat'}};
+loadStatus();loadConfig();setInterval(loadStatus,10000);
+</script></body></html>)HTML";
+
 void handleRoot() {
-  String body = "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>";
-  body += "<title>DRATEK eInk gateway</title><style>body{font-family:Arial,sans-serif;margin:24px;line-height:1.4;background:#f6f7f9;color:#111}main{max-width:980px;margin:auto}section{background:#fff;border:1px solid #ddd;border-radius:8px;padding:16px;margin:12px 0}input,button{font:inherit;padding:9px;margin:4px 0;width:100%;box-sizing:border-box}button{background:#111827;color:#fff;border:0;border-radius:6px;cursor:pointer}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.pill{display:inline-block;background:#eef2ff;border-radius:999px;padding:5px 10px;margin:3px}</style></head><body><main>";
-  body += "<h1>DRATEK eInk gateway</h1><section><h2>Status</h2>";
-  body += "<span class='pill'>FW " + String(FIRMWARE_VERSION) + "</span><span class='pill'>IP " + WiFi.localIP().toString() + "</span><span class='pill'>RSSI " + String(WiFi.RSSI()) + "</span><span class='pill'>MAC " + WiFi.macAddress() + "</span>";
-  body += "</section><section><h2>Nastaveni site</h2><form method='post' action='/config-form'><div class='grid'>";
-  body += "<label>Hostname<input name='hostname' value='" + hostname + "'></label><label>SSID<input name='ssid'></label><label>Heslo<input name='password' type='password'></label>";
-  body += "<label>Static IP<input name='ip' placeholder='prazdne = DHCP'></label><label>Gateway<input name='gateway' placeholder='192.168.1.1'></label><label>Subnet<input name='subnet' placeholder='255.255.255.0'></label><label>DNS<input name='dns' placeholder='192.168.1.1'></label>";
-  body += "</div><button>Ulozit a restartovat</button></form></section><section><h2>API</h2><p><code>/api/status</code>, <code>/api/scan?seconds=8</code>, <code>/api/config</code></p></section>";
-  body += "<p>Transfer API: <code>POST multipart /api/transfer/upload?address=XX:XX:XX:XX:XX:XX</code> and <code>GET /api/transfer/status?id=...</code></p>";
-  body += "</main></body></html>";
-  server.send(200, "text/html; charset=utf-8", body);
+  server.send_P(200, "text/html; charset=utf-8", ADMIN_PAGE);
 }
 
 IPAddress parseIp(const String& value, const IPAddress& fallback) {
@@ -823,21 +858,6 @@ void handleConfig() {
   doc["ok"] = true;
   doc["message"] = "config_saved_restarting";
   sendJson(doc);
-  delay(500);
-  ESP.restart();
-}
-
-void handleConfigForm() {
-  saveNetworkConfig(
-    server.arg("ssid"),
-    server.arg("password"),
-    server.arg("hostname"),
-    server.arg("ip"),
-    server.arg("gateway"),
-    server.arg("subnet"),
-    server.arg("dns")
-  );
-  server.send(200, "text/plain; charset=utf-8", "Ulozeno. Gateway se restartuje.");
   delay(500);
   ESP.restart();
 }
@@ -1053,7 +1073,6 @@ void setup() {
   server.on("/api/config", HTTP_GET, handleConfig);
   server.on("/api/config", HTTP_POST, handleConfig);
   server.on("/", HTTP_GET, handleRoot);
-  server.on("/config-form", HTTP_POST, handleConfigForm);
   server.onNotFound([]() {
     JsonDocument doc;
     doc["ok"] = false;
