@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 import socket
@@ -25,6 +26,7 @@ DEFAULT_TIMEOUT = 8
 DISCOVERY_SERVICE = "_dratek-eink-gateway._tcp.local."
 FIRMWARE_DIR = Path(__file__).parent / "firmware"
 FLASH_JOBS_KEY = "dratek_eink_flash_jobs"
+OTA_JOBS_KEY = "dratek_eink_ota_jobs"
 FLASH_PROFILES = {
     "esp32": {
         "label": "ESP32 / ESP32-WROOM",
@@ -137,6 +139,7 @@ async def async_gateway_status(hass: HomeAssistant, gateway: dict[str, Any]) -> 
         "checked_at": int(time.time()),
         "gateway_id": payload.get("gateway_id"),
         "firmware": payload.get("firmware"),
+        "chip": payload.get("chip"),
         "ip": payload.get("ip"),
         "mac": payload.get("mac"),
         "wifi_rssi": payload.get("wifi_rssi"),
@@ -149,6 +152,15 @@ async def async_gateway_status(hass: HomeAssistant, gateway: dict[str, Any]) -> 
         "ble_initialized": payload.get("ble_initialized"),
         "transfer_status": payload.get("transfer_status"),
         "transfer_job_id": payload.get("transfer_job_id"),
+        "ota_supported": payload.get("ota_supported"),
+        "ota_status": payload.get("ota_status"),
+        "ota_error": payload.get("ota_error"),
+        "ota_bytes_written": payload.get("ota_bytes_written"),
+        "ota_expected_size": payload.get("ota_expected_size"),
+        "firmware_size": payload.get("firmware_size"),
+        "flash_size": payload.get("flash_size"),
+        "running_partition_size": payload.get("running_partition_size"),
+        "update_partition_size": payload.get("update_partition_size"),
     }
 
 
@@ -171,6 +183,127 @@ async def async_refresh_all_gateways(hass: HomeAssistant) -> list[dict[str, Any]
         gateway["updated_at"] = int(time.time())
     await async_save_gateways(hass, gateways)
     return gateways
+
+
+async def async_start_gateway_ota(
+    hass: HomeAssistant,
+    gateway_id: str,
+    expected_version: str,
+) -> dict[str, Any] | None:
+    gateways = await async_load_gateways(hass)
+    gateway = next((item for item in gateways if item.get("id") == gateway_id), None)
+    if not gateway:
+        return None
+
+    jobs = hass.data.setdefault(OTA_JOBS_KEY, {})
+    job_id = uuid.uuid4().hex
+    job: dict[str, Any] = {
+        "job_id": job_id,
+        "gateway_id": gateway_id,
+        "status": "queued",
+        "progress": 0,
+        "ok": None,
+        "error": "",
+        "log": ["OTA update queued."],
+        "created_at": int(time.time()),
+        "updated_at": int(time.time()),
+    }
+    jobs[job_id] = job
+
+    def update(status: str, progress: int, message: str = "") -> None:
+        job["status"] = status
+        job["progress"] = progress
+        job["updated_at"] = int(time.time())
+        if message:
+            job["log"].append(message)
+
+    async def runner() -> None:
+        try:
+            update("preparing", 5, "Reading gateway status and selecting the correct firmware image.")
+            status = await async_gateway_status(hass, gateway)
+            if not status.get("ok"):
+                raise RuntimeError(status.get("message") or "Gateway is offline.")
+            if not status.get("ota_supported"):
+                raise RuntimeError("Gateway firmware does not support OTA yet. Flash version 0.1.38 once over USB.")
+
+            chip = str(status.get("chip") or "")
+            profile = FLASH_PROFILES.get(chip)
+            if not profile:
+                raise RuntimeError(f"Unsupported or unknown gateway chip: {chip or 'unknown'}")
+            firmware_path = profile["files"]["app"][1]
+            if not firmware_path.exists():
+                raise RuntimeError(f"Bundled OTA image is missing: {firmware_path.name}")
+
+            firmware = await hass.async_add_executor_job(firmware_path.read_bytes)
+            firmware_md5 = hashlib.md5(firmware, usedforsecurity=False).hexdigest()
+            partition_size = int(status.get("update_partition_size") or 0)
+            if partition_size and len(firmware) > partition_size:
+                raise RuntimeError(
+                    f"Firmware has {len(firmware)} bytes but the OTA partition has only {partition_size} bytes."
+                )
+            job["chip"] = chip
+            job["firmware_size"] = len(firmware)
+            job["target_version"] = expected_version
+            update(
+                "uploading",
+                20,
+                f"Uploading {firmware_path.name} ({len(firmware)} bytes, MD5 {firmware_md5}).",
+            )
+
+            gateway_with_status = dict(gateway)
+            gateway_with_status["status"] = status
+            base_url = _gateway_send_base_url(gateway_with_status)
+            poll_gateway = dict(gateway)
+            if status.get("ip"):
+                poll_gateway["host"] = status["ip"]
+            session = async_get_clientsession(hass)
+            form = FormData()
+            form.add_field(
+                "firmware",
+                firmware,
+                filename=firmware_path.name,
+                content_type="application/octet-stream",
+            )
+            upload_url = f"{base_url}/api/ota/upload?size={len(firmware)}&md5={firmware_md5}"
+            async with session.post(upload_url, data=form, timeout=120) as response:
+                result = await response.json(content_type=None)
+                if response.status >= 400 or not result.get("ok"):
+                    raise RuntimeError(result.get("error") or f"Gateway returned HTTP {response.status}.")
+
+            update("restarting", 80, "Firmware verified by gateway. Waiting for restart and version check.")
+            await asyncio.sleep(3)
+            deadline = time.monotonic() + 75
+            last_error = ""
+            while time.monotonic() < deadline:
+                await asyncio.sleep(2)
+                refreshed = await async_gateway_status(hass, poll_gateway)
+                if refreshed.get("ok"):
+                    reported_version = str(refreshed.get("firmware") or "")
+                    if reported_version == expected_version:
+                        gateway["status"] = refreshed
+                        gateway["updated_at"] = int(time.time())
+                        await async_save_gateways(hass, gateways)
+                        job["reported_version"] = reported_version
+                        job["ok"] = True
+                        job["completed_at"] = int(time.time())
+                        update("done", 100, f"Gateway is online with firmware {reported_version}.")
+                        return
+                    last_error = f"Gateway came back with unexpected firmware {reported_version or 'unknown'}."
+                else:
+                    last_error = str(refreshed.get("message") or "Gateway is restarting.")
+
+            raise RuntimeError(last_error or "Gateway did not return after OTA update.")
+        except Exception as exc:
+            job["ok"] = False
+            job["error"] = str(exc)
+            update("failed", int(job.get("progress") or 0), f"OTA update failed: {exc}")
+
+    hass.async_create_task(runner())
+    return job
+
+
+def async_get_gateway_ota_job(hass: HomeAssistant, job_id: str) -> dict[str, Any] | None:
+    return hass.data.setdefault(OTA_JOBS_KEY, {}).get(job_id)
 
 
 async def async_scan_gateway(hass: HomeAssistant, gateway_id: str, seconds: int = 8) -> dict[str, Any] | None:
@@ -360,6 +493,8 @@ def _discover_gateways_sync(seconds: int) -> list[dict[str, Any]]:
                 "port": info.port,
                 "gateway_id": properties.get("id", ""),
                 "firmware": properties.get("fw", ""),
+                "chip": properties.get("chip", ""),
+                "ota_supported": properties.get("ota", "") == "1",
                 "server": info.server.rstrip("."),
             }
 
@@ -512,6 +647,35 @@ def _flash_gateway_sync(
         esptool_cmd.extend([hex(offset), str(path)])
     add_log(f"Flashing {profile['label']} firmware...")
     try:
+        erase_cmd = [
+            sys.executable,
+            "-m",
+            "esptool",
+            "--chip",
+            profile["chip"],
+            "--port",
+            port,
+            "--baud",
+            "460800",
+            "erase_region",
+            "0xe000",
+            "0x2000",
+        ]
+        add_log("Resetting OTA boot metadata while preserving Wi-Fi configuration.")
+        erase_proc = subprocess.run(
+            erase_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=45,
+            check=False,
+        )
+        for line in erase_proc.stdout.splitlines():
+            if line.strip():
+                add_log(line.strip())
+        if erase_proc.returncode != 0:
+            raise RuntimeError(f"OTA metadata erase failed with exit code {erase_proc.returncode}")
+
         proc = subprocess.Popen(
             esptool_cmd,
             stdout=subprocess.PIPE,

@@ -1,5 +1,16 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.38
+
+- pridana aktualizace firmware gatewaye pres sit primo z Home Assistantu
+- HA automaticky rozpozna ESP32 nebo ESP32-S3, nahraje spravny firmware a po restartu overi jeho verzi
+- OTA zapis je streamovany, kontrolovany pomoci MD5 a behem aktualizace je BLE prenos uzamceny
+- nove partition tabulky odstranuji nepouzivany SPIFFS a zvetsuji oba OTA sloty
+- ESP32 ma nyni dva aplikacni sloty po 1,875 MB; ESP32-S3 dva sloty po 3,875 MB
+- odstranena stara duplicitni prenosova API; aktualni multipart prenos do eInk zustava zachovan
+
+> **Dulezite:** verzi 0.1.38 je nutne nahrat do kazde gatewaye jeste jednou pres USB. Tim se zapise nova partition tabulka a aktivuje OTA. Vsechny dalsi aktualizace uz lze instalovat tlacitkem v karte gatewaye.
+
 ## Novinky ve verzi 0.1.37
 
 - Přenos obrazových bloků nyní přesněji kopíruje původní SDK: každý blok čeká na potvrzení GATT zápisu, nikoli na notifikaci displeje.

@@ -10,13 +10,11 @@ Aktualni stav:
 - zakladni detekce DRATEK eInk reklam podle manufacturer id `0x5053`
 - mDNS discovery sluzba `_dratek-eink-gateway._tcp.local`
 - ulozeni Wi-Fi konfigurace do ESP32 NVS pameti pres USB serial
-
-Pripravene dalsi kroky:
-
-- endpoint `POST /api/send` pro prenos bitmapy do konkretni cenovky
-- retry logika BLE prenosu
-- OTA update
-- automaticke flashovani z Home Assistant panelu
+- asynchronni BLE prenos bitmapy pres `POST /api/transfer/upload`
+- stav prenosove ulohy pres `GET /api/transfer/status`
+- streamovana OTA aktualizace pres `POST /api/ota/upload`
+- automaticke USB flashovani i OTA aktualizace z Home Assistant panelu
+- dva OTA aplikacni sloty bez nepouzivaneho SPIFFS
 
 ## Nastaveni Wi-Fi
 

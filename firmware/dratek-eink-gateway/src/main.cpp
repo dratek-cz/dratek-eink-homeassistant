@@ -3,14 +3,20 @@
 #include <ESPmDNS.h>
 #include <NimBLEDevice.h>
 #include <Preferences.h>
+#include <Update.h>
 #include <WebServer.h>
 #include <WiFi.h>
 #include <esp_heap_caps.h>
+#include <esp_ota_ops.h>
 #include <esp_system.h>
-#include <mbedtls/base64.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.37-gateway";
+static const char* FIRMWARE_VERSION = "0.1.38-gateway";
+#if CONFIG_IDF_TARGET_ESP32S3
+static const char* CHIP_FAMILY = "esp32s3";
+#else
+static const char* CHIP_FAMILY = "esp32";
+#endif
 static const size_t MAX_TRANSFER_LOG_LINES = 80;
 static const size_t MAX_UPLOAD_PAYLOAD_BYTES = 128UL * 1024UL;
 static const uint32_t MDNS_REFRESH_INTERVAL_MS = 5UL * 60UL * 1000UL;
@@ -56,21 +62,17 @@ bool wifiWasConnected = false;
 bool bleInitialized = false;
 uint32_t lastMdnsStartMs = 0;
 uint32_t lastWifiReconnectMs = 0;
+bool otaInProgress = false;
+String otaStatus = "idle";
+String otaError;
+size_t otaBytesWritten = 0;
+size_t otaExpectedSize = 0;
+uint32_t otaRestartAtMs = 0;
 
 class TransferLogSink {
  public:
   virtual void add(const String& line) = 0;
   virtual ~TransferLogSink() = default;
-};
-
-class LocalTransferLog : public TransferLogSink {
- public:
-  std::vector<String> lines;
-
-  void add(const String& line) override {
-    if (lines.size() >= MAX_TRANSFER_LOG_LINES) lines.erase(lines.begin());
-    lines.push_back(line);
-  }
 };
 
 class JobTransferLog : public TransferLogSink {
@@ -130,14 +132,8 @@ bool transferIsBusy() {
   return busy;
 }
 
-bool rejectIfTransferBusy() {
-  if (!transferIsBusy()) return false;
-  JsonDocument doc;
-  doc["ok"] = false;
-  doc["error"] = "gateway_busy";
-  doc["message"] = "A display transfer is currently running.";
-  sendJson(doc, 409);
-  return true;
+bool gatewayOperationBusy() {
+  return transferIsBusy() || otaInProgress || otaRestartAtMs != 0;
 }
 
 void ensureBleInitialized() {
@@ -146,11 +142,6 @@ void ensureBleInitialized() {
   NimBLEDevice::init("");
   bleInitialized = true;
   Serial.println("BLE initialized.");
-}
-
-void appendLocalLog(JsonDocument& doc, const LocalTransferLog& source) {
-  JsonArray target = doc["log"].to<JsonArray>();
-  for (const String& line : source.lines) target.add(line);
 }
 
 void handleStatus() {
@@ -164,6 +155,7 @@ void handleStatus() {
   doc["gateway_id"] = gatewayId;
   doc["hostname"] = hostname;
   doc["firmware"] = FIRMWARE_VERSION;
+  doc["chip"] = CHIP_FAMILY;
   doc["ip"] = WiFi.localIP().toString();
   doc["mac"] = WiFi.macAddress();
   doc["wifi_rssi"] = WiFi.RSSI();
@@ -183,6 +175,17 @@ void handleStatus() {
   doc["dhcp"] = dhcp;
   doc["static_ip"] = staticIp;
   doc["last_scan_devices"] = lastScanDevices.size();
+  const esp_partition_t* runningPartition = esp_ota_get_running_partition();
+  const esp_partition_t* updatePartition = esp_ota_get_next_update_partition(nullptr);
+  doc["ota_supported"] = updatePartition != nullptr;
+  doc["ota_status"] = otaStatus;
+  doc["ota_error"] = otaError;
+  doc["ota_bytes_written"] = otaBytesWritten;
+  doc["ota_expected_size"] = otaExpectedSize;
+  doc["firmware_size"] = ESP.getSketchSize();
+  doc["flash_size"] = ESP.getFlashChipSize();
+  doc["running_partition_size"] = runningPartition ? runningPartition->size : 0;
+  doc["update_partition_size"] = updatePartition ? updatePartition->size : 0;
   sendJson(doc);
 }
 
@@ -194,7 +197,7 @@ bool hasDratekManufacturer(NimBLEAdvertisedDevice* device) {
 }
 
 void handleScan() {
-  if (transferIsBusy()) {
+  if (gatewayOperationBusy()) {
     JsonDocument doc;
     doc["ok"] = false;
     doc["error"] = "gateway_busy";
@@ -273,18 +276,6 @@ bool waitForPacket(uint8_t prefix, std::vector<uint8_t>& out, uint32_t timeoutMs
     delay(20);
   }
   return false;
-}
-
-bool decodeBase64(const String& input, std::vector<uint8_t>& output) {
-  size_t required = 0;
-  int check = mbedtls_base64_decode(nullptr, 0, &required, (const unsigned char*)input.c_str(), input.length());
-  if (check != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL || required == 0) return false;
-  output.resize(required);
-  size_t written = 0;
-  int result = mbedtls_base64_decode(output.data(), output.size(), &written, (const unsigned char*)input.c_str(), input.length());
-  if (result != 0) return false;
-  output.resize(written);
-  return true;
 }
 
 void addLog(TransferLogSink& log, const String& line) {
@@ -486,182 +477,96 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
   return true;
 }
 
-void handleSend() {
-  if (rejectIfTransferBusy()) return;
-  JsonDocument doc;
-  LocalTransferLog log;
-  if (!server.hasArg("plain")) {
-    doc["ok"] = false;
-    doc["error"] = "missing_body";
-    sendJson(doc, 400);
-    return;
-  }
-  String body = server.arg("plain");
-  JsonDocument request;
-  DeserializationError error = deserializeJson(request, body);
-  if (error) {
-    doc["ok"] = false;
-    doc["error"] = "invalid_json";
-    sendJson(doc, 400);
-    return;
-  }
-  String address = request["address"] | "";
-  String encoded = request["payload"] | "";
-  if (address.length() == 0 || encoded.length() == 0) {
-    doc["ok"] = false;
-    doc["error"] = "missing_address_or_payload";
-    sendJson(doc, 400);
-    return;
-  }
-  std::vector<uint8_t> payload;
-  if (!decodeBase64(encoded, payload)) {
-    doc["ok"] = false;
-    doc["error"] = "invalid_base64_payload";
-    sendJson(doc, 400);
-    return;
-  }
-  addLog(log, "Decoded payload " + String(payload.size()) + " bytes.");
-  bool ok = sendPayloadToDisplay(address, payload, log);
-  doc["ok"] = ok;
-  if (!ok) doc["error"] = "ble_transfer_failed";
-  appendLocalLog(doc, log);
-  sendJson(doc, ok ? 200 : 502);
+void failOta(const String& error) {
+  otaError = error;
+  otaStatus = "failed";
+  otaInProgress = false;
+  if (Update.isRunning()) Update.abort();
+  Serial.println("OTA failed: " + error);
 }
 
-void handleSendBinary() {
-  if (rejectIfTransferBusy()) return;
-  JsonDocument doc;
-  LocalTransferLog log;
-  String address = server.arg("address");
-  if (address.length() == 0) {
-    doc["ok"] = false;
-    doc["error"] = "missing_address";
-    sendJson(doc, 400);
-    return;
-  }
-  if (!server.hasArg("plain")) {
-    doc["ok"] = false;
-    doc["error"] = "missing_binary_body";
-    sendJson(doc, 400);
-    return;
-  }
-  String body = server.arg("plain");
-  std::vector<uint8_t> payload(body.length());
-  memcpy(payload.data(), body.c_str(), body.length());
-  addLog(log, "Received binary payload " + String(payload.size()) + " bytes.");
-  addLog(log, "Free heap before BLE transfer: " + String(ESP.getFreeHeap()) + ".");
-  bool ok = sendPayloadToDisplay(address, payload, log);
-  addLog(log, "Free heap after BLE transfer: " + String(ESP.getFreeHeap()) + ".");
-  doc["ok"] = ok;
-  if (!ok) doc["error"] = "ble_transfer_failed";
-  appendLocalLog(doc, log);
-  sendJson(doc, ok ? 200 : 502);
-}
+void handleOtaUploadChunk() {
+  HTTPUpload& upload = server.upload();
+  if (upload.status == UPLOAD_FILE_START) {
+    otaError = "";
+    otaBytesWritten = 0;
+    otaExpectedSize = strtoul(server.arg("size").c_str(), nullptr, 10);
+    String expectedMd5 = server.arg("md5");
 
-void handleSendBase64() {
-  if (rejectIfTransferBusy()) return;
-  JsonDocument doc;
-  LocalTransferLog log;
-  String address = server.arg("address");
-  if (address.length() == 0) {
-    doc["ok"] = false;
-    doc["error"] = "missing_address";
-    sendJson(doc, 400);
-    return;
-  }
-  if (!server.hasArg("plain")) {
-    doc["ok"] = false;
-    doc["error"] = "missing_base64_body";
-    sendJson(doc, 400);
-    return;
-  }
-  String encoded = server.arg("plain");
-  encoded.trim();
-  std::vector<uint8_t> payload;
-  if (!decodeBase64(encoded, payload)) {
-    doc["ok"] = false;
-    doc["error"] = "invalid_base64_payload";
-    sendJson(doc, 400);
-    return;
-  }
-  addLog(log, "Received base64 payload " + String(encoded.length()) + " chars, decoded " + String(payload.size()) + " bytes.");
-  addLog(log, "Free heap before BLE transfer: " + String(ESP.getFreeHeap()) + ".");
-  bool ok = sendPayloadToDisplay(address, payload, log);
-  addLog(log, "Free heap after BLE transfer: " + String(ESP.getFreeHeap()) + ".");
-  doc["ok"] = ok;
-  if (!ok) doc["error"] = "ble_transfer_failed";
-  appendLocalLog(doc, log);
-  sendJson(doc, ok ? 200 : 502);
-}
-
-void handleTransferStart() {
-  JsonDocument doc;
-  String address = server.arg("address");
-  String requestedId = server.arg("id");
-  if (address.length() == 0) {
-    doc["ok"] = false;
-    doc["error"] = "missing_address";
-    sendJson(doc, 400);
-    return;
-  }
-  if (!server.hasArg("plain")) {
-    doc["ok"] = false;
-    doc["error"] = "missing_base64_body";
-    sendJson(doc, 400);
-    return;
-  }
-  if (requestedId.length() && transferMutex) {
-    xSemaphoreTake(transferMutex, portMAX_DELAY);
-    bool existing = requestedId == transferJob.id;
-    String existingStatus = transferJob.status;
-    xSemaphoreGive(transferMutex);
-    if (existing) {
-      doc["ok"] = true;
-      doc["job_id"] = requestedId;
-      doc["status"] = existingStatus;
-      doc["duplicate"] = true;
-      sendJson(doc, 202);
+    if (transferIsBusy()) {
+      failOta("gateway_busy");
       return;
     }
-  }
-  if (transferIsBusy()) {
-    doc["ok"] = false;
-    doc["error"] = "gateway_busy";
-    xSemaphoreTake(transferMutex, portMAX_DELAY);
-    doc["job_id"] = transferJob.id;
-    xSemaphoreGive(transferMutex);
-    sendJson(doc, 409);
+    if (otaExpectedSize == 0 || expectedMd5.length() != 32) {
+      failOta("invalid_ota_metadata");
+      return;
+    }
+    const esp_partition_t* updatePartition = esp_ota_get_next_update_partition(nullptr);
+    if (!updatePartition || otaExpectedSize > updatePartition->size) {
+      failOta("firmware_too_large");
+      return;
+    }
+
+    otaInProgress = true;
+    otaStatus = "uploading";
+    if (!Update.begin(otaExpectedSize, U_FLASH) || !Update.setMD5(expectedMd5.c_str())) {
+      failOta(String("ota_begin_failed: ") + Update.errorString());
+      return;
+    }
+    Serial.println("OTA upload started: " + String(otaExpectedSize) + " bytes for " + String(CHIP_FAMILY) + ".");
     return;
   }
 
-  const String& encoded = server.arg("plain");
-  std::vector<uint8_t> payload;
-  if (!decodeBase64(encoded, payload)) {
-    doc["ok"] = false;
-    doc["error"] = "invalid_base64_payload";
-    sendJson(doc, 400);
+  if (upload.status == UPLOAD_FILE_WRITE) {
+    if (!otaInProgress || otaError.length()) return;
+    size_t written = Update.write(upload.buf, upload.currentSize);
+    otaBytesWritten += written;
+    if (written != upload.currentSize) {
+      failOta(String("ota_write_failed: ") + Update.errorString());
+    }
     return;
   }
 
-  String jobId = requestedId.length() ? requestedId : String(millis(), HEX) + "-" + String(++transferSequence, HEX);
-  xSemaphoreTake(transferMutex, portMAX_DELAY);
-  queuedPayload.swap(payload);
-  transferJob.id = jobId;
-  transferJob.address = address;
-  transferJob.status = "queued";
-  transferJob.error = "";
-  transferJob.log.clear();
-  transferJob.createdMs = millis();
-  transferJob.updatedMs = transferJob.createdMs;
-  xSemaphoreGive(transferMutex);
+  if (upload.status == UPLOAD_FILE_END) {
+    if (!otaInProgress || otaError.length()) return;
+    if (otaBytesWritten != otaExpectedSize) {
+      failOta("ota_size_mismatch");
+      return;
+    }
+    if (!Update.end()) {
+      failOta(String("ota_verify_failed: ") + Update.errorString());
+      return;
+    }
+    otaInProgress = false;
+    otaStatus = "ready_to_reboot";
+    Serial.println("OTA image verified. Reboot pending.");
+    return;
+  }
+
+  if (upload.status == UPLOAD_FILE_ABORTED) {
+    failOta("ota_upload_aborted");
+  }
+}
+
+void handleOtaUploadComplete() {
+  JsonDocument doc;
+  if (otaStatus != "ready_to_reboot") {
+    doc["ok"] = false;
+    doc["error"] = otaError.length() ? otaError : "ota_upload_incomplete";
+    doc["bytes_written"] = otaBytesWritten;
+    doc["expected_size"] = otaExpectedSize;
+    sendJson(doc, otaError == "gateway_busy" ? 409 : 400);
+    return;
+  }
 
   doc["ok"] = true;
-  doc["job_id"] = jobId;
-  doc["status"] = "queued";
-  doc["payload_bytes"] = queuedPayload.size();
-  doc["free_heap"] = ESP.getFreeHeap();
-  doc["largest_free_block"] = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  doc["status"] = otaStatus;
+  doc["firmware"] = FIRMWARE_VERSION;
+  doc["chip"] = CHIP_FAMILY;
+  doc["bytes_written"] = otaBytesWritten;
+  doc["message"] = "Firmware verified. Gateway will reboot.";
   sendJson(doc, 202);
+  otaRestartAtMs = millis() + 1500;
 }
 
 void handleTransferUploadChunk() {
@@ -683,7 +588,7 @@ void handleTransferUploadChunk() {
       uploadDuplicate = uploadJobId == transferJob.id;
       xSemaphoreGive(transferMutex);
     }
-    if (!uploadDuplicate && transferIsBusy()) {
+    if (!uploadDuplicate && gatewayOperationBusy()) {
       uploadError = "gateway_busy";
     }
     return;
@@ -735,7 +640,7 @@ void handleTransferUploadComplete() {
     sendJson(doc, 400);
     return;
   }
-  if (transferIsBusy()) {
+  if (gatewayOperationBusy()) {
     doc["ok"] = false;
     doc["error"] = "gateway_busy";
     sendJson(doc, 409);
@@ -855,7 +760,7 @@ void handleRoot() {
   body += "</section><section><h2>Nastaveni site</h2><form method='post' action='/config-form'><div class='grid'>";
   body += "<label>Hostname<input name='hostname' value='" + hostname + "'></label><label>SSID<input name='ssid'></label><label>Heslo<input name='password' type='password'></label>";
   body += "<label>Static IP<input name='ip' placeholder='prazdne = DHCP'></label><label>Gateway<input name='gateway' placeholder='192.168.1.1'></label><label>Subnet<input name='subnet' placeholder='255.255.255.0'></label><label>DNS<input name='dns' placeholder='192.168.1.1'></label>";
-  body += "</div><button>Ulozit a restartovat</button></form></section><section><h2>API</h2><p><code>/api/status</code>, <code>/api/scan?seconds=8</code>, <code>/api/send</code>, <code>/api/config</code></p></section>";
+  body += "</div><button>Ulozit a restartovat</button></form></section><section><h2>API</h2><p><code>/api/status</code>, <code>/api/scan?seconds=8</code>, <code>/api/config</code></p></section>";
   body += "<p>Transfer API: <code>POST multipart /api/transfer/upload?address=XX:XX:XX:XX:XX:XX</code> and <code>GET /api/transfer/status?id=...</code></p>";
   body += "</main></body></html>";
   server.send(200, "text/html; charset=utf-8", body);
@@ -960,6 +865,8 @@ void printSerialStatus() {
   doc["message"] = "status";
   doc["gateway_id"] = gatewayId;
   doc["firmware"] = FIRMWARE_VERSION;
+  doc["chip"] = CHIP_FAMILY;
+  doc["ota_supported"] = esp_ota_get_next_update_partition(nullptr) != nullptr;
   doc["hostname"] = hostname;
   doc["stored_hostname"] = storedHostname;
   doc["stored_ssid"] = ssid;
@@ -1023,6 +930,8 @@ void startMdns() {
   MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "id", gatewayId.c_str());
   MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "fw", FIRMWARE_VERSION);
   MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "ip", WiFi.localIP().toString());
+  MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "chip", CHIP_FAMILY);
+  MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "ota", "1");
   MDNS.addService("http", "tcp", 80);
   MDNS.addServiceTxt("http", "tcp", "model", "DRATEK eInk gateway");
   mdnsStarted = true;
@@ -1051,7 +960,7 @@ void maintainNetworkServices() {
   }
 
   if (
-    connected && mdnsStarted && !transferIsBusy()
+    connected && mdnsStarted && !gatewayOperationBusy()
     && millis() - lastMdnsStartMs >= MDNS_REFRESH_INTERVAL_MS
   ) {
     Serial.println("Refreshing mDNS advertisement.");
@@ -1138,12 +1047,9 @@ void setup() {
 
   server.on("/api/status", HTTP_GET, handleStatus);
   server.on("/api/scan", HTTP_GET, handleScan);
-  server.on("/api/send", HTTP_POST, handleSend);
-  server.on("/api/send-bin", HTTP_POST, handleSendBinary);
-  server.on("/api/send-b64", HTTP_POST, handleSendBase64);
-  server.on("/api/transfer/start", HTTP_POST, handleTransferStart);
   server.on("/api/transfer/upload", HTTP_POST, handleTransferUploadComplete, handleTransferUploadChunk);
   server.on("/api/transfer/status", HTTP_GET, handleTransferStatus);
+  server.on("/api/ota/upload", HTTP_POST, handleOtaUploadComplete, handleOtaUploadChunk);
   server.on("/api/config", HTTP_GET, handleConfig);
   server.on("/api/config", HTTP_POST, handleConfig);
   server.on("/", HTTP_GET, handleRoot);
@@ -1161,6 +1067,11 @@ void setup() {
 void loop() {
   handleSerialConfig();
   server.handleClient();
+  if (otaRestartAtMs != 0 && static_cast<int32_t>(millis() - otaRestartAtMs) >= 0) {
+    Serial.println("Restarting into the updated firmware.");
+    delay(100);
+    ESP.restart();
+  }
   startQueuedTransfer();
   maintainNetworkServices();
   delay(2);

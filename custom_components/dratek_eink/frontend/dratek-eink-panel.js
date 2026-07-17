@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.37";
+const DRATEK_EINK_VERSION = "0.1.38";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -38,6 +38,9 @@ class DratekEinkPanel extends HTMLElement {
     this._flashResult = null;
     this._flashJobId = "";
     this._flashPollTimer = null;
+    this._otaResult = null;
+    this._otaJobId = "";
+    this._otaPollTimer = null;
     this._serialResult = null;
     this._draftSaveTimer = null;
     this._loadingDraft = false;
@@ -68,6 +71,7 @@ class DratekEinkPanel extends HTMLElement {
     window.removeEventListener("keydown", this._handleKeyDown);
     window.clearTimeout(this._propertyEditTimer);
     window.clearTimeout(this._flashPollTimer);
+    window.clearTimeout(this._otaPollTimer);
   }
 
   set hass(hass) {
@@ -227,6 +231,55 @@ class DratekEinkPanel extends HTMLElement {
         node.scrollTop = node.scrollHeight;
       });
     });
+  }
+
+  async _startGatewayOta(gatewayId) {
+    if (!this._hass || !gatewayId || this._gatewayBusy) return;
+    const gateway = this._gateways.find((item) => item.id === gatewayId);
+    if (!gateway || !confirm(`Aktualizovat firmware gateway ${gateway.name} pres sit? Behem aktualizace nebude dostupny BLE prenos.`)) return;
+    this._gatewayBusy = true;
+    this._otaResult = { ok: null, status: "queued", progress: 0, log: ["Zakladam OTA aktualizaci..."] };
+    this._otaJobId = "";
+    this._render();
+    try {
+      const result = await this._hass.callWS({ type: "dratek_eink/gateways/ota_start", gateway_id: gatewayId });
+      this._otaJobId = result.job.job_id;
+      this._otaResult = result.job;
+      this._scheduleOtaPoll();
+    } catch (err) {
+      this._otaResult = { ok: false, status: "failed", progress: 0, error: this._message(err), log: [] };
+      this._gatewayBusy = false;
+    }
+    this._render();
+    this._paint();
+  }
+
+  _scheduleOtaPoll() {
+    window.clearTimeout(this._otaPollTimer);
+    this._otaPollTimer = window.setTimeout(() => this._pollOtaJob(), 1000);
+  }
+
+  async _pollOtaJob() {
+    if (!this._hass || !this._otaJobId) return;
+    try {
+      const result = await this._hass.callWS({ type: "dratek_eink/gateways/ota_job", job_id: this._otaJobId });
+      this._otaResult = result.job;
+      const done = ["done", "failed"].includes(result.job.status);
+      this._gatewayBusy = !done;
+      this._render();
+      this._scrollGatewayLogsToBottom();
+      this._paint();
+      if (!done) {
+        this._scheduleOtaPoll();
+      } else if (result.job.ok) {
+        await this._loadGateways(true);
+      }
+    } catch (err) {
+      this._otaResult = { ok: false, status: "failed", progress: this._otaResult?.progress || 0, error: this._message(err), log: this._otaResult?.log || [] };
+      this._gatewayBusy = false;
+      this._render();
+      this._paint();
+    }
   }
 
   async _serialGatewayStatus() {
@@ -1566,7 +1619,7 @@ class DratekEinkPanel extends HTMLElement {
         .action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:16px;display:grid;place-items:center}.wide-action{grid-column:span 4;font-size:13px}.panel-divider{height:1px;background:var(--divider-color);margin:14px 0}.layout-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-btn{min-height:58px;display:grid;place-items:center;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.layout-btn.active{background:var(--primary-color);color:var(--text-primary-color,#fff);border-color:var(--primary-color)}.transform-box{margin-top:10px;padding:10px;border:1px solid var(--divider-color);border-radius:8px;background:var(--secondary-background-color)}.transform-box small{display:block;color:var(--secondary-text-color);line-height:1.35;margin-top:6px}.properties-panel{max-height:calc(100vh - 120px);overflow:auto}
         .workspace-card{padding:0;overflow:hidden}.canvas-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--divider-color);background:var(--card-background-color)}.canvas-meta{display:flex;align-items:center;gap:8px;color:var(--secondary-text-color);font-size:12px}.workspace{min-height:590px;overflow:auto;display:grid;place-items:center;background:linear-gradient(45deg,rgba(127,127,127,.08) 25%,transparent 25%),linear-gradient(-45deg,rgba(127,127,127,.08) 25%,transparent 25%);background-size:18px 18px;border:0;padding:34px}
         canvas{background:#fff;box-shadow:0 20px 54px rgba(0,0,0,.24);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:760}.field input,.field select,.projectbar input,.projectbar select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-        table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:#111827;color:#e5e7eb;border-radius:8px;padding:12px;font-size:12px;line-height:1.45;max-height:320px;white-space:pre-wrap}.gateway-log{max-height:260px;min-height:96px;overflow-y:auto}.send-result{margin-top:10px}.variable-table input{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:7px}.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:20;display:grid;place-items:center;padding:24px}.symbol-dialog{width:min(920px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:16px}.symbol-search{display:grid;grid-template-columns:1fr auto;gap:10px;margin:12px 0}.symbol-search input{width:100%;border:1px solid var(--divider-color);border-radius:7px;background:var(--secondary-background-color);color:var(--primary-text-color);padding:10px}.category-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}.category-row button{min-height:32px;padding:6px 10px}.category-row button.active{background:var(--primary-color);color:var(--text-primary-color,#fff)}.symbol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}.symbol-tile{min-height:78px;display:grid;grid-template-rows:32px auto;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.symbol-tile strong{font-size:29px;line-height:1}.symbol-tile span{font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;text-align:center}
+        table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:#111827;color:#e5e7eb;border-radius:8px;padding:12px;font-size:12px;line-height:1.45;max-height:320px;white-space:pre-wrap}.gateway-log{max-height:260px;min-height:96px;overflow-y:auto}.send-result{margin-top:10px}.ota-progress{height:9px;background:var(--secondary-background-color);border:1px solid var(--divider-color);border-radius:999px;overflow:hidden;margin:11px 0}.ota-progress span{display:block;height:100%;background:#0f766e;transition:width .25s ease}.variable-table input{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:7px}.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:20;display:grid;place-items:center;padding:24px}.symbol-dialog{width:min(920px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:16px}.symbol-search{display:grid;grid-template-columns:1fr auto;gap:10px;margin:12px 0}.symbol-search input{width:100%;border:1px solid var(--divider-color);border-radius:7px;background:var(--secondary-background-color);color:var(--primary-text-color);padding:10px}.category-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}.category-row button{min-height:32px;padding:6px 10px}.category-row button.active{background:var(--primary-color);color:var(--text-primary-color,#fff)}.symbol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}.symbol-tile{min-height:78px;display:grid;grid-template-rows:32px auto;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.symbol-tile strong{font-size:29px;line-height:1}.symbol-tile span{font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;text-align:center}
         .section-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}.debug-card details{margin-top:10px}.debug-card summary{cursor:pointer;color:var(--primary-color);font-weight:760}.inspector-empty{padding:18px;border:1px dashed var(--divider-color);border-radius:8px;color:var(--secondary-text-color);text-align:center;background:var(--secondary-background-color)}
         @media(max-width:1180px){.editor-shell,.status-grid,.projectbar{grid-template-columns:1fr}.left,.right{position:static}.tabbar{width:100%}.tab{flex:1}.workspace{min-height:420px}}
       </style>
@@ -1610,7 +1663,7 @@ class DratekEinkPanel extends HTMLElement {
           </div>
           <div class="card"><div class="section-title"><h2>Vyhledani v siti</h2><div class="toolbar"><button id="discoverGateways" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:access-point-network"></ha-icon>${this._gatewayBusy ? "Pracuji..." : "Vyhledat gatewaye v siti"}</button><button id="refreshGateways" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Obnovit stav ulozenych</button></div></div>${this._renderDiscoveredGateways()}</div>
           ${this._renderGatewayResult()}
-          <div class="card"><div class="section-title"><h2>Sprava opakovacu signalu</h2><span class="pill muted">ESP32 pres Wi-Fi</span></div>${this._renderGateways()}</div>
+          <div class="card"><div class="section-title"><h2>Sprava opakovacu signalu</h2><span class="pill muted">ESP32 pres Wi-Fi</span></div>${this._renderGateways()}${this._renderOtaResult()}</div>
           <div class="card"><div class="section-title"><h2>Vytvorit gateway</h2><div class="toolbar"><button id="refreshSerialPorts" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:usb-port"></ha-icon>Nacist porty</button><button id="serialStatus" class="secondary" ${this._gatewayBusy || !this._flashForm.port ? "disabled" : ""}><ha-icon icon="mdi:console"></ha-icon>USB status</button><button id="serialWifi" class="secondary" ${this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid ? "disabled" : ""}><ha-icon icon="mdi:wifi-cog"></ha-icon>Poslat Wi-Fi</button><button id="flashGateway" ${this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid ? "disabled" : ""}><ha-icon icon="mdi:chip"></ha-icon>Flashnout ESP32</button></div></div>${this._renderNoSerialPortsWarning()}<div class="row"><div class="field"><label>USB / serial port</label><select id="flashPort">${this._serialPorts.length ? this._serialPorts.map((port) => `<option value="${this._escape(port.device)}" ${port.device === this._flashForm.port ? "selected" : ""}>${this._escape(port.device)} - ${this._escape(port.description || port.name || "")}</option>`).join("") : `<option value="">Zadny port nenalezen</option>`}</select></div><div class="field"><label>Typ ESP32</label><select id="flashChip"><option value="esp32s3" ${this._flashForm.chip === "esp32s3" ? "selected" : ""}>ESP32-S3</option><option value="esp32" ${this._flashForm.chip === "esp32" ? "selected" : ""}>ESP32 / ESP32-WROOM</option></select></div></div><div class="row"><div class="field"><label>Nazev gatewaye</label><input id="flashHostname" value="${this._escape(this._flashForm.hostname)}" placeholder="dratek-eink-gateway_112016022026"></div><div class="field"><label>Wi-Fi SSID</label><input id="flashSsid" value="${this._escape(this._flashForm.ssid)}" placeholder="Nazev Wi-Fi"></div></div><div class="row"><div class="field"><label>Wi-Fi heslo</label><input id="flashPassword" type="password" value="${this._escape(this._flashForm.password)}" placeholder="Heslo"></div><div class="field"><label>Firmware</label><input value="${this._flashForm.chip === "esp32s3" ? "ESP32-S3 build" : "ESP32 build"}" disabled></div></div>${this._renderFlashResult()}${this._renderSerialResult()}</div>
         </div>
       </div>
@@ -1666,6 +1719,20 @@ class DratekEinkPanel extends HTMLElement {
     return `<div class="send-result"><span class="pill ${cls}">${this._escape(message)}</span>${facts}${log ? `<pre class="gateway-log">${this._escape(log)}</pre>` : ""}</div>`;
   }
 
+  _renderOtaResult() {
+    if (!this._otaResult) return "";
+    const running = this._otaResult.ok === null || !["done", "failed"].includes(this._otaResult.status);
+    const cls = running ? "warn" : this._otaResult.ok ? "good" : "bad";
+    const progress = Math.max(0, Math.min(100, Number(this._otaResult.progress) || 0));
+    const message = running
+      ? `OTA aktualizace: ${this._otaResult.status || "priprava"} (${progress} %)`
+      : this._otaResult.ok
+        ? `OTA dokonceno. Gateway bezi na ${this._escape(this._otaResult.reported_version || this._otaResult.target_version || "novem firmware")}.`
+        : `OTA selhalo: ${this._escape(this._otaResult.error || "neznamy problem")}`;
+    const log = (this._otaResult.log || []).join("\n");
+    return `<div class="send-result"><span class="pill ${cls}">${message}</span><div class="ota-progress"><span style="width:${progress}%"></span></div>${log ? `<pre class="gateway-log">${this._escape(log)}</pre>` : ""}</div>`;
+  }
+
   _renderNoSerialPortsWarning() {
     if (!this._serialPortsLoaded || this._serialPorts.length) return "";
     return `<div class="send-result"><span class="pill bad">Nebyl nalezen zadny USB / serial port</span><p><strong>Pozor:</strong> ESP32 musi byt pripojene primo do hardwaru, na kterem bezi Home Assistant. Nestaci pripojit ESP32 do jineho pocitace v siti, ze ktereho Home Assistant jen spravujes. Pro flash firmware do gateway musi byt ESP32 fyzicky zapojene do USB portu HA stroje.</p></div>`;
@@ -1681,11 +1748,15 @@ class DratekEinkPanel extends HTMLElement {
       const unknown = status.ok === null || status.ok === undefined;
       const cls = online ? "good" : unknown ? "warn" : "bad";
       const text = online ? "Online" : unknown ? "Neovereno" : "Offline";
+      const otaReady = online && status.ota_supported === true;
+      const currentFirmware = status.firmware === `${DRATEK_EINK_VERSION}-gateway`;
+      const otaLabel = otaReady ? (currentFirmware ? "Preinstalovat OTA" : "Aktualizovat FW") : "Nejprve USB flash";
       return `<div class="device-card">
         <div class="device-card-top"><div><strong>${this._escape(gateway.name)}</strong><span>${this._escape(gateway.host)}</span></div><span class="pill ${cls}">${text}</span></div>
         <div class="device-model">${this._escape(status.message || "")}</div>
         <div class="device-meta">
           <span>FW ${this._escape(status.firmware || "-")}</span>
+          <span>Chip ${this._escape(status.chip || "-")}</span>
           <span>IP ${this._escape(status.ip || "-")}</span>
           <span>RSSI ${this._escape(status.wifi_rssi ?? "-")}</span>
           <span>Heap ${this._escape(status.free_heap ?? "-")}</span>
@@ -1695,8 +1766,9 @@ class DratekEinkPanel extends HTMLElement {
           <span>mDNS ${status.mdns_started === true ? "aktivni" : status.mdns_started === false ? "neaktivni" : "-"}</span>
           <span>BLE ${status.ble_initialized === true ? "aktivni" : status.ble_initialized === false ? "ceka" : "-"}</span>
           <span>Prenos ${this._escape(status.transfer_status || "-")}</span>
+          <span>OTA slot ${status.update_partition_size ? `${Math.round(Number(status.update_partition_size) / 1024)} kB` : "-"}</span>
         </div>
-        <div class="toolbar"><button data-gateway-scan="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:radar"></ha-icon>BLE scan</button><button class="secondary" data-gateway-refresh="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Status</button><button class="danger" data-gateway-delete="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat</button></div>
+        <div class="toolbar"><button data-gateway-scan="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:radar"></ha-icon>BLE scan</button><button data-gateway-ota="${this._escape(gateway.id)}" ${this._gatewayBusy || !otaReady ? "disabled" : ""} title="${otaReady ? "Nahrat firmware z aktualni instalace HA" : "OTA se aktivuje prvnim USB flashem verze 0.1.38"}"><ha-icon icon="mdi:update"></ha-icon>${otaLabel}</button><button class="secondary" data-gateway-refresh="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Status</button><button class="danger" data-gateway-delete="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat</button></div>
       </div>`;
     }).join("")}</div>`;
   }
@@ -1729,6 +1801,7 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#serialStatus")?.addEventListener("click", () => this._serialGatewayStatus());
     this.shadowRoot.querySelector("#serialWifi")?.addEventListener("click", () => this._serialGatewayWifi());
     this.shadowRoot.querySelectorAll("[data-gateway-scan]").forEach((button) => button.addEventListener("click", () => this._scanGateway(button.dataset.gatewayScan)));
+    this.shadowRoot.querySelectorAll("[data-gateway-ota]").forEach((button) => button.addEventListener("click", () => this._startGatewayOta(button.dataset.gatewayOta)));
     this.shadowRoot.querySelectorAll("[data-gateway-refresh]").forEach((button) => button.addEventListener("click", async () => {
       this._gatewayBusy = true;
       this._render();

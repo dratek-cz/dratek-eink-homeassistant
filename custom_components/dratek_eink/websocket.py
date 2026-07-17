@@ -12,13 +12,14 @@ from homeassistant.helpers.storage import Store
 from PIL import Image
 import voluptuous as vol
 
-from .const import PARTIAL_UPDATE_SDK_TYPES
+from .const import PANEL_VERSION, PARTIAL_UPDATE_SDK_TYPES
 from .discovery import parse_dratek_advertisement
 from .gateway import (
     async_add_gateway,
     async_delete_gateway,
     async_discover_gateways,
     async_flash_gateway,
+    async_get_gateway_ota_job,
     async_get_flash_job,
     async_list_serial_ports,
     async_load_gateways,
@@ -29,6 +30,7 @@ from .gateway import (
     async_serial_gateway_status,
     async_serial_gateway_wifi,
     async_start_flash_gateway,
+    async_start_gateway_ota,
 )
 from .render import render_text_image
 from .transfer import DratekTransfer
@@ -62,6 +64,8 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_flash_gateway_job)
     websocket_api.async_register_command(hass, websocket_gateway_serial_status)
     websocket_api.async_register_command(hass, websocket_gateway_serial_wifi)
+    websocket_api.async_register_command(hass, websocket_start_gateway_ota)
+    websocket_api.async_register_command(hass, websocket_gateway_ota_job)
 
 
 @websocket_api.websocket_command({"type": "dratek_eink/scan"})
@@ -456,6 +460,48 @@ async def websocket_gateway_serial_wifi(
         msg.get("hostname", "dratek-eink-gateway"),
     )
     connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/gateways/ota_start",
+        "gateway_id": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_start_gateway_ota(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    job = await async_start_gateway_ota(
+        hass,
+        msg["gateway_id"],
+        f"{PANEL_VERSION}-gateway",
+    )
+    if job is None:
+        connection.send_error(msg["id"], "not_found", "Gateway was not found.")
+        return
+    connection.send_result(msg["id"], {"job": job})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/gateways/ota_job",
+        "job_id": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_gateway_ota_job(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    job = async_get_gateway_ota_job(hass, msg["job_id"])
+    if not job:
+        connection.send_error(msg["id"], "not_found", "OTA job was not found.")
+        return
+    connection.send_result(msg["id"], {"job": job})
 
 
 @websocket_api.websocket_command({"type": "dratek_eink/projects/list"})
