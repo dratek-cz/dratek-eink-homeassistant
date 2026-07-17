@@ -10,7 +10,7 @@
 #include <mbedtls/base64.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.36-gateway";
+static const char* FIRMWARE_VERSION = "0.1.37-gateway";
 static const size_t MAX_TRANSFER_LOG_LINES = 80;
 static const size_t MAX_UPLOAD_PAYLOAD_BYTES = 128UL * 1024UL;
 static const uint32_t MDNS_REFRESH_INTERVAL_MS = 5UL * 60UL * 1000UL;
@@ -427,80 +427,63 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
   }
   addLog(log, "Starting at block " + String(firstBlock) + ".");
 
+  // SDK type 51 (SW bit 0x80) advances on the GATT write-complete callback.
+  // It does not send a control-point notification after every image block.
   std::vector<uint8_t> block(blockSize);
-  int requestedBlock = firstBlock;
-  int timeoutRetries = 0;
-  while (true) {
-    if (requestedBlock < totalBlocks) {
-      int startOffset = requestedBlock * chunkSize;
-      int dataLen = min(chunkSize, (int)payload.size() - startOffset);
-      block[0] = requestedBlock & 0xFF;
-      block[1] = (requestedBlock >> 8) & 0xFF;
-      block[2] = (requestedBlock >> 16) & 0xFF;
-      block[3] = (requestedBlock >> 24) & 0xFF;
-      memcpy(block.data() + 4, payload.data() + startOffset, dataLen);
+  for (int blockNumber = firstBlock; blockNumber < totalBlocks; blockNumber++) {
+    int startOffset = blockNumber * chunkSize;
+    int dataLen = min(chunkSize, (int)payload.size() - startOffset);
+    block[0] = blockNumber & 0xFF;
+    block[1] = (blockNumber >> 8) & 0xFF;
+    block[2] = (blockNumber >> 16) & 0xFF;
+    block[3] = (blockNumber >> 24) & 0xFF;
+    memcpy(block.data() + 4, payload.data() + startOffset, dataLen);
 
-      bool queued = false;
-      for (int writeAttempt = 1; writeAttempt <= 5; writeAttempt++) {
-        queued = writeChar->writeValue(block.data(), dataLen + 4, false);
-        if (queued) break;
-        addLog(log, "BLE queue rejected block " + String(requestedBlock) + ", retry " + String(writeAttempt) + "/5.");
-        delay(50);
-      }
-      if (!queued) {
-        client->disconnect();
-        NimBLEDevice::deleteClient(client);
-        addLog(log, "Unable to queue image block " + String(requestedBlock) + ".");
-        return false;
-      }
-
-      if (requestedBlock == firstBlock || requestedBlock % 10 == 0 || requestedBlock == totalBlocks - 1) {
-        int percent = ((requestedBlock + 1) * 100) / max(1, totalBlocks);
-        addLog(log, "Sent requested block " + String(requestedBlock + 1) + "/" + String(totalBlocks) + " (" + String(percent) + "%).");
-      }
+    bool written = false;
+    for (int writeAttempt = 1; writeAttempt <= 3; writeAttempt++) {
+      // response=true waits for the same GATT acknowledgement used by the Android SDK.
+      written = writeChar->writeValue(block.data(), dataLen + 4, true);
+      if (written) break;
+      addLog(log, "BLE write failed for block " + String(blockNumber) + ", retry " + String(writeAttempt) + "/3.");
+      delay(100);
+    }
+    if (!written) {
+      client->disconnect();
+      NimBLEDevice::deleteClient(client);
+      addLog(log, "Display did not acknowledge image block " + String(blockNumber) + ".");
+      return false;
     }
 
-    uint32_t responseTimeout = requestedBlock >= totalBlocks - 1 ? 60000 : 15000;
-    if (!waitForPacket(0x05, packet, responseTimeout)) {
-      if (requestedBlock < totalBlocks && timeoutRetries < 2) {
-        timeoutRetries++;
-        addLog(log, "No response after block " + String(requestedBlock) + "; resending it (" + String(timeoutRetries) + "/2).");
-        continue;
-      }
-      break;
+    if (blockNumber == firstBlock || blockNumber % 10 == 0 || blockNumber == totalBlocks - 1) {
+      int percent = ((blockNumber + 1) * 100) / max(1, totalBlocks);
+      addLog(log, "Acknowledged block " + String(blockNumber + 1) + "/" + String(totalBlocks) + " (" + String(percent) + "%).");
     }
+    delay(5);
+  }
 
+  addLog(log, "All image blocks were acknowledged by BLE.");
+  if (waitForPacket(0x05, packet, 30000)) {
     addLog(log, "Notification: " + hexPacket(packet));
-    timeoutRetries = 0;
     if (packet.size() > 1 && packet[1] == 0x08) {
       client->disconnect();
       NimBLEDevice::deleteClient(client);
       addLog(log, "Display confirmed transfer complete.");
       return true;
     }
-    if (packet.size() < 6 || packet[1] != 0) {
+    if (packet.size() > 1 && packet[1] != 0) {
       client->disconnect();
       NimBLEDevice::deleteClient(client);
       addLog(log, "Display rejected image transfer: " + hexPacket(packet));
       return false;
     }
-
-    int nextBlock = (int)packet[2] | ((int)packet[3] << 8) | ((int)packet[4] << 16) | ((int)packet[5] << 24);
-    if (nextBlock < 0 || nextBlock > totalBlocks) {
-      client->disconnect();
-      NimBLEDevice::deleteClient(client);
-      addLog(log, "Display requested invalid block " + String(nextBlock) + "/" + String(totalBlocks) + ".");
-      return false;
-    }
-    if (nextBlock <= requestedBlock && nextBlock < totalBlocks) {
-      addLog(log, "Display requested retransmission from block " + String(nextBlock) + ".");
-    }
-    requestedBlock = nextBlock;
   }
+
+  // The original SDK reports success after the last acknowledged GATT write;
+  // some display firmware versions do not send a separate final notification.
   client->disconnect();
   NimBLEDevice::deleteClient(client);
-  addLog(log, "Timed out waiting for final display confirmation.");
-  return false;
+  addLog(log, "Transfer completed; no separate final notification was required.");
+  return true;
 }
 
 void handleSend() {

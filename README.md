@@ -1,5 +1,11 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.37
+
+- Přenos obrazových bloků nyní přesněji kopíruje původní SDK: každý blok čeká na potvrzení GATT zápisu, nikoli na notifikaci displeje.
+- Opraveno opakované odesílání prvního bloku u displejů se softwarem řady 129.
+- Chybějící samostatná závěrečná notifikace již není chybně hlášena jako neúspěšný přenos, pokud BLE potvrdilo všechny bloky.
+
 ## Novinky ve verzi 0.1.36
 
 - bloky se odesilaji request-driven podle originalniho Picksmart SDK protokolu
