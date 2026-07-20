@@ -1,5 +1,17 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.45
+
+- horni ribbon designeru ma sjednocene zelene karty Soubor, Promenne, Zobrazeni, Nastroje a Rozlozeni
+- Odeslat navrh je presunuto z hlavicky aplikace primo do designeru a barevne odliseno
+- projekty lze exportovat do editovatelneho souboru a znovu je ze souboru otevrit
+- export zachovava objekty, obrazky, promenne, orientaci, rozliseni i nastaveni barev
+- karta Nastroje obsahuje inverzi cerne a bile vcetne vlozenych obrazku
+- karta Rozlozeni obsahuje orientaci na sirku a na vysku i mapovani 2,9palcoveho displeje
+- pri zmene orientace se existujici objekty otoci spolu s pracovni plochou; opraven je i zpetny smer otoceni
+- zoom, prizpusobeni, prichytavani k mrizce a realne barvy eInk jsou presunuty do karty Zobrazeni
+- firmware gateway zustava 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.44
 
 - karta Soubor je vyrazne zelena a pouziva prehledne rozlozeni ve stylu kancelarskych aplikaci
