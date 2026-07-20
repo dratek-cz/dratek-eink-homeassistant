@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.47";
+const DRATEK_EINK_VERSION = "0.1.48";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -1137,7 +1137,7 @@ class DratekEinkPanel extends HTMLElement {
       if (next.type === "text" && Number(next.fontSize || 0) <= 16 && Number(next.w || 0) >= 48) {
         next.textAlign = "left";
       }
-      if (next.variable && next.variableName) variables[next.variableName] = next.text || "";
+      if (next.variable && next.variableName) variables[next.variableName] = next.type === "chart" ? (next.data || "") : (next.text || "");
       return next;
     });
     this._variables = variables;
@@ -1194,9 +1194,9 @@ class DratekEinkPanel extends HTMLElement {
     if (type === "chart") {
       object.w = this._snapValue(size.width * 0.72);
       object.h = this._snapValue(size.height * 0.62);
-      object.chartType = "line";
-      object.data = "2.10, 2.35, 2.18, 2.62, 2.45, 2.84, 2.31, 2.56";
-      object.chartLabels = "00, 03, 06, 09, 12, 15, 18, 21";
+      object.chartType = "bar";
+      object.data = "1.62, 1.48, 1.36, 1.29, 1.34, 1.51, 1.88, 2.24, 2.06, 1.72, 1.38, 1.12, 0.94, 0.86, 0.91, 1.08, 1.42, 1.96, 2.58, 2.74, 2.39, 2.05, 1.84, 1.68";
+      object.chartLabels = "00, 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23";
       object.chartTitle = "Cena elektřiny";
       object.xLabel = "Hodina";
       object.yLabel = "Kč/kWh";
@@ -1206,6 +1206,10 @@ class DratekEinkPanel extends HTMLElement {
       object.showAxes = true;
       object.showGrid = true;
       object.showValues = false;
+      object.barColor = "red";
+      object.legendFontSize = 8;
+      object.variable = true;
+      object.variableName = this._uniqueVariableName("ceny_spot_24h", object.id);
     }
     if (type === "qr") {
       object.w = Math.min(object.w, object.h);
@@ -1213,6 +1217,7 @@ class DratekEinkPanel extends HTMLElement {
       object.keepRatio = true;
     }
     this._objects.push(object);
+    if (object.variable && object.variableName) this._variables[object.variableName] = object.type === "chart" ? object.data : object.text;
     this._selectedIds = [object.id];
     this._render();
     this._paint();
@@ -1281,7 +1286,7 @@ class DratekEinkPanel extends HTMLElement {
       };
       if (copy.variable && copy.variableName) {
         copy.variableName = this._uniqueVariableName(copy.variableName, copy.id);
-        this._variables[copy.variableName] = copy.text || "";
+        this._variables[copy.variableName] = copy.type === "chart" ? (copy.data || "") : (copy.text || "");
       }
       return copy;
     });
@@ -1443,11 +1448,19 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _variableDefs() {
+    for (const object of this._objects.filter((item) => item.type === "chart")) {
+      object.variable = true;
+      object.variableName = this._uniqueVariableName(object.variableName || "data_grafu", object.id);
+      if (this._variables[object.variableName] === undefined) this._variables[object.variableName] = object.data || "";
+      if (!object.barColor) object.barColor = "red";
+      if (!Number(object.legendFontSize)) object.legendFontSize = 8;
+    }
     return this._objects
       .filter((object) => ["text", "chart"].includes(object.type) && object.variable && object.variableName)
       .map((object) => ({
         id: object.id,
         name: object.variableName,
+        type: object.type,
         defaultValue: object.type === "chart" ? (object.data || "") : (object.text || ""),
         value: this._variables[object.variableName] ?? (object.type === "chart" ? object.data : object.text) ?? "",
       }));
@@ -1874,8 +1887,8 @@ class DratekEinkPanel extends HTMLElement {
         .editor-shell{display:grid;grid-template-columns:250px minmax(0,1fr) 318px 250px;gap:12px;align-items:start}.left,.right,.layers-panel{position:sticky;top:12px}.designer-section{position:relative}.designer-section.locked> :not(.designer-lock){pointer-events:none;opacity:.28;filter:grayscale(1)}.designer-lock{position:absolute;z-index:15;left:50%;top:110px;transform:translateX(-50%);width:min(440px,calc(100% - 32px));padding:28px;text-align:center;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.24)}.designer-lock ha-icon{--mdc-icon-size:44px;color:#16803c}.designer-lock h2{font-size:20px;text-transform:none;margin:10px 0}.designer-lock p{color:var(--secondary-text-color)}.template-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:282px;overflow:auto;padding-right:2px}.template-hero .template-grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr));max-height:none;overflow:visible;padding-right:0}.template-card{min-height:76px;display:grid;grid-template-columns:34px 1fr;align-items:center;text-align:left;gap:9px;padding:9px;border:1px solid var(--divider-color);background:linear-gradient(180deg,var(--card-background-color),var(--secondary-background-color));color:var(--primary-text-color);box-shadow:none}.template-card ha-icon{color:var(--primary-color);--mdc-icon-size:26px}.template-card strong{display:block;font-size:12px;line-height:1.2}.template-card span{display:block;font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;margin-top:2px}.template-card:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}.tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.tool-icon{min-height:82px;display:grid;grid-template-rows:36px auto;place-items:center;text-align:center;padding:10px 6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.tool-icon .ico{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-color);font-size:18px;font-weight:900}.tool-icon .txt{font-size:11px;font-weight:850;color:var(--secondary-text-color);text-transform:uppercase}.tool-icon:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}
         .action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:16px;display:grid;place-items:center}.wide-action{grid-column:span 4;font-size:13px}.panel-divider{height:1px;background:var(--divider-color);margin:14px 0}.layout-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-btn{min-height:58px;display:grid;place-items:center;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.layout-btn.active{background:var(--primary-color);color:var(--text-primary-color,#fff);border-color:var(--primary-color)}.transform-box{margin-top:10px;padding:10px;border:1px solid var(--divider-color);border-radius:8px;background:var(--secondary-background-color)}.transform-box small{display:block;color:var(--secondary-text-color);line-height:1.35;margin-top:6px}.properties-panel,.layers-panel{max-height:calc(100vh - 120px);overflow:auto}.layer-list{display:grid;gap:6px}.layer-row{display:grid;grid-template-columns:minmax(0,1fr) 34px 34px;gap:4px;align-items:center;padding:4px;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color)}.layer-row.selected{border-color:#16803c;background:rgba(22,128,60,.1);box-shadow:inset 3px 0 0 #16803c}.layer-main{min-width:0;justify-content:flex-start;background:transparent;color:var(--primary-text-color);box-shadow:none;padding:7px}.layer-main span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.layer-main ha-icon{color:var(--secondary-text-color);flex:0 0 auto}.layer-step{min-height:32px;padding:5px;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.layer-hint{margin:9px 0 0;color:var(--secondary-text-color);font-size:11px;line-height:1.4}.background-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding-top:9px;margin-top:7px;border-top:1px solid var(--divider-color)}.background-picker button{display:grid;place-items:center;gap:4px;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none;font-size:11px}.background-picker button.selected{outline:2px solid #16803c;outline-offset:-2px}.color-swatch{width:24px;height:20px;border:1px solid #7f7f7f;border-radius:4px}.color-swatch.white{background:#fff}.color-swatch.black{background:#000}.color-swatch.red{background:#d41414}
         .workspace-card{padding:0;overflow:hidden}.canvas-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--divider-color);background:var(--card-background-color)}.canvas-meta{display:flex;align-items:center;gap:8px;color:var(--secondary-text-color);font-size:12px}.workspace{min-height:590px;overflow:auto;display:grid;place-items:center;background:linear-gradient(45deg,rgba(127,127,127,.08) 25%,transparent 25%),linear-gradient(-45deg,rgba(127,127,127,.08) 25%,transparent 25%);background-size:18px 18px;border:0;padding:34px}
-        canvas{background:#fff;box-shadow:0 20px 54px rgba(0,0,0,.24);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:760}.field input,.field select,.field textarea,.file-menu input,.file-menu select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px;font:inherit}.field textarea{resize:vertical;min-height:62px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-        table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:#111827;color:#e5e7eb;border-radius:8px;padding:12px;font-size:12px;line-height:1.45;max-height:320px;white-space:pre-wrap}.gateway-log{max-height:260px;min-height:96px;overflow-y:auto}.send-result{margin-top:10px}.ota-progress{height:9px;background:var(--secondary-background-color);border:1px solid var(--divider-color);border-radius:999px;overflow:hidden;margin:11px 0}.ota-progress span{display:block;height:100%;background:#0f766e;transition:width .25s ease}.variable-table input{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:7px}.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:20;display:grid;place-items:center;padding:24px}.symbol-dialog{width:min(920px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:16px}.symbol-search{display:grid;grid-template-columns:1fr auto;gap:10px;margin:12px 0}.symbol-search input{width:100%;border:1px solid var(--divider-color);border-radius:7px;background:var(--secondary-background-color);color:var(--primary-text-color);padding:10px}.category-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}.category-row button{min-height:32px;padding:6px 10px}.category-row button.active{background:var(--primary-color);color:var(--text-primary-color,#fff)}.symbol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}.symbol-tile{min-height:78px;display:grid;grid-template-rows:32px auto;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.symbol-tile strong{font-size:29px;line-height:1}.symbol-tile span{font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;text-align:center}
+        canvas{background:#fff;box-shadow:0 20px 54px rgba(0,0,0,.24);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:760}.field small{color:var(--secondary-text-color);font-size:11px;line-height:1.35}.field input,.field select,.field textarea,.file-menu input,.file-menu select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px;font:inherit}.field textarea{resize:vertical;min-height:62px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+        table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:#111827;color:#e5e7eb;border-radius:8px;padding:12px;font-size:12px;line-height:1.45;max-height:320px;white-space:pre-wrap}.gateway-log{max-height:260px;min-height:96px;overflow-y:auto}.send-result{margin-top:10px}.ota-progress{height:9px;background:var(--secondary-background-color);border:1px solid var(--divider-color);border-radius:999px;overflow:hidden;margin:11px 0}.ota-progress span{display:block;height:100%;background:#0f766e;transition:width .25s ease}.variable-list{display:grid;gap:12px}.variable-card{padding:13px;border:1px solid var(--divider-color);border-radius:8px;background:var(--secondary-background-color)}.variable-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}.variable-card-head strong{font-size:14px}.variable-card input,.variable-card textarea{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:9px;font:inherit}.variable-card textarea{resize:vertical;min-height:82px;line-height:1.45}.format-help{display:grid;grid-template-columns:auto minmax(0,1fr);gap:9px;margin-top:9px;padding:10px;border:1px solid rgba(22,128,60,.3);border-radius:7px;background:rgba(22,128,60,.08);font-size:12px;line-height:1.45}.format-help ha-icon{color:#16803c}.format-help code{display:block;margin-top:4px;white-space:normal;overflow-wrap:anywhere}.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:20;display:grid;place-items:center;padding:24px}.symbol-dialog{width:min(920px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:16px}.symbol-search{display:grid;grid-template-columns:1fr auto;gap:10px;margin:12px 0}.symbol-search input{width:100%;border:1px solid var(--divider-color);border-radius:7px;background:var(--secondary-background-color);color:var(--primary-text-color);padding:10px}.category-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}.category-row button{min-height:32px;padding:6px 10px}.category-row button.active{background:var(--primary-color);color:var(--text-primary-color,#fff)}.symbol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}.symbol-tile{min-height:78px;display:grid;grid-template-rows:32px auto;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.symbol-tile strong{font-size:29px;line-height:1}.symbol-tile span{font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;text-align:center}
         .section-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}.debug-card details{margin-top:10px}.debug-card summary{cursor:pointer;color:var(--primary-color);font-weight:760}.inspector-empty{padding:18px;border:1px dashed var(--divider-color);border-radius:8px;color:var(--secondary-text-color);text-align:center;background:var(--secondary-background-color)}
         .ribbon-tab.menu-tab,.ribbon-tab.menu-tab.active{background:#16803c;color:#fff;border-color:#16803c}.ribbon-tab.menu-tab:hover{background:#126c33}.ribbon-tab.menu-tab.active{background:#0d5f2a;box-shadow:inset 0 -3px 0 rgba(255,255,255,.75)}.ribbon-send{background:#1565c0;color:#fff;border-color:#1565c0;margin-left:6px;box-shadow:none}.ribbon-send:hover:not(:disabled){background:#0d4f9b}.file-menu{padding:0;overflow:hidden;width:min(760px,calc(100vw - 52px))}.file-backstage{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:390px}.file-rail{display:flex;flex-direction:column;gap:3px;padding:16px 10px;background:#16803c;color:#fff}.file-rail-title{display:flex;align-items:center;gap:10px;padding:5px 10px 18px;font-size:20px;font-weight:850}.file-rail button{justify-content:flex-start;background:transparent;color:#fff;box-shadow:none;border:0;padding:11px 12px}.file-rail button:hover{background:rgba(255,255,255,.16)}.file-content{padding:20px;min-width:0}.file-content-actions{display:flex;gap:8px;margin-top:15px}.ribbon-menu{position:absolute;z-index:12;top:50px;padding:9px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);box-shadow:0 18px 46px rgba(0,0,0,.22)}.view-menu{left:205px;min-width:310px}.tools-menu{left:310px;min-width:270px}.layout-menu{left:410px;min-width:340px}.view-option{display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:center;gap:10px;padding:10px;border-radius:6px;font-weight:750}.view-option:hover{background:var(--secondary-background-color)}.menu-command-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding-bottom:8px;margin-bottom:4px;border-bottom:1px solid var(--divider-color)}.menu-command-row button{display:grid;place-items:center;gap:4px;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.menu-command-row span{font-size:11px}.menu-command{width:100%;display:flex;align-items:center;justify-content:flex-start;text-align:left;background:transparent;color:var(--primary-text-color);box-shadow:none}.menu-command ha-icon{color:#16803c;--mdc-icon-size:28px}.menu-command span{display:grid}.menu-command small{color:var(--secondary-text-color);font-weight:500}.menu-command.selected{background:rgba(22,128,60,.1);border-color:#16803c}.layout-menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-menu-button{min-height:76px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.layout-menu-button.active{background:#16803c;color:#fff}.editor-dialog{width:min(760px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:18px}.template-dialog{width:min(980px,100%)}.template-dialog .template-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));max-height:none;overflow:visible}.new-project-dialog{width:min(620px,100%)}.project-choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.project-choice{min-height:180px;display:grid;grid-template-rows:54px auto auto;place-items:center;text-align:center;padding:20px;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.project-choice ha-icon{--mdc-icon-size:48px;color:#16803c}.project-choice strong{font-size:17px}.project-choice span{color:var(--secondary-text-color);font-size:12px}.project-choice:hover{border-color:#16803c;background:rgba(22,128,60,.07)}
         .queue-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.queue-stat{display:flex;align-items:center;gap:12px}.queue-stat ha-icon{--mdc-icon-size:26px;color:var(--primary-color)}.queue-stat strong{display:block;font-size:23px}.queue-stat span{color:var(--secondary-text-color);font-size:12px}.queue-list{display:grid;gap:8px}.queue-row{display:grid;grid-template-columns:auto minmax(150px,1fr) minmax(170px,1fr) auto auto;align-items:center;gap:12px;padding:11px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color)}.queue-row.writing{border-color:#d97706;background:rgba(217,119,6,.07)}.queue-row.failed{border-color:#dc2626}.queue-icon{width:38px;height:38px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color)}.queue-main strong,.queue-route strong{display:block}.queue-main small,.queue-route small{display:block;color:var(--secondary-text-color);margin-top:3px}.signal-value{font-weight:850}.signal-value.good-signal{color:#16803c}.signal-value.warn-signal{color:#b06000}.signal-value.bad-signal{color:#c62828}
@@ -2020,7 +2033,7 @@ class DratekEinkPanel extends HTMLElement {
     const variables = this._variableDefs();
     return `<div class="modal-backdrop"><div class="editor-dialog">
       <div class="section-title"><h2>Proměnné návrhu</h2><button id="variablesDialogClose" class="icon-btn secondary" title="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button></div>
-      ${variables.length ? `<table class="variable-table"><thead><tr><th>Název</th><th>Výchozí hodnota</th><th>Hodnota pro odeslání</th></tr></thead><tbody>${variables.map((variable) => `<tr><td><strong>${this._escape(variable.name)}</strong></td><td>${this._escape(variable.defaultValue)}</td><td><input data-variable="${this._escape(variable.name)}" value="${this._escape(variable.value)}"></td></tr>`).join("")}</tbody></table>` : `<div class="inspector-empty"><ha-icon icon="mdi:variable-off"></ha-icon><p>Návrh zatím neobsahuje žádnou proměnnou.</p></div>`}
+      ${variables.length ? `<div class="variable-list">${variables.map((variable) => `<div class="variable-card"><div class="variable-card-head"><strong>${this._escape(variable.name)}</strong><span class="pill muted">${variable.type === "chart" ? "Pole pro graf" : "Text"}</span></div>${variable.type === "chart" ? `<textarea data-variable="${this._escape(variable.name)}" rows="4">${this._escape(variable.value)}</textarea><div class="format-help"><ha-icon icon="mdi:code-json"></ha-icon><div><strong>Datový formát</strong><div>Pošlete pole čísel v pořadí zleva doprava. Doporučený je JSON; podporovaný je také seznam oddělený čárkami. Pro desetinnou čárku oddělujte hodnoty středníkem.</div><code>[1.62, 1.48, 1.36] &nbsp; nebo &nbsp; 1,62; 1,48; 1,36</code></div></div>` : `<input data-variable="${this._escape(variable.name)}" value="${this._escape(variable.value)}">`}</div>`).join("")}</div>` : `<div class="inspector-empty"><ha-icon icon="mdi:variable-off"></ha-icon><p>Návrh zatím neobsahuje žádnou proměnnou.</p></div>`}
     </div></div>`;
   }
 
@@ -2425,13 +2438,13 @@ class DratekEinkPanel extends HTMLElement {
       <div class="field"><label>Data</label><textarea data-prop="data" rows="3" placeholder="2.10, 2.35, 2.18">${this._escape(object.data || "")}</textarea></div>
       <div class="field"><label>Popisky bodů</label><input data-prop="chartLabels" value="${this._escape(object.chartLabels || "")}" placeholder="00, 03, 06, 09"></div>
       <div class="row"><div class="field"><label>Popisek osy X</label><input data-prop="xLabel" value="${this._escape(object.xLabel || "")}"></div><div class="field"><label>Popisek osy Y</label><input data-prop="yLabel" value="${this._escape(object.yLabel || "")}"></div></div>
+      <div class="row"><div class="field"><label>Barva sloupců</label><select data-prop="barColor"><option value="black" ${object.barColor === "black" ? "selected" : ""}>Černá</option><option value="red" ${!object.barColor || object.barColor === "red" ? "selected" : ""}>Červená</option><option value="white" ${object.barColor === "white" ? "selected" : ""}>Bílá s černým rámečkem</option></select></div><div class="field"><label>Velikost textu legendy</label><input data-prop="legendFontSize" type="number" min="6" max="18" value="${Number(object.legendFontSize || 8)}"></div></div>
       <div class="row"><div class="field"><label>Minimum</label><input data-prop="chartMin" type="number" step="any" value="${this._escape(object.chartMin ?? "")}" placeholder="Automaticky"></div><div class="field"><label>Maximum</label><input data-prop="chartMax" type="number" step="any" value="${this._escape(object.chartMax ?? "")}" placeholder="Automaticky"></div></div>
       <label><input data-prop="showAxes" type="checkbox" ${object.showAxes !== false ? "checked" : ""}> Zobrazit osy</label>
       <label><input data-prop="showGrid" type="checkbox" ${object.showGrid !== false ? "checked" : ""}> Zobrazit mřížku</label>
       <label><input data-prop="showValues" type="checkbox" ${object.showValues ? "checked" : ""}> Zobrazit hodnoty</label>
       <div class="panel-divider"></div>
-      <label><input data-prop="variable" type="checkbox" ${object.variable ? "checked" : ""}> Data z proměnné Home Assistantu</label>
-      <div class="field"><label>Název proměnné</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="ceny_spot"></div>`;
+      <div class="field"><label>Datová proměnná pro Home Assistant</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="ceny_spot_24h"><small>Pole upravíte v horním menu Proměnné.</small></div>`;
     if (object.type === "line") return `<div class="row"><div class="field"><label>X1</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label>Y1</label><input data-prop="y" type="number" value="${object.y}"></div></div><div class="row"><div class="field"><label>X2</label><input data-prop="x2" type="number" value="${object.x2}"></div><div class="field"><label>Y2</label><input data-prop="y2" type="number" value="${object.y2}"></div></div><div class="row"><div class="field"><label>Barva</label><select data-prop="color"><option value="black" ${object.color === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.color === "red" ? "selected" : ""}>Cervena</option></select></div><div class="field"><label>Sila</label><input data-prop="strokeWidth" type="number" value="${object.strokeWidth || 2}"></div></div>`;
     if (object.type === "barcode" || object.type === "qr") return `${common}<div class="field"><label>${object.type === "qr" ? "QR data" : "EAN data"}</label><input data-prop="text" value="${this._escape(object.text)}"></div>`;
     return `${common}<label><input data-prop="keepRatio" type="checkbox" ${object.keepRatio ? "checked" : ""}> Zachovat pomer stran</label>`;
@@ -2456,7 +2469,7 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-prop]").forEach((input) => {
       const key = input.dataset.prop;
       if (input.type === "checkbox") object[key] = input.checked;
-      else if (["x", "y", "x2", "y2", "w", "h", "rotation", "fontSize", "minFontSize", "strokeWidth", "maxPoints"].includes(key)) object[key] = Number(input.value);
+      else if (["x", "y", "x2", "y2", "w", "h", "rotation", "fontSize", "minFontSize", "strokeWidth", "maxPoints", "legendFontSize"].includes(key)) object[key] = Number(input.value);
       else object[key] = input.value;
     });
     if (object.type === "text") {
@@ -2468,16 +2481,21 @@ class DratekEinkPanel extends HTMLElement {
       }
     }
     if (["text", "chart"].includes(object.type)) {
+      if (object.type === "chart") object.variable = true;
       const defaultValue = object.type === "chart" ? (object.data || "") : (object.text || "");
       if (object.variable) {
         object.variableName = this._uniqueVariableName(object.variableName || (object.type === "chart" ? "data_grafu" : object.text) || "promenna", object.id);
-        if (this._variables[object.variableName] === undefined) this._variables[object.variableName] = defaultValue;
+        if (oldVariableName && oldVariableName !== object.variableName && this._variables[oldVariableName] !== undefined) {
+          this._variables[object.variableName] = this._variables[oldVariableName];
+          delete this._variables[oldVariableName];
+        } else if (this._variables[object.variableName] === undefined) this._variables[object.variableName] = defaultValue;
       } else if (object.variableName) {
         delete this._variables[object.variableName];
         object.variableName = "";
       }
       if (changedProp === "variable" || changedProp === "variableName" || wasVariable !== !!object.variable || oldVariableName !== (object.variableName || "")) this._render();
     }
+    if (object.type === "chart") object.legendFontSize = Math.max(6, Math.min(18, Number(object.legendFontSize || 8)));
     this._paint();
     this._scheduleDraftSave();
   }
@@ -2740,12 +2758,13 @@ class DratekEinkPanel extends HTMLElement {
     ctx.fillRect(0, 0, box.w, box.h);
     const values = this._chartValues(object);
     const color = this._color(object.color || "black");
+    const legendFontSize = Math.max(6, Math.min(18, Number(object.legendFontSize || 8)));
     const title = String(object.chartTitle || "").trim();
     const showAxes = object.showAxes !== false;
-    const left = showAxes ? (object.yLabel ? 34 : 25) : 5;
+    const left = showAxes ? Math.max(object.yLabel ? 34 : 25, Math.round(legendFontSize * 3.4)) : 5;
     const right = 6;
-    const top = title ? 17 : 5;
-    const bottom = showAxes ? (object.xLabel ? 22 : 14) : 5;
+    const top = title ? Math.max(17, legendFontSize + 8) : 5;
+    const bottom = showAxes ? Math.max(object.xLabel ? 22 : 14, object.xLabel ? legendFontSize * 2.4 : legendFontSize + 7) : 5;
     const plotW = Math.max(8, box.w - left - right);
     const plotH = Math.max(8, box.h - top - bottom);
 
@@ -2774,7 +2793,9 @@ class DratekEinkPanel extends HTMLElement {
       if (!Number.isFinite(explicitMax)) max += padding;
     }
     const yFor = (value) => top + plotH - ((value - min) / Math.max(0.000001, max - min)) * plotH;
-    const xFor = (index) => left + (values.length === 1 ? plotW / 2 : (index / (values.length - 1)) * plotW);
+    const xFor = (index) => object.chartType === "bar"
+      ? left + ((index + 0.5) / Math.max(1, values.length)) * plotW
+      : left + (values.length === 1 ? plotW / 2 : (index / (values.length - 1)) * plotW);
 
     if (object.showGrid !== false) {
       ctx.strokeStyle = "#b8b8b8";
@@ -2797,7 +2818,7 @@ class DratekEinkPanel extends HTMLElement {
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(left, top); ctx.lineTo(left, top + plotH); ctx.lineTo(left + plotW, top + plotH); ctx.stroke();
       ctx.fillStyle = "#000";
-      ctx.font = "600 7px Arial";
+      ctx.font = `600 ${legendFontSize}px Arial`;
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
       ctx.fillText(this._formatChartNumber(max), left - 3, top + 2);
@@ -2807,8 +2828,8 @@ class DratekEinkPanel extends HTMLElement {
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       for (const index of [...new Set(labelIndexes)]) ctx.fillText(labels[index] || String(index + 1), xFor(index), top + plotH + 3, 34);
-      ctx.font = "700 8px Arial";
-      if (object.xLabel) ctx.fillText(String(object.xLabel), left + plotW / 2, box.h - 9, plotW);
+      ctx.font = `700 ${Math.min(18, legendFontSize + 1)}px Arial`;
+      if (object.xLabel) ctx.fillText(String(object.xLabel), left + plotW / 2, box.h - legendFontSize - 2, plotW);
       if (object.yLabel) {
         ctx.save();
         ctx.translate(7, top + plotH / 2);
@@ -2824,11 +2845,19 @@ class DratekEinkPanel extends HTMLElement {
       const barW = Math.max(1, slot * 0.62);
       const baselineValue = min <= 0 && max >= 0 ? 0 : min;
       const baselineY = yFor(baselineValue);
-      ctx.fillStyle = color;
+      const barColor = object.barColor || "red";
+      ctx.fillStyle = this._color(barColor);
       values.forEach((value, index) => {
         const x = left + index * slot + (slot - barW) / 2;
         const y = yFor(value);
-        ctx.fillRect(x, Math.min(y, baselineY), barW, Math.max(1, Math.abs(baselineY - y)));
+        const barY = Math.min(y, baselineY);
+        const barH = Math.max(1, Math.abs(baselineY - y));
+        ctx.fillRect(x, barY, barW, barH);
+        if (barColor === "white") {
+          ctx.strokeStyle = "#000";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x + 0.5, barY + 0.5, Math.max(0, barW - 1), Math.max(0, barH - 1));
+        }
       });
     } else {
       if (object.chartType === "area") {
@@ -2853,7 +2882,7 @@ class DratekEinkPanel extends HTMLElement {
 
     if (object.showValues) {
       ctx.fillStyle = "#000";
-      ctx.font = "700 7px Arial";
+      ctx.font = `700 ${legendFontSize}px Arial`;
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
       const every = values.length <= 10 ? 1 : Math.ceil(values.length / 8);

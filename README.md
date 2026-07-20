@@ -1,5 +1,17 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.48
+
+- novy graf je ve vychozim stavu sloupcovy
+- obsahuje 24 realistickych ukazkovych hodinovych cen pro denni spotovy trh
+- kazdy graf automaticky vytvari datovou promennou, ktera je ihned dostupna v menu Promenne
+- promenna grafu pouziva viceradkove datove pole s navodem pro JSON, seznam i ceskou desetinnou carku
+- starsi grafy bez promenne se pri otevreni dialogu Promenne automaticky doplni
+- sloupce mohou byt cerne, cervene nebo bile; bile sloupce maji jednopixelovy cerny ramecek
+- lze nastavit velikost textu legendy, popisku os, hodin a zobrazovanych hodnot
+- opravena je zmena nazvu promenne i duplikovani grafu vcetne jeho dat
+- firmware gateway zustava 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.47
 
 - po odeslani navrhu se zobrazi pouze strucny vysledek; dlouhy technicky log uz designer neroztahuje
