@@ -1,5 +1,16 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.47
+
+- po odeslani navrhu se zobrazi pouze strucny vysledek; dlouhy technicky log uz designer neroztahuje
+- nahled vzdy pouziva skutecne barvy eInk a tato volba se uzivateli jiz nenabizi
+- projekt ma vlastni bile, cerne nebo cervene pozadi, ktere vyplni vsechny adresovatelne pixely displeje
+- vice objektu lze oznacit vyberovym obdelnikem tazenim mysi; Shift zachova predchozi vyber
+- vedle Inspectoru je novy panel Objekty se seznamem vrstev od popredi k pozadi
+- kliknutim v panelu Objekty lze prvek vybrat a sipkami menit jeho poradi ve vrstvach
+- barva pozadi se uklada do internich navrhu, automatickych konceptu i exportovanych projektu
+- firmware gateway zustava 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.46
 
 - designer je zamceny, dokud uzivatel explicitne neotevre konkretni nalezeny displej

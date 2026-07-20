@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.46";
+const DRATEK_EINK_VERSION = "0.1.47";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -19,7 +19,7 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedIds = [];
     this._drag = null;
     this._nextId = 1;
-    this._realPreview = false;
+    this._backgroundColor = "white";
     this._zoom = 1;
     this._snap = true;
     this._projects = [];
@@ -567,6 +567,7 @@ class DratekEinkPanel extends HTMLElement {
       orientation: this._orientation,
       display_transform: this._displayTransform,
       invert_colors: false,
+      background_color: "white",
       width: size.width,
       height: size.height,
       variables: {},
@@ -581,6 +582,7 @@ class DratekEinkPanel extends HTMLElement {
     this._orientation = source.orientation === "portrait" ? "portrait" : "landscape";
     this._displayTransform = source.display_transform || "rotate_cw";
     this._invertColors = !!source.invert_colors;
+    this._backgroundColor = ["white", "black", "red"].includes(source.background_color) ? source.background_color : "white";
     const size = this._displaySize(device);
     this._objects = Array.isArray(source.objects) ? structuredClone(source.objects) : [];
     this._variables = source.variables ? structuredClone(source.variables) : {};
@@ -662,6 +664,7 @@ class DratekEinkPanel extends HTMLElement {
       orientation: this._orientation,
       displayTransform: this._displayTransform,
       invertColors: this._invertColors,
+      backgroundColor: this._backgroundColor,
       projectName: this._projectName,
       selectedProjectId: this._selectedProjectId,
       nextId: this._nextId,
@@ -684,6 +687,7 @@ class DratekEinkPanel extends HTMLElement {
     this._orientation = snapshot.orientation || "landscape";
     this._displayTransform = snapshot.displayTransform || "rotate_cw";
     this._invertColors = !!snapshot.invertColors;
+    this._backgroundColor = ["white", "black", "red"].includes(snapshot.backgroundColor) ? snapshot.backgroundColor : "white";
     this._projectName = snapshot.projectName || "Novy navrh";
     this._selectedProjectId = snapshot.selectedProjectId || "";
     this._nextId = snapshot.nextId || this._nextObjectId();
@@ -1138,6 +1142,7 @@ class DratekEinkPanel extends HTMLElement {
     });
     this._variables = variables;
     this._invertColors = false;
+    this._backgroundColor = "white";
     this._selectedIds = [];
     this._selectedProjectId = "";
     this._projectName = `Sablona ${template.title}`;
@@ -1301,6 +1306,7 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedIds = [];
     this._variables = {};
     this._invertColors = false;
+    this._backgroundColor = "white";
     this._selectedProjectId = "";
     this._projectName = "Novy navrh";
     this._nextId = 1;
@@ -1327,6 +1333,7 @@ class DratekEinkPanel extends HTMLElement {
     const moving = this._objects.filter((object) => selected.has(object.id));
     const rest = this._objects.filter((object) => !selected.has(object.id));
     this._objects = direction === "front" ? [...rest, ...moving] : [...moving, ...rest];
+    this._render();
     this._paint();
     this._scheduleDraftSave();
   }
@@ -1356,6 +1363,28 @@ class DratekEinkPanel extends HTMLElement {
     this._pushHistory();
     this._invertColors = !this._invertColors;
     this._toolsMenuOpen = false;
+    this._render();
+    this._paint();
+    this._scheduleDraftSave();
+  }
+
+  _setBackgroundColor(color) {
+    if (!["white", "black", "red"].includes(color) || color === this._backgroundColor) return;
+    this._pushHistory();
+    this._backgroundColor = color;
+    this._toolsMenuOpen = false;
+    this._render();
+    this._paint();
+    this._scheduleDraftSave();
+  }
+
+  _moveLayerStep(id, direction) {
+    const index = this._objects.findIndex((object) => object.id === id);
+    const target = direction === "front" ? index + 1 : index - 1;
+    if (index < 0 || target < 0 || target >= this._objects.length) return;
+    this._pushHistory();
+    [this._objects[index], this._objects[target]] = [this._objects[target], this._objects[index]];
+    this._selectedIds = [id];
     this._render();
     this._paint();
     this._scheduleDraftSave();
@@ -1463,9 +1492,10 @@ class DratekEinkPanel extends HTMLElement {
     const handleHit = this._handleHitTest(point);
     const object = handleHit ? handleHit.object : this._hitTest(point);
     if (!object) {
-      this._selectedIds = [];
-      this._drag = null;
-      this._render();
+      const baseIds = event.shiftKey ? [...this._selectedIds] : [];
+      this._selectedIds = baseIds;
+      this._drag = { mode: "marquee", start: point, current: point, baseIds };
+      event.preventDefault();
       this._paint();
       return;
     }
@@ -1495,6 +1525,20 @@ class DratekEinkPanel extends HTMLElement {
       return;
     }
     const point = this._canvasPoint(event);
+    if (this._drag.mode === "marquee") {
+      this._drag.current = point;
+      const left = Math.min(this._drag.start.x, point.x);
+      const top = Math.min(this._drag.start.y, point.y);
+      const right = Math.max(this._drag.start.x, point.x);
+      const bottom = Math.max(this._drag.start.y, point.y);
+      const hits = this._objects.filter((object) => {
+        const box = this._box(object);
+        return box.x <= right && box.x + box.w >= left && box.y <= bottom && box.y + box.h >= top;
+      }).map((object) => object.id);
+      this._selectedIds = [...new Set([...this._drag.baseIds, ...hits])];
+      this._paint();
+      return;
+    }
     const dx = point.x - this._drag.start.x;
     const dy = point.y - this._drag.start.y;
     if (!this._drag.historyPushed && (Math.abs(dx) > 0 || Math.abs(dy) > 0)) {
@@ -1520,8 +1564,13 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _onPointerUp() {
-    if (this._drag) this._scheduleDraftSave();
+    const marquee = this._drag?.mode === "marquee";
+    if (this._drag && !marquee) this._scheduleDraftSave();
     this._drag = null;
+    if (marquee) {
+      this._render();
+      this._paint();
+    }
   }
 
   _updateCursor(event) {
@@ -1591,6 +1640,7 @@ class DratekEinkPanel extends HTMLElement {
       orientation: this._orientation,
       display_transform: this._displayTransform,
       invert_colors: this._invertColors,
+      background_color: this._backgroundColor,
       width: size.width,
       height: size.height,
       variables: this._variables,
@@ -1652,6 +1702,7 @@ class DratekEinkPanel extends HTMLElement {
       this._variables = structuredClone(project.variables || {});
       this._displayTransform = project.display_transform || "rotate_cw";
       this._invertColors = !!project.invert_colors;
+      this._backgroundColor = ["white", "black", "red"].includes(project.background_color) ? project.background_color : "white";
       this._projectName = project.name || "Importovany navrh";
       this._selectedProjectId = "";
       this._selectedIds = [];
@@ -1676,6 +1727,7 @@ class DratekEinkPanel extends HTMLElement {
       this._orientation = project.orientation === "portrait" ? "portrait" : "landscape";
       this._displayTransform = project.display_transform || "rotate_cw";
       this._invertColors = !!project.invert_colors;
+      this._backgroundColor = ["white", "black", "red"].includes(project.background_color) ? project.background_color : "white";
       const size = this._displaySize();
       if (project.width !== size.width || project.height !== size.height) {
         this._orientation = previousOrientation;
@@ -1819,15 +1871,16 @@ class DratekEinkPanel extends HTMLElement {
         .route-list{display:grid;gap:7px}.route{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:7px 9px;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);font-size:12px}.route.preferred{border-color:#0f766e;background:rgba(15,118,110,.08)}.route ha-icon{color:#0f766e}.route-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:780}.route-rssi{color:var(--secondary-text-color)}.topology{display:grid;gap:8px}.topology-row{display:grid;grid-template-columns:minmax(170px,1fr) minmax(80px,2fr) minmax(190px,1.2fr);align-items:center;gap:10px}.topology-node{display:flex;align-items:center;gap:9px;border:1px solid var(--divider-color);border-radius:8px;padding:10px;background:var(--card-background-color);min-width:0}.topology-node strong,.topology-node small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.topology-node small{color:var(--secondary-text-color);margin-top:2px}.topology-link{height:2px;background:var(--divider-color);position:relative}.topology-link:after{content:"";position:absolute;right:0;top:-4px;border-left:7px solid #0f766e;border-top:5px solid transparent;border-bottom:5px solid transparent}.topology-link span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--card-background-color);padding:2px 8px;color:var(--secondary-text-color);font-size:11px;white-space:nowrap}
         .subtabs{display:flex;gap:6px;padding:5px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);width:max-content;max-width:100%}.subtab{background:transparent;color:var(--secondary-text-color);box-shadow:none}.subtab.active{background:#0f766e;color:#fff}.gateway-name-edit{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px}.gateway-name-edit input{min-width:0;border:1px solid var(--primary-color);border-radius:7px;padding:7px;background:var(--card-background-color);color:var(--primary-text-color)}.gateway-health{display:grid;grid-template-columns:1fr 1fr;gap:10px}.health-tile{padding:10px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color)}.health-tile label{display:block;color:var(--secondary-text-color);font-size:11px;text-transform:uppercase;font-weight:800;margin-bottom:5px}
         .empty-state{min-height:280px;display:grid;place-items:center;text-align:center;gap:9px;color:var(--secondary-text-color)}.empty-state h2{color:var(--primary-text-color);font-size:18px;text-transform:none;letter-spacing:0;margin:0}.empty-icon{width:62px;height:62px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);font-weight:950;color:var(--primary-color)}
-        .editor-shell{display:grid;grid-template-columns:276px minmax(0,1fr) 352px;gap:12px;align-items:start}.left,.right{position:sticky;top:12px}.designer-section{position:relative}.designer-section.locked> :not(.designer-lock){pointer-events:none;opacity:.28;filter:grayscale(1)}.designer-lock{position:absolute;z-index:15;left:50%;top:110px;transform:translateX(-50%);width:min(440px,calc(100% - 32px));padding:28px;text-align:center;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.24)}.designer-lock ha-icon{--mdc-icon-size:44px;color:#16803c}.designer-lock h2{font-size:20px;text-transform:none;margin:10px 0}.designer-lock p{color:var(--secondary-text-color)}.template-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:282px;overflow:auto;padding-right:2px}.template-hero .template-grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr));max-height:none;overflow:visible;padding-right:0}.template-card{min-height:76px;display:grid;grid-template-columns:34px 1fr;align-items:center;text-align:left;gap:9px;padding:9px;border:1px solid var(--divider-color);background:linear-gradient(180deg,var(--card-background-color),var(--secondary-background-color));color:var(--primary-text-color);box-shadow:none}.template-card ha-icon{color:var(--primary-color);--mdc-icon-size:26px}.template-card strong{display:block;font-size:12px;line-height:1.2}.template-card span{display:block;font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;margin-top:2px}.template-card:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}.tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.tool-icon{min-height:82px;display:grid;grid-template-rows:36px auto;place-items:center;text-align:center;padding:10px 6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.tool-icon .ico{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-color);font-size:18px;font-weight:900}.tool-icon .txt{font-size:11px;font-weight:850;color:var(--secondary-text-color);text-transform:uppercase}.tool-icon:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}
-        .action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:16px;display:grid;place-items:center}.wide-action{grid-column:span 4;font-size:13px}.panel-divider{height:1px;background:var(--divider-color);margin:14px 0}.layout-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-btn{min-height:58px;display:grid;place-items:center;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.layout-btn.active{background:var(--primary-color);color:var(--text-primary-color,#fff);border-color:var(--primary-color)}.transform-box{margin-top:10px;padding:10px;border:1px solid var(--divider-color);border-radius:8px;background:var(--secondary-background-color)}.transform-box small{display:block;color:var(--secondary-text-color);line-height:1.35;margin-top:6px}.properties-panel{max-height:calc(100vh - 120px);overflow:auto}
+        .editor-shell{display:grid;grid-template-columns:250px minmax(0,1fr) 318px 250px;gap:12px;align-items:start}.left,.right,.layers-panel{position:sticky;top:12px}.designer-section{position:relative}.designer-section.locked> :not(.designer-lock){pointer-events:none;opacity:.28;filter:grayscale(1)}.designer-lock{position:absolute;z-index:15;left:50%;top:110px;transform:translateX(-50%);width:min(440px,calc(100% - 32px));padding:28px;text-align:center;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.24)}.designer-lock ha-icon{--mdc-icon-size:44px;color:#16803c}.designer-lock h2{font-size:20px;text-transform:none;margin:10px 0}.designer-lock p{color:var(--secondary-text-color)}.template-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:282px;overflow:auto;padding-right:2px}.template-hero .template-grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr));max-height:none;overflow:visible;padding-right:0}.template-card{min-height:76px;display:grid;grid-template-columns:34px 1fr;align-items:center;text-align:left;gap:9px;padding:9px;border:1px solid var(--divider-color);background:linear-gradient(180deg,var(--card-background-color),var(--secondary-background-color));color:var(--primary-text-color);box-shadow:none}.template-card ha-icon{color:var(--primary-color);--mdc-icon-size:26px}.template-card strong{display:block;font-size:12px;line-height:1.2}.template-card span{display:block;font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;margin-top:2px}.template-card:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}.tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.tool-icon{min-height:82px;display:grid;grid-template-rows:36px auto;place-items:center;text-align:center;padding:10px 6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.tool-icon .ico{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-color);font-size:18px;font-weight:900}.tool-icon .txt{font-size:11px;font-weight:850;color:var(--secondary-text-color);text-transform:uppercase}.tool-icon:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}
+        .action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:16px;display:grid;place-items:center}.wide-action{grid-column:span 4;font-size:13px}.panel-divider{height:1px;background:var(--divider-color);margin:14px 0}.layout-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-btn{min-height:58px;display:grid;place-items:center;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.layout-btn.active{background:var(--primary-color);color:var(--text-primary-color,#fff);border-color:var(--primary-color)}.transform-box{margin-top:10px;padding:10px;border:1px solid var(--divider-color);border-radius:8px;background:var(--secondary-background-color)}.transform-box small{display:block;color:var(--secondary-text-color);line-height:1.35;margin-top:6px}.properties-panel,.layers-panel{max-height:calc(100vh - 120px);overflow:auto}.layer-list{display:grid;gap:6px}.layer-row{display:grid;grid-template-columns:minmax(0,1fr) 34px 34px;gap:4px;align-items:center;padding:4px;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color)}.layer-row.selected{border-color:#16803c;background:rgba(22,128,60,.1);box-shadow:inset 3px 0 0 #16803c}.layer-main{min-width:0;justify-content:flex-start;background:transparent;color:var(--primary-text-color);box-shadow:none;padding:7px}.layer-main span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.layer-main ha-icon{color:var(--secondary-text-color);flex:0 0 auto}.layer-step{min-height:32px;padding:5px;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.layer-hint{margin:9px 0 0;color:var(--secondary-text-color);font-size:11px;line-height:1.4}.background-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding-top:9px;margin-top:7px;border-top:1px solid var(--divider-color)}.background-picker button{display:grid;place-items:center;gap:4px;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none;font-size:11px}.background-picker button.selected{outline:2px solid #16803c;outline-offset:-2px}.color-swatch{width:24px;height:20px;border:1px solid #7f7f7f;border-radius:4px}.color-swatch.white{background:#fff}.color-swatch.black{background:#000}.color-swatch.red{background:#d41414}
         .workspace-card{padding:0;overflow:hidden}.canvas-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--divider-color);background:var(--card-background-color)}.canvas-meta{display:flex;align-items:center;gap:8px;color:var(--secondary-text-color);font-size:12px}.workspace{min-height:590px;overflow:auto;display:grid;place-items:center;background:linear-gradient(45deg,rgba(127,127,127,.08) 25%,transparent 25%),linear-gradient(-45deg,rgba(127,127,127,.08) 25%,transparent 25%);background-size:18px 18px;border:0;padding:34px}
         canvas{background:#fff;box-shadow:0 20px 54px rgba(0,0,0,.24);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:760}.field input,.field select,.field textarea,.file-menu input,.file-menu select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px;font:inherit}.field textarea{resize:vertical;min-height:62px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
         table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:#111827;color:#e5e7eb;border-radius:8px;padding:12px;font-size:12px;line-height:1.45;max-height:320px;white-space:pre-wrap}.gateway-log{max-height:260px;min-height:96px;overflow-y:auto}.send-result{margin-top:10px}.ota-progress{height:9px;background:var(--secondary-background-color);border:1px solid var(--divider-color);border-radius:999px;overflow:hidden;margin:11px 0}.ota-progress span{display:block;height:100%;background:#0f766e;transition:width .25s ease}.variable-table input{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:7px}.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:20;display:grid;place-items:center;padding:24px}.symbol-dialog{width:min(920px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:16px}.symbol-search{display:grid;grid-template-columns:1fr auto;gap:10px;margin:12px 0}.symbol-search input{width:100%;border:1px solid var(--divider-color);border-radius:7px;background:var(--secondary-background-color);color:var(--primary-text-color);padding:10px}.category-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}.category-row button{min-height:32px;padding:6px 10px}.category-row button.active{background:var(--primary-color);color:var(--text-primary-color,#fff)}.symbol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}.symbol-tile{min-height:78px;display:grid;grid-template-rows:32px auto;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.symbol-tile strong{font-size:29px;line-height:1}.symbol-tile span{font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;text-align:center}
         .section-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}.debug-card details{margin-top:10px}.debug-card summary{cursor:pointer;color:var(--primary-color);font-weight:760}.inspector-empty{padding:18px;border:1px dashed var(--divider-color);border-radius:8px;color:var(--secondary-text-color);text-align:center;background:var(--secondary-background-color)}
         .ribbon-tab.menu-tab,.ribbon-tab.menu-tab.active{background:#16803c;color:#fff;border-color:#16803c}.ribbon-tab.menu-tab:hover{background:#126c33}.ribbon-tab.menu-tab.active{background:#0d5f2a;box-shadow:inset 0 -3px 0 rgba(255,255,255,.75)}.ribbon-send{background:#1565c0;color:#fff;border-color:#1565c0;margin-left:6px;box-shadow:none}.ribbon-send:hover:not(:disabled){background:#0d4f9b}.file-menu{padding:0;overflow:hidden;width:min(760px,calc(100vw - 52px))}.file-backstage{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:390px}.file-rail{display:flex;flex-direction:column;gap:3px;padding:16px 10px;background:#16803c;color:#fff}.file-rail-title{display:flex;align-items:center;gap:10px;padding:5px 10px 18px;font-size:20px;font-weight:850}.file-rail button{justify-content:flex-start;background:transparent;color:#fff;box-shadow:none;border:0;padding:11px 12px}.file-rail button:hover{background:rgba(255,255,255,.16)}.file-content{padding:20px;min-width:0}.file-content-actions{display:flex;gap:8px;margin-top:15px}.ribbon-menu{position:absolute;z-index:12;top:50px;padding:9px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);box-shadow:0 18px 46px rgba(0,0,0,.22)}.view-menu{left:205px;min-width:310px}.tools-menu{left:310px;min-width:270px}.layout-menu{left:410px;min-width:340px}.view-option{display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:center;gap:10px;padding:10px;border-radius:6px;font-weight:750}.view-option:hover{background:var(--secondary-background-color)}.menu-command-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding-bottom:8px;margin-bottom:4px;border-bottom:1px solid var(--divider-color)}.menu-command-row button{display:grid;place-items:center;gap:4px;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.menu-command-row span{font-size:11px}.menu-command{width:100%;display:flex;align-items:center;justify-content:flex-start;text-align:left;background:transparent;color:var(--primary-text-color);box-shadow:none}.menu-command ha-icon{color:#16803c;--mdc-icon-size:28px}.menu-command span{display:grid}.menu-command small{color:var(--secondary-text-color);font-weight:500}.menu-command.selected{background:rgba(22,128,60,.1);border-color:#16803c}.layout-menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-menu-button{min-height:76px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.layout-menu-button.active{background:#16803c;color:#fff}.editor-dialog{width:min(760px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:18px}.template-dialog{width:min(980px,100%)}.template-dialog .template-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));max-height:none;overflow:visible}.new-project-dialog{width:min(620px,100%)}.project-choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.project-choice{min-height:180px;display:grid;grid-template-rows:54px auto auto;place-items:center;text-align:center;padding:20px;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.project-choice ha-icon{--mdc-icon-size:48px;color:#16803c}.project-choice strong{font-size:17px}.project-choice span{color:var(--secondary-text-color);font-size:12px}.project-choice:hover{border-color:#16803c;background:rgba(22,128,60,.07)}
         .queue-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.queue-stat{display:flex;align-items:center;gap:12px}.queue-stat ha-icon{--mdc-icon-size:26px;color:var(--primary-color)}.queue-stat strong{display:block;font-size:23px}.queue-stat span{color:var(--secondary-text-color);font-size:12px}.queue-list{display:grid;gap:8px}.queue-row{display:grid;grid-template-columns:auto minmax(150px,1fr) minmax(170px,1fr) auto auto;align-items:center;gap:12px;padding:11px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color)}.queue-row.writing{border-color:#d97706;background:rgba(217,119,6,.07)}.queue-row.failed{border-color:#dc2626}.queue-icon{width:38px;height:38px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color)}.queue-main strong,.queue-route strong{display:block}.queue-main small,.queue-route small{display:block;color:var(--secondary-text-color);margin-top:3px}.signal-value{font-weight:850}.signal-value.good-signal{color:#16803c}.signal-value.warn-signal{color:#b06000}.signal-value.bad-signal{color:#c62828}
-        @media(max-width:1180px){.editor-shell,.status-grid{grid-template-columns:1fr}.queue-summary{grid-template-columns:1fr 1fr}.left,.right{position:static}.tabbar,.subtabs{width:100%}.tab,.subtab{flex:1}.workspace{min-height:420px}}
+        @media(max-width:1450px){.editor-shell{grid-template-columns:230px minmax(0,1fr) 300px}.layers-panel{grid-column:3}.properties-panel{grid-column:3}.layers-panel,.properties-panel{position:static}}
+        @media(max-width:1180px){.editor-shell,.status-grid{grid-template-columns:1fr}.queue-summary{grid-template-columns:1fr 1fr}.left,.right,.layers-panel,.properties-panel{position:static;grid-column:auto}.tabbar,.subtabs{width:100%}.tab,.subtab{flex:1}.workspace{min-height:420px}}
         @media(max-width:720px){.topology-row,.queue-row{grid-template-columns:1fr}.queue-summary,.file-menu-grid,.file-actions,.file-backstage,.project-choice-grid{grid-template-columns:1fr}.file-rail{display:grid;grid-template-columns:1fr 1fr}.file-rail-title{grid-column:1/-1}.ribbon{flex-wrap:wrap}.ribbon-project{width:100%;order:3}.ribbon-menu{left:8px;right:8px;top:94px;min-width:0}.designer-context{align-items:flex-start}.topology-link{width:2px;height:26px;justify-self:center}.topology-link:after{right:-4px;top:auto;bottom:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #0f766e}.topology-link span{white-space:normal}.route{grid-template-columns:auto minmax(0,1fr) auto}.route-rssi{grid-column:2}.gateway-health{grid-template-columns:1fr}}
       </style>
       <div class="page">
@@ -1846,8 +1899,9 @@ class DratekEinkPanel extends HTMLElement {
         ${this._renderSendResult()}
         <div class="editor-shell">
           ${this._renderToolSidebar()}
-          <div class="card workspace-card"><div class="canvas-head"><div class="canvas-meta"><ha-icon icon="mdi:checkerboard"></ha-icon><strong>${size.width} x ${size.height}</strong><span>${this._orientation === "portrait" ? "Na vysku" : "Na sirku"}</span></div><div class="canvas-meta"><span>Zoom ${Math.round(this._zoom * 100)}%</span><span>${this._realPreview ? "Realne barvy eInk" : "Barevny nahled"}</span></div></div><div class="workspace"><canvas id="editor" width="${size.width}" height="${size.height}" style="width:${Math.round(size.width * this._zoom)}px;height:${Math.round(size.height * this._zoom)}px"></canvas></div></div>
+          <div class="card workspace-card"><div class="canvas-head"><div class="canvas-meta"><ha-icon icon="mdi:checkerboard"></ha-icon><strong>${size.width} x ${size.height}</strong><span>${this._orientation === "portrait" ? "Na výšku" : "Na šířku"}</span></div><div class="canvas-meta"><span>Zoom ${Math.round(this._zoom * 100)}%</span><span>Reálné barvy eInk</span></div></div><div class="workspace"><canvas id="editor" width="${size.width}" height="${size.height}" style="width:${Math.round(size.width * this._zoom)}px;height:${Math.round(size.height * this._zoom)}px"></canvas></div></div>
           <div class="card right properties-panel"><div class="section-title"><h2>Inspector</h2><span class="pill muted">${object ? this._escape(object.type) : "bez vyberu"}</span></div>${this._renderProperties(object)}</div>
+          ${this._renderLayersPanel()}
         </div>
         </div>
         <div style="${this._activeTab === "queue" ? "" : "display:none"}">${this._renderQueue()}</div>
@@ -1928,12 +1982,32 @@ class DratekEinkPanel extends HTMLElement {
 
   _renderViewMenu() {
     if (!this._viewMenuOpen) return "";
-    return `<div class="ribbon-menu view-menu"><div class="menu-command-row"><button id="zoomIn" title="Priblizit"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon><span>Priblizit</span></button><button id="zoomOut" title="Oddalit"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon><span>Oddalit</span></button><button id="zoomFit" title="Prizpusobit"><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon><span>Prizpusobit</span></button></div><label class="view-option"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}><ha-icon icon="mdi:grid"></ha-icon><span>Prichytavat k mrizce</span></label><label class="view-option"><input id="realPreview" type="checkbox" ${this._realPreview ? "checked" : ""}><ha-icon icon="mdi:palette-outline"></ha-icon><span>Realne barvy eInk</span></label></div>`;
+    return `<div class="ribbon-menu view-menu"><div class="menu-command-row"><button id="zoomIn" title="Přiblížit"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon><span>Přiblížit</span></button><button id="zoomOut" title="Oddálit"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon><span>Oddálit</span></button><button id="zoomFit" title="Přizpůsobit"><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon><span>Přizpůsobit</span></button></div><label class="view-option"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}><ha-icon icon="mdi:grid"></ha-icon><span>Přichytávat k mřížce</span></label></div>`;
   }
 
   _renderToolsMenu() {
     if (!this._toolsMenuOpen) return "";
-    return `<div class="ribbon-menu tools-menu"><button id="invertColors" class="menu-command ${this._invertColors ? "selected" : ""}"><ha-icon icon="mdi:invert-colors"></ha-icon><span><strong>Invertovat barvy</strong><small>${this._invertColors ? "Inverze je zapnuta" : "Prohodit cernou a bilou"}</small></span></button></div>`;
+    return `<div class="ribbon-menu tools-menu"><button id="invertColors" class="menu-command ${this._invertColors ? "selected" : ""}"><ha-icon icon="mdi:invert-colors"></ha-icon><span><strong>Invertovat barvy</strong><small>${this._invertColors ? "Inverze je zapnuta" : "Prohodit černou a bílou"}</small></span></button><div class="background-picker"><button data-background="white" class="${this._backgroundColor === "white" ? "selected" : ""}" title="Bílé pozadí"><span class="color-swatch white"></span>Bílé</button><button data-background="black" class="${this._backgroundColor === "black" ? "selected" : ""}" title="Černé pozadí"><span class="color-swatch black"></span>Černé</button><button data-background="red" class="${this._backgroundColor === "red" ? "selected" : ""}" title="Červené pozadí"><span class="color-swatch red"></span>Červené</button></div></div>`;
+  }
+
+  _objectLabel(object, index) {
+    if (object.type === "text") return String(object.text || "Text").slice(0, 28);
+    if (object.type === "rect") return `Obdélník ${index + 1}`;
+    if (object.type === "line") return `Čára ${index + 1}`;
+    if (object.type === "barcode") return `EAN ${object.value || ""}`.trim();
+    if (object.type === "qr") return `QR ${object.value || ""}`.trim().slice(0, 28);
+    if (object.type === "chart") return String(object.chartTitle || "Graf").slice(0, 28);
+    if (object.type === "image") return `Obrázek ${index + 1}`;
+    return `Objekt ${index + 1}`;
+  }
+
+  _objectIcon(object) {
+    return ({ text: "mdi:format-text", rect: "mdi:rectangle-outline", line: "mdi:vector-line", barcode: "mdi:barcode", qr: "mdi:qrcode", chart: "mdi:chart-line", image: "mdi:image-outline" })[object.type] || "mdi:shape-outline";
+  }
+
+  _renderLayersPanel() {
+    const layers = this._objects.map((object, index) => ({ object, index })).reverse();
+    return `<div class="card layers-panel"><div class="section-title"><h2>Objekty</h2><span class="pill muted">${this._objects.length}</span></div>${layers.length ? `<div class="layer-list">${layers.map(({ object, index }) => `<div class="layer-row ${this._selectedIds.includes(object.id) ? "selected" : ""}"><button class="layer-main" data-layer-select="${object.id}" title="Vybrat objekt"><ha-icon icon="${this._objectIcon(object)}"></ha-icon><span>${this._escape(this._objectLabel(object, index))}</span></button><button class="layer-step" data-layer-front="${object.id}" title="Posunout do popředí" ${index === this._objects.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-up"></ha-icon></button><button class="layer-step" data-layer-back="${object.id}" title="Posunout do pozadí" ${index === 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-down"></ha-icon></button></div>`).join("")}</div><p class="layer-hint">Nahoře je popředí. Se Shiftem lze vybrat více objektů.</p>` : `<div class="inspector-empty"><ha-icon icon="mdi:layers-outline"></ha-icon><p>Návrh zatím neobsahuje žádné objekty.</p></div>`}</div>`;
   }
 
   _renderLayoutMenu(device) {
@@ -2306,8 +2380,20 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#zoomOut")?.addEventListener("click", () => { this._zoom = Math.max(0.35, this._zoom - 0.15); this._render(); });
     this.shadowRoot.querySelector("#zoomFit")?.addEventListener("click", () => { this._fitZoom(); this._render(); });
     this.shadowRoot.querySelector("#snap")?.addEventListener("change", (event) => { this._snap = event.target.checked; });
-    this.shadowRoot.querySelector("#realPreview")?.addEventListener("change", (event) => { this._realPreview = event.target.checked; this._paint(); });
     this.shadowRoot.querySelector("#invertColors")?.addEventListener("click", () => this._toggleInvertColors());
+    this.shadowRoot.querySelectorAll("[data-background]").forEach((button) => button.addEventListener("click", () => this._setBackgroundColor(button.dataset.background)));
+    this.shadowRoot.querySelectorAll("[data-layer-select]").forEach((button) => button.addEventListener("click", (event) => {
+      const id = button.dataset.layerSelect;
+      if (event.shiftKey) {
+        this._selectedIds = this._selectedIds.includes(id) ? this._selectedIds.filter((item) => item !== id) : [...this._selectedIds, id];
+      } else {
+        this._selectedIds = [id];
+      }
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelectorAll("[data-layer-front]").forEach((button) => button.addEventListener("click", () => this._moveLayerStep(button.dataset.layerFront, "front")));
+    this.shadowRoot.querySelectorAll("[data-layer-back]").forEach((button) => button.addEventListener("click", () => this._moveLayerStep(button.dataset.layerBack, "back")));
     this.shadowRoot.querySelector("#deviceSelect")?.addEventListener("change", (event) => this._selectDevice(event.target.value));
     this.shadowRoot.querySelector("#gatewaySendSelect")?.addEventListener("change", (event) => { this._selectedGatewayId = event.target.value; this._render(); this._paint(); });
     this.shadowRoot.querySelectorAll("[data-orientation]").forEach((button) => button.addEventListener("click", () => this._setOrientation(button.dataset.orientation)));
@@ -2419,11 +2505,11 @@ class DratekEinkPanel extends HTMLElement {
 
   _drawScene(ctx, width, height, withSelection) {
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle = this._color(this._backgroundColor);
     ctx.fillRect(0, 0, width, height);
     for (const object of this._objects) this._drawObject(ctx, object);
     if (this._invertColors) this._applyColorInversion(ctx, width, height);
-    if (this._realPreview) this._applyEinkPreview(ctx, width, height);
+    this._applyEinkPreview(ctx, width, height);
     if (withSelection) this._drawSelection(ctx);
   }
 
@@ -2843,6 +2929,18 @@ class DratekEinkPanel extends HTMLElement {
         ctx.strokeRect(handle.x - half, handle.y - half, size, size);
       }
     }
+    if (this._drag?.mode === "marquee") {
+      const x = Math.min(this._drag.start.x, this._drag.current.x);
+      const y = Math.min(this._drag.start.y, this._drag.current.y);
+      const w = Math.abs(this._drag.current.x - this._drag.start.x);
+      const h = Math.abs(this._drag.current.y - this._drag.start.y);
+      ctx.setLineDash([5, 3]);
+      ctx.strokeStyle = "#0078d4";
+      ctx.fillStyle = "rgba(0,120,212,.12)";
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h);
+      ctx.setLineDash([]);
+    }
     ctx.restore();
   }
 
@@ -2885,7 +2983,7 @@ class DratekEinkPanel extends HTMLElement {
     if (!this._sendResult) return "";
     const cls = this._sendResult.ok ? "good" : "bad";
     const text = this._sendResult.ok ? "Odeslano do displeje." : `Odeslani selhalo: ${this._sendResult.error || "neznama chyba"}`;
-    return `<div class="send-result"><span class="pill ${cls}">${this._escape(text)}</span>${(this._sendResult.log || []).length ? `<pre>${this._escape(this._sendResult.log.join("\n"))}</pre>` : ""}</div>`;
+    return `<div class="send-result"><span class="pill ${cls}">${this._escape(text)}</span></div>`;
   }
 
   _renderSymbolDialog() {
