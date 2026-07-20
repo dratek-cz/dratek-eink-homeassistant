@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.43";
+const DRATEK_EINK_VERSION = "0.1.44";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -26,6 +26,10 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedProjectId = "";
     this._projectName = "Novy navrh";
     this._fileMenuOpen = false;
+    this._viewMenuOpen = false;
+    this._variablesDialogOpen = false;
+    this._templateDialogOpen = false;
+    this._newProjectDialogOpen = false;
     this._variables = {};
     this._orientation = "landscape";
     this._displayTransform = "rotate_cw";
@@ -1127,6 +1131,9 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedProjectId = "";
     this._projectName = `Sablona ${template.title}`;
     this._nextId = this._nextObjectId();
+    this._templateDialogOpen = false;
+    this._newProjectDialogOpen = false;
+    this._fileMenuOpen = false;
     this._fitZoom();
     this._render();
     this._paint();
@@ -1254,7 +1261,14 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _newProject() {
-    if (this._objects.length && !confirm("Vytvorit novy prazdny navrh?")) return;
+    this._fileMenuOpen = false;
+    this._newProjectDialogOpen = true;
+    this._render();
+    this._paint();
+  }
+
+  _createBlankProject() {
+    if (this._objects.length && !confirm("Nahradit aktualni navrh prazdnym projektem?")) return;
     this._pushHistory();
     this._objects = [];
     this._selectedIds = [];
@@ -1262,6 +1276,7 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedProjectId = "";
     this._projectName = "Novy navrh";
     this._nextId = 1;
+    this._newProjectDialogOpen = false;
     this._render();
     this._paint();
     this._scheduleDraftSave();
@@ -1714,9 +1729,10 @@ class DratekEinkPanel extends HTMLElement {
         canvas{background:#fff;box-shadow:0 20px 54px rgba(0,0,0,.24);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:760}.field input,.field select,.file-menu input,.file-menu select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
         table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:#111827;color:#e5e7eb;border-radius:8px;padding:12px;font-size:12px;line-height:1.45;max-height:320px;white-space:pre-wrap}.gateway-log{max-height:260px;min-height:96px;overflow-y:auto}.send-result{margin-top:10px}.ota-progress{height:9px;background:var(--secondary-background-color);border:1px solid var(--divider-color);border-radius:999px;overflow:hidden;margin:11px 0}.ota-progress span{display:block;height:100%;background:#0f766e;transition:width .25s ease}.variable-table input{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:7px}.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:20;display:grid;place-items:center;padding:24px}.symbol-dialog{width:min(920px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:16px}.symbol-search{display:grid;grid-template-columns:1fr auto;gap:10px;margin:12px 0}.symbol-search input{width:100%;border:1px solid var(--divider-color);border-radius:7px;background:var(--secondary-background-color);color:var(--primary-text-color);padding:10px}.category-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}.category-row button{min-height:32px;padding:6px 10px}.category-row button.active{background:var(--primary-color);color:var(--text-primary-color,#fff)}.symbol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}.symbol-tile{min-height:78px;display:grid;grid-template-rows:32px auto;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.symbol-tile strong{font-size:29px;line-height:1}.symbol-tile span{font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;text-align:center}
         .section-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}.debug-card details{margin-top:10px}.debug-card summary{cursor:pointer;color:var(--primary-color);font-weight:760}.inspector-empty{padding:18px;border:1px dashed var(--divider-color);border-radius:8px;color:var(--secondary-text-color);text-align:center;background:var(--secondary-background-color)}
+        .ribbon-tab.file-tab,.ribbon-tab.file-tab.active{background:#16803c;color:#fff;border-color:#16803c}.ribbon-tab.file-tab:hover{background:#126c33}.file-menu{padding:0;overflow:hidden;width:min(760px,calc(100vw - 52px))}.file-backstage{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:350px}.file-rail{display:flex;flex-direction:column;gap:3px;padding:16px 10px;background:#16803c;color:#fff}.file-rail-title{display:flex;align-items:center;gap:10px;padding:5px 10px 18px;font-size:20px;font-weight:850}.file-rail button{justify-content:flex-start;background:transparent;color:#fff;box-shadow:none;border:0;padding:11px 12px}.file-rail button:hover{background:rgba(255,255,255,.16)}.file-content{padding:20px;min-width:0}.file-content-actions{display:flex;gap:8px;margin-top:15px}.view-menu{position:absolute;z-index:12;left:208px;top:50px;min-width:240px;padding:8px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);box-shadow:0 18px 46px rgba(0,0,0,.22)}.view-option{display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:center;gap:10px;padding:10px;border-radius:6px;font-weight:750}.view-option:hover{background:var(--secondary-background-color)}.editor-dialog{width:min(760px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:18px}.template-dialog{width:min(980px,100%)}.template-dialog .template-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));max-height:none;overflow:visible}.new-project-dialog{width:min(620px,100%)}.project-choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.project-choice{min-height:180px;display:grid;grid-template-rows:54px auto auto;place-items:center;text-align:center;padding:20px;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.project-choice ha-icon{--mdc-icon-size:48px;color:#16803c}.project-choice strong{font-size:17px}.project-choice span{color:var(--secondary-text-color);font-size:12px}.project-choice:hover{border-color:#16803c;background:rgba(22,128,60,.07)}
         .queue-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.queue-stat{display:flex;align-items:center;gap:12px}.queue-stat ha-icon{--mdc-icon-size:26px;color:var(--primary-color)}.queue-stat strong{display:block;font-size:23px}.queue-stat span{color:var(--secondary-text-color);font-size:12px}.queue-list{display:grid;gap:8px}.queue-row{display:grid;grid-template-columns:auto minmax(150px,1fr) minmax(170px,1fr) auto auto;align-items:center;gap:12px;padding:11px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color)}.queue-row.writing{border-color:#d97706;background:rgba(217,119,6,.07)}.queue-row.failed{border-color:#dc2626}.queue-icon{width:38px;height:38px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color)}.queue-main strong,.queue-route strong{display:block}.queue-main small,.queue-route small{display:block;color:var(--secondary-text-color);margin-top:3px}.signal-value{font-weight:850}.signal-value.good-signal{color:#16803c}.signal-value.warn-signal{color:#b06000}.signal-value.bad-signal{color:#c62828}
         @media(max-width:1180px){.editor-shell,.status-grid{grid-template-columns:1fr}.queue-summary{grid-template-columns:1fr 1fr}.left,.right{position:static}.tabbar,.subtabs{width:100%}.tab,.subtab{flex:1}.workspace{min-height:420px}}
-        @media(max-width:720px){.topology-row,.queue-row{grid-template-columns:1fr}.queue-summary,.file-menu-grid,.file-actions{grid-template-columns:1fr}.designer-context{align-items:flex-start}.topology-link{width:2px;height:26px;justify-self:center}.topology-link:after{right:-4px;top:auto;bottom:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #0f766e}.topology-link span{white-space:normal}.route{grid-template-columns:auto minmax(0,1fr) auto}.route-rssi{grid-column:2}.gateway-health{grid-template-columns:1fr}}
+        @media(max-width:720px){.topology-row,.queue-row{grid-template-columns:1fr}.queue-summary,.file-menu-grid,.file-actions,.file-backstage,.project-choice-grid{grid-template-columns:1fr}.file-rail{display:grid;grid-template-columns:1fr 1fr}.file-rail-title{grid-column:1/-1}.view-menu{left:8px}.designer-context{align-items:flex-start}.topology-link{width:2px;height:26px;justify-self:center}.topology-link:after{right:-4px;top:auto;bottom:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #0f766e}.topology-link span{white-space:normal}.route{grid-template-columns:auto minmax(0,1fr) auto}.route-rssi{grid-column:2}.gateway-health{grid-template-columns:1fr}}
       </style>
       <div class="page">
         <div class="topbar">
@@ -1730,13 +1746,11 @@ class DratekEinkPanel extends HTMLElement {
         </div>
         <div style="${this._activeTab === "designer" ? "" : "display:none"}">
         <div class="card designer-context"><div class="display-identity"><div class="status-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></div><div><strong>${this._escape(this._deviceTitle(device))}</strong><span>${device ? this._escape(device.address) : "Vyber displej v karte Nalezene displeje"}</span></div></div><span class="resolution-chip"><ha-icon icon="mdi:resize"></ha-icon>${size.width} x ${size.height}</span></div>
-        <div class="card ribbon"><button id="fileMenuToggle" class="ribbon-tab ${this._fileMenuOpen ? "active" : ""}"><ha-icon icon="mdi:file-outline"></ha-icon>Soubor</button><span class="ribbon-project">${this._escape(this._projectName)}</span>${this._renderFileMenu()}</div>
-        <div class="card"><div class="toolbar"><select id="gatewaySendSelect"><option value="">Integrovane Bluetooth</option>${this._gateways.map((gateway) => `<option value="${this._escape(gateway.id)}" ${gateway.id === this._selectedGatewayId ? "selected" : ""}>${this._escape(gateway.name)} - ${this._escape(gateway.host)}</option>`).join("")}</select><button id="sendGatewayDesign" class="secondary" ${!device || !this._selectedGatewayId || this._sending ? "disabled" : ""}><ha-icon icon="mdi:router-wireless"></ha-icon>Odeslat pres gateway</button><button id="orientationLandscape" class="secondary" data-orientation="landscape" title="Na sirku" ${this._orientation === "landscape" ? "disabled" : ""}><ha-icon icon="mdi:phone-landscape"></ha-icon>Na sirku</button><button id="orientationPortrait" class="secondary" data-orientation="portrait" title="Na vysku" ${this._orientation === "portrait" ? "disabled" : ""}><ha-icon icon="mdi:phone-portrait"></ha-icon>Na vysku</button><button id="sendTest" class="secondary" ${!device ? "disabled" : ""}><ha-icon icon="mdi:send-check-outline"></ha-icon>Test dratek.cz</button><label class="pill muted"><input id="realPreview" type="checkbox" ${this._realPreview ? "checked" : ""}> Real eInk colors</label></div>${this._renderSendResult()}</div>
-        ${this._renderVariables()}
-        <div class="card template-hero"><div class="section-title"><h2>Sablony navrhu</h2><span class="pill good">Vyber sablonu kliknutim</span></div><div class="template-grid">${this._renderTemplates()}</div></div>
+        <div class="card ribbon"><button id="fileMenuToggle" class="ribbon-tab file-tab ${this._fileMenuOpen ? "active" : ""}"><ha-icon icon="mdi:file-outline"></ha-icon>Soubor</button><button id="variablesDialogOpen" class="ribbon-tab"><ha-icon icon="mdi:variable"></ha-icon>Promenne</button><button id="viewMenuToggle" class="ribbon-tab ${this._viewMenuOpen ? "active" : ""}"><ha-icon icon="mdi:eye-outline"></ha-icon>Zobrazeni</button><span class="ribbon-project">${this._escape(this._projectName)}</span>${this._renderFileMenu()}${this._renderViewMenu()}</div>
+        ${this._renderSendResult()}
         <div class="editor-shell">
           <div class="card left"><div class="section-title"><h2>Nastroje</h2><span class="pill muted">${this._selectedIds.length} vybrano</span></div><div class="tool-grid"><button class="tool-icon" data-add="text" title="Text"><span class="ico"><ha-icon icon="mdi:format-text"></ha-icon></span><span class="txt">Text</span></button><button id="openSymbols" class="tool-icon" title="Symboly"><span class="ico"><ha-icon icon="mdi:shape-plus"></ha-icon></span><span class="txt">Symbol</span></button><button class="tool-icon" data-add="rect" title="Rectangle"><span class="ico"><ha-icon icon="mdi:rectangle-outline"></ha-icon></span><span class="txt">Rect</span></button><button class="tool-icon" data-add="line" title="Cara"><span class="ico"><ha-icon icon="mdi:vector-line"></ha-icon></span><span class="txt">Cara</span></button><button class="tool-icon" data-add="barcode" title="EAN"><span class="ico"><ha-icon icon="mdi:barcode"></ha-icon></span><span class="txt">EAN</span></button><button class="tool-icon" data-add="qr" title="QR"><span class="ico"><ha-icon icon="mdi:qrcode"></ha-icon></span><span class="txt">QR</span></button><button id="addImage" class="tool-icon secondary" title="Obrazek"><span class="ico"><ha-icon icon="mdi:image-plus"></ha-icon></span><span class="txt">Image</span></button><input id="imageFile" type="file" accept="image/*" hidden></div><div class="panel-divider"></div><h2>Layout displeje</h2><div class="layout-grid"><button class="layout-btn ${this._orientation === "landscape" ? "active" : ""}" data-orientation="landscape" title="Navrh na sirku"><ha-icon icon="mdi:phone-landscape"></ha-icon>Na sirku</button><button class="layout-btn ${this._orientation === "portrait" ? "active" : ""}" data-orientation="portrait" title="Navrh na vysku"><ha-icon icon="mdi:phone-portrait"></ha-icon>Na vysku</button></div>${this._renderTransformSelector(device)}<div class="panel-divider"></div><h2>Upravy</h2><div class="action-grid"><button id="undoAction" class="icon-btn secondary" title="Zpet" ${this._undoStack.length ? "" : "disabled"}><ha-icon icon="mdi:undo"></ha-icon></button><button id="redoAction" class="icon-btn secondary" title="Dopredu" ${this._redoStack.length ? "" : "disabled"}><ha-icon icon="mdi:redo"></ha-icon></button><button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:content-duplicate"></ha-icon></button><button id="rotateSelected" class="icon-btn secondary" title="Otocit 90" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:rotate-right"></ha-icon></button><button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:flip-horizontal"></ha-icon></button><button id="layerFront" class="icon-btn secondary" title="Do popredi" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:arrange-bring-forward"></ha-icon></button><button id="layerBack" class="icon-btn secondary" title="Do pozadi" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:arrange-send-backward"></ha-icon></button><button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-left"></ha-icon></button><button id="alignCenter" class="icon-btn secondary" title="Zarovnat na stred" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-center"></ha-icon></button><button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-top"></ha-icon></button><button id="alignMiddle" class="icon-btn secondary" title="Svisly stred" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:format-align-middle"></ha-icon></button><button id="deleteSelected" class="wide-action danger" ${this._selectedIds.length ? "" : "disabled"}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat vybrane</button><button id="clearDesign" class="wide-action danger"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Smazat vse</button></div><div class="panel-divider"></div><h2>Zobrazeni</h2><div class="action-grid"><button id="zoomIn" class="icon-btn secondary" title="Priblizit"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></button><button id="zoomOut" class="icon-btn secondary" title="Oddalit"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon></button><button id="zoomFit" class="icon-btn secondary" title="Prizpusobit"><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon></button><label class="wide-action pill muted"><input id="snap" type="checkbox" ${this._snap ? "checked" : ""}> Grid snap 5 px</label></div></div>
-          <div class="card workspace-card"><div class="canvas-head"><div class="canvas-meta"><ha-icon icon="mdi:checkerboard"></ha-icon><strong>${size.width} x ${size.height}</strong><span>${this._orientation === "portrait" ? "Na vysku" : "Na sirku"}</span></div><div class="canvas-meta"><span>Zoom ${Math.round(this._zoom * 100)}%</span><span>${this._realPreview ? "Real eInk colors" : "RGB nahled"}</span></div></div><div class="workspace"><canvas id="editor" width="${size.width}" height="${size.height}" style="width:${Math.round(size.width * this._zoom)}px;height:${Math.round(size.height * this._zoom)}px"></canvas></div></div>
+          <div class="card workspace-card"><div class="canvas-head"><div class="canvas-meta"><ha-icon icon="mdi:checkerboard"></ha-icon><strong>${size.width} x ${size.height}</strong><span>${this._orientation === "portrait" ? "Na vysku" : "Na sirku"}</span></div><div class="canvas-meta"><span>Zoom ${Math.round(this._zoom * 100)}%</span><span>${this._realPreview ? "Realne barvy eInk" : "Barevny nahled"}</span></div></div><div class="workspace"><canvas id="editor" width="${size.width}" height="${size.height}" style="width:${Math.round(size.width * this._zoom)}px;height:${Math.round(size.height * this._zoom)}px"></canvas></div></div>
           <div class="card right properties-panel"><div class="section-title"><h2>Inspector</h2><span class="pill muted">${object ? this._escape(object.type) : "bez vyberu"}</span></div>${this._renderProperties(object)}</div>
         </div>
         </div>
@@ -1750,7 +1764,7 @@ class DratekEinkPanel extends HTMLElement {
           ${this._renderGatewayWorkspace()}
         </div>
       </div>
-      ${this._renderSymbolDialog()}`;
+      ${this._renderSymbolDialog()}${this._renderVariablesDialog()}${this._renderTemplateDialog()}${this._renderNewProjectDialog()}`;
     this._bind();
     this._paint();
   }
@@ -1761,18 +1775,55 @@ class DratekEinkPanel extends HTMLElement {
     const projects = this._projects.filter((project) => Number(project.width) === size.width && Number(project.height) === size.height);
     const selectedProjectAvailable = projects.some((project) => project.id === this._selectedProjectId);
     return `<div class="file-menu">
-      <div class="file-menu-head"><div><h2>Soubor</h2><div class="subtitle">Projekt pro rozliseni ${size.width} x ${size.height}</div></div><button id="fileMenuClose" class="icon-btn secondary" title="Zavrit"><ha-icon icon="mdi:close"></ha-icon></button></div>
-      <div class="file-menu-grid">
-        <div class="field"><label>Nazev projektu</label><input id="projectName" value="${this._escape(this._projectName)}" placeholder="Nazev navrhu"></div>
-        <div class="field"><label>Ulozene projekty</label><select id="projectSelect"><option value="">Novy / neulozeny navrh</option>${projects.map((project) => `<option value="${this._escape(project.id)}" ${project.id === this._selectedProjectId ? "selected" : ""}>${this._escape(project.name)}</option>`).join("")}</select></div>
-      </div>
-      <div class="file-actions">
-        <button id="newProject" class="file-action"><ha-icon icon="mdi:file-plus-outline"></ha-icon><span>Novy</span></button>
-        <button id="saveProject" class="file-action"><ha-icon icon="mdi:content-save-outline"></ha-icon><span>Ulozit</span></button>
-        <button id="loadProject" class="file-action" ${selectedProjectAvailable ? "" : "disabled"}><ha-icon icon="mdi:folder-open-outline"></ha-icon><span>Nacist</span></button>
-        <button id="deleteProject" class="file-action danger" ${selectedProjectAvailable ? "" : "disabled"}><ha-icon icon="mdi:trash-can-outline"></ha-icon><span>Smazat</span></button>
+      <div class="file-backstage">
+        <div class="file-rail">
+          <div class="file-rail-title"><ha-icon icon="mdi:file-document-outline"></ha-icon><span>Soubor</span></div>
+          <button id="newProject"><ha-icon icon="mdi:file-plus-outline"></ha-icon><span>Novy projekt</span></button>
+          <button id="saveProject"><ha-icon icon="mdi:content-save-outline"></ha-icon><span>Ulozit projekt</span></button>
+          <button id="openTemplateFromFile"><ha-icon icon="mdi:view-grid-plus-outline"></ha-icon><span>Otevrit sablonu</span></button>
+        </div>
+        <div class="file-content">
+          <div class="file-menu-head"><div><h2>Projekt</h2><div class="subtitle">Navrhy ${size.width} x ${size.height} px</div></div><button id="fileMenuClose" class="icon-btn secondary" title="Zavrit"><ha-icon icon="mdi:close"></ha-icon></button></div>
+          <div class="field"><label>Nazev projektu</label><input id="projectName" value="${this._escape(this._projectName)}" placeholder="Nazev navrhu"></div>
+          <div class="field"><label>Ulozene projekty pro tento displej</label><select id="projectSelect"><option value="">Novy / neulozeny navrh</option>${projects.map((project) => `<option value="${this._escape(project.id)}" ${project.id === this._selectedProjectId ? "selected" : ""}>${this._escape(project.name)}</option>`).join("")}</select></div>
+          <div class="file-content-actions"><button id="loadProject" ${selectedProjectAvailable ? "" : "disabled"}><ha-icon icon="mdi:folder-open-outline"></ha-icon>Otevrit</button><button id="deleteProject" class="danger" ${selectedProjectAvailable ? "" : "disabled"}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat</button></div>
+        </div>
       </div>
     </div>`;
+  }
+
+  _renderViewMenu() {
+    if (!this._viewMenuOpen) return "";
+    return `<div class="view-menu"><label class="view-option"><input id="realPreview" type="checkbox" ${this._realPreview ? "checked" : ""}><ha-icon icon="mdi:palette-outline"></ha-icon><span>Realne barvy eInk</span></label></div>`;
+  }
+
+  _renderVariablesDialog() {
+    if (!this._variablesDialogOpen) return "";
+    const variables = this._variableDefs();
+    return `<div class="modal-backdrop"><div class="editor-dialog">
+      <div class="section-title"><h2>Promenne navrhu</h2><button id="variablesDialogClose" class="icon-btn secondary" title="Zavrit"><ha-icon icon="mdi:close"></ha-icon></button></div>
+      ${variables.length ? `<table class="variable-table"><thead><tr><th>Nazev</th><th>Vychozi text</th><th>Hodnota pro odeslani</th></tr></thead><tbody>${variables.map((variable) => `<tr><td><strong>${this._escape(variable.name)}</strong></td><td>${this._escape(variable.defaultValue)}</td><td><input data-variable="${this._escape(variable.name)}" value="${this._escape(variable.value)}"></td></tr>`).join("")}</tbody></table>` : `<div class="inspector-empty"><ha-icon icon="mdi:variable-off"></ha-icon><p>Navrh zatim neobsahuje zadny promenny text.</p></div>`}
+    </div></div>`;
+  }
+
+  _renderTemplateDialog() {
+    if (!this._templateDialogOpen) return "";
+    const size = this._displaySize();
+    return `<div class="modal-backdrop"><div class="editor-dialog template-dialog">
+      <div class="section-title"><div><h2>Otevrit sablonu</h2><div class="subtitle">Sablona se prizpusobi rozliseni ${size.width} x ${size.height} px</div></div><button id="templateDialogClose" class="icon-btn secondary" title="Zavrit"><ha-icon icon="mdi:close"></ha-icon></button></div>
+      <div class="template-grid">${this._renderTemplates()}</div>
+    </div></div>`;
+  }
+
+  _renderNewProjectDialog() {
+    if (!this._newProjectDialogOpen) return "";
+    return `<div class="modal-backdrop"><div class="editor-dialog new-project-dialog">
+      <div class="section-title"><h2>Novy projekt</h2><button id="newProjectDialogClose" class="icon-btn secondary" title="Zavrit"><ha-icon icon="mdi:close"></ha-icon></button></div>
+      <div class="project-choice-grid">
+        <button id="createBlankProject" class="project-choice"><ha-icon icon="mdi:file-outline"></ha-icon><strong>Prazdny projekt</strong><span>Zacit s cistou pracovni plochou</span></button>
+        <button id="newProjectFromTemplate" class="project-choice"><ha-icon icon="mdi:view-grid-plus-outline"></ha-icon><strong>Pouzit sablonu</strong><span>Vybrat pripraveny navrh</span></button>
+      </div>
+    </div></div>`;
   }
 
   _renderGatewayResult() {
@@ -2059,9 +2110,17 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-device-name-cancel]").forEach((button) => button.addEventListener("click", () => { this._editingDeviceAddress = ""; this._deviceNameDraft = ""; this._render(); this._paint(); }));
     this.shadowRoot.querySelector("#sendDesign").addEventListener("click", () => this._sendDesign());
     this.shadowRoot.querySelector("#sendGatewayDesign")?.addEventListener("click", () => this._sendDesignViaGateway());
-    this.shadowRoot.querySelector("#fileMenuToggle")?.addEventListener("click", () => { this._fileMenuOpen = !this._fileMenuOpen; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#fileMenuToggle")?.addEventListener("click", () => { this._fileMenuOpen = !this._fileMenuOpen; this._viewMenuOpen = false; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#fileMenuClose")?.addEventListener("click", () => { this._fileMenuOpen = false; this._render(); this._paint(); });
-    this.shadowRoot.querySelector("#newProject")?.addEventListener("click", () => { this._fileMenuOpen = false; this._newProject(); });
+    this.shadowRoot.querySelector("#viewMenuToggle")?.addEventListener("click", () => { this._viewMenuOpen = !this._viewMenuOpen; this._fileMenuOpen = false; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#variablesDialogOpen")?.addEventListener("click", () => { this._variablesDialogOpen = true; this._fileMenuOpen = false; this._viewMenuOpen = false; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#variablesDialogClose")?.addEventListener("click", () => { this._variablesDialogOpen = false; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#openTemplateFromFile")?.addEventListener("click", () => { this._fileMenuOpen = false; this._templateDialogOpen = true; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#templateDialogClose")?.addEventListener("click", () => { this._templateDialogOpen = false; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#newProject")?.addEventListener("click", () => this._newProject());
+    this.shadowRoot.querySelector("#newProjectDialogClose")?.addEventListener("click", () => { this._newProjectDialogOpen = false; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#createBlankProject")?.addEventListener("click", () => this._createBlankProject());
+    this.shadowRoot.querySelector("#newProjectFromTemplate")?.addEventListener("click", () => { this._newProjectDialogOpen = false; this._templateDialogOpen = true; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#saveProject")?.addEventListener("click", () => { this._fileMenuOpen = false; this._saveProject(); });
     this.shadowRoot.querySelector("#loadProject")?.addEventListener("click", () => { this._fileMenuOpen = false; this._loadSelectedProject(); });
     this.shadowRoot.querySelector("#deleteProject")?.addEventListener("click", () => { this._fileMenuOpen = false; this._deleteProject(); });
@@ -2093,8 +2152,7 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#zoomOut").addEventListener("click", () => { this._zoom = Math.max(0.35, this._zoom - 0.15); this._render(); });
     this.shadowRoot.querySelector("#zoomFit").addEventListener("click", () => { this._fitZoom(); this._render(); });
     this.shadowRoot.querySelector("#snap").addEventListener("change", (event) => { this._snap = event.target.checked; });
-    this.shadowRoot.querySelector("#realPreview").addEventListener("change", (event) => { this._realPreview = event.target.checked; this._paint(); });
-    this.shadowRoot.querySelector("#sendTest").addEventListener("click", () => this._sendTestText());
+    this.shadowRoot.querySelector("#realPreview")?.addEventListener("change", (event) => { this._realPreview = event.target.checked; this._paint(); });
     this.shadowRoot.querySelector("#deviceSelect")?.addEventListener("change", (event) => this._selectDevice(event.target.value));
     this.shadowRoot.querySelector("#gatewaySendSelect")?.addEventListener("change", (event) => { this._selectedGatewayId = event.target.value; this._render(); this._paint(); });
     this.shadowRoot.querySelectorAll("[data-orientation]").forEach((button) => button.addEventListener("click", () => this._setOrientation(button.dataset.orientation)));
@@ -2509,12 +2567,6 @@ class DratekEinkPanel extends HTMLElement {
         <div><strong>${this._escape(template.title)}</strong><span>vlozit layout</span></div>
       </button>
     `).join("");
-  }
-
-  _renderVariables() {
-    const variables = this._variableDefs();
-    if (!variables.length) return "";
-    return `<div class="card" style="margin-bottom:12px"><h2>Promenne navrhu</h2><table class="variable-table"><thead><tr><th>Nazev</th><th>Default</th><th>Hodnota pro odeslani</th></tr></thead><tbody>${variables.map((variable) => `<tr><td><strong>${this._escape(variable.name)}</strong></td><td>${this._escape(variable.defaultValue)}</td><td><input data-variable="${this._escape(variable.name)}" value="${this._escape(variable.value)}"></td></tr>`).join("")}</tbody></table></div>`;
   }
 
   _renderTransformSelector(device) {

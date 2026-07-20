@@ -1,5 +1,16 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.44
+
+- karta Soubor je vyrazne zelena a pouziva prehledne rozlozeni ve stylu kancelarskych aplikaci
+- rucni volba integrovaneho Bluetooth nebo gateway byla z designeru odstranena; vzdy se pouzije automaticky nejlepsi cesta
+- technicka tlacitka pro odeslani pres gateway a testovaci text byla odstranena
+- realne barvy eInk jsou dostupne cesky v nabidce Zobrazeni
+- promenne navrhu se upravuji v samostatnem dialogu
+- sablony jsou dostupne pres Soubor > Otevrit sablonu
+- novy projekt nabidne prazdnou pracovni plochu nebo vyber sablony
+- verze firmware gateway zustava 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.43
 
 - nalezene displeje lze pojmenovat vlastnim nazvem, napriklad Kuchyn nebo Obyvak
