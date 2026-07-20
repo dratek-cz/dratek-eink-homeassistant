@@ -13,6 +13,7 @@ from homeassistant.helpers.storage import Store
 from PIL import Image
 import voluptuous as vol
 
+from .automation import get_entity_auto_update_manager
 from .const import GATEWAY_FIRMWARE_VERSION, PARTIAL_UPDATE_SDK_TYPES
 from .discovery import parse_dratek_advertisement, parse_dratek_manufacturer_data
 from .gateway import (
@@ -51,6 +52,30 @@ def _battery_payload(device: Any) -> dict[str, Any]:
         "battery_percent": device.battery_percent,
         "battery_estimated": True,
     }
+
+
+async def _save_entity_automation(
+    hass: HomeAssistant,
+    msg: dict[str, Any],
+    *,
+    route_type: str,
+    gateway_id: str = "",
+    transport_name: str = "",
+) -> None:
+    if "automation" not in msg:
+        return
+    config = dict(msg.get("automation") or {})
+    config.update(
+        {
+            "sdk_type": int(msg["sdk_type"]),
+            "orientation": msg.get("orientation", "landscape"),
+            "transform": msg.get("transform"),
+            "route_type": route_type,
+            "gateway_id": gateway_id,
+            "transport_name": transport_name,
+        }
+    )
+    await get_entity_auto_update_manager(hass).async_set_config(msg["address"], config)
 
 
 @callback
@@ -414,6 +439,7 @@ async def websocket_scan_gateway(
         "image": str,
         "orientation": str,
         "transform": str,
+        vol.Optional("automation"): dict,
     }
 )
 @websocket_api.async_response
@@ -466,6 +492,14 @@ async def websocket_send_gateway_design(
                 {"ok": False, "error": "Gateway nebyla nalezena.", "log": log_lines},
             )
             return
+        if result.get("ok") is not False:
+            await _save_entity_automation(
+                hass,
+                msg,
+                route_type="gateway",
+                gateway_id=msg["gateway_id"],
+                transport_name=str(gateway.get("name") or gateway.get("host") or "DRATEK eInk gateway"),
+            )
     except Exception as exc:
         log_lines.append(f"Gateway send failed: {exc}")
         connection.send_result(msg["id"], {"ok": False, "error": str(exc), "log": log_lines})
@@ -818,6 +852,7 @@ async def websocket_save_device_draft(
         "image": str,
         "orientation": str,
         "transform": str,
+        vol.Optional("automation"): dict,
     }
 )
 @websocket_api.async_response
@@ -860,6 +895,13 @@ async def websocket_send_design(
             operation="design",
             runner=run_transfer,
         )
+        if result.get("ok") is not False:
+            await _save_entity_automation(
+                hass,
+                msg,
+                route_type="local",
+                transport_name="Home Assistant Bluetooth",
+            )
     except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
         log(f"Send failed: {exc}")
         connection.send_result(

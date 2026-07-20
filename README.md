@@ -1,5 +1,16 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.51
+
+- promenny text lze zapnout pro automaticke odeslani pri zmene navazane entity nebo Pomocnika Home Assistantu
+- vazba, ciste pozadi navrhu i zvolena cesta pres Bluetooth nebo gateway se ulozi do Home Assistantu po prvnim uspesnem rucnim odeslani
+- dalsi zmeny hodnoty fungují i pri zavrenem designeru a po restartu Home Assistantu
+- rychle zmeny stejne entity se slouci po 2 sekundach, aby se eInk zbytecne neprekresloval
+- automaticke zapisy pouzivaji beznou frontu a jsou v ni oznaceny jako `Automaticka zmena entity`
+- ruzne gatewaye mohou zpracovavat sve fronty nezavisle; zapisy pres stejnou gateway zustavaji bezpecne serializovane
+- automaticky se v teto verzi aktualizuji textove objekty; grafy nad entitou se nadale aktualizuji pri rucnim odeslani
+- firmware gateway zustava 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.50
 
 - opraveno psani do nazvu promenne v Inspectoru; pole uz po prvnim znaku neztrati fokus

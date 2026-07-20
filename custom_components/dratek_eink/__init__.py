@@ -31,12 +31,14 @@ SEND_TEXT_SCHEMA = vol.Schema(
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    from .automation import get_entity_auto_update_manager
     from .websocket import async_setup as async_setup_websocket
 
     hass.data.setdefault(DOMAIN, {})
     if not hass.data[DOMAIN].get("websocket_setup"):
         async_setup_websocket(hass)
         hass.data[DOMAIN]["websocket_setup"] = True
+    await get_entity_auto_update_manager(hass).async_initialize()
 
     async def handle_send_text(call: ServiceCall) -> None:
         address = call.data["address"]

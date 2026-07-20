@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.50";
+const DRATEK_EINK_VERSION = "0.1.51";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -1833,6 +1833,7 @@ class DratekEinkPanel extends HTMLElement {
       return;
     }
     const canvas = this._renderExportCanvas();
+    const automation = this._entityAutomationPayload();
     const size = this._displaySize(device);
     if (canvas.width !== size.width || canvas.height !== size.height) {
       this._sendResult = {
@@ -1854,6 +1855,7 @@ class DratekEinkPanel extends HTMLElement {
         orientation: this._orientation,
         transform: this._displayTransform,
         image: canvas.toDataURL("image/png"),
+        automation,
       });
       if (this._sendResult && this._sendResult.ok) await this._saveCurrentDeviceDraft();
     } catch (err) {
@@ -1878,6 +1880,7 @@ class DratekEinkPanel extends HTMLElement {
       canvas.width = size.width;
       canvas.height = size.height;
       this._drawScene(canvas.getContext("2d"), canvas.width, canvas.height, false);
+      const automation = this._entityAutomationPayload();
       this._sendResult = await this._hass.callWS({
         type: "dratek_eink/gateways/send_design",
         gateway_id: this._selectedGatewayId,
@@ -1886,6 +1889,7 @@ class DratekEinkPanel extends HTMLElement {
         orientation: this._orientation,
         transform: this._displayTransform,
         image: canvas.toDataURL("image/png"),
+        automation,
       });
       if (this._sendResult && this._sendResult.ok) await this._saveCurrentDeviceDraft();
     } catch (err) {
@@ -2138,7 +2142,7 @@ class DratekEinkPanel extends HTMLElement {
         const labels = { queued: "Ve fronte", writing: "Zapisuji", succeeded: "Dokonceno", failed: "Selhalo" };
         const classes = { queued: "muted", writing: "warn", succeeded: "good", failed: "bad" };
         const icons = { queued: "mdi:tray-arrow-down", writing: "mdi:progress-upload", succeeded: "mdi:check", failed: "mdi:alert-circle-outline" };
-        const operation = { design: "Navrh", partial_design: "Castecny zapis", text: "Text", service_text: "HA sluzba" }[job.operation] || job.operation;
+        const operation = { design: "Navrh", partial_design: "Castecny zapis", text: "Text", service_text: "HA sluzba", entity_update: "Automaticka zmena entity" }[job.operation] || job.operation;
         return `<div class="queue-row ${this._escape(job.status)}">
           <div class="queue-icon"><ha-icon icon="${icons[job.status] || "mdi:help"}"></ha-icon></div>
           <div class="queue-main"><strong>${this._escape(job.address)}</strong><small>${this._escape(operation)} | ${this._formatTime(job.created_at)}</small></div>
@@ -2483,6 +2487,7 @@ class DratekEinkPanel extends HTMLElement {
         this._pushHistory();
         object.entityId = entityId;
         if (!entityId) object.entityAttribute = "";
+        if (entityId && object.type === "text" && object.autoUpdate === undefined) object.autoUpdate = true;
         this._render();
         this._paint();
         this._scheduleDraftSave();
@@ -2500,7 +2505,7 @@ class DratekEinkPanel extends HTMLElement {
     const state = object.entityId ? this._hass?.states?.[object.entityId] : null;
     const friendlyName = state?.attributes?.friendly_name || object.entityId || "";
     const value = object.entityId ? this._entityValue(object) : "";
-    return `<div class="entity-source"><h2>Zdroj z Home Assistantu</h2><div class="field"><label>Entita nebo Pomocník</label><ha-entity-picker data-entity-picker="${this._escape(object.id)}"></ha-entity-picker><small>Vyberte například input_text, input_number nebo libovolný senzor. Bez výběru se používá ruční hodnota z menu Proměnné.</small></div>${object.entityId ? `<div class="field"><label>Atribut entity (volitelné)</label><input data-prop="entityAttribute" value="${this._escape(object.entityAttribute || "")}" placeholder="Například prices"><small>Nechte prázdné pro hlavní stav entity. Atribut je vhodný například pro pole spotových cen.</small></div><div class="entity-current"><ha-icon icon="mdi:home-assistant"></ha-icon><div><strong>${this._escape(value || "Bez hodnoty")}</strong><small>${this._escape(friendlyName)} · ${this._escape(object.entityId)}</small></div></div>` : ""}</div>`;
+    return `<div class="entity-source"><h2>Zdroj z Home Assistantu</h2><div class="field"><label>Entita nebo Pomocník</label><ha-entity-picker data-entity-picker="${this._escape(object.id)}"></ha-entity-picker><small>Vyberte například input_text, input_number nebo libovolný senzor. Bez výběru se používá ruční hodnota z menu Proměnné.</small></div>${object.entityId ? `<div class="field"><label>Atribut entity (volitelné)</label><input data-prop="entityAttribute" value="${this._escape(object.entityAttribute || "")}" placeholder="Například prices"><small>Nechte prázdné pro hlavní stav entity. Atribut je vhodný například pro pole spotových cen.</small></div>${object.type === "text" ? `<label><input data-prop="autoUpdate" type="checkbox" ${object.autoUpdate !== false ? "checked" : ""}> Automaticky odeslat při změně</label><small>Změny se sloučí po 2 sekundách a zapíší přes frontu i při zavřeném designeru.</small>` : ""}<div class="entity-current"><ha-icon icon="mdi:home-assistant"></ha-icon><div><strong>${this._escape(value || "Bez hodnoty")}</strong><small>${this._escape(friendlyName)} · ${this._escape(object.entityId)}</small></div></div>` : ""}</div>`;
   }
 
   _renderProperties(object) {
@@ -2600,11 +2605,13 @@ class DratekEinkPanel extends HTMLElement {
     this._drawScene(canvas.getContext("2d"), canvas.width, canvas.height, true);
   }
 
-  _drawScene(ctx, width, height, withSelection) {
+  _drawScene(ctx, width, height, withSelection, excludedIds = null) {
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = this._color(this._backgroundColor);
     ctx.fillRect(0, 0, width, height);
-    for (const object of this._objects) this._drawObject(ctx, object);
+    for (const object of this._objects) {
+      if (!excludedIds || !excludedIds.has(object.id)) this._drawObject(ctx, object);
+    }
     if (this._invertColors) this._applyColorInversion(ctx, width, height);
     this._applyEinkPreview(ctx, width, height);
     if (withSelection) this._drawSelection(ctx);
@@ -3068,6 +3075,43 @@ class DratekEinkPanel extends HTMLElement {
       { name: "bottom-left", x: box.x, y: box.y + box.h },
       { name: "bottom-right", x: box.x + box.w, y: box.y + box.h },
     ];
+  }
+
+  _automaticTextBindings() {
+    return this._objects.filter((object) => object.type === "text" && object.entityId && object.autoUpdate !== false);
+  }
+
+  _entityAutomationPayload() {
+    const objects = this._automaticTextBindings();
+    if (!objects.length) return { enabled: false };
+    const size = this._displaySize();
+    const canvas = document.createElement("canvas");
+    canvas.width = size.width;
+    canvas.height = size.height;
+    this._drawScene(canvas.getContext("2d"), size.width, size.height, false, new Set(objects.map((object) => object.id)));
+    const effectiveColor = (color) => {
+      if (!this._invertColors || color === "red") return color || "black";
+      return color === "white" ? "black" : "white";
+    };
+    return {
+      enabled: true,
+      base_image: canvas.toDataURL("image/png"),
+      bindings: objects.map((object) => ({
+        id: object.id,
+        entity_id: object.entityId,
+        entity_attribute: object.entityAttribute || "",
+        include_unit: !object.entityAttribute,
+        fallback: object.text || "",
+        x: Number(object.x || 0), y: Number(object.y || 0),
+        w: Number(object.w || 1), h: Number(object.h || 1),
+        rotation: Number(object.rotation || 0), flipH: !!object.flipH,
+        color: effectiveColor(object.color), fontSize: Number(object.fontSize || 16),
+        minFontSize: Number(object.minFontSize || this._readableMinFontSize()),
+        bold: !!object.bold, textAlign: object.textAlign || "left",
+        verticalAlign: object.verticalAlign || "middle", autoFit: object.autoFit !== false,
+        padding: Number(object.padding || 0),
+      })),
+    };
   }
 
   _renderExportCanvas() {
