@@ -1,5 +1,17 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.50
+
+- opraveno psani do nazvu promenne v Inspectoru; pole uz po prvnim znaku neztrati fokus
+- klavesy stisknute ve formularich designeru se nepredavaji globalnim zkratkam, hledani ani Assist chatu Home Assistantu
+- promenny text a graf lze primo v Inspectoru propojit s existujici entitou nebo Pomocnikem Home Assistantu
+- vyber entity pouziva standardni vyhledavac entit HA a podporuje napriklad `input_text`, `input_number` i senzory
+- lze pouzit hlavni stav entity nebo zadat konkretni atribut, napriklad pole `prices` se spotovymi cenami
+- Inspector i dialog Promenne zobrazuji zdrojovou entitu, jeji ID a aktualni hodnotu
+- pri zmene navazane entity se otevreny nahled automaticky prekresli a pri odeslani se pouzije nejnovejsi hodnota
+- vazba na entitu se uklada jako editovatelna soucast projektu i konceptu konkretniho displeje
+- firmware gateway zustava 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.49
 
 - opravena interpretace baterie: hodnota z BLE reklamy je napeti CR2450 v desetinach voltu, nikoli procenta

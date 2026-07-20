@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.49";
+const DRATEK_EINK_VERSION = "0.1.50";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -70,6 +70,11 @@ class DratekEinkPanel extends HTMLElement {
     this._propertyEditActive = false;
     this._propertyEditTimer = null;
     this._handleKeyDown = (event) => this._onKeyDown(event);
+    this._stopTypingShortcut = (event) => {
+      if (this._isTypingEvent(event)) event.stopPropagation();
+    };
+    this.shadowRoot.addEventListener("keydown", this._stopTypingShortcut);
+    this.shadowRoot.addEventListener("keyup", this._stopTypingShortcut);
   }
 
   _defaultGatewayName() {
@@ -92,6 +97,7 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   set hass(hass) {
+    const previousSignature = this._entityStateSignature(this._hass);
     this._hass = hass;
     if (!this._rendered) {
       this._rendered = true;
@@ -99,7 +105,24 @@ class DratekEinkPanel extends HTMLElement {
       this._loadProjects();
       this._loadGateways();
       this._loadSerialPorts();
+    } else if (previousSignature !== this._entityStateSignature(hass) && this._activeTab === "designer") {
+      const active = this.shadowRoot.activeElement;
+      const editing = active && ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName);
+      if (!editing) this._render();
+      this._paint();
     }
+  }
+
+  _entityStateSignature(hass = this._hass) {
+    if (!hass || !hass.states) return "";
+    return this._objects
+      .filter((object) => object.entityId)
+      .map((object) => {
+        const state = hass.states[object.entityId];
+        const value = object.entityAttribute ? state?.attributes?.[object.entityAttribute] : state?.state;
+        return `${object.id}:${object.entityId}:${object.entityAttribute || ""}:${JSON.stringify(value)}`;
+      })
+      .join("|");
   }
 
   async _loadQueue(render = true) {
@@ -710,7 +733,8 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _isTypingEvent(event) {
-    return event.composedPath().some((node) => {
+    const path = typeof event.composedPath === "function" ? event.composedPath() : [event.target];
+    return path.some((node) => {
       const tag = String(node.tagName || "").toLowerCase();
       return tag === "input" || tag === "textarea" || tag === "select" || node.isContentEditable;
     });
@@ -1098,6 +1122,8 @@ class DratekEinkPanel extends HTMLElement {
       bold: true,
       variable: false,
       variableName: "",
+      entityId: "",
+      entityAttribute: "",
       textAlign: "center",
       verticalAlign: "middle",
       autoFit: true,
@@ -1447,6 +1473,32 @@ class DratekEinkPanel extends HTMLElement {
     return `${base}_${index}`;
   }
 
+  _entityRawValue(object) {
+    if (!object?.entityId) return undefined;
+    const state = this._hass?.states?.[object.entityId];
+    if (!state) return undefined;
+    return object.entityAttribute ? state.attributes?.[object.entityAttribute] : state.state;
+  }
+
+  _entityValue(object) {
+    const value = this._entityRawValue(object);
+    if (value === undefined || value === null) return "";
+    if (Array.isArray(value) || typeof value === "object") return JSON.stringify(value);
+    const unit = object.type === "text" && !object.entityAttribute
+      ? this._hass?.states?.[object.entityId]?.attributes?.unit_of_measurement
+      : "";
+    return `${value}${unit ? ` ${unit}` : ""}`;
+  }
+
+  _entityStateLabel(object) {
+    if (!object?.entityId) return "Ruční hodnota";
+    const state = this._hass?.states?.[object.entityId];
+    if (!state) return "Entita nebyla nalezena";
+    const friendlyName = state.attributes?.friendly_name || object.entityId;
+    const value = this._entityValue(object);
+    return `${friendlyName}: ${value || "-"}`;
+  }
+
   _variableDefs() {
     for (const object of this._objects.filter((item) => item.type === "chart")) {
       object.variable = true;
@@ -1461,6 +1513,9 @@ class DratekEinkPanel extends HTMLElement {
         id: object.id,
         name: object.variableName,
         type: object.type,
+        entityId: object.entityId || "",
+        entityAttribute: object.entityAttribute || "",
+        entityLabel: this._entityStateLabel(object),
         defaultValue: object.type === "chart" ? (object.data || "") : (object.text || ""),
         value: this._variables[object.variableName] ?? (object.type === "chart" ? object.data : object.text) ?? "",
       }));
@@ -1887,7 +1942,7 @@ class DratekEinkPanel extends HTMLElement {
         .editor-shell{display:grid;grid-template-columns:250px minmax(0,1fr) 318px 250px;gap:12px;align-items:start}.left,.right,.layers-panel{position:sticky;top:12px}.designer-section{position:relative}.designer-section.locked> :not(.designer-lock){pointer-events:none;opacity:.28;filter:grayscale(1)}.designer-lock{position:absolute;z-index:15;left:50%;top:110px;transform:translateX(-50%);width:min(440px,calc(100% - 32px));padding:28px;text-align:center;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.24)}.designer-lock ha-icon{--mdc-icon-size:44px;color:#16803c}.designer-lock h2{font-size:20px;text-transform:none;margin:10px 0}.designer-lock p{color:var(--secondary-text-color)}.template-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:282px;overflow:auto;padding-right:2px}.template-hero .template-grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr));max-height:none;overflow:visible;padding-right:0}.template-card{min-height:76px;display:grid;grid-template-columns:34px 1fr;align-items:center;text-align:left;gap:9px;padding:9px;border:1px solid var(--divider-color);background:linear-gradient(180deg,var(--card-background-color),var(--secondary-background-color));color:var(--primary-text-color);box-shadow:none}.template-card ha-icon{color:var(--primary-color);--mdc-icon-size:26px}.template-card strong{display:block;font-size:12px;line-height:1.2}.template-card span{display:block;font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;margin-top:2px}.template-card:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}.tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.tool-icon{min-height:82px;display:grid;grid-template-rows:36px auto;place-items:center;text-align:center;padding:10px 6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.tool-icon .ico{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-color);font-size:18px;font-weight:900}.tool-icon .txt{font-size:11px;font-weight:850;color:var(--secondary-text-color);text-transform:uppercase}.tool-icon:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}
         .action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:16px;display:grid;place-items:center}.wide-action{grid-column:span 4;font-size:13px}.panel-divider{height:1px;background:var(--divider-color);margin:14px 0}.layout-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-btn{min-height:58px;display:grid;place-items:center;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.layout-btn.active{background:var(--primary-color);color:var(--text-primary-color,#fff);border-color:var(--primary-color)}.transform-box{margin-top:10px;padding:10px;border:1px solid var(--divider-color);border-radius:8px;background:var(--secondary-background-color)}.transform-box small{display:block;color:var(--secondary-text-color);line-height:1.35;margin-top:6px}.properties-panel,.layers-panel{max-height:calc(100vh - 120px);overflow:auto}.layer-list{display:grid;gap:6px}.layer-row{display:grid;grid-template-columns:minmax(0,1fr) 34px 34px;gap:4px;align-items:center;padding:4px;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color)}.layer-row.selected{border-color:#16803c;background:rgba(22,128,60,.1);box-shadow:inset 3px 0 0 #16803c}.layer-main{min-width:0;justify-content:flex-start;background:transparent;color:var(--primary-text-color);box-shadow:none;padding:7px}.layer-main span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.layer-main ha-icon{color:var(--secondary-text-color);flex:0 0 auto}.layer-step{min-height:32px;padding:5px;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.layer-hint{margin:9px 0 0;color:var(--secondary-text-color);font-size:11px;line-height:1.4}.background-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding-top:9px;margin-top:7px;border-top:1px solid var(--divider-color)}.background-picker button{display:grid;place-items:center;gap:4px;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none;font-size:11px}.background-picker button.selected{outline:2px solid #16803c;outline-offset:-2px}.color-swatch{width:24px;height:20px;border:1px solid #7f7f7f;border-radius:4px}.color-swatch.white{background:#fff}.color-swatch.black{background:#000}.color-swatch.red{background:#d41414}
         .workspace-card{padding:0;overflow:hidden}.canvas-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--divider-color);background:var(--card-background-color)}.canvas-meta{display:flex;align-items:center;gap:8px;color:var(--secondary-text-color);font-size:12px}.workspace{min-height:590px;overflow:auto;display:grid;place-items:center;background:linear-gradient(45deg,rgba(127,127,127,.08) 25%,transparent 25%),linear-gradient(-45deg,rgba(127,127,127,.08) 25%,transparent 25%);background-size:18px 18px;border:0;padding:34px}
-        canvas{background:#fff;box-shadow:0 20px 54px rgba(0,0,0,.24);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:760}.field small{color:var(--secondary-text-color);font-size:11px;line-height:1.35}.field input,.field select,.field textarea,.file-menu input,.file-menu select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px;font:inherit}.field textarea{resize:vertical;min-height:62px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+        canvas{background:#fff;box-shadow:0 20px 54px rgba(0,0,0,.24);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:760}.field small{color:var(--secondary-text-color);font-size:11px;line-height:1.35}.field input,.field select,.field textarea,.file-menu input,.file-menu select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px;font:inherit}.field textarea{resize:vertical;min-height:62px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.entity-source{margin-top:12px;padding:11px;border:1px solid var(--divider-color);border-radius:8px;background:var(--secondary-background-color)}.entity-source ha-entity-picker{display:block;width:100%;margin-top:5px}.entity-current{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:start;margin-top:8px;padding:9px;border-radius:7px;background:var(--card-background-color);font-size:12px}.entity-current ha-icon{color:#16803c}.entity-current strong,.entity-current small{display:block;overflow-wrap:anywhere}.entity-current small{color:var(--secondary-text-color);margin-top:2px}
         table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:#111827;color:#e5e7eb;border-radius:8px;padding:12px;font-size:12px;line-height:1.45;max-height:320px;white-space:pre-wrap}.gateway-log{max-height:260px;min-height:96px;overflow-y:auto}.send-result{margin-top:10px}.ota-progress{height:9px;background:var(--secondary-background-color);border:1px solid var(--divider-color);border-radius:999px;overflow:hidden;margin:11px 0}.ota-progress span{display:block;height:100%;background:#0f766e;transition:width .25s ease}.variable-list{display:grid;gap:12px}.variable-card{padding:13px;border:1px solid var(--divider-color);border-radius:8px;background:var(--secondary-background-color)}.variable-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}.variable-card-head strong{font-size:14px}.variable-card input,.variable-card textarea{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:9px;font:inherit}.variable-card textarea{resize:vertical;min-height:82px;line-height:1.45}.format-help{display:grid;grid-template-columns:auto minmax(0,1fr);gap:9px;margin-top:9px;padding:10px;border:1px solid rgba(22,128,60,.3);border-radius:7px;background:rgba(22,128,60,.08);font-size:12px;line-height:1.45}.format-help ha-icon{color:#16803c}.format-help code{display:block;margin-top:4px;white-space:normal;overflow-wrap:anywhere}.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:20;display:grid;place-items:center;padding:24px}.symbol-dialog{width:min(920px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:16px}.symbol-search{display:grid;grid-template-columns:1fr auto;gap:10px;margin:12px 0}.symbol-search input{width:100%;border:1px solid var(--divider-color);border-radius:7px;background:var(--secondary-background-color);color:var(--primary-text-color);padding:10px}.category-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}.category-row button{min-height:32px;padding:6px 10px}.category-row button.active{background:var(--primary-color);color:var(--text-primary-color,#fff)}.symbol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}.symbol-tile{min-height:78px;display:grid;grid-template-rows:32px auto;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.symbol-tile strong{font-size:29px;line-height:1}.symbol-tile span{font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;text-align:center}
         .section-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}.debug-card details{margin-top:10px}.debug-card summary{cursor:pointer;color:var(--primary-color);font-weight:760}.inspector-empty{padding:18px;border:1px dashed var(--divider-color);border-radius:8px;color:var(--secondary-text-color);text-align:center;background:var(--secondary-background-color)}
         .ribbon-tab.menu-tab,.ribbon-tab.menu-tab.active{background:#16803c;color:#fff;border-color:#16803c}.ribbon-tab.menu-tab:hover{background:#126c33}.ribbon-tab.menu-tab.active{background:#0d5f2a;box-shadow:inset 0 -3px 0 rgba(255,255,255,.75)}.ribbon-send{background:#1565c0;color:#fff;border-color:#1565c0;margin-left:6px;box-shadow:none}.ribbon-send:hover:not(:disabled){background:#0d4f9b}.file-menu{padding:0;overflow:hidden;width:min(760px,calc(100vw - 52px))}.file-backstage{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:390px}.file-rail{display:flex;flex-direction:column;gap:3px;padding:16px 10px;background:#16803c;color:#fff}.file-rail-title{display:flex;align-items:center;gap:10px;padding:5px 10px 18px;font-size:20px;font-weight:850}.file-rail button{justify-content:flex-start;background:transparent;color:#fff;box-shadow:none;border:0;padding:11px 12px}.file-rail button:hover{background:rgba(255,255,255,.16)}.file-content{padding:20px;min-width:0}.file-content-actions{display:flex;gap:8px;margin-top:15px}.ribbon-menu{position:absolute;z-index:12;top:50px;padding:9px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);box-shadow:0 18px 46px rgba(0,0,0,.22)}.view-menu{left:205px;min-width:310px}.tools-menu{left:310px;min-width:270px}.layout-menu{left:410px;min-width:340px}.view-option{display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:center;gap:10px;padding:10px;border-radius:6px;font-weight:750}.view-option:hover{background:var(--secondary-background-color)}.menu-command-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding-bottom:8px;margin-bottom:4px;border-bottom:1px solid var(--divider-color)}.menu-command-row button{display:grid;place-items:center;gap:4px;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.menu-command-row span{font-size:11px}.menu-command{width:100%;display:flex;align-items:center;justify-content:flex-start;text-align:left;background:transparent;color:var(--primary-text-color);box-shadow:none}.menu-command ha-icon{color:#16803c;--mdc-icon-size:28px}.menu-command span{display:grid}.menu-command small{color:var(--secondary-text-color);font-weight:500}.menu-command.selected{background:rgba(22,128,60,.1);border-color:#16803c}.layout-menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-menu-button{min-height:76px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.layout-menu-button.active{background:#16803c;color:#fff}.editor-dialog{width:min(760px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:18px}.template-dialog{width:min(980px,100%)}.template-dialog .template-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));max-height:none;overflow:visible}.new-project-dialog{width:min(620px,100%)}.project-choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.project-choice{min-height:180px;display:grid;grid-template-rows:54px auto auto;place-items:center;text-align:center;padding:20px;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.project-choice ha-icon{--mdc-icon-size:48px;color:#16803c}.project-choice strong{font-size:17px}.project-choice span{color:var(--secondary-text-color);font-size:12px}.project-choice:hover{border-color:#16803c;background:rgba(22,128,60,.07)}
@@ -2032,8 +2087,8 @@ class DratekEinkPanel extends HTMLElement {
     if (!this._variablesDialogOpen) return "";
     const variables = this._variableDefs();
     return `<div class="modal-backdrop"><div class="editor-dialog">
-      <div class="section-title"><h2>Proměnné návrhu</h2><button id="variablesDialogClose" class="icon-btn secondary" title="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button></div>
-      ${variables.length ? `<div class="variable-list">${variables.map((variable) => `<div class="variable-card"><div class="variable-card-head"><strong>${this._escape(variable.name)}</strong><span class="pill muted">${variable.type === "chart" ? "Pole pro graf" : "Text"}</span></div>${variable.type === "chart" ? `<textarea data-variable="${this._escape(variable.name)}" rows="4">${this._escape(variable.value)}</textarea><div class="format-help"><ha-icon icon="mdi:code-json"></ha-icon><div><strong>Datový formát</strong><div>Pošlete pole čísel v pořadí zleva doprava. Doporučený je JSON; podporovaný je také seznam oddělený čárkami. Pro desetinnou čárku oddělujte hodnoty středníkem.</div><code>[1.62, 1.48, 1.36] &nbsp; nebo &nbsp; 1,62; 1,48; 1,36</code></div></div>` : `<input data-variable="${this._escape(variable.name)}" value="${this._escape(variable.value)}">`}</div>`).join("")}</div>` : `<div class="inspector-empty"><ha-icon icon="mdi:variable-off"></ha-icon><p>Návrh zatím neobsahuje žádnou proměnnou.</p></div>`}
+      <div class="section-title"><div><h2>Proměnné návrhu</h2><div class="subtitle">Ruční hodnoty upravíte zde. Zdroj z entity nebo Pomocníka Home Assistantu vyberete v Inspectoru konkrétního objektu.</div></div><button id="variablesDialogClose" class="icon-btn secondary" title="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button></div>
+      ${variables.length ? `<div class="variable-list">${variables.map((variable) => `<div class="variable-card"><div class="variable-card-head"><strong>${this._escape(variable.name)}</strong><span class="pill ${variable.entityId ? "good" : "muted"}">${variable.entityId ? "Entita HA" : variable.type === "chart" ? "Ruční pole" : "Ruční text"}</span></div>${variable.entityId ? `<div class="entity-current"><ha-icon icon="mdi:home-assistant"></ha-icon><div><strong>${this._escape(variable.entityLabel)}</strong><small>${this._escape(variable.entityId)}${variable.entityAttribute ? ` · atribut ${this._escape(variable.entityAttribute)}` : ""}</small></div></div>` : variable.type === "chart" ? `<textarea data-variable="${this._escape(variable.name)}" rows="4">${this._escape(variable.value)}</textarea>` : `<input data-variable="${this._escape(variable.name)}" value="${this._escape(variable.value)}">`}${variable.type === "chart" ? `<div class="format-help"><ha-icon icon="mdi:code-json"></ha-icon><div><strong>Datový formát</strong><div>Zdroj musí vrátit pole čísel v pořadí zleva doprava. Doporučený je JSON; podporovaný je také seznam oddělený čárkami. Pro desetinnou čárku oddělujte hodnoty středníkem.</div><code>[1.62, 1.48, 1.36] &nbsp; nebo &nbsp; 1,62; 1,48; 1,36</code></div></div>` : ""}</div>`).join("")}</div>` : `<div class="inspector-empty"><ha-icon icon="mdi:variable-off"></ha-icon><p>Návrh zatím neobsahuje žádnou proměnnou. Označte text jako proměnný nebo vložte graf.</p></div>`}
     </div></div>`;
   }
 
@@ -2416,6 +2471,23 @@ class DratekEinkPanel extends HTMLElement {
       this._paint();
       this._scheduleDraftSave();
     }));
+    this.shadowRoot.querySelectorAll("[data-entity-picker]").forEach((picker) => {
+      const object = this._objects.find((item) => item.id === picker.dataset.entityPicker);
+      if (!object) return;
+      picker.hass = this._hass;
+      picker.value = object.entityId || "";
+      picker.allowCustomEntity = true;
+      picker.addEventListener("value-changed", (event) => {
+        const entityId = event.detail?.value || "";
+        if (entityId === (object.entityId || "")) return;
+        this._pushHistory();
+        object.entityId = entityId;
+        if (!entityId) object.entityAttribute = "";
+        this._render();
+        this._paint();
+        this._scheduleDraftSave();
+      });
+    });
     const canvas = this.shadowRoot.querySelector("#editor");
     canvas.addEventListener("pointerdown", (event) => this._onPointerDown(event));
     canvas.addEventListener("pointermove", (event) => this._onPointerMove(event));
@@ -2424,12 +2496,19 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-prop]").forEach((input) => input.addEventListener("input", (event) => this._readProperties(event)));
   }
 
+  _renderEntityBinding(object) {
+    const state = object.entityId ? this._hass?.states?.[object.entityId] : null;
+    const friendlyName = state?.attributes?.friendly_name || object.entityId || "";
+    const value = object.entityId ? this._entityValue(object) : "";
+    return `<div class="entity-source"><h2>Zdroj z Home Assistantu</h2><div class="field"><label>Entita nebo Pomocník</label><ha-entity-picker data-entity-picker="${this._escape(object.id)}"></ha-entity-picker><small>Vyberte například input_text, input_number nebo libovolný senzor. Bez výběru se používá ruční hodnota z menu Proměnné.</small></div>${object.entityId ? `<div class="field"><label>Atribut entity (volitelné)</label><input data-prop="entityAttribute" value="${this._escape(object.entityAttribute || "")}" placeholder="Například prices"><small>Nechte prázdné pro hlavní stav entity. Atribut je vhodný například pro pole spotových cen.</small></div><div class="entity-current"><ha-icon icon="mdi:home-assistant"></ha-icon><div><strong>${this._escape(value || "Bez hodnoty")}</strong><small>${this._escape(friendlyName)} · ${this._escape(object.entityId)}</small></div></div>` : ""}</div>`;
+  }
+
   _renderProperties(object) {
     if (!object) {
       return `<div class="inspector-empty"><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon><p>${this._selectedIds.length > 1 ? `Vybrano ${this._selectedIds.length} objektu.` : "Vyber objekt v navrhu."}</p></div>`;
     }
     const common = `<h2>Pozice</h2><div class="row"><div class="field"><label>X</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label>Y</label><input data-prop="y" type="number" value="${object.y}"></div></div><div class="row"><div class="field"><label>Sirka</label><input data-prop="w" type="number" value="${object.w || 1}"></div><div class="field"><label>Vyska</label><input data-prop="h" type="number" value="${object.h || 1}"></div></div><h2>Vzhled</h2><div class="row"><div class="field"><label>Rotace</label><select data-prop="rotation"><option ${object.rotation === 0 ? "selected" : ""}>0</option><option ${object.rotation === 90 ? "selected" : ""}>90</option><option ${object.rotation === 180 ? "selected" : ""}>180</option><option ${object.rotation === 270 ? "selected" : ""}>270</option></select></div><div class="field"><label>Barva</label><select data-prop="color"><option value="black" ${object.color === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.color === "red" ? "selected" : ""}>Cervena</option><option value="white" ${object.color === "white" ? "selected" : ""}>Bila</option></select></div></div>`;
-    if (object.type === "text") return `${common}<div class="field"><label>Text</label><input data-prop="text" value="${this._escape(object.text)}"></div><div class="row"><div class="field"><label>Velikost textu</label><input data-prop="fontSize" type="number" min="${this._textMinFontSize(object)}" value="${object.fontSize}"></div><div class="field"><label>Font pro eInk</label><input value="Arial" disabled></div></div><div class="row"><div class="field"><label>Zarovnani</label><select data-prop="textAlign"><option value="left" ${object.textAlign === "left" ? "selected" : ""}>Vlevo</option><option value="center" ${!object.textAlign || object.textAlign === "center" ? "selected" : ""}>Stred</option><option value="right" ${object.textAlign === "right" ? "selected" : ""}>Vpravo</option></select></div><div class="field"><label>Svisle</label><select data-prop="verticalAlign"><option value="top" ${object.verticalAlign === "top" ? "selected" : ""}>Nahore</option><option value="middle" ${!object.verticalAlign || object.verticalAlign === "middle" ? "selected" : ""}>Stred</option><option value="bottom" ${object.verticalAlign === "bottom" ? "selected" : ""}>Dole</option></select></div></div><label><input data-prop="autoFit" type="checkbox" ${object.autoFit !== false ? "checked" : ""}> Prizpusobit velikost podle boxu</label><label><input data-prop="bold" type="checkbox" ${object.bold ? "checked" : ""}> Bold</label><label><input data-prop="variable" type="checkbox" ${object.variable ? "checked" : ""}> Promenny text</label><div class="field"><label>Nazev promenne</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="napr_teplota"></div>`;
+    if (object.type === "text") return `${common}<div class="field"><label>Text</label><input data-prop="text" value="${this._escape(object.text)}"></div><div class="row"><div class="field"><label>Velikost textu</label><input data-prop="fontSize" type="number" min="${this._textMinFontSize(object)}" value="${object.fontSize}"></div><div class="field"><label>Font pro eInk</label><input value="Arial" disabled></div></div><div class="row"><div class="field"><label>Zarovnani</label><select data-prop="textAlign"><option value="left" ${object.textAlign === "left" ? "selected" : ""}>Vlevo</option><option value="center" ${!object.textAlign || object.textAlign === "center" ? "selected" : ""}>Stred</option><option value="right" ${object.textAlign === "right" ? "selected" : ""}>Vpravo</option></select></div><div class="field"><label>Svisle</label><select data-prop="verticalAlign"><option value="top" ${object.verticalAlign === "top" ? "selected" : ""}>Nahore</option><option value="middle" ${!object.verticalAlign || object.verticalAlign === "middle" ? "selected" : ""}>Stred</option><option value="bottom" ${object.verticalAlign === "bottom" ? "selected" : ""}>Dole</option></select></div></div><label><input data-prop="autoFit" type="checkbox" ${object.autoFit !== false ? "checked" : ""}> Prizpusobit velikost podle boxu</label><label><input data-prop="bold" type="checkbox" ${object.bold ? "checked" : ""}> Bold</label><label><input data-prop="variable" type="checkbox" ${object.variable ? "checked" : ""}> Promenny text</label>${object.variable ? `<div class="field"><label>Interni nazev promenne</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="napr_teplota"><small>Tento nazev patri sablone; neni to samostatna entita Home Assistantu.</small></div>${this._renderEntityBinding(object)}` : ""}`;
     if (object.type === "rect") return `${common}<div class="row"><div class="field"><label>Vypln</label><select data-prop="fill"><option value="none" ${object.fill === "none" ? "selected" : ""}>Bez vyplne</option><option value="black" ${object.fill === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.fill === "red" ? "selected" : ""}>Cervena</option><option value="white" ${object.fill === "white" ? "selected" : ""}>Bila</option></select></div><div class="field"><label>Ramecek</label><select data-prop="stroke"><option value="none" ${object.stroke === "none" ? "selected" : ""}>Bez ramecku</option><option value="black" ${object.stroke === "black" ? "selected" : ""}>Cerny</option><option value="red" ${object.stroke === "red" ? "selected" : ""}>Cerveny</option></select></div></div><div class="field"><label>Sila ramecku</label><input data-prop="strokeWidth" type="number" value="${object.strokeWidth || 0}"></div>`;
     if (object.type === "chart") return `${common}
       <h2>Graf</h2>
@@ -2444,7 +2523,7 @@ class DratekEinkPanel extends HTMLElement {
       <label><input data-prop="showGrid" type="checkbox" ${object.showGrid !== false ? "checked" : ""}> Zobrazit mřížku</label>
       <label><input data-prop="showValues" type="checkbox" ${object.showValues ? "checked" : ""}> Zobrazit hodnoty</label>
       <div class="panel-divider"></div>
-      <div class="field"><label>Datová proměnná pro Home Assistant</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="ceny_spot_24h"><small>Pole upravíte v horním menu Proměnné.</small></div>`;
+      <div class="field"><label>Interní název datové proměnné</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="ceny_spot_24h"><small>Ruční pole upravíte v horním menu Proměnné.</small></div>${this._renderEntityBinding(object)}`;
     if (object.type === "line") return `<div class="row"><div class="field"><label>X1</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label>Y1</label><input data-prop="y" type="number" value="${object.y}"></div></div><div class="row"><div class="field"><label>X2</label><input data-prop="x2" type="number" value="${object.x2}"></div><div class="field"><label>Y2</label><input data-prop="y2" type="number" value="${object.y2}"></div></div><div class="row"><div class="field"><label>Barva</label><select data-prop="color"><option value="black" ${object.color === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.color === "red" ? "selected" : ""}>Cervena</option></select></div><div class="field"><label>Sila</label><input data-prop="strokeWidth" type="number" value="${object.strokeWidth || 2}"></div></div>`;
     if (object.type === "barcode" || object.type === "qr") return `${common}<div class="field"><label>${object.type === "qr" ? "QR data" : "EAN data"}</label><input data-prop="text" value="${this._escape(object.text)}"></div>`;
     return `${common}<label><input data-prop="keepRatio" type="checkbox" ${object.keepRatio ? "checked" : ""}> Zachovat pomer stran</label>`;
@@ -2493,7 +2572,7 @@ class DratekEinkPanel extends HTMLElement {
         delete this._variables[object.variableName];
         object.variableName = "";
       }
-      if (changedProp === "variable" || changedProp === "variableName" || wasVariable !== !!object.variable || oldVariableName !== (object.variableName || "")) this._render();
+      if (changedProp === "variable" || wasVariable !== !!object.variable) this._render();
     }
     if (object.type === "chart") object.legendFontSize = Math.max(6, Math.min(18, Number(object.legendFontSize || 8)));
     this._paint();
@@ -2557,8 +2636,10 @@ class DratekEinkPanel extends HTMLElement {
     ctx.rect(0, 0, box.w, box.h);
     ctx.clip();
     ctx.fillStyle = this._color(object.color);
-    const value = object.variable && object.variableName
-      ? (this._variables[object.variableName] ?? object.text ?? "")
+    const value = object.entityId
+      ? (this._entityValue(object) || object.text || "")
+      : object.variable && object.variableName
+        ? (this._variables[object.variableName] ?? object.text ?? "")
       : (object.text || "");
     const lines = String(value).split("\n");
     const family = "Arial";
@@ -2730,8 +2811,10 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _chartValues(object) {
-    const raw = String(object.variable && object.variableName
-      ? (this._variables[object.variableName] ?? object.data ?? "")
+    const raw = String(object.entityId
+      ? (this._entityValue(object) || object.data || "")
+      : object.variable && object.variableName
+        ? (this._variables[object.variableName] ?? object.data ?? "")
       : (object.data || "")).trim();
     let values = [];
     if (raw.startsWith("[")) {
