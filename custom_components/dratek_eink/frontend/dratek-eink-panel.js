@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.45";
+const DRATEK_EINK_VERSION = "0.1.46";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -417,12 +417,8 @@ class DratekEinkPanel extends HTMLElement {
     this._render();
     try {
       this._result = await this._hass.callWS({ type: "dratek_eink/scan" });
-      if (this._result.devices.length) {
-        const found = this._result.devices.some((device) => device.address === this._selectedDeviceAddress);
-        if (!this._selectedDeviceAddress || !found) {
-          await this._selectDevice(this._result.devices[0].address, { saveCurrent: false, render: false });
-        }
-      }
+      const found = this._result.devices.some((device) => device.address === this._selectedDeviceAddress);
+      if (!found) this._selectedDeviceAddress = "";
       this._selectPreferredRoute(this._device());
     } catch (err) {
       this._error = this._message(err);
@@ -448,7 +444,7 @@ class DratekEinkPanel extends HTMLElement {
 
   _device() {
     const devices = this._result ? this._result.devices : [];
-    return devices.find((device) => device.address === this._selectedDeviceAddress) || devices[0] || null;
+    return devices.find((device) => device.address === this._selectedDeviceAddress) || null;
   }
 
   _deviceTitle(device) {
@@ -515,15 +511,15 @@ class DratekEinkPanel extends HTMLElement {
 
   _transformOptions() {
     return [
-      ["rotate_cw", "OtoÄŤit doprava"],
-      ["rotate_ccw", "OtoÄŤit doleva"],
-      ["rotate_cw_flip_lr", "Doprava + zrcadlit vodorovnÄ›"],
+      ["rotate_cw", "Otočit doprava"],
+      ["rotate_ccw", "Otočit doleva"],
+      ["rotate_cw_flip_lr", "Doprava + zrcadlit vodorovně"],
       ["rotate_cw_flip_tb", "Doprava + zrcadlit svisle"],
-      ["rotate_ccw_flip_lr", "Doleva + zrcadlit vodorovnÄ›"],
+      ["rotate_ccw_flip_lr", "Doleva + zrcadlit vodorovně"],
       ["rotate_ccw_flip_tb", "Doleva + zrcadlit svisle"],
       ["none", "Bez transformace"],
-      ["rotate_180", "OtoÄŤit o 180Â°"],
-      ["flip_lr", "Jen zrcadlit vodorovnÄ›"],
+      ["rotate_180", "Otočit o 180°"],
+      ["flip_lr", "Jen zrcadlit vodorovně"],
       ["flip_tb", "Jen zrcadlit svisle"],
     ];
   }
@@ -717,7 +713,7 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _onKeyDown(event) {
-    if (this._activeTab !== "designer" || this._isTypingEvent(event)) return;
+    if (this._activeTab !== "designer" || !this._device() || this._isTypingEvent(event)) return;
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key) && this._selectedIds.length) {
       event.preventDefault();
       const step = event.shiftKey ? 10 : 1;
@@ -834,27 +830,27 @@ class DratekEinkPanel extends HTMLElement {
   _templateDefinitions() {
     return [
       { id: "weather", title: "Pocasi", icon: "mdi:weather-partly-cloudy", objects: [
-        this._tt(92, 22, 66, 28, "â", "black", true),
+        this._tt(92, 22, 66, 28, "☁", "black", true),
         this._tt(83, 50, 86, 16, "Patek", "black", true),
         this._tt(72, 68, 110, 14, "23. kvetna"),
         this._ln(45, 84, 205, 84),
         this._tt(83, 92, 88, 18, "12:45", "red", true, "cas"),
         this._ln(45, 112, 205, 112),
-        this._tt(69, 126, 112, 30, "23Â°C", "black", true, "teplota"),
+        this._tt(69, 126, 112, 30, "23°C", "black", true, "teplota"),
         this._tt(92, 157, 70, 12, "Polojasno"),
-        this._tt(95, 171, 60, 11, "24Â° / 13Â°"),
+        this._tt(95, 171, 60, 11, "24° / 13°"),
         this._rr(0, 195, 250, 55, "red", "none"),
         this._tt(18, 205, 28, 11, "SO", "white"),
         this._tt(76, 205, 28, 11, "NE", "white"),
         this._tt(134, 205, 28, 11, "PO", "white"),
         this._tt(195, 205, 28, 11, "UT", "white"),
-        this._tt(13, 221, 38, 16, "22Â°", "white", true),
-        this._tt(73, 221, 38, 16, "25Â°", "white", true),
-        this._tt(132, 221, 38, 16, "18Â°", "white", true),
-        this._tt(190, 221, 38, 16, "20Â°", "white", true),
+        this._tt(13, 221, 38, 16, "22°", "white", true),
+        this._tt(73, 221, 38, 16, "25°", "white", true),
+        this._tt(132, 221, 38, 16, "18°", "white", true),
+        this._tt(190, 221, 38, 16, "20°", "white", true),
       ] },
       { id: "energy", title: "Cena energie", icon: "mdi:lightning-bolt", objects: [
-        this._tt(18, 17, 30, 32, "âšˇ", "red", true),
+        this._tt(18, 17, 30, 32, "⚡", "red", true),
         this._tt(57, 20, 150, 18, "Cena elektriny", "black", true),
         this._tt(58, 41, 72, 11, "Kc / kWh"),
         this._ln(15, 62, 235, 62),
@@ -885,35 +881,35 @@ class DratekEinkPanel extends HTMLElement {
       ] },
       { id: "home", title: "Dum", icon: "mdi:home", objects: [
         this._tt(19, 18, 80, 20, "Dum", "black", true),
-        this._tt(82, 57, 92, 64, "âŚ‚", "red", true),
-        this._tt(39, 147, 20, 15, "â™¨", "black"),
-        this._tt(75, 147, 82, 16, "21,5 Â°C", "black", false, "teplota_dum"),
-        this._tt(39, 174, 20, 15, "â—Ź", "black"),
+        this._tt(82, 57, 92, 64, "⌂", "red", true),
+        this._tt(39, 147, 20, 15, "♨", "black"),
+        this._tt(75, 147, 82, 16, "21,5 °C", "black", false, "teplota_dum"),
+        this._tt(39, 174, 20, 15, "●", "black"),
         this._tt(75, 174, 62, 16, "45 %", "black", false, "vlhkost"),
-        this._tt(39, 201, 20, 15, "â—‰", "black"),
+        this._tt(39, 201, 20, 15, "◉", "black"),
         this._tt(75, 201, 106, 16, "3 svetla ON", "black", false, "svetla"),
-        this._tt(39, 228, 20, 15, "â–Ł", "black"),
+        this._tt(39, 228, 20, 15, "▣", "black"),
         this._tt(75, 228, 104, 16, "Vse zamceno", "black", false, "zamky"),
         this._ln(20, 267, 230, 267),
         this._rr(31, 276, 31, 31, "red", "none"),
-        this._tt(42, 285, 26, 20, "âś“", "white", true),
+        this._tt(42, 285, 26, 20, "✓", "white", true),
         this._tt(82, 286, 126, 14, "Vsechno v poradku", "red", true, "stav_domu"),
       ] },
       { id: "waste", title: "Odpady", icon: "mdi:trash-can-outline", objects: [
         this._tt(20, 18, 92, 20, "Odpady", "black", true),
-        this._tt(49, 79, 72, 54, "â™ś", "black", true),
+        this._tt(49, 79, 72, 54, "♜", "black", true),
         this._tt(140, 86, 68, 22, "ZITRA", "red", true, "odpad_1_kdy"),
         this._tt(140, 117, 60, 18, "Plast", "black", false, "odpad_1_typ"),
         this._ln(15, 158, 235, 158),
-        this._tt(51, 194, 68, 48, "â™»", "black", true),
+        this._tt(51, 194, 68, 48, "♻", "black", true),
         this._tt(138, 200, 70, 18, "za 7 dni", "red", true, "odpad_2_kdy"),
         this._tt(140, 230, 62, 18, "Papir", "black", false, "odpad_2_typ"),
       ] },
       { id: "solar", title: "Fotovoltaika", icon: "mdi:solar-power", objects: [
-        this._tt(22, 18, 34, 28, "âĽ", "black", false),
+        this._tt(22, 18, 34, 28, "☼", "black", false),
         this._tt(78, 20, 142, 19, "Fotovoltaika", "black", true),
         this._tt(80, 42, 96, 11, "Aktualni vykon"),
-        this._tt(78, 75, 96, 58, "â–¦", "black", true),
+        this._tt(78, 75, 96, 58, "▦", "black", true),
         this._tt(66, 136, 132, 31, "2,35 kW", "black", true, "vykon_fve"),
         this._ln(15, 183, 235, 183),
         this._tt(20, 197, 70, 13, "Dnes"),
@@ -929,11 +925,11 @@ class DratekEinkPanel extends HTMLElement {
       ] },
       { id: "washer", title: "Pracka", icon: "mdi:washing-machine", objects: [
         this._tt(18, 18, 80, 20, "Pracka", "black", true),
-        this._tt(50, 62, 94, 76, "â–Ł", "black", true),
+        this._tt(50, 62, 94, 76, "▣", "black", true),
         this._tt(22, 154, 54, 14, "Program"),
-        this._tt(22, 174, 112, 18, "Bavlna 60Â°", "red", true, "program_pracky"),
+        this._tt(22, 174, 112, 18, "Bavlna 60°", "red", true, "program_pracky"),
         this._ln(15, 203, 235, 203),
-        this._tt(22, 221, 18, 15, "â—·"),
+        this._tt(22, 221, 18, 15, "◷"),
         this._tt(59, 222, 48, 13, "Zbyva"),
         this._tt(143, 217, 70, 22, "01:15", "red", true, "pracka_zbyva"),
         this._ln(15, 250, 235, 250),
@@ -941,29 +937,29 @@ class DratekEinkPanel extends HTMLElement {
       ] },
       { id: "living", title: "Obyvak", icon: "mdi:sofa-outline", objects: [
         this._tt(20, 18, 88, 20, "Obyvak", "black", true),
-        this._tt(38, 78, 36, 50, "â™¨", "red", true),
-        this._tt(96, 88, 118, 32, "23,5 Â°C", "black", true, "teplota_obyvak"),
+        this._tt(38, 78, 36, 50, "♨", "red", true),
+        this._tt(96, 88, 118, 32, "23,5 °C", "black", true, "teplota_obyvak"),
         this._ln(20, 154, 230, 154),
-        this._tt(48, 188, 30, 30, "â—Ź", "black", true),
+        this._tt(48, 188, 30, 30, "●", "black", true),
         this._tt(94, 193, 104, 18, "Vlhkost: 40 %", "black", true, "vlhkost_obyvak"),
         this._ln(20, 230, 230, 230),
         this._tt(66, 267, 124, 18, "CO2: 650 ppm", "black", true, "co2_obyvak"),
       ] },
       { id: "presence", title: "Kdo je doma", icon: "mdi:account-group", objects: [
         this._tt(17, 18, 124, 20, "Kdo je doma", "black", true),
-        this._tt(25, 67, 18, 18, "â—Ź"),
+        this._tt(25, 67, 18, 18, "●"),
         this._tt(57, 68, 80, 16, "Petr", "black", false, "petr_stav"),
-        this._tt(205, 65, 28, 22, "âŚ‚", "red", true),
+        this._tt(205, 65, 28, 22, "⌂", "red", true),
         this._ln(15, 100, 235, 100),
-        this._tt(25, 118, 18, 18, "â—Ź"),
+        this._tt(25, 118, 18, 18, "●"),
         this._tt(57, 119, 80, 16, "Jana", "black", false, "jana_stav"),
-        this._tt(205, 116, 28, 22, "âŚ‚", "red", true),
+        this._tt(205, 116, 28, 22, "⌂", "red", true),
         this._ln(15, 151, 235, 151),
-        this._tt(25, 168, 18, 18, "â—Ź"),
+        this._tt(25, 168, 18, 18, "●"),
         this._tt(57, 169, 80, 16, "Eliska", "black", false, "eliska_jmeno"),
         this._tt(165, 171, 70, 15, "Ve skole", "red", true, "eliska_stav"),
         this._rr(0, 218, 250, 54, "red", "none"),
-        this._tt(35, 229, 24, 22, "â—·", "white", true),
+        this._tt(35, 229, 24, 22, "◷", "white", true),
         this._tt(76, 229, 128, 13, "Posledni aktualizace", "white", true),
         this._tt(76, 246, 64, 20, "12:45", "white", true, "cas_update"),
       ] },
@@ -976,7 +972,7 @@ class DratekEinkPanel extends HTMLElement {
         this._tt(20, 234, 48, 12, "Heslo"),
         this._tt(20, 251, 140, 14, "MyPassword123", "red", true, "wifi_heslo"),
         this._ln(15, 277, 235, 277),
-        this._tt(37, 293, 28, 20, "â‰‹", "black", true),
+        this._tt(37, 293, 28, 20, "≋", "black", true),
         this._tt(82, 297, 120, 12, "Naskenuj pro pripojeni"),
       ] },
       { id: "calendar", title: "Kalendar", icon: "mdi:calendar-month", objects: [
@@ -991,7 +987,7 @@ class DratekEinkPanel extends HTMLElement {
         this._tt(99, 182, 96, 15, "Narozeniny", "black", false, "udalost_2_nazev"),
         this._tt(99, 201, 70, 14, "Tomas", "black", false, "udalost_2_detail"),
         this._rr(0, 240, 250, 58, "red", "none"),
-        this._tt(34, 254, 34, 23, "â™›", "white", true),
+        this._tt(34, 254, 34, 23, "♛", "white", true),
         this._tt(78, 253, 112, 13, "Zitra ma svatek", "white"),
         this._tt(78, 271, 70, 18, "Jana", "white", true, "svatek"),
       ] },
@@ -1035,46 +1031,46 @@ class DratekEinkPanel extends HTMLElement {
 
   _symbolCategories() {
     return [
-      ["all", "Vse"],
-      ["weather", "Pocasi"],
-      ["home", "Domacnost"],
+      ["all", "Vše"],
+      ["weather", "Počasí"],
+      ["home", "Domácnost"],
       ["energy", "Energie"],
       ["tech", "Technika"],
       ["status", "Stavy"],
-      ["people", "Lide"],
-      ["time", "Cas"],
+      ["people", "Lidé"],
+      ["time", "Čas"],
       ["transport", "Doprava"],
       ["finance", "Finance"],
-      ["security", "Bezpecnost"],
-      ["health", "Zdravi"],
+      ["security", "Bezpečnost"],
+      ["health", "Zdraví"],
       ["media", "Media"],
-      ["food", "Jidlo"],
+      ["food", "Jídlo"],
       ["shop", "Obchod"],
-      ["nature", "Priroda"],
-      ["arrows", "Sipky"],
-      ["symbols", "Znacky"],
+      ["nature", "Příroda"],
+      ["arrows", "Šipky"],
+      ["symbols", "Značky"],
     ];
   }
 
   _symbolCatalog() {
     return [
-      ["weather", "slunce", "â€"], ["weather", "slunce male", "âĽ"], ["weather", "mrak", "â"], ["weather", "dest", "â‚"], ["weather", "snih", "âť„"], ["weather", "blesk", "âšˇ"], ["weather", "teplota", "â„"], ["weather", "teplota f", "â„‰"], ["weather", "vitr", "â‰‹"], ["weather", "noc", "âľ"], ["weather", "mesic", "â˝"], ["weather", "hvezda", "â…"], ["weather", "kapka", "â—Ź"], ["weather", "vlhkost", "%"], ["weather", "tlak", "hPa"], ["weather", "uv", "UV"], ["weather", "mlha", "â‰ˇ"], ["weather", "mrholeni", "â‹®"], ["weather", "duha", "âŚ’"], ["weather", "mraz", "*"],
-      ["home", "dum", "âŚ‚"], ["home", "doma", "âŚ‚"], ["home", "zamek", "â–Ł"], ["home", "odemceno", "â–˘"], ["home", "klic", "âšż"], ["home", "svetlo", "â—‰"], ["home", "zarovka", "â—Ź"], ["home", "voda", "â—Ź"], ["home", "kohout", "âŚ"], ["home", "odpad", "â™ś"], ["home", "recyklace", "â™»"], ["home", "pracka", "â–Ł"], ["home", "mycka", "â–¤"], ["home", "lednice", "â–Ż"], ["home", "trouba", "â–Ą"], ["home", "topeni", "â™¨"], ["home", "termostat", "â„"], ["home", "ventilator", "âś¶"], ["home", "okno", "â–Ą"], ["home", "dvere", "â–Ż"], ["home", "garaz", "â–°"], ["home", "zahrada", "â™§"], ["home", "bazĂ©n", "â‰"], ["home", "zaluzie", "â–¤"],
-      ["energy", "blesk", "âšˇ"], ["energy", "solar", "â–¦"], ["energy", "panel", "â–¦"], ["energy", "uspora", "âś“"], ["energy", "list", "â™§"], ["energy", "graf", "â–Ą"], ["energy", "baterie plna", "â–°"], ["energy", "baterie pul", "â–±"], ["energy", "zasuvka", "âŚ"], ["energy", "nabijeni", "âšˇ"], ["energy", "vykon", "kW"], ["energy", "energie", "kWh"], ["energy", "plyn", "â—Ś"], ["energy", "voda", "â‰"], ["energy", "co2", "COâ‚‚"], ["energy", "nahoru", "â–˛"], ["energy", "dolu", "â–Ľ"], ["energy", "tarif", "T"], ["energy", "cena", "KÄŤ"], ["energy", "sit", "â–¤"],
-      ["tech", "wifi", "â‰‹"], ["tech", "signal", "â–‚"], ["tech", "signal 2", "â–"], ["tech", "signal 3", "â–„"], ["tech", "qr", "â–¦"], ["tech", "barcode", "â–Ą"], ["tech", "server", "â–¤"], ["tech", "senzor", "â—Ś"], ["tech", "chip", "â–Ł"], ["tech", "bluetooth", "B"], ["tech", "mobil", "â–Ż"], ["tech", "tablet", "â–­"], ["tech", "pc", "â–°"], ["tech", "router", "â–¤"], ["tech", "cloud", "â"], ["tech", "database", "â–¦"], ["tech", "api", "API"], ["tech", "kamera", "â–Ł"], ["tech", "mikrofon", "â™Ş"], ["tech", "reproduktor", "â—"], ["tech", "nastaveni", "âš™"], ["tech", "terminal", ">_"], ["tech", "download", "â†“"], ["tech", "upload", "â†‘"],
-      ["status", "ok", "âś“"], ["status", "hotovo", "âś“"], ["status", "chyba", "âś•"], ["status", "krizek", "Ă—"], ["status", "varovani", "!"], ["status", "info", "i"], ["status", "otazka", "?"], ["status", "nahoru", "â–˛"], ["status", "dolu", "â–Ľ"], ["status", "zapnuto", "â—Ź"], ["status", "vypnuto", "â—‹"], ["status", "stop", "â– "], ["status", "pauza", "â…ˇ"], ["status", "play", "â–¶"], ["status", "record", "â—Ź"], ["status", "minus", "â’"], ["status", "plus", "+"], ["status", "rovna se", "="], ["status", "stav dobry", "OK"], ["status", "stav low", "LOW"], ["status", "stav high", "HI"],
-      ["people", "osoba", "â—Ź"], ["people", "clovek", "â—Ź"], ["people", "doma", "âŚ‚"], ["people", "prace", "â–Ł"], ["people", "skola", "â–Ą"], ["people", "srdce", "â™Ą"], ["people", "hvezda", "â…"], ["people", "rodina", "â—Źâ—Ź"], ["people", "dite", "â€˘"], ["people", "spanek", "Zz"], ["people", "aktivita", "â–˛"], ["people", "prichod", "â†’"], ["people", "odchod", "â†"], ["people", "host", "G"], ["people", "uzivatel", "U"], ["people", "telefon", "â–Ż"],
-      ["time", "hodiny", "â—·"], ["time", "cas", "â—·"], ["time", "kalendar", "â–Ł"], ["time", "den", "â€"], ["time", "noc", "âľ"], ["time", "alarm", "!"], ["time", "pauza", "â…ˇ"], ["time", "timer", "â—´"], ["time", "stopky", "â—µ"], ["time", "obnovit", "â†»"], ["time", "opakovat", "â†ş"], ["time", "dnes", "D"], ["time", "zitra", "Z"], ["time", "tyden", "T"], ["time", "mesic", "M"], ["time", "rok", "R"],
-      ["transport", "auto", "â–°"], ["transport", "bus", "â–Ł"], ["transport", "vlak", "â–¤"], ["transport", "kolo", "â—‹"], ["transport", "kolobezka", "o"], ["transport", "nabijeni", "âšˇ"], ["transport", "parkovani", "P"], ["transport", "letadlo", "âś"], ["transport", "lod", "âŚ"], ["transport", "pesky", "â—Ź"], ["transport", "trasa", "â†’"], ["transport", "sever", "N"], ["transport", "jih", "S"], ["transport", "vychod", "E"], ["transport", "zapad", "W"], ["transport", "domu", "âŚ‚"],
-      ["finance", "koruna", "KÄŤ"], ["finance", "euro", "â‚¬"], ["finance", "dolar", "$"], ["finance", "libra", "ÂŁ"], ["finance", "yen", "ÂĄ"], ["finance", "procenta", "%"], ["finance", "promile", "â€°"], ["finance", "tag", "â—†"], ["finance", "sleva", "-%"], ["finance", "nahoru", "â–˛"], ["finance", "dolu", "â–Ľ"], ["finance", "cena", "KÄŤ"], ["finance", "faktura", "â–¤"], ["finance", "platba", "âś“"], ["finance", "kosik", "â–˘"], ["finance", "nejlevnejsi", "â…"],
-      ["security", "alarm", "!"], ["security", "zamek", "â–Ł"], ["security", "odemceno", "â–˘"], ["security", "straz", "â—‰"], ["security", "kamera", "â–Ł"], ["security", "pohyb", "â—Ś"], ["security", "sirena", ")))"], ["security", "pozar", "â–˛"], ["security", "kour", "â‰‹"], ["security", "voda", "â‰"], ["security", "okno", "â–Ą"], ["security", "dvere", "â–Ż"], ["security", "bezpecne", "âś“"], ["security", "problem", "âś•"], ["security", "pin", "â—Źâ—Źâ—Ź"], ["security", "sos", "SOS"],
-      ["health", "srdce", "â™Ą"], ["health", "tep", "â™Ą"], ["health", "teplota", "â„"], ["health", "kroky", "â—Ź"], ["health", "spanek", "Zz"], ["health", "vaha", "kg"], ["health", "lek", "+"], ["health", "prvni pomoc", "âśš"], ["health", "voda", "â—Ź"], ["health", "jidlo", "â—"], ["health", "sport", "â–˛"], ["health", "klid", "â—‹"], ["health", "varovani", "!"], ["health", "ok", "âś“"],
-      ["media", "play", "â–¶"], ["media", "pause", "â…ˇ"], ["media", "stop", "â– "], ["media", "record", "â—Ź"], ["media", "prev", "â—€"], ["media", "next", "â–¶"], ["media", "volume", ")))"], ["media", "mute", "Ă—"], ["media", "hudba", "â™Ş"], ["media", "radio", "â–¤"], ["media", "tv", "â–­"], ["media", "film", "â–Ą"], ["media", "foto", "â–Ł"], ["media", "kamera", "â–Ł"], ["media", "playlist", "â‰ˇ"],
-      ["food", "jidlo", "â—"], ["food", "kava", "â•"], ["food", "caj", "â•"], ["food", "voda", "â—Ź"], ["food", "vino", "â—ˇ"], ["food", "pivo", "â–±"], ["food", "snidane", "â€"], ["food", "obed", "â—‹"], ["food", "vecere", "âľ"], ["food", "nakup", "â–˘"], ["food", "lednice", "â–Ż"], ["food", "teplota", "â„"], ["food", "hotovo", "âś“"], ["food", "cas", "â—·"],
-      ["shop", "kosik", "â–˘"], ["shop", "tag", "â—†"], ["shop", "sleva", "%"], ["shop", "cena", "KÄŤ"], ["shop", "ean", "â–Ą"], ["shop", "qr", "â–¦"], ["shop", "balik", "â–Ł"], ["shop", "sklad", "â–¤"], ["shop", "doprava", "â†’"], ["shop", "hotovo", "âś“"], ["shop", "chybi", "!"], ["shop", "plus", "+"], ["shop", "minus", "â’"], ["shop", "favorite", "â…"],
-      ["nature", "list", "â™§"], ["nature", "strom", "â™Ł"], ["nature", "kvetina", "âśż"], ["nature", "slunce", "â€"], ["nature", "voda", "â‰"], ["nature", "hora", "â–˛"], ["nature", "oheĹ", "â–˛"], ["nature", "snih", "âť„"], ["nature", "mesic", "âľ"], ["nature", "hvezda", "â…"], ["nature", "recyklace", "â™»"], ["nature", "co2", "COâ‚‚"], ["nature", "eko", "ECO"],
-      ["arrows", "vpravo", "â†’"], ["arrows", "vlevo", "â†"], ["arrows", "nahoru", "â†‘"], ["arrows", "dolu", "â†“"], ["arrows", "severovychod", "â†—"], ["arrows", "severozapad", "â†–"], ["arrows", "jihovychod", "â†"], ["arrows", "jihozapad", "â†™"], ["arrows", "obnovit", "â†»"], ["arrows", "zpet", "â†ş"], ["arrows", "enter", "â†µ"], ["arrows", "tam zpet", "â†”"], ["arrows", "nahoru dolu", "â†•"], ["arrows", "rychle", "Â»"], ["arrows", "pomalu", "Â«"], ["arrows", "pokraÄŤovat", "â–¶"],
-      ["symbols", "check", "âś“"], ["symbols", "cross", "âś•"], ["symbols", "krat", "Ă—"], ["symbols", "plus", "+"], ["symbols", "minus", "â’"], ["symbols", "star", "â…"], ["symbols", "heart", "â™Ą"], ["symbols", "circle", "â—Ź"], ["symbols", "circle empty", "â—‹"], ["symbols", "square", "â– "], ["symbols", "square empty", "â–ˇ"], ["symbols", "diamond", "â—†"], ["symbols", "diamond empty", "â—‡"], ["symbols", "triangle up", "â–˛"], ["symbols", "triangle down", "â–Ľ"], ["symbols", "dot", "â€˘"], ["symbols", "hash", "#"], ["symbols", "at", "@"], ["symbols", "ampersand", "&"], ["symbols", "degree", "Â°"], ["symbols", "copyright", "Â©"], ["symbols", "registered", "Â®"], ["symbols", "section", "Â§"],
+      ["weather", "slunce", "☀"], ["weather", "slunce male", "☼"], ["weather", "mrak", "☁"], ["weather", "dest", "☂"], ["weather", "snih", "❄"], ["weather", "blesk", "⚡"], ["weather", "teplota", "℃"], ["weather", "teplota f", "℉"], ["weather", "vitr", "≋"], ["weather", "noc", "☾"], ["weather", "mesic", "☽"], ["weather", "hvezda", "★"], ["weather", "kapka", "●"], ["weather", "vlhkost", "%"], ["weather", "tlak", "hPa"], ["weather", "uv", "UV"], ["weather", "mlha", "≡"], ["weather", "mrholeni", "⋮"], ["weather", "duha", "⌒"], ["weather", "mraz", "*"],
+      ["home", "dum", "⌂"], ["home", "doma", "⌂"], ["home", "zamek", "▣"], ["home", "odemceno", "▢"], ["home", "klic", "⚿"], ["home", "svetlo", "◉"], ["home", "zarovka", "●"], ["home", "voda", "●"], ["home", "kohout", "⌐"], ["home", "odpad", "♜"], ["home", "recyklace", "♻"], ["home", "pracka", "▣"], ["home", "mycka", "▤"], ["home", "lednice", "▯"], ["home", "trouba", "▥"], ["home", "topeni", "♨"], ["home", "termostat", "℃"], ["home", "ventilator", "✶"], ["home", "okno", "▥"], ["home", "dvere", "▯"], ["home", "garaz", "▰"], ["home", "zahrada", "♧"], ["home", "bazén", "≈"], ["home", "zaluzie", "▤"],
+      ["energy", "blesk", "⚡"], ["energy", "solar", "▦"], ["energy", "panel", "▦"], ["energy", "uspora", "✓"], ["energy", "list", "♧"], ["energy", "graf", "▥"], ["energy", "baterie plna", "▰"], ["energy", "baterie pul", "▱"], ["energy", "zasuvka", "⌁"], ["energy", "nabijeni", "⚡"], ["energy", "vykon", "kW"], ["energy", "energie", "kWh"], ["energy", "plyn", "◌"], ["energy", "voda", "≈"], ["energy", "co2", "CO₂"], ["energy", "nahoru", "▲"], ["energy", "dolu", "▼"], ["energy", "tarif", "T"], ["energy", "cena", "Kč"], ["energy", "sit", "▤"],
+      ["tech", "wifi", "≋"], ["tech", "signal", "▂"], ["tech", "signal 2", "▃"], ["tech", "signal 3", "▄"], ["tech", "qr", "▦"], ["tech", "barcode", "▥"], ["tech", "server", "▤"], ["tech", "senzor", "◌"], ["tech", "chip", "▣"], ["tech", "bluetooth", "B"], ["tech", "mobil", "▯"], ["tech", "tablet", "▭"], ["tech", "pc", "▰"], ["tech", "router", "▤"], ["tech", "cloud", "☁"], ["tech", "database", "▦"], ["tech", "api", "API"], ["tech", "kamera", "▣"], ["tech", "mikrofon", "♪"], ["tech", "reproduktor", "◁"], ["tech", "nastaveni", "⚙"], ["tech", "terminal", ">_"], ["tech", "download", "↓"], ["tech", "upload", "↑"],
+      ["status", "ok", "✓"], ["status", "hotovo", "✓"], ["status", "chyba", "✕"], ["status", "krizek", "×"], ["status", "varovani", "!"], ["status", "info", "i"], ["status", "otazka", "?"], ["status", "nahoru", "▲"], ["status", "dolu", "▼"], ["status", "zapnuto", "●"], ["status", "vypnuto", "○"], ["status", "stop", "■"], ["status", "pauza", "Ⅱ"], ["status", "play", "▶"], ["status", "record", "●"], ["status", "minus", "−"], ["status", "plus", "+"], ["status", "rovna se", "="], ["status", "stav dobry", "OK"], ["status", "stav low", "LOW"], ["status", "stav high", "HI"],
+      ["people", "osoba", "●"], ["people", "clovek", "●"], ["people", "doma", "⌂"], ["people", "prace", "▣"], ["people", "skola", "▥"], ["people", "srdce", "♥"], ["people", "hvezda", "★"], ["people", "rodina", "●●"], ["people", "dite", "•"], ["people", "spanek", "Zz"], ["people", "aktivita", "▲"], ["people", "prichod", "→"], ["people", "odchod", "←"], ["people", "host", "G"], ["people", "uzivatel", "U"], ["people", "telefon", "▯"],
+      ["time", "hodiny", "◷"], ["time", "cas", "◷"], ["time", "kalendar", "▣"], ["time", "den", "☀"], ["time", "noc", "☾"], ["time", "alarm", "!"], ["time", "pauza", "Ⅱ"], ["time", "timer", "◴"], ["time", "stopky", "◵"], ["time", "obnovit", "↻"], ["time", "opakovat", "↺"], ["time", "dnes", "D"], ["time", "zitra", "Z"], ["time", "tyden", "T"], ["time", "mesic", "M"], ["time", "rok", "R"],
+      ["transport", "auto", "▰"], ["transport", "bus", "▣"], ["transport", "vlak", "▤"], ["transport", "kolo", "○"], ["transport", "kolobezka", "o"], ["transport", "nabijeni", "⚡"], ["transport", "parkovani", "P"], ["transport", "letadlo", "✈"], ["transport", "lod", "⌁"], ["transport", "pesky", "●"], ["transport", "trasa", "→"], ["transport", "sever", "N"], ["transport", "jih", "S"], ["transport", "vychod", "E"], ["transport", "zapad", "W"], ["transport", "domu", "⌂"],
+      ["finance", "koruna", "Kč"], ["finance", "euro", "€"], ["finance", "dolar", "$"], ["finance", "libra", "£"], ["finance", "yen", "¥"], ["finance", "procenta", "%"], ["finance", "promile", "‰"], ["finance", "tag", "◆"], ["finance", "sleva", "-%"], ["finance", "nahoru", "▲"], ["finance", "dolu", "▼"], ["finance", "cena", "Kč"], ["finance", "faktura", "▤"], ["finance", "platba", "✓"], ["finance", "kosik", "▢"], ["finance", "nejlevnejsi", "★"],
+      ["security", "alarm", "!"], ["security", "zamek", "▣"], ["security", "odemceno", "▢"], ["security", "straz", "◉"], ["security", "kamera", "▣"], ["security", "pohyb", "◌"], ["security", "sirena", ")))"], ["security", "pozar", "▲"], ["security", "kour", "≋"], ["security", "voda", "≈"], ["security", "okno", "▥"], ["security", "dvere", "▯"], ["security", "bezpecne", "✓"], ["security", "problem", "✕"], ["security", "pin", "●●●"], ["security", "sos", "SOS"],
+      ["health", "srdce", "♥"], ["health", "tep", "♥"], ["health", "teplota", "℃"], ["health", "kroky", "●"], ["health", "spanek", "Zz"], ["health", "vaha", "kg"], ["health", "lek", "+"], ["health", "prvni pomoc", "✚"], ["health", "voda", "●"], ["health", "jidlo", "◐"], ["health", "sport", "▲"], ["health", "klid", "○"], ["health", "varovani", "!"], ["health", "ok", "✓"],
+      ["media", "play", "▶"], ["media", "pause", "Ⅱ"], ["media", "stop", "■"], ["media", "record", "●"], ["media", "prev", "◀"], ["media", "next", "▶"], ["media", "volume", ")))"], ["media", "mute", "×"], ["media", "hudba", "♪"], ["media", "radio", "▤"], ["media", "tv", "▭"], ["media", "film", "▥"], ["media", "foto", "▣"], ["media", "kamera", "▣"], ["media", "playlist", "≡"],
+      ["food", "jidlo", "◐"], ["food", "kava", "☕"], ["food", "caj", "☕"], ["food", "voda", "●"], ["food", "vino", "◡"], ["food", "pivo", "▱"], ["food", "snidane", "☀"], ["food", "obed", "○"], ["food", "vecere", "☾"], ["food", "nakup", "▢"], ["food", "lednice", "▯"], ["food", "teplota", "℃"], ["food", "hotovo", "✓"], ["food", "cas", "◷"],
+      ["shop", "kosik", "▢"], ["shop", "tag", "◆"], ["shop", "sleva", "%"], ["shop", "cena", "Kč"], ["shop", "ean", "▥"], ["shop", "qr", "▦"], ["shop", "balik", "▣"], ["shop", "sklad", "▤"], ["shop", "doprava", "→"], ["shop", "hotovo", "✓"], ["shop", "chybi", "!"], ["shop", "plus", "+"], ["shop", "minus", "−"], ["shop", "favorite", "★"],
+      ["nature", "list", "♧"], ["nature", "strom", "♣"], ["nature", "kvetina", "✿"], ["nature", "slunce", "☀"], ["nature", "voda", "≈"], ["nature", "hora", "▲"], ["nature", "oheň", "▲"], ["nature", "snih", "❄"], ["nature", "mesic", "☾"], ["nature", "hvezda", "★"], ["nature", "recyklace", "♻"], ["nature", "co2", "CO₂"], ["nature", "eko", "ECO"],
+      ["arrows", "vpravo", "→"], ["arrows", "vlevo", "←"], ["arrows", "nahoru", "↑"], ["arrows", "dolu", "↓"], ["arrows", "severovychod", "↗"], ["arrows", "severozapad", "↖"], ["arrows", "jihovychod", "↘"], ["arrows", "jihozapad", "↙"], ["arrows", "obnovit", "↻"], ["arrows", "zpet", "↺"], ["arrows", "enter", "↵"], ["arrows", "tam zpet", "↔"], ["arrows", "nahoru dolu", "↕"], ["arrows", "rychle", "»"], ["arrows", "pomalu", "«"], ["arrows", "pokračovat", "▶"],
+      ["symbols", "check", "✓"], ["symbols", "cross", "✕"], ["symbols", "krat", "×"], ["symbols", "plus", "+"], ["symbols", "minus", "−"], ["symbols", "star", "★"], ["symbols", "heart", "♥"], ["symbols", "circle", "●"], ["symbols", "circle empty", "○"], ["symbols", "square", "■"], ["symbols", "square empty", "□"], ["symbols", "diamond", "◆"], ["symbols", "diamond empty", "◇"], ["symbols", "triangle up", "▲"], ["symbols", "triangle down", "▼"], ["symbols", "dot", "•"], ["symbols", "hash", "#"], ["symbols", "at", "@"], ["symbols", "ampersand", "&"], ["symbols", "degree", "°"], ["symbols", "copyright", "©"], ["symbols", "registered", "®"], ["symbols", "section", "§"],
     ].map(([category, label, symbol]) => ({ category, label, symbol }));
   }
 
@@ -1190,6 +1186,22 @@ class DratekEinkPanel extends HTMLElement {
       object.y2 = object.y + this._snapValue(size.height * 0.2);
     }
     if (type === "barcode") object.h = this._snapValue(size.height * 0.32);
+    if (type === "chart") {
+      object.w = this._snapValue(size.width * 0.72);
+      object.h = this._snapValue(size.height * 0.62);
+      object.chartType = "line";
+      object.data = "2.10, 2.35, 2.18, 2.62, 2.45, 2.84, 2.31, 2.56";
+      object.chartLabels = "00, 03, 06, 09, 12, 15, 18, 21";
+      object.chartTitle = "Cena elektřiny";
+      object.xLabel = "Hodina";
+      object.yLabel = "Kč/kWh";
+      object.chartMin = "";
+      object.chartMax = "";
+      object.maxPoints = 24;
+      object.showAxes = true;
+      object.showGrid = true;
+      object.showValues = false;
+    }
     if (type === "qr") {
       object.w = Math.min(object.w, object.h);
       object.h = object.w;
@@ -1392,7 +1404,7 @@ class DratekEinkPanel extends HTMLElement {
     const base = this._normalizeVariableName(value);
     const used = new Set(
       this._objects
-        .filter((object) => object.id !== objectId && object.type === "text" && object.variable && object.variableName)
+        .filter((object) => object.id !== objectId && ["text", "chart"].includes(object.type) && object.variable && object.variableName)
         .map((object) => object.variableName)
     );
     if (!used.has(base)) return base;
@@ -1403,12 +1415,12 @@ class DratekEinkPanel extends HTMLElement {
 
   _variableDefs() {
     return this._objects
-      .filter((object) => object.type === "text" && object.variable && object.variableName)
+      .filter((object) => ["text", "chart"].includes(object.type) && object.variable && object.variableName)
       .map((object) => ({
         id: object.id,
         name: object.variableName,
-        defaultValue: object.text || "",
-        value: this._variables[object.variableName] ?? object.text ?? "",
+        defaultValue: object.type === "chart" ? (object.data || "") : (object.text || ""),
+        value: this._variables[object.variableName] ?? (object.type === "chart" ? object.data : object.text) ?? "",
       }));
   }
 
@@ -1807,10 +1819,10 @@ class DratekEinkPanel extends HTMLElement {
         .route-list{display:grid;gap:7px}.route{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:7px 9px;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);font-size:12px}.route.preferred{border-color:#0f766e;background:rgba(15,118,110,.08)}.route ha-icon{color:#0f766e}.route-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:780}.route-rssi{color:var(--secondary-text-color)}.topology{display:grid;gap:8px}.topology-row{display:grid;grid-template-columns:minmax(170px,1fr) minmax(80px,2fr) minmax(190px,1.2fr);align-items:center;gap:10px}.topology-node{display:flex;align-items:center;gap:9px;border:1px solid var(--divider-color);border-radius:8px;padding:10px;background:var(--card-background-color);min-width:0}.topology-node strong,.topology-node small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.topology-node small{color:var(--secondary-text-color);margin-top:2px}.topology-link{height:2px;background:var(--divider-color);position:relative}.topology-link:after{content:"";position:absolute;right:0;top:-4px;border-left:7px solid #0f766e;border-top:5px solid transparent;border-bottom:5px solid transparent}.topology-link span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--card-background-color);padding:2px 8px;color:var(--secondary-text-color);font-size:11px;white-space:nowrap}
         .subtabs{display:flex;gap:6px;padding:5px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);width:max-content;max-width:100%}.subtab{background:transparent;color:var(--secondary-text-color);box-shadow:none}.subtab.active{background:#0f766e;color:#fff}.gateway-name-edit{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px}.gateway-name-edit input{min-width:0;border:1px solid var(--primary-color);border-radius:7px;padding:7px;background:var(--card-background-color);color:var(--primary-text-color)}.gateway-health{display:grid;grid-template-columns:1fr 1fr;gap:10px}.health-tile{padding:10px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color)}.health-tile label{display:block;color:var(--secondary-text-color);font-size:11px;text-transform:uppercase;font-weight:800;margin-bottom:5px}
         .empty-state{min-height:280px;display:grid;place-items:center;text-align:center;gap:9px;color:var(--secondary-text-color)}.empty-state h2{color:var(--primary-text-color);font-size:18px;text-transform:none;letter-spacing:0;margin:0}.empty-icon{width:62px;height:62px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);font-weight:950;color:var(--primary-color)}
-        .editor-shell{display:grid;grid-template-columns:276px minmax(0,1fr) 352px;gap:12px;align-items:start}.left,.right{position:sticky;top:12px}.template-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:282px;overflow:auto;padding-right:2px}.template-hero .template-grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr));max-height:none;overflow:visible;padding-right:0}.template-card{min-height:76px;display:grid;grid-template-columns:34px 1fr;align-items:center;text-align:left;gap:9px;padding:9px;border:1px solid var(--divider-color);background:linear-gradient(180deg,var(--card-background-color),var(--secondary-background-color));color:var(--primary-text-color);box-shadow:none}.template-card ha-icon{color:var(--primary-color);--mdc-icon-size:26px}.template-card strong{display:block;font-size:12px;line-height:1.2}.template-card span{display:block;font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;margin-top:2px}.template-card:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}.tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.tool-icon{min-height:82px;display:grid;grid-template-rows:36px auto;place-items:center;text-align:center;padding:10px 6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.tool-icon .ico{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-color);font-size:18px;font-weight:900}.tool-icon .txt{font-size:11px;font-weight:850;color:var(--secondary-text-color);text-transform:uppercase}.tool-icon:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}
+        .editor-shell{display:grid;grid-template-columns:276px minmax(0,1fr) 352px;gap:12px;align-items:start}.left,.right{position:sticky;top:12px}.designer-section{position:relative}.designer-section.locked> :not(.designer-lock){pointer-events:none;opacity:.28;filter:grayscale(1)}.designer-lock{position:absolute;z-index:15;left:50%;top:110px;transform:translateX(-50%);width:min(440px,calc(100% - 32px));padding:28px;text-align:center;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.24)}.designer-lock ha-icon{--mdc-icon-size:44px;color:#16803c}.designer-lock h2{font-size:20px;text-transform:none;margin:10px 0}.designer-lock p{color:var(--secondary-text-color)}.template-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:282px;overflow:auto;padding-right:2px}.template-hero .template-grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr));max-height:none;overflow:visible;padding-right:0}.template-card{min-height:76px;display:grid;grid-template-columns:34px 1fr;align-items:center;text-align:left;gap:9px;padding:9px;border:1px solid var(--divider-color);background:linear-gradient(180deg,var(--card-background-color),var(--secondary-background-color));color:var(--primary-text-color);box-shadow:none}.template-card ha-icon{color:var(--primary-color);--mdc-icon-size:26px}.template-card strong{display:block;font-size:12px;line-height:1.2}.template-card span{display:block;font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;margin-top:2px}.template-card:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}.tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.tool-icon{min-height:82px;display:grid;grid-template-rows:36px auto;place-items:center;text-align:center;padding:10px 6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.tool-icon .ico{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-color);font-size:18px;font-weight:900}.tool-icon .txt{font-size:11px;font-weight:850;color:var(--secondary-text-color);text-transform:uppercase}.tool-icon:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}
         .action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:16px;display:grid;place-items:center}.wide-action{grid-column:span 4;font-size:13px}.panel-divider{height:1px;background:var(--divider-color);margin:14px 0}.layout-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-btn{min-height:58px;display:grid;place-items:center;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.layout-btn.active{background:var(--primary-color);color:var(--text-primary-color,#fff);border-color:var(--primary-color)}.transform-box{margin-top:10px;padding:10px;border:1px solid var(--divider-color);border-radius:8px;background:var(--secondary-background-color)}.transform-box small{display:block;color:var(--secondary-text-color);line-height:1.35;margin-top:6px}.properties-panel{max-height:calc(100vh - 120px);overflow:auto}
         .workspace-card{padding:0;overflow:hidden}.canvas-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--divider-color);background:var(--card-background-color)}.canvas-meta{display:flex;align-items:center;gap:8px;color:var(--secondary-text-color);font-size:12px}.workspace{min-height:590px;overflow:auto;display:grid;place-items:center;background:linear-gradient(45deg,rgba(127,127,127,.08) 25%,transparent 25%),linear-gradient(-45deg,rgba(127,127,127,.08) 25%,transparent 25%);background-size:18px 18px;border:0;padding:34px}
-        canvas{background:#fff;box-shadow:0 20px 54px rgba(0,0,0,.24);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:760}.field input,.field select,.file-menu input,.file-menu select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+        canvas{background:#fff;box-shadow:0 20px 54px rgba(0,0,0,.24);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:760}.field input,.field select,.field textarea,.file-menu input,.file-menu select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px;font:inherit}.field textarea{resize:vertical;min-height:62px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
         table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:#111827;color:#e5e7eb;border-radius:8px;padding:12px;font-size:12px;line-height:1.45;max-height:320px;white-space:pre-wrap}.gateway-log{max-height:260px;min-height:96px;overflow-y:auto}.send-result{margin-top:10px}.ota-progress{height:9px;background:var(--secondary-background-color);border:1px solid var(--divider-color);border-radius:999px;overflow:hidden;margin:11px 0}.ota-progress span{display:block;height:100%;background:#0f766e;transition:width .25s ease}.variable-table input{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:7px}.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:20;display:grid;place-items:center;padding:24px}.symbol-dialog{width:min(920px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:16px}.symbol-search{display:grid;grid-template-columns:1fr auto;gap:10px;margin:12px 0}.symbol-search input{width:100%;border:1px solid var(--divider-color);border-radius:7px;background:var(--secondary-background-color);color:var(--primary-text-color);padding:10px}.category-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}.category-row button{min-height:32px;padding:6px 10px}.category-row button.active{background:var(--primary-color);color:var(--text-primary-color,#fff)}.symbol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}.symbol-tile{min-height:78px;display:grid;grid-template-rows:32px auto;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.symbol-tile strong{font-size:29px;line-height:1}.symbol-tile span{font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;text-align:center}
         .section-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}.debug-card details{margin-top:10px}.debug-card summary{cursor:pointer;color:var(--primary-color);font-weight:760}.inspector-empty{padding:18px;border:1px dashed var(--divider-color);border-radius:8px;color:var(--secondary-text-color);text-align:center;background:var(--secondary-background-color)}
         .ribbon-tab.menu-tab,.ribbon-tab.menu-tab.active{background:#16803c;color:#fff;border-color:#16803c}.ribbon-tab.menu-tab:hover{background:#126c33}.ribbon-tab.menu-tab.active{background:#0d5f2a;box-shadow:inset 0 -3px 0 rgba(255,255,255,.75)}.ribbon-send{background:#1565c0;color:#fff;border-color:#1565c0;margin-left:6px;box-shadow:none}.ribbon-send:hover:not(:disabled){background:#0d4f9b}.file-menu{padding:0;overflow:hidden;width:min(760px,calc(100vw - 52px))}.file-backstage{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:390px}.file-rail{display:flex;flex-direction:column;gap:3px;padding:16px 10px;background:#16803c;color:#fff}.file-rail-title{display:flex;align-items:center;gap:10px;padding:5px 10px 18px;font-size:20px;font-weight:850}.file-rail button{justify-content:flex-start;background:transparent;color:#fff;box-shadow:none;border:0;padding:11px 12px}.file-rail button:hover{background:rgba(255,255,255,.16)}.file-content{padding:20px;min-width:0}.file-content-actions{display:flex;gap:8px;margin-top:15px}.ribbon-menu{position:absolute;z-index:12;top:50px;padding:9px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);box-shadow:0 18px 46px rgba(0,0,0,.22)}.view-menu{left:205px;min-width:310px}.tools-menu{left:310px;min-width:270px}.layout-menu{left:410px;min-width:340px}.view-option{display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:center;gap:10px;padding:10px;border-radius:6px;font-weight:750}.view-option:hover{background:var(--secondary-background-color)}.menu-command-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding-bottom:8px;margin-bottom:4px;border-bottom:1px solid var(--divider-color)}.menu-command-row button{display:grid;place-items:center;gap:4px;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.menu-command-row span{font-size:11px}.menu-command{width:100%;display:flex;align-items:center;justify-content:flex-start;text-align:left;background:transparent;color:var(--primary-text-color);box-shadow:none}.menu-command ha-icon{color:#16803c;--mdc-icon-size:28px}.menu-command span{display:grid}.menu-command small{color:var(--secondary-text-color);font-weight:500}.menu-command.selected{background:rgba(22,128,60,.1);border-color:#16803c}.layout-menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-menu-button{min-height:76px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.layout-menu-button.active{background:#16803c;color:#fff}.editor-dialog{width:min(760px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:18px}.template-dialog{width:min(980px,100%)}.template-dialog .template-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));max-height:none;overflow:visible}.new-project-dialog{width:min(620px,100%)}.project-choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.project-choice{min-height:180px;display:grid;grid-template-rows:54px auto auto;place-items:center;text-align:center;padding:20px;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.project-choice ha-icon{--mdc-icon-size:48px;color:#16803c}.project-choice strong{font-size:17px}.project-choice span{color:var(--secondary-text-color);font-size:12px}.project-choice:hover{border-color:#16803c;background:rgba(22,128,60,.07)}
@@ -1822,12 +1834,13 @@ class DratekEinkPanel extends HTMLElement {
         <div class="topbar">
           <div class="brand"><div class="logo">DE</div><div><h1>DRATEK eInk <span class="version-badge">v${DRATEK_EINK_VERSION}</span></h1><div class="subtitle">Editor sablon, BLE diagnostika a sprava displeju</div></div></div>
         </div>
-        <div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezene displeje</button><button class="tab ${this._activeTab === "designer" ? "active" : ""}" data-tab="designer"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Designer</button><button class="tab ${this._activeTab === "queue" ? "active" : ""}" data-tab="queue"><ha-icon icon="mdi:tray-full"></ha-icon>Fronta zapisu${this._queue.queued || this._queue.writing ? `<span class="pill warn">${this._queue.queued + this._queue.writing}</span>` : ""}</button><button class="tab ${this._activeTab === "gateways" ? "active" : ""}" data-tab="gateways"><ha-icon icon="mdi:router-wireless"></ha-icon>Gatewaye</button></div>
+        <div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezene displeje</button><button class="tab ${this._activeTab === "designer" ? "active" : ""}" data-tab="designer" ${device ? "" : "disabled"} title="${device ? "Otevřít designer" : "Nejprve vyberte displej"}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Designer</button><button class="tab ${this._activeTab === "queue" ? "active" : ""}" data-tab="queue"><ha-icon icon="mdi:tray-full"></ha-icon>Fronta zapisu${this._queue.queued || this._queue.writing ? `<span class="pill warn">${this._queue.queued + this._queue.writing}</span>` : ""}</button><button class="tab ${this._activeTab === "gateways" ? "active" : ""}" data-tab="gateways"><ha-icon icon="mdi:router-wireless"></ha-icon>Gatewaye</button></div>
         <div style="${this._activeTab === "devices" ? "" : "display:none"}">
           <div class="card"><div class="toolbar" style="margin-bottom:12px"><button id="scanDevicesTab" ${this._loading ? "disabled" : ""}><ha-icon icon="mdi:bluetooth-searching"></ha-icon>${this._loading ? "Vyhledavam..." : "Spustit scan"}</button></div>${this._renderDeviceCards(result.devices, device && device.address)}</div>
           <div class="card"><div class="section-title"><h2>Mapa pripojeni</h2><span class="pill muted">${result.devices.reduce((sum, item) => sum + (item.paths || []).length, 0)} dostupnych cest</span></div>${this._renderTopology(result.devices)}</div>
         </div>
-        <div style="${this._activeTab === "designer" ? "" : "display:none"}">
+        <div class="designer-section ${device ? "" : "locked"}" style="${this._activeTab === "designer" ? "" : "display:none"}">
+        ${device ? "" : `<div class="designer-lock"><ha-icon icon="mdi:monitor-lock"></ha-icon><h2>Nejprve vyberte displej</h2><p>Pracovní plocha se nastaví podle jeho rozlišení a uloženého návrhu.</p><button data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Vybrat displej</button></div>`}
         <div class="card designer-context"><div class="display-identity"><div class="status-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></div><div><strong>${this._escape(this._deviceTitle(device))}</strong><span>${device ? this._escape(device.address) : "Vyber displej v karte Nalezene displeje"}</span></div></div><span class="resolution-chip"><ha-icon icon="mdi:resize"></ha-icon>${size.width} x ${size.height}</span></div>
         <div class="card ribbon"><button id="fileMenuToggle" class="ribbon-tab menu-tab ${this._fileMenuOpen ? "active" : ""}"><ha-icon icon="mdi:file-outline"></ha-icon>Soubor</button><button id="variablesDialogOpen" class="ribbon-tab menu-tab"><ha-icon icon="mdi:variable"></ha-icon>Promenne</button><button id="viewMenuToggle" class="ribbon-tab menu-tab ${this._viewMenuOpen ? "active" : ""}"><ha-icon icon="mdi:eye-outline"></ha-icon>Zobrazeni</button><button id="toolsMenuToggle" class="ribbon-tab menu-tab ${this._toolsMenuOpen ? "active" : ""}"><ha-icon icon="mdi:tools"></ha-icon>Nastroje</button><button id="layoutMenuToggle" class="ribbon-tab menu-tab ${this._layoutMenuOpen ? "active" : ""}"><ha-icon icon="mdi:page-layout-body"></ha-icon>Rozlozeni</button><button id="sendDesign" class="ribbon-send" ${!device || this._sending ? "disabled" : ""}><ha-icon icon="mdi:upload"></ha-icon>${this._sending ? "Odesilam..." : "Odeslat navrh"}</button><span class="ribbon-project">${this._escape(this._projectName)}</span>${this._renderFileMenu()}${this._renderViewMenu()}${this._renderToolsMenu()}${this._renderLayoutMenu(device)}</div>
         ${this._renderSendResult()}
@@ -1863,6 +1876,7 @@ class DratekEinkPanel extends HTMLElement {
         <button class="tool-icon" data-add="line" title="Cara"><span class="ico"><ha-icon icon="mdi:vector-line"></ha-icon></span><span class="txt">Cara</span></button>
         <button class="tool-icon" data-add="barcode" title="EAN"><span class="ico"><ha-icon icon="mdi:barcode"></ha-icon></span><span class="txt">EAN</span></button>
         <button class="tool-icon" data-add="qr" title="QR"><span class="ico"><ha-icon icon="mdi:qrcode"></ha-icon></span><span class="txt">QR</span></button>
+        <button class="tool-icon" data-add="chart" title="Graf"><span class="ico"><ha-icon icon="mdi:chart-line"></ha-icon></span><span class="txt">Graf</span></button>
         <button id="addImage" class="tool-icon secondary" title="Obrazek"><span class="ico"><ha-icon icon="mdi:image-plus"></ha-icon></span><span class="txt">Image</span></button>
         <input id="imageFile" type="file" accept="image/*" hidden>
       </div>
@@ -1931,8 +1945,8 @@ class DratekEinkPanel extends HTMLElement {
     if (!this._variablesDialogOpen) return "";
     const variables = this._variableDefs();
     return `<div class="modal-backdrop"><div class="editor-dialog">
-      <div class="section-title"><h2>Promenne navrhu</h2><button id="variablesDialogClose" class="icon-btn secondary" title="Zavrit"><ha-icon icon="mdi:close"></ha-icon></button></div>
-      ${variables.length ? `<table class="variable-table"><thead><tr><th>Nazev</th><th>Vychozi text</th><th>Hodnota pro odeslani</th></tr></thead><tbody>${variables.map((variable) => `<tr><td><strong>${this._escape(variable.name)}</strong></td><td>${this._escape(variable.defaultValue)}</td><td><input data-variable="${this._escape(variable.name)}" value="${this._escape(variable.value)}"></td></tr>`).join("")}</tbody></table>` : `<div class="inspector-empty"><ha-icon icon="mdi:variable-off"></ha-icon><p>Navrh zatim neobsahuje zadny promenny text.</p></div>`}
+      <div class="section-title"><h2>Proměnné návrhu</h2><button id="variablesDialogClose" class="icon-btn secondary" title="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button></div>
+      ${variables.length ? `<table class="variable-table"><thead><tr><th>Název</th><th>Výchozí hodnota</th><th>Hodnota pro odeslání</th></tr></thead><tbody>${variables.map((variable) => `<tr><td><strong>${this._escape(variable.name)}</strong></td><td>${this._escape(variable.defaultValue)}</td><td><input data-variable="${this._escape(variable.name)}" value="${this._escape(variable.value)}"></td></tr>`).join("")}</tbody></table>` : `<div class="inspector-empty"><ha-icon icon="mdi:variable-off"></ha-icon><p>Návrh zatím neobsahuje žádnou proměnnou.</p></div>`}
     </div></div>`;
   }
 
@@ -2212,6 +2226,11 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-gateway-name-save]").forEach((button) => button.addEventListener("click", () => this._renameGateway(button.dataset.gatewayNameSave)));
     this.shadowRoot.querySelectorAll("[data-gateway-name-cancel]").forEach((button) => button.addEventListener("click", () => { this._editingGatewayId = ""; this._render(); this._paint(); }));
     this.shadowRoot.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", async () => {
+      if (button.dataset.tab === "designer" && !this._device()) {
+        this._activeTab = "devices";
+        this._render();
+        return;
+      }
       this._activeTab = button.dataset.tab;
       window.clearTimeout(this._queuePollTimer);
       if (this._activeTab === "queue") {
@@ -2313,6 +2332,20 @@ class DratekEinkPanel extends HTMLElement {
     const common = `<h2>Pozice</h2><div class="row"><div class="field"><label>X</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label>Y</label><input data-prop="y" type="number" value="${object.y}"></div></div><div class="row"><div class="field"><label>Sirka</label><input data-prop="w" type="number" value="${object.w || 1}"></div><div class="field"><label>Vyska</label><input data-prop="h" type="number" value="${object.h || 1}"></div></div><h2>Vzhled</h2><div class="row"><div class="field"><label>Rotace</label><select data-prop="rotation"><option ${object.rotation === 0 ? "selected" : ""}>0</option><option ${object.rotation === 90 ? "selected" : ""}>90</option><option ${object.rotation === 180 ? "selected" : ""}>180</option><option ${object.rotation === 270 ? "selected" : ""}>270</option></select></div><div class="field"><label>Barva</label><select data-prop="color"><option value="black" ${object.color === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.color === "red" ? "selected" : ""}>Cervena</option><option value="white" ${object.color === "white" ? "selected" : ""}>Bila</option></select></div></div>`;
     if (object.type === "text") return `${common}<div class="field"><label>Text</label><input data-prop="text" value="${this._escape(object.text)}"></div><div class="row"><div class="field"><label>Velikost textu</label><input data-prop="fontSize" type="number" min="${this._textMinFontSize(object)}" value="${object.fontSize}"></div><div class="field"><label>Font pro eInk</label><input value="Arial" disabled></div></div><div class="row"><div class="field"><label>Zarovnani</label><select data-prop="textAlign"><option value="left" ${object.textAlign === "left" ? "selected" : ""}>Vlevo</option><option value="center" ${!object.textAlign || object.textAlign === "center" ? "selected" : ""}>Stred</option><option value="right" ${object.textAlign === "right" ? "selected" : ""}>Vpravo</option></select></div><div class="field"><label>Svisle</label><select data-prop="verticalAlign"><option value="top" ${object.verticalAlign === "top" ? "selected" : ""}>Nahore</option><option value="middle" ${!object.verticalAlign || object.verticalAlign === "middle" ? "selected" : ""}>Stred</option><option value="bottom" ${object.verticalAlign === "bottom" ? "selected" : ""}>Dole</option></select></div></div><label><input data-prop="autoFit" type="checkbox" ${object.autoFit !== false ? "checked" : ""}> Prizpusobit velikost podle boxu</label><label><input data-prop="bold" type="checkbox" ${object.bold ? "checked" : ""}> Bold</label><label><input data-prop="variable" type="checkbox" ${object.variable ? "checked" : ""}> Promenny text</label><div class="field"><label>Nazev promenne</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="napr_teplota"></div>`;
     if (object.type === "rect") return `${common}<div class="row"><div class="field"><label>Vypln</label><select data-prop="fill"><option value="none" ${object.fill === "none" ? "selected" : ""}>Bez vyplne</option><option value="black" ${object.fill === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.fill === "red" ? "selected" : ""}>Cervena</option><option value="white" ${object.fill === "white" ? "selected" : ""}>Bila</option></select></div><div class="field"><label>Ramecek</label><select data-prop="stroke"><option value="none" ${object.stroke === "none" ? "selected" : ""}>Bez ramecku</option><option value="black" ${object.stroke === "black" ? "selected" : ""}>Cerny</option><option value="red" ${object.stroke === "red" ? "selected" : ""}>Cerveny</option></select></div></div><div class="field"><label>Sila ramecku</label><input data-prop="strokeWidth" type="number" value="${object.strokeWidth || 0}"></div>`;
+    if (object.type === "chart") return `${common}
+      <h2>Graf</h2>
+      <div class="row"><div class="field"><label>Typ grafu</label><select data-prop="chartType"><option value="line" ${object.chartType === "line" ? "selected" : ""}>Spojnicový</option><option value="bar" ${object.chartType === "bar" ? "selected" : ""}>Sloupcový</option><option value="area" ${object.chartType === "area" ? "selected" : ""}>Plošný</option></select></div><div class="field"><label>Počet bodů</label><input data-prop="maxPoints" type="number" min="2" max="96" value="${Number(object.maxPoints || 24)}"></div></div>
+      <div class="field"><label>Název grafu</label><input data-prop="chartTitle" value="${this._escape(object.chartTitle || "")}"></div>
+      <div class="field"><label>Data</label><textarea data-prop="data" rows="3" placeholder="2.10, 2.35, 2.18">${this._escape(object.data || "")}</textarea></div>
+      <div class="field"><label>Popisky bodů</label><input data-prop="chartLabels" value="${this._escape(object.chartLabels || "")}" placeholder="00, 03, 06, 09"></div>
+      <div class="row"><div class="field"><label>Popisek osy X</label><input data-prop="xLabel" value="${this._escape(object.xLabel || "")}"></div><div class="field"><label>Popisek osy Y</label><input data-prop="yLabel" value="${this._escape(object.yLabel || "")}"></div></div>
+      <div class="row"><div class="field"><label>Minimum</label><input data-prop="chartMin" type="number" step="any" value="${this._escape(object.chartMin ?? "")}" placeholder="Automaticky"></div><div class="field"><label>Maximum</label><input data-prop="chartMax" type="number" step="any" value="${this._escape(object.chartMax ?? "")}" placeholder="Automaticky"></div></div>
+      <label><input data-prop="showAxes" type="checkbox" ${object.showAxes !== false ? "checked" : ""}> Zobrazit osy</label>
+      <label><input data-prop="showGrid" type="checkbox" ${object.showGrid !== false ? "checked" : ""}> Zobrazit mřížku</label>
+      <label><input data-prop="showValues" type="checkbox" ${object.showValues ? "checked" : ""}> Zobrazit hodnoty</label>
+      <div class="panel-divider"></div>
+      <label><input data-prop="variable" type="checkbox" ${object.variable ? "checked" : ""}> Data z proměnné Home Assistantu</label>
+      <div class="field"><label>Název proměnné</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="ceny_spot"></div>`;
     if (object.type === "line") return `<div class="row"><div class="field"><label>X1</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label>Y1</label><input data-prop="y" type="number" value="${object.y}"></div></div><div class="row"><div class="field"><label>X2</label><input data-prop="x2" type="number" value="${object.x2}"></div><div class="field"><label>Y2</label><input data-prop="y2" type="number" value="${object.y2}"></div></div><div class="row"><div class="field"><label>Barva</label><select data-prop="color"><option value="black" ${object.color === "black" ? "selected" : ""}>Cerna</option><option value="red" ${object.color === "red" ? "selected" : ""}>Cervena</option></select></div><div class="field"><label>Sila</label><input data-prop="strokeWidth" type="number" value="${object.strokeWidth || 2}"></div></div>`;
     if (object.type === "barcode" || object.type === "qr") return `${common}<div class="field"><label>${object.type === "qr" ? "QR data" : "EAN data"}</label><input data-prop="text" value="${this._escape(object.text)}"></div>`;
     return `${common}<label><input data-prop="keepRatio" type="checkbox" ${object.keepRatio ? "checked" : ""}> Zachovat pomer stran</label>`;
@@ -2337,7 +2370,7 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-prop]").forEach((input) => {
       const key = input.dataset.prop;
       if (input.type === "checkbox") object[key] = input.checked;
-      else if (["x", "y", "x2", "y2", "w", "h", "rotation", "fontSize", "minFontSize", "strokeWidth"].includes(key)) object[key] = Number(input.value);
+      else if (["x", "y", "x2", "y2", "w", "h", "rotation", "fontSize", "minFontSize", "strokeWidth", "maxPoints"].includes(key)) object[key] = Number(input.value);
       else object[key] = input.value;
     });
     if (object.type === "text") {
@@ -2347,16 +2380,17 @@ class DratekEinkPanel extends HTMLElement {
         const lineCount = String(object.text || "").split("\n").length || 1;
         object.h = Math.max(Number(object.h || 1), Math.ceil(object.fontSize * 1.18 * lineCount));
       }
+    }
+    if (["text", "chart"].includes(object.type)) {
+      const defaultValue = object.type === "chart" ? (object.data || "") : (object.text || "");
       if (object.variable) {
-        object.variableName = this._uniqueVariableName(object.variableName || object.text || "variable", object.id);
-        if (this._variables[object.variableName] === undefined) this._variables[object.variableName] = object.text || "";
+        object.variableName = this._uniqueVariableName(object.variableName || (object.type === "chart" ? "data_grafu" : object.text) || "promenna", object.id);
+        if (this._variables[object.variableName] === undefined) this._variables[object.variableName] = defaultValue;
       } else if (object.variableName) {
         delete this._variables[object.variableName];
         object.variableName = "";
       }
-      if (changedProp === "variable" || changedProp === "variableName" || wasVariable !== !!object.variable || oldVariableName !== (object.variableName || "")) {
-        this._render();
-      }
+      if (changedProp === "variable" || changedProp === "variableName" || wasVariable !== !!object.variable || oldVariableName !== (object.variableName || "")) this._render();
     }
     this._paint();
     this._scheduleDraftSave();
@@ -2408,6 +2442,7 @@ class DratekEinkPanel extends HTMLElement {
     else if (object.type === "line") this._drawLine(ctx, object);
     else if (object.type === "barcode") this._drawBarcode(ctx, object, box);
     else if (object.type === "qr") this._drawQr(ctx, object, box);
+    else if (object.type === "chart") this._drawChart(ctx, object, box);
     else if (object.type === "image") this._drawImage(ctx, object, box);
     ctx.restore();
   }
@@ -2590,6 +2625,164 @@ class DratekEinkPanel extends HTMLElement {
     }
   }
 
+  _chartValues(object) {
+    const raw = String(object.variable && object.variableName
+      ? (this._variables[object.variableName] ?? object.data ?? "")
+      : (object.data || "")).trim();
+    let values = [];
+    if (raw.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) values = parsed.map(Number).filter(Number.isFinite);
+      } catch (_err) { /* Use the text parser below. */ }
+    }
+    if (!values.length) {
+      const parts = raw.includes(";")
+        ? raw.split(/[;\n]+/).map((value) => value.trim().replace(",", "."))
+        : raw.split(/[,\s\n]+/);
+      values = parts.map(Number).filter(Number.isFinite);
+    }
+    return values.slice(-Math.max(2, Math.min(96, Number(object.maxPoints || 24))));
+  }
+
+  _drawChart(ctx, object, box) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, box.w, box.h);
+    ctx.clip();
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, box.w, box.h);
+    const values = this._chartValues(object);
+    const color = this._color(object.color || "black");
+    const title = String(object.chartTitle || "").trim();
+    const showAxes = object.showAxes !== false;
+    const left = showAxes ? (object.yLabel ? 34 : 25) : 5;
+    const right = 6;
+    const top = title ? 17 : 5;
+    const bottom = showAxes ? (object.xLabel ? 22 : 14) : 5;
+    const plotW = Math.max(8, box.w - left - right);
+    const plotH = Math.max(8, box.h - top - bottom);
+
+    ctx.fillStyle = "#000";
+    ctx.font = "700 10px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    if (title) ctx.fillText(title, box.w / 2, 2, Math.max(10, box.w - 8));
+    if (!values.length) {
+      ctx.font = "600 9px Arial";
+      ctx.textBaseline = "middle";
+      ctx.fillText("Zadejte data grafu", box.w / 2, box.h / 2);
+      ctx.restore();
+      return;
+    }
+
+    const explicitMin = String(object.chartMin ?? "").trim() !== "" ? Number(object.chartMin) : null;
+    const explicitMax = String(object.chartMax ?? "").trim() !== "" ? Number(object.chartMax) : null;
+    let min = Number.isFinite(explicitMin) ? explicitMin : Math.min(...values);
+    let max = Number.isFinite(explicitMax) ? explicitMax : Math.max(...values);
+    if (min === max) { min -= 1; max += 1; }
+    if (min > max) [min, max] = [max, min];
+    if (!Number.isFinite(explicitMin) || !Number.isFinite(explicitMax)) {
+      const padding = Math.max(0.01, (max - min) * 0.06);
+      if (!Number.isFinite(explicitMin)) min -= padding;
+      if (!Number.isFinite(explicitMax)) max += padding;
+    }
+    const yFor = (value) => top + plotH - ((value - min) / Math.max(0.000001, max - min)) * plotH;
+    const xFor = (index) => left + (values.length === 1 ? plotW / 2 : (index / (values.length - 1)) * plotW);
+
+    if (object.showGrid !== false) {
+      ctx.strokeStyle = "#b8b8b8";
+      ctx.lineWidth = 0.6;
+      ctx.setLineDash([2, 2]);
+      for (let step = 0; step <= 3; step++) {
+        const y = top + (plotH * step) / 3;
+        ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(left + plotW, y); ctx.stroke();
+      }
+      const verticals = Math.min(6, Math.max(2, values.length - 1));
+      for (let step = 0; step <= verticals; step++) {
+        const x = left + (plotW * step) / verticals;
+        ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, top + plotH); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
+
+    if (showAxes) {
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(left, top); ctx.lineTo(left, top + plotH); ctx.lineTo(left + plotW, top + plotH); ctx.stroke();
+      ctx.fillStyle = "#000";
+      ctx.font = "600 7px Arial";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.fillText(this._formatChartNumber(max), left - 3, top + 2);
+      ctx.fillText(this._formatChartNumber(min), left - 3, top + plotH - 2);
+      const labels = String(object.chartLabels || "").split(/[,;\n]+/).map((value) => value.trim()).filter(Boolean).slice(-values.length);
+      const labelIndexes = values.length > 2 && plotW > 140 ? [0, Math.floor((values.length - 1) / 2), values.length - 1] : [0, values.length - 1];
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      for (const index of [...new Set(labelIndexes)]) ctx.fillText(labels[index] || String(index + 1), xFor(index), top + plotH + 3, 34);
+      ctx.font = "700 8px Arial";
+      if (object.xLabel) ctx.fillText(String(object.xLabel), left + plotW / 2, box.h - 9, plotW);
+      if (object.yLabel) {
+        ctx.save();
+        ctx.translate(7, top + plotH / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.textBaseline = "top";
+        ctx.fillText(String(object.yLabel), 0, 0, plotH);
+        ctx.restore();
+      }
+    }
+
+    if (object.chartType === "bar") {
+      const slot = plotW / Math.max(1, values.length);
+      const barW = Math.max(1, slot * 0.62);
+      const baselineValue = min <= 0 && max >= 0 ? 0 : min;
+      const baselineY = yFor(baselineValue);
+      ctx.fillStyle = color;
+      values.forEach((value, index) => {
+        const x = left + index * slot + (slot - barW) / 2;
+        const y = yFor(value);
+        ctx.fillRect(x, Math.min(y, baselineY), barW, Math.max(1, Math.abs(baselineY - y)));
+      });
+    } else {
+      if (object.chartType === "area") {
+        const baselineValue = min <= 0 && max >= 0 ? 0 : min;
+        const baselineY = yFor(baselineValue);
+        ctx.beginPath();
+        ctx.moveTo(xFor(0), baselineY);
+        values.forEach((value, index) => ctx.lineTo(xFor(index), yFor(value)));
+        ctx.lineTo(xFor(values.length - 1), baselineY);
+        ctx.closePath();
+        ctx.fillStyle = object.color === "red" ? "rgba(212,20,20,.35)" : "rgba(0,0,0,.28)";
+        ctx.fill();
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1.2, Number(object.strokeWidth || 2));
+      ctx.beginPath();
+      values.forEach((value, index) => index ? ctx.lineTo(xFor(index), yFor(value)) : ctx.moveTo(xFor(index), yFor(value)));
+      ctx.stroke();
+      ctx.fillStyle = color;
+      values.forEach((value, index) => { ctx.beginPath(); ctx.arc(xFor(index), yFor(value), 1.7, 0, Math.PI * 2); ctx.fill(); });
+    }
+
+    if (object.showValues) {
+      ctx.fillStyle = "#000";
+      ctx.font = "700 7px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      const every = values.length <= 10 ? 1 : Math.ceil(values.length / 8);
+      values.forEach((value, index) => { if (index % every === 0 || index === values.length - 1) ctx.fillText(this._formatChartNumber(value), xFor(index), yFor(value) - 2); });
+    }
+    ctx.restore();
+  }
+
+  _formatChartNumber(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "-";
+    const digits = Math.abs(number) >= 100 ? 0 : Math.abs(number) >= 10 ? 1 : 2;
+    return number.toFixed(digits).replace(".", ",");
+  }
+
   _drawImage(ctx, object, box) {
     if (!object._img && object.image) {
       object._img = new Image();
@@ -2705,8 +2898,8 @@ class DratekEinkPanel extends HTMLElement {
     });
     return `<div class="modal-backdrop">
       <div class="symbol-dialog">
-        <div class="section-title"><h2>Vlozit symbol</h2><button id="closeSymbols" class="secondary"><ha-icon icon="mdi:close"></ha-icon>Zavrit</button></div>
-        <div class="symbol-search"><input id="symbolSearch" value="${this._escape(this._symbolSearch)}" placeholder="Hledat symbol, napriklad wifi, teplota, svetlo..."><span class="pill muted">${symbols.length} symbolu</span></div>
+        <div class="section-title"><h2>Vložit symbol</h2><button id="closeSymbols" class="secondary"><ha-icon icon="mdi:close"></ha-icon>Zavřít</button></div>
+        <div class="symbol-search"><input id="symbolSearch" value="${this._escape(this._symbolSearch)}" placeholder="Hledat symbol, například Wi-Fi, teplota, světlo..."><span class="pill muted">${symbols.length} symbolů</span></div>
         <div class="category-row">${this._symbolCategories().map(([id, label]) => `<button class="secondary ${this._symbolCategory === id ? "active" : ""}" data-symbol-category="${this._escape(id)}">${this._escape(label)}</button>`).join("")}</div>
         <div class="symbol-grid">${symbols.map((item) => `<button class="symbol-tile" data-symbol="${this._escape(item.symbol)}" title="${this._escape(item.label)}"><strong>${this._escape(item.symbol)}</strong><span>${this._escape(item.label)}</span></button>`).join("")}</div>
       </div>
@@ -2727,7 +2920,7 @@ class DratekEinkPanel extends HTMLElement {
     const options = this._transformOptions()
       .map(([value, label]) => `<option value="${this._escape(value)}" ${this._displayTransform === value ? "selected" : ""}>${this._escape(label)}</option>`)
       .join("");
-    return `<div class="transform-box"><div class="field"><label>Mapovani 2,9&quot; displeje</label><select id="displayTransform">${options}</select></div><small>Pokud je obraz na PE29 posunuty, otoceny nebo zrcadleny, zmen tuto volbu a znovu odesli navrh. Volba se uklada ke konkretni BLE adrese displeje.</small></div>`;
+    return `<div class="transform-box"><div class="field"><label>Mapování 2,9&quot; displeje</label><select id="displayTransform">${options}</select></div><small>Pokud je obraz na PE29 posunutý, otočený nebo zrcadlený, změňte tuto volbu a návrh znovu odešlete. Volba se ukládá ke konkrétní BLE adrese displeje.</small></div>`;
   }
 
   _renderDeviceCards(devices, selectedAddress) {

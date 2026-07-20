@@ -1,5 +1,17 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.46
+
+- designer je zamceny, dokud uzivatel explicitne neotevre konkretni nalezeny displej
+- scan jiz automaticky nevybira prvni nalezeny displej, takze nemuze vzniknout navrh pro nespravne rozliseni
+- opravena poskozena cestina a Unicode znaky v mapovani 2,9palcoveho displeje, sablonach a celem katalogu symbolu
+- kategorie symbolu a hlavni dialogy pouzivaji spravne ceske popisky
+- pridan plnohodnotny objekt Graf se spojnicovym, sloupcovym a plosnym zobrazenim
+- graf podporuje nazev, popisky os a bodu, mrizku, hodnoty, automaticke i rucni minimum a maximum a omezeni poctu bodu
+- data grafu lze zadat jako seznam, JSON pole nebo ceska desetinna cisla oddelena strednikem
+- data grafu lze oznacit jako promennou pro hodnoty z Home Assistantu
+- firmware gateway zustava 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.45
 
 - horni ribbon designeru ma sjednocene zelene karty Soubor, Promenne, Zobrazeni, Nastroje a Rozlozeni
