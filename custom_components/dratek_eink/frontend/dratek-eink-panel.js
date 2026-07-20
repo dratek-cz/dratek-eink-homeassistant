@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.48";
+const DRATEK_EINK_VERSION = "0.1.49";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -3056,7 +3056,7 @@ class DratekEinkPanel extends HTMLElement {
     }
     return `<div class="device-grid">${devices.map((device) => {
       const selected = device.address === selectedAddress;
-      const battery = Number(device.battery);
+      const battery = this._batteryInfo(device);
       const rssi = Number(device.rssi);
       const paths = device.paths || [];
       const editing = this._editingDeviceAddress === device.address;
@@ -3064,7 +3064,7 @@ class DratekEinkPanel extends HTMLElement {
         <div class="device-card-top"><div><strong>${this._escape(this._deviceTitle(device))}</strong><span>${this._escape(device.display_name ? `${device.physical_code} | ${device.address}` : device.address)}</span></div><span class="pill ${selected ? "good" : "muted"}">${selected ? "Vybrano" : this._escape(device.display_name || "Bez nazvu")}</span></div>
         <div class="device-model">${this._escape(device.model)}<br><span>SDK ${this._escape(device.sdk_type)} / raw ${this._escape(device.raw_type)}</span></div>
         <div class="device-meters">
-          <div class="meter-block"><label>Baterie</label><div class="battery ${this._batteryClass(battery)}"><span style="width:${this._batteryPercent(battery)}%"></span></div><strong>${Number.isFinite(battery) ? `${battery}%` : "-"}</strong></div>
+          <div class="meter-block" title="Odhad zbývající kapacity CR2450 podle naměřeného napětí"><label>Baterie CR2450</label><div class="battery ${this._batteryClass(battery.percent)}"><span style="width:${this._batteryPercent(battery.percent)}%"></span></div><strong>${Number.isFinite(battery.percent) ? `≈ ${battery.percent} % · ${this._formatBatteryVoltage(battery.voltage)}` : "-"}</strong></div>
           <div class="meter-block"><label>Signal</label>${this._renderSignalBars(rssi)}<strong>${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>
         </div>
         <div class="route-list">${paths.map((path, index) => `<div class="route ${index === 0 ? "preferred" : ""}"><ha-icon icon="${path.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon><span class="route-name">${this._escape(path.name)}</span><span class="route-rssi signal-value ${this._signalClass(Number(path.rssi))}">${this._escape(path.rssi ?? "-")} dBm</span>${index === 0 ? `<span class="pill good">Aktivni cesta</span>` : ""}</div>`).join("")}</div>
@@ -3072,6 +3072,45 @@ class DratekEinkPanel extends HTMLElement {
         ${editing ? `<div class="device-name-edit"><input data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Napriklad Kuchyn"><button data-device-name-save="${this._escape(device.address)}" title="Ulozit nazev"><ha-icon icon="mdi:check"></ha-icon></button><button class="secondary" data-device-name-cancel title="Zrusit"><ha-icon icon="mdi:close"></ha-icon></button></div>` : `<div class="device-actions"><button class="secondary" data-device-rename="${this._escape(device.address)}"><ha-icon icon="mdi:pencil-outline"></ha-icon>${device.display_name ? "Prejmenovat" : "Pojmenovat"}</button><button data-select-device="${this._escape(device.address)}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Otevrit v designeru</button></div>`}
       </div>`;
     }).join("")}</div>`;
+  }
+
+  _batteryInfo(device) {
+    const raw = Number(device.battery_raw ?? device.battery);
+    const reportedVoltage = Number(device.battery_voltage);
+    const voltage = Number.isFinite(reportedVoltage) && reportedVoltage > 0
+      ? reportedVoltage
+      : Number.isFinite(raw) && raw > 0
+        ? (raw > 5 ? raw / 10 : raw)
+        : NaN;
+    const reportedPercent = Number(device.battery_percent);
+    const percent = Number.isFinite(reportedPercent)
+      ? Math.max(0, Math.min(100, Math.round(reportedPercent)))
+      : this._cr2450Percent(voltage);
+    return { voltage, percent };
+  }
+
+  _cr2450Percent(voltage) {
+    if (!Number.isFinite(voltage)) return NaN;
+    const curve = [[3.20, 100], [3.10, 96], [3.00, 85], [2.90, 55], [2.80, 20], [2.70, 8], [2.60, 4], [2.50, 2], [2.00, 0]];
+    if (voltage >= curve[0][0]) return 100;
+    if (voltage <= curve[curve.length - 1][0]) return 0;
+    for (let index = 0; index < curve.length - 1; index++) {
+      const [highVoltage, highPercent] = curve[index];
+      const [lowVoltage, lowPercent] = curve[index + 1];
+      if (voltage >= lowVoltage && voltage <= highVoltage) {
+        const ratio = (voltage - lowVoltage) / (highVoltage - lowVoltage);
+        return Math.round(lowPercent + ratio * (highPercent - lowPercent));
+      }
+    }
+    return 0;
+  }
+
+  _formatBatteryVoltage(voltage) {
+    if (!Number.isFinite(voltage)) return "-";
+    const decimals = Math.abs(voltage * 10 - Math.round(voltage * 10)) < 0.000001
+      ? 1
+      : Math.abs(voltage * 100 - Math.round(voltage * 100)) < 0.000001 ? 2 : 3;
+    return `${voltage.toFixed(decimals).replace(".", ",")} V`;
   }
 
   _batteryPercent(value) {

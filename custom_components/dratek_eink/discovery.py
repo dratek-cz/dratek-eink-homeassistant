@@ -6,6 +6,60 @@ from typing import Any
 from .const import DEVICE_SIZES, DRATEK_COMPANY_ID, SDK_MODELS
 
 
+# CR2450 voltage is nearly flat through most of its life, so voltage can only
+# provide an estimate. Anchors follow the typical loaded discharge curves from
+# Panasonic and Energizer CR2450 datasheets, with a conservative end-of-life knee.
+CR2450_VOLTAGE_PERCENT_CURVE = (
+    (3.20, 100),
+    (3.10, 96),
+    (3.00, 85),
+    (2.90, 55),
+    (2.80, 20),
+    (2.70, 8),
+    (2.60, 4),
+    (2.50, 2),
+    (2.00, 0),
+)
+
+
+def cr2450_voltage_from_power_level(power_level: int | float | None) -> float | None:
+    """Convert the SDK power level to volts without discarding precision."""
+    if power_level is None:
+        return None
+    try:
+        value = float(power_level)
+    except (TypeError, ValueError):
+        return None
+    if not 0 < value < 255:
+        return None
+    # Current advertisements use decivolts (30 = 3.0 V). Accept volts too so a
+    # future scanner can provide a more precise value such as 3.07 V.
+    return value / 10.0 if value > 5 else value
+
+
+def cr2450_percent_from_voltage(voltage: int | float | None) -> int | None:
+    """Estimate remaining CR2450 capacity using piecewise interpolation."""
+    if voltage is None:
+        return None
+    try:
+        value = float(voltage)
+    except (TypeError, ValueError):
+        return None
+    if value >= CR2450_VOLTAGE_PERCENT_CURVE[0][0]:
+        return 100
+    if value <= CR2450_VOLTAGE_PERCENT_CURVE[-1][0]:
+        return 0
+    for (high_v, high_percent), (low_v, low_percent) in zip(
+        CR2450_VOLTAGE_PERCENT_CURVE,
+        CR2450_VOLTAGE_PERCENT_CURVE[1:],
+        strict=False,
+    ):
+        if low_v <= value <= high_v:
+            ratio = (value - low_v) / (high_v - low_v)
+            return round(low_percent + ratio * (high_percent - low_percent))
+    return 0
+
+
 @dataclass(slots=True)
 class DratekAdvertisement:
     address: str
@@ -24,6 +78,14 @@ class DratekAdvertisement:
     def title(self) -> str:
         rssi = f", RSSI {self.rssi}" if self.rssi is not None else ""
         return f"{self.physical_code} - {self.model} ({self.address}{rssi})"
+
+    @property
+    def battery_voltage(self) -> float | None:
+        return cr2450_voltage_from_power_level(self.battery)
+
+    @property
+    def battery_percent(self) -> int | None:
+        return cr2450_percent_from_voltage(self.battery_voltage)
 
 
 SDK_TYPE_BY_NAME = {

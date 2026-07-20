@@ -42,6 +42,17 @@ PROJECT_STORE_KEY = "dratek_eink.projects"
 PROJECT_STORE_VERSION = 1
 
 
+def _battery_payload(device: Any) -> dict[str, Any]:
+    """Expose raw voltage data and the CR2450 capacity estimate."""
+    return {
+        "battery": device.battery,
+        "battery_raw": device.battery,
+        "battery_voltage": device.battery_voltage,
+        "battery_percent": device.battery_percent,
+        "battery_estimated": True,
+    }
+
+
 @callback
 def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_scan)
@@ -129,7 +140,7 @@ async def websocket_scan(
                 "raw_type": device.raw_type,
                 "sdk_type": device.sdk_type,
                 "profile": f"0x{device.profile:02X}",
-                "battery": device.battery,
+                **_battery_payload(device),
                 "sw": device.sw,
                 "hw": device.hw,
                 "model": device.model,
@@ -196,7 +207,7 @@ async def websocket_scan(
                 "raw_type": parsed.raw_type,
                 "sdk_type": parsed.sdk_type,
                 "profile": f"0x{parsed.profile:02X}",
-                "battery": parsed.battery,
+                **_battery_payload(parsed),
                 "sw": parsed.sw,
                 "hw": parsed.hw,
                 "model": parsed.model,

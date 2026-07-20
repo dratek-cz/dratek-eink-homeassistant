@@ -1,5 +1,15 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.49
+
+- opravena interpretace baterie: hodnota z BLE reklamy je napeti CR2450 v desetinach voltu, nikoli procenta
+- zbyvajici kapacita se odhaduje nelinearni interpolaci podle typickych vybijecich krivek CR2450 Panasonic a Energizer
+- seznam displeju ukazuje odhad procent i skutecne napeti, napriklad `≈ 85 % · 3,0 V`
+- ukazatel a jeho barva se ridi prepocitanym procentem, ne surovou hodnotou z BLE paketu
+- backend poskytuje zvlast puvodni hodnotu, napeti, odhad procent a priznak, ze jde o odhad
+- vypocet zachova presnejsi napeti, pokud je budouci scanner nebo firmware poskytne
+- firmware gateway zustava 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.48
 
 - novy graf je ve vychozim stavu sloupcovy
