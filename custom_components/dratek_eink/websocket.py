@@ -54,6 +54,7 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_delete_project)
     websocket_api.async_register_command(hass, websocket_load_device_draft)
     websocket_api.async_register_command(hass, websocket_save_device_draft)
+    websocket_api.async_register_command(hass, websocket_set_device_name)
     websocket_api.async_register_command(hass, websocket_list_gateways)
     websocket_api.async_register_command(hass, websocket_add_gateway)
     websocket_api.async_register_command(hass, websocket_delete_gateway)
@@ -204,6 +205,8 @@ async def websocket_scan(
             }
 
     devices = list(devices_by_address.values())
+    project_data = await _load_project_data(hass)
+    device_names = project_data.get("device_names", {})
     for device in devices:
         device["paths"].sort(
             key=lambda path: path.get("rssi") if isinstance(path.get("rssi"), (int, float)) else -999,
@@ -211,6 +214,7 @@ async def websocket_scan(
         )
         device["preferred_path"] = device["paths"][0]
         device["rssi"] = device["preferred_path"].get("rssi")
+        device["display_name"] = str(device_names.get(_normalize_address(device["address"]), ""))
 
     devices.sort(key=lambda item: item["physical_code"])
     ble_devices.sort(key=lambda item: (item["name"] or "", item["address"]))
@@ -242,14 +246,39 @@ def _project_store(hass: HomeAssistant) -> Store:
 async def _load_project_data(hass: HomeAssistant) -> dict[str, Any]:
     data = await _project_store(hass).async_load()
     if not isinstance(data, dict):
-        return {"projects": [], "device_drafts": {}}
+        return {"projects": [], "device_drafts": {}, "device_names": {}}
     data.setdefault("projects", [])
     data.setdefault("device_drafts", {})
+    data.setdefault("device_names", {})
     return data
 
 
 def _normalize_address(address: str) -> str:
     return address.upper()
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/devices/set_name",
+        "address": str,
+        "name": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_set_device_name(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    address = _normalize_address(msg["address"])
+    name = str(msg["name"] or "").strip()[:80]
+    data = await _load_project_data(hass)
+    if name:
+        data["device_names"][address] = name
+    else:
+        data["device_names"].pop(address, None)
+    await _project_store(hass).async_save(data)
+    connection.send_result(msg["id"], {"address": address, "name": name})
 
 
 @websocket_api.websocket_command({"type": "dratek_eink/gateways/list"})

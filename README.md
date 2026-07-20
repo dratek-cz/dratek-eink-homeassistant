@@ -1,5 +1,16 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.43
+
+- nalezene displeje lze pojmenovat vlastnim nazvem, napriklad Kuchyn nebo Obyvak
+- nazvy jsou ulozene interne podle BLE adresy a zustavaji zachovane po restartu i aktualizaci
+- uzivatelsky nazev se zobrazuje v kartach displeju, mape pripojeni a designeru
+- karty displeju maji samostatne akce pro pojmenovani a otevreni v designeru
+- horni cast designeru je zjednodusena na nazev displeje, BLE adresu a kompaktni rozliseni
+- odstraneny siroke metriky rozliseni a poctu objektu
+- projektove prikazy Novy, Ulozit, Nacist a Smazat jsou presunuty do rozbalovaci karty Soubor
+- nabidka Soubor zobrazuje pouze projekty pro aktualni rozliseni displeje
+
 ## Novinky ve verzi 0.1.42
 
 - sjednocen text `Sprava gateway` v cele uzivatelske casti

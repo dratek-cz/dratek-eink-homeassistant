@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.42";
+const DRATEK_EINK_VERSION = "0.1.43";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -13,6 +13,8 @@ class DratekEinkPanel extends HTMLElement {
     this._error = "";
     this._sendResult = null;
     this._selectedDeviceAddress = "";
+    this._editingDeviceAddress = "";
+    this._deviceNameDraft = "";
     this._objects = [];
     this._selectedIds = [];
     this._drag = null;
@@ -23,6 +25,7 @@ class DratekEinkPanel extends HTMLElement {
     this._projects = [];
     this._selectedProjectId = "";
     this._projectName = "Novy navrh";
+    this._fileMenuOpen = false;
     this._variables = {};
     this._orientation = "landscape";
     this._displayTransform = "rotate_cw";
@@ -441,6 +444,30 @@ class DratekEinkPanel extends HTMLElement {
     return devices.find((device) => device.address === this._selectedDeviceAddress) || devices[0] || null;
   }
 
+  _deviceTitle(device) {
+    if (!device) return "Neni vybran displej";
+    return device.display_name || device.physical_code || device.address;
+  }
+
+  async _saveDeviceName(address) {
+    const device = (this._result?.devices || []).find((item) => item.address === address);
+    if (!device || !this._hass) return;
+    try {
+      const result = await this._hass.callWS({
+        type: "dratek_eink/devices/set_name",
+        address,
+        name: this._deviceNameDraft,
+      });
+      device.display_name = result.name || "";
+      this._editingDeviceAddress = "";
+      this._deviceNameDraft = "";
+    } catch (err) {
+      this._error = this._message(err);
+    }
+    this._render();
+    this._paint();
+  }
+
   _selectPreferredRoute(device) {
     const preferred = device && device.preferred_path;
     this._selectedGatewayId = preferred && preferred.type === "gateway" ? preferred.id : "";
@@ -554,7 +581,7 @@ class DratekEinkPanel extends HTMLElement {
     this._variables = source.variables ? structuredClone(source.variables) : {};
     this._selectedIds = [];
     this._selectedProjectId = source.id || "";
-    this._projectName = source.name || (device && device.physical_code ? `Navrh ${device.physical_code}` : "Novy navrh");
+    this._projectName = source.name || (device ? `Navrh ${this._deviceTitle(device)}` : "Novy navrh");
     this._nextId = this._nextObjectId();
     if ((source.width && source.width !== size.width) || (source.height && source.height !== size.height)) {
       this._scaleDesign({ width: source.width || size.width, height: source.height || size.height }, size);
@@ -1675,7 +1702,8 @@ class DratekEinkPanel extends HTMLElement {
         .card{background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;padding:14px;box-shadow:0 10px 28px rgba(0,0,0,.06)}.metric{color:var(--secondary-text-color);font-size:12px;margin-bottom:5px}.value{font-size:25px;font-weight:850}.pill{display:inline-flex;min-height:26px;align-items:center;border-radius:999px;padding:0 10px;font-size:12px;font-weight:800}.good{background:#d7f5df;color:#0b6b2a}.warn{background:#fff2c7;color:#775500}.bad{background:#ffd9d4;color:#9d1c0f}.muted{background:var(--secondary-background-color);color:var(--secondary-text-color)}
         .tabbar{display:flex;gap:6px;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;padding:5px;width:max-content;max-width:100%;box-shadow:0 8px 24px rgba(0,0,0,.05)}.tab{background:transparent;color:var(--secondary-text-color);box-shadow:none;border:0;border-radius:7px;padding:10px 14px}.tab.active{background:var(--primary-color);color:var(--text-primary-color,#fff)}
         .status-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}.status-tile{display:flex;align-items:center;justify-content:space-between;gap:12px}.status-icon{width:42px;height:42px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-color)}
-        .projectbar{display:grid;grid-template-columns:minmax(190px,280px) minmax(210px,340px) auto;gap:10px;align-items:center}.projectbar .toolbar{justify-content:flex-end}
+        .designer-context{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 14px}.display-identity{display:flex;align-items:center;gap:11px;min-width:0}.display-identity .status-icon{flex:0 0 auto}.display-identity strong{display:block;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.display-identity span{display:block;color:var(--secondary-text-color);font-size:12px;margin-top:2px}.resolution-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid var(--divider-color);border-radius:6px;color:var(--secondary-text-color);font-size:11px;font-weight:800;white-space:nowrap}
+        .ribbon{position:relative;display:flex;align-items:center;gap:6px;min-height:48px;padding:5px 8px}.ribbon-tab{background:transparent;color:var(--primary-text-color);box-shadow:none;border-radius:6px}.ribbon-tab.active{background:#0f766e;color:#fff}.ribbon-project{margin-left:auto;min-width:0;color:var(--secondary-text-color);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file-menu{position:absolute;z-index:12;left:8px;top:50px;width:min(620px,calc(100vw - 52px));padding:14px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);box-shadow:0 20px 55px rgba(0,0,0,.24)}.file-menu-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}.file-menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.file-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}.file-action{min-height:72px;display:grid;grid-template-rows:26px auto;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.file-action ha-icon{--mdc-icon-size:24px;color:var(--primary-color)}.device-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.device-name-edit{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px}.device-name-edit input{min-width:0;border:1px solid var(--primary-color);border-radius:7px;padding:8px;background:var(--card-background-color);color:var(--primary-text-color)}
         .device-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}.device-card{position:relative;display:grid;gap:13px;text-align:left;background:linear-gradient(180deg,var(--card-background-color),var(--secondary-background-color));color:var(--primary-text-color);border:1px solid var(--divider-color);border-radius:8px;padding:15px;box-shadow:0 12px 32px rgba(0,0,0,.08);overflow:hidden}.device-card:before{content:"";position:absolute;inset:0 0 auto;height:3px;background:#9ca3af}.device-card.selected{border-color:var(--primary-color);box-shadow:0 0 0 2px rgba(37,99,235,.18),0 16px 38px rgba(0,0,0,.11)}.device-card.selected:before{background:var(--primary-color)}.device-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.device-card-top strong{display:block;font-size:20px;letter-spacing:.01em}.device-card-top span:not(.pill){display:block;color:var(--secondary-text-color);font-size:12px;margin-top:3px}.device-model{font-size:13px;line-height:1.45;color:var(--primary-text-color)}.device-model span,.device-meta{color:var(--secondary-text-color);font-size:12px}.device-meters{display:grid;grid-template-columns:1fr 1fr;gap:12px}.meter-block{display:grid;gap:6px}.meter-block label{font-size:11px;text-transform:uppercase;color:var(--secondary-text-color);font-weight:800;letter-spacing:.08em}.battery{height:10px;border-radius:999px;background:rgba(127,127,127,.14);overflow:hidden;border:1px solid var(--divider-color)}.battery span{display:block;height:100%;background:#9ca3af}.battery.high span{background:#16a34a}.battery.medium span{background:#d97706}.battery.low span{background:#dc2626}.signal-bars{height:20px;display:flex;align-items:end;gap:3px}.signal-bars span{display:block;width:8px;border-radius:2px;background:var(--divider-color)}.signal-bars span:nth-child(1){height:7px}.signal-bars span:nth-child(2){height:11px}.signal-bars span:nth-child(3){height:15px}.signal-bars span:nth-child(4){height:19px}.signal-bars.level-1 .on{background:#dc2626}.signal-bars.level-2 .on{background:#d97706}.signal-bars.level-3 .on,.signal-bars.level-4 .on{background:#16a34a}.device-meta{display:flex;gap:8px;flex-wrap:wrap}.device-meta span{background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:999px;padding:4px 8px}
         .route-list{display:grid;gap:7px}.route{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:7px 9px;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);font-size:12px}.route.preferred{border-color:#0f766e;background:rgba(15,118,110,.08)}.route ha-icon{color:#0f766e}.route-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:780}.route-rssi{color:var(--secondary-text-color)}.topology{display:grid;gap:8px}.topology-row{display:grid;grid-template-columns:minmax(170px,1fr) minmax(80px,2fr) minmax(190px,1.2fr);align-items:center;gap:10px}.topology-node{display:flex;align-items:center;gap:9px;border:1px solid var(--divider-color);border-radius:8px;padding:10px;background:var(--card-background-color);min-width:0}.topology-node strong,.topology-node small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.topology-node small{color:var(--secondary-text-color);margin-top:2px}.topology-link{height:2px;background:var(--divider-color);position:relative}.topology-link:after{content:"";position:absolute;right:0;top:-4px;border-left:7px solid #0f766e;border-top:5px solid transparent;border-bottom:5px solid transparent}.topology-link span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--card-background-color);padding:2px 8px;color:var(--secondary-text-color);font-size:11px;white-space:nowrap}
         .subtabs{display:flex;gap:6px;padding:5px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);width:max-content;max-width:100%}.subtab{background:transparent;color:var(--secondary-text-color);box-shadow:none}.subtab.active{background:#0f766e;color:#fff}.gateway-name-edit{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px}.gateway-name-edit input{min-width:0;border:1px solid var(--primary-color);border-radius:7px;padding:7px;background:var(--card-background-color);color:var(--primary-text-color)}.gateway-health{display:grid;grid-template-columns:1fr 1fr;gap:10px}.health-tile{padding:10px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color)}.health-tile label{display:block;color:var(--secondary-text-color);font-size:11px;text-transform:uppercase;font-weight:800;margin-bottom:5px}
@@ -1683,12 +1711,12 @@ class DratekEinkPanel extends HTMLElement {
         .editor-shell{display:grid;grid-template-columns:276px minmax(0,1fr) 352px;gap:12px;align-items:start}.left,.right{position:sticky;top:12px}.template-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:282px;overflow:auto;padding-right:2px}.template-hero .template-grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr));max-height:none;overflow:visible;padding-right:0}.template-card{min-height:76px;display:grid;grid-template-columns:34px 1fr;align-items:center;text-align:left;gap:9px;padding:9px;border:1px solid var(--divider-color);background:linear-gradient(180deg,var(--card-background-color),var(--secondary-background-color));color:var(--primary-text-color);box-shadow:none}.template-card ha-icon{color:var(--primary-color);--mdc-icon-size:26px}.template-card strong{display:block;font-size:12px;line-height:1.2}.template-card span{display:block;font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;margin-top:2px}.template-card:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}.tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.tool-icon{min-height:82px;display:grid;grid-template-rows:36px auto;place-items:center;text-align:center;padding:10px 6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.tool-icon .ico{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-color);font-size:18px;font-weight:900}.tool-icon .txt{font-size:11px;font-weight:850;color:var(--secondary-text-color);text-transform:uppercase}.tool-icon:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}
         .action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:16px;display:grid;place-items:center}.wide-action{grid-column:span 4;font-size:13px}.panel-divider{height:1px;background:var(--divider-color);margin:14px 0}.layout-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-btn{min-height:58px;display:grid;place-items:center;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.layout-btn.active{background:var(--primary-color);color:var(--text-primary-color,#fff);border-color:var(--primary-color)}.transform-box{margin-top:10px;padding:10px;border:1px solid var(--divider-color);border-radius:8px;background:var(--secondary-background-color)}.transform-box small{display:block;color:var(--secondary-text-color);line-height:1.35;margin-top:6px}.properties-panel{max-height:calc(100vh - 120px);overflow:auto}
         .workspace-card{padding:0;overflow:hidden}.canvas-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--divider-color);background:var(--card-background-color)}.canvas-meta{display:flex;align-items:center;gap:8px;color:var(--secondary-text-color);font-size:12px}.workspace{min-height:590px;overflow:auto;display:grid;place-items:center;background:linear-gradient(45deg,rgba(127,127,127,.08) 25%,transparent 25%),linear-gradient(-45deg,rgba(127,127,127,.08) 25%,transparent 25%);background-size:18px 18px;border:0;padding:34px}
-        canvas{background:#fff;box-shadow:0 20px 54px rgba(0,0,0,.24);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:760}.field input,.field select,.projectbar input,.projectbar select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+        canvas{background:#fff;box-shadow:0 20px 54px rgba(0,0,0,.24);touch-action:none}.field{display:grid;gap:5px;margin-bottom:10px}.field label{color:var(--secondary-text-color);font-size:12px;font-weight:760}.field input,.field select,.file-menu input,.file-menu select,#deviceSelect{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);padding:8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
         table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--divider-color);vertical-align:top}th{color:var(--secondary-text-color);font-size:11px;text-transform:uppercase}pre{overflow:auto;background:#111827;color:#e5e7eb;border-radius:8px;padding:12px;font-size:12px;line-height:1.45;max-height:320px;white-space:pre-wrap}.gateway-log{max-height:260px;min-height:96px;overflow-y:auto}.send-result{margin-top:10px}.ota-progress{height:9px;background:var(--secondary-background-color);border:1px solid var(--divider-color);border-radius:999px;overflow:hidden;margin:11px 0}.ota-progress span{display:block;height:100%;background:#0f766e;transition:width .25s ease}.variable-table input{width:100%;box-sizing:border-box;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);padding:7px}.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:20;display:grid;place-items:center;padding:24px}.symbol-dialog{width:min(920px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:16px}.symbol-search{display:grid;grid-template-columns:1fr auto;gap:10px;margin:12px 0}.symbol-search input{width:100%;border:1px solid var(--divider-color);border-radius:7px;background:var(--secondary-background-color);color:var(--primary-text-color);padding:10px}.category-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}.category-row button{min-height:32px;padding:6px 10px}.category-row button.active{background:var(--primary-color);color:var(--text-primary-color,#fff)}.symbol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}.symbol-tile{min-height:78px;display:grid;grid-template-rows:32px auto;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.symbol-tile strong{font-size:29px;line-height:1}.symbol-tile span{font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;text-align:center}
         .section-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}.debug-card details{margin-top:10px}.debug-card summary{cursor:pointer;color:var(--primary-color);font-weight:760}.inspector-empty{padding:18px;border:1px dashed var(--divider-color);border-radius:8px;color:var(--secondary-text-color);text-align:center;background:var(--secondary-background-color)}
         .queue-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.queue-stat{display:flex;align-items:center;gap:12px}.queue-stat ha-icon{--mdc-icon-size:26px;color:var(--primary-color)}.queue-stat strong{display:block;font-size:23px}.queue-stat span{color:var(--secondary-text-color);font-size:12px}.queue-list{display:grid;gap:8px}.queue-row{display:grid;grid-template-columns:auto minmax(150px,1fr) minmax(170px,1fr) auto auto;align-items:center;gap:12px;padding:11px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color)}.queue-row.writing{border-color:#d97706;background:rgba(217,119,6,.07)}.queue-row.failed{border-color:#dc2626}.queue-icon{width:38px;height:38px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color)}.queue-main strong,.queue-route strong{display:block}.queue-main small,.queue-route small{display:block;color:var(--secondary-text-color);margin-top:3px}.signal-value{font-weight:850}.signal-value.good-signal{color:#16803c}.signal-value.warn-signal{color:#b06000}.signal-value.bad-signal{color:#c62828}
-        @media(max-width:1180px){.editor-shell,.status-grid,.projectbar{grid-template-columns:1fr}.queue-summary{grid-template-columns:1fr 1fr}.left,.right{position:static}.tabbar,.subtabs{width:100%}.tab,.subtab{flex:1}.workspace{min-height:420px}}
-        @media(max-width:720px){.topology-row,.queue-row{grid-template-columns:1fr}.queue-summary{grid-template-columns:1fr}.topology-link{width:2px;height:26px;justify-self:center}.topology-link:after{right:-4px;top:auto;bottom:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #0f766e}.topology-link span{white-space:normal}.route{grid-template-columns:auto minmax(0,1fr) auto}.route-rssi{grid-column:2}.gateway-health{grid-template-columns:1fr}}
+        @media(max-width:1180px){.editor-shell,.status-grid{grid-template-columns:1fr}.queue-summary{grid-template-columns:1fr 1fr}.left,.right{position:static}.tabbar,.subtabs{width:100%}.tab,.subtab{flex:1}.workspace{min-height:420px}}
+        @media(max-width:720px){.topology-row,.queue-row{grid-template-columns:1fr}.queue-summary,.file-menu-grid,.file-actions{grid-template-columns:1fr}.designer-context{align-items:flex-start}.topology-link{width:2px;height:26px;justify-self:center}.topology-link:after{right:-4px;top:auto;bottom:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #0f766e}.topology-link span{white-space:normal}.route{grid-template-columns:auto minmax(0,1fr) auto}.route-rssi{grid-column:2}.gateway-health{grid-template-columns:1fr}}
       </style>
       <div class="page">
         <div class="topbar">
@@ -1701,13 +1729,9 @@ class DratekEinkPanel extends HTMLElement {
           <div class="card"><div class="section-title"><h2>Mapa pripojeni</h2><span class="pill muted">${result.devices.reduce((sum, item) => sum + (item.paths || []).length, 0)} dostupnych cest</span></div>${this._renderTopology(result.devices)}</div>
         </div>
         <div style="${this._activeTab === "designer" ? "" : "display:none"}">
-        <div class="status-grid">
-          <div class="card status-tile"><div><div class="metric">Vybrany displej</div><span class="pill ${device ? "good" : "warn"}">${device ? this._escape(device.physical_code) : "Neni vybran"}</span></div><div class="status-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></div></div>
-          <div class="card status-tile"><div><div class="metric">Rozliseni navrhu</div><div class="value">${size.width}x${size.height}</div></div><div class="status-icon"><ha-icon icon="mdi:resize"></ha-icon></div></div>
-          <div class="card status-tile"><div><div class="metric">Objekty v sablone</div><div class="value">${this._objects.length}</div></div><div class="status-icon"><ha-icon icon="mdi:shape-outline"></ha-icon></div></div>
-        </div>
-        <div class="card projectbar"><input id="projectName" value="${this._escape(this._projectName)}" placeholder="Nazev navrhu"><select id="projectSelect"><option value="">Novy / neulozeny navrh</option>${this._projects.map((project) => `<option value="${this._escape(project.id)}" ${project.id === this._selectedProjectId ? "selected" : ""}>${this._escape(project.name)} (${project.width}x${project.height})</option>`).join("")}</select><div class="toolbar"><button id="newProject" class="secondary"><ha-icon icon="mdi:file-plus-outline"></ha-icon>Novy</button><button id="saveProject"><ha-icon icon="mdi:content-save-outline"></ha-icon>Ulozit</button><button id="loadProject" class="secondary" ${this._selectedProjectId ? "" : "disabled"}><ha-icon icon="mdi:folder-open-outline"></ha-icon>Nacist</button><button id="deleteProject" class="danger" ${this._selectedProjectId ? "" : "disabled"}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat</button></div></div>
-        <div class="card"><div class="toolbar"><label>Displej</label><select id="deviceSelect">${result.devices.map((item) => `<option value="${this._escape(item.address)}" ${item.address === (device && device.address) ? "selected" : ""}>${this._escape(item.physical_code)} - ${this._escape(item.model)} - SDK ${this._escape(item.sdk_type)} - RSSI ${this._escape(item.rssi)}</option>`).join("")}</select><span class="pill muted">${size.width} x ${size.height}</span><select id="gatewaySendSelect"><option value="">Bez gatewaye</option>${this._gateways.map((gateway) => `<option value="${this._escape(gateway.id)}" ${gateway.id === this._selectedGatewayId ? "selected" : ""}>${this._escape(gateway.name)} - ${this._escape(gateway.host)}</option>`).join("")}</select><button id="sendGatewayDesign" class="secondary" ${!device || !this._selectedGatewayId || this._sending ? "disabled" : ""}><ha-icon icon="mdi:router-wireless"></ha-icon>Odeslat pres gateway</button><button id="orientationLandscape" class="secondary" data-orientation="landscape" title="Na sirku" ${this._orientation === "landscape" ? "disabled" : ""}><ha-icon icon="mdi:phone-landscape"></ha-icon>Na sirku</button><button id="orientationPortrait" class="secondary" data-orientation="portrait" title="Na vysku" ${this._orientation === "portrait" ? "disabled" : ""}><ha-icon icon="mdi:phone-portrait"></ha-icon>Na vysku</button><button id="sendTest" class="secondary" ${!device ? "disabled" : ""}><ha-icon icon="mdi:send-check-outline"></ha-icon>Test dratek.cz</button><label class="pill muted"><input id="realPreview" type="checkbox" ${this._realPreview ? "checked" : ""}> Real eInk colors</label></div>${this._renderSendResult()}</div>
+        <div class="card designer-context"><div class="display-identity"><div class="status-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></div><div><strong>${this._escape(this._deviceTitle(device))}</strong><span>${device ? this._escape(device.address) : "Vyber displej v karte Nalezene displeje"}</span></div></div><span class="resolution-chip"><ha-icon icon="mdi:resize"></ha-icon>${size.width} x ${size.height}</span></div>
+        <div class="card ribbon"><button id="fileMenuToggle" class="ribbon-tab ${this._fileMenuOpen ? "active" : ""}"><ha-icon icon="mdi:file-outline"></ha-icon>Soubor</button><span class="ribbon-project">${this._escape(this._projectName)}</span>${this._renderFileMenu()}</div>
+        <div class="card"><div class="toolbar"><select id="gatewaySendSelect"><option value="">Integrovane Bluetooth</option>${this._gateways.map((gateway) => `<option value="${this._escape(gateway.id)}" ${gateway.id === this._selectedGatewayId ? "selected" : ""}>${this._escape(gateway.name)} - ${this._escape(gateway.host)}</option>`).join("")}</select><button id="sendGatewayDesign" class="secondary" ${!device || !this._selectedGatewayId || this._sending ? "disabled" : ""}><ha-icon icon="mdi:router-wireless"></ha-icon>Odeslat pres gateway</button><button id="orientationLandscape" class="secondary" data-orientation="landscape" title="Na sirku" ${this._orientation === "landscape" ? "disabled" : ""}><ha-icon icon="mdi:phone-landscape"></ha-icon>Na sirku</button><button id="orientationPortrait" class="secondary" data-orientation="portrait" title="Na vysku" ${this._orientation === "portrait" ? "disabled" : ""}><ha-icon icon="mdi:phone-portrait"></ha-icon>Na vysku</button><button id="sendTest" class="secondary" ${!device ? "disabled" : ""}><ha-icon icon="mdi:send-check-outline"></ha-icon>Test dratek.cz</button><label class="pill muted"><input id="realPreview" type="checkbox" ${this._realPreview ? "checked" : ""}> Real eInk colors</label></div>${this._renderSendResult()}</div>
         ${this._renderVariables()}
         <div class="card template-hero"><div class="section-title"><h2>Sablony navrhu</h2><span class="pill good">Vyber sablonu kliknutim</span></div><div class="template-grid">${this._renderTemplates()}</div></div>
         <div class="editor-shell">
@@ -1729,6 +1753,26 @@ class DratekEinkPanel extends HTMLElement {
       ${this._renderSymbolDialog()}`;
     this._bind();
     this._paint();
+  }
+
+  _renderFileMenu() {
+    if (!this._fileMenuOpen) return "";
+    const size = this._displaySize();
+    const projects = this._projects.filter((project) => Number(project.width) === size.width && Number(project.height) === size.height);
+    const selectedProjectAvailable = projects.some((project) => project.id === this._selectedProjectId);
+    return `<div class="file-menu">
+      <div class="file-menu-head"><div><h2>Soubor</h2><div class="subtitle">Projekt pro rozliseni ${size.width} x ${size.height}</div></div><button id="fileMenuClose" class="icon-btn secondary" title="Zavrit"><ha-icon icon="mdi:close"></ha-icon></button></div>
+      <div class="file-menu-grid">
+        <div class="field"><label>Nazev projektu</label><input id="projectName" value="${this._escape(this._projectName)}" placeholder="Nazev navrhu"></div>
+        <div class="field"><label>Ulozene projekty</label><select id="projectSelect"><option value="">Novy / neulozeny navrh</option>${projects.map((project) => `<option value="${this._escape(project.id)}" ${project.id === this._selectedProjectId ? "selected" : ""}>${this._escape(project.name)}</option>`).join("")}</select></div>
+      </div>
+      <div class="file-actions">
+        <button id="newProject" class="file-action"><ha-icon icon="mdi:file-plus-outline"></ha-icon><span>Novy</span></button>
+        <button id="saveProject" class="file-action"><ha-icon icon="mdi:content-save-outline"></ha-icon><span>Ulozit</span></button>
+        <button id="loadProject" class="file-action" ${selectedProjectAvailable ? "" : "disabled"}><ha-icon icon="mdi:folder-open-outline"></ha-icon><span>Nacist</span></button>
+        <button id="deleteProject" class="file-action danger" ${selectedProjectAvailable ? "" : "disabled"}><ha-icon icon="mdi:trash-can-outline"></ha-icon><span>Smazat</span></button>
+      </div>
+    </div>`;
   }
 
   _renderGatewayResult() {
@@ -1816,7 +1860,7 @@ class DratekEinkPanel extends HTMLElement {
       return `<div class="topology-row">
         <div class="topology-node"><ha-icon icon="${local ? "mdi:home-assistant" : "mdi:router-wireless"}"></ha-icon><div><strong>${this._escape(path.name)}</strong><small>${local ? "Integrovane BLE / proxy" : this._escape(path.host || "Wi-Fi gateway")}</small></div></div>
         <div class="topology-link"><span class="signal-value ${this._signalClass(Number(path.rssi))}">${this._escape(path.rssi ?? "-")} dBm${preferred ? " | nejlepsi cesta" : ""}</span></div>
-        <div class="topology-node"><ha-icon icon="mdi:tablet-dashboard"></ha-icon><div><strong>${this._escape(device.physical_code)}</strong><small>${this._escape(device.model)}</small></div></div>
+        <div class="topology-node"><ha-icon icon="mdi:tablet-dashboard"></ha-icon><div><strong>${this._escape(this._deviceTitle(device))}</strong><small>${this._escape(device.physical_code)} | ${this._escape(device.model)}</small></div></div>
       </div>`;
     }).join("")}</div>`;
   }
@@ -2002,14 +2046,27 @@ class DratekEinkPanel extends HTMLElement {
       this._render();
       this._paint();
     }));
+    this.shadowRoot.querySelectorAll("[data-device-rename]").forEach((button) => button.addEventListener("click", () => {
+      const device = (this._result?.devices || []).find((item) => item.address === button.dataset.deviceRename);
+      if (!device) return;
+      this._editingDeviceAddress = device.address;
+      this._deviceNameDraft = device.display_name || "";
+      this._render();
+      window.requestAnimationFrame(() => this.shadowRoot.querySelector(`[data-device-name-input="${device.address}"]`)?.focus());
+    }));
+    this.shadowRoot.querySelectorAll("[data-device-name-input]").forEach((input) => input.addEventListener("input", (event) => { this._deviceNameDraft = event.target.value; }));
+    this.shadowRoot.querySelectorAll("[data-device-name-save]").forEach((button) => button.addEventListener("click", () => this._saveDeviceName(button.dataset.deviceNameSave)));
+    this.shadowRoot.querySelectorAll("[data-device-name-cancel]").forEach((button) => button.addEventListener("click", () => { this._editingDeviceAddress = ""; this._deviceNameDraft = ""; this._render(); this._paint(); }));
     this.shadowRoot.querySelector("#sendDesign").addEventListener("click", () => this._sendDesign());
     this.shadowRoot.querySelector("#sendGatewayDesign")?.addEventListener("click", () => this._sendDesignViaGateway());
-    this.shadowRoot.querySelector("#newProject").addEventListener("click", () => this._newProject());
-    this.shadowRoot.querySelector("#saveProject").addEventListener("click", () => this._saveProject());
-    this.shadowRoot.querySelector("#loadProject").addEventListener("click", () => this._loadSelectedProject());
-    this.shadowRoot.querySelector("#deleteProject").addEventListener("click", () => this._deleteProject());
-    this.shadowRoot.querySelector("#projectName").addEventListener("input", (event) => { this._projectName = event.target.value; this._scheduleDraftSave(); });
-    this.shadowRoot.querySelector("#projectSelect").addEventListener("change", (event) => { this._selectedProjectId = event.target.value; const project = this._projects.find((item) => item.id === this._selectedProjectId); if (project) this._projectName = project.name; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#fileMenuToggle")?.addEventListener("click", () => { this._fileMenuOpen = !this._fileMenuOpen; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#fileMenuClose")?.addEventListener("click", () => { this._fileMenuOpen = false; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#newProject")?.addEventListener("click", () => { this._fileMenuOpen = false; this._newProject(); });
+    this.shadowRoot.querySelector("#saveProject")?.addEventListener("click", () => { this._fileMenuOpen = false; this._saveProject(); });
+    this.shadowRoot.querySelector("#loadProject")?.addEventListener("click", () => { this._fileMenuOpen = false; this._loadSelectedProject(); });
+    this.shadowRoot.querySelector("#deleteProject")?.addEventListener("click", () => { this._fileMenuOpen = false; this._deleteProject(); });
+    this.shadowRoot.querySelector("#projectName")?.addEventListener("input", (event) => { this._projectName = event.target.value; this._scheduleDraftSave(); });
+    this.shadowRoot.querySelector("#projectSelect")?.addEventListener("change", (event) => { this._selectedProjectId = event.target.value; const project = this._projects.find((item) => item.id === this._selectedProjectId); if (project) this._projectName = project.name; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#openSymbols")?.addEventListener("click", () => { this._symbolPickerOpen = true; this._symbolSearch = ""; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#closeSymbols")?.addEventListener("click", () => { this._symbolPickerOpen = false; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#symbolSearch")?.addEventListener("input", (event) => { this._symbolSearch = event.target.value; this._render(); this._paint(); });
@@ -2038,7 +2095,7 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#snap").addEventListener("change", (event) => { this._snap = event.target.checked; });
     this.shadowRoot.querySelector("#realPreview").addEventListener("change", (event) => { this._realPreview = event.target.checked; this._paint(); });
     this.shadowRoot.querySelector("#sendTest").addEventListener("click", () => this._sendTestText());
-    this.shadowRoot.querySelector("#deviceSelect").addEventListener("change", (event) => this._selectDevice(event.target.value));
+    this.shadowRoot.querySelector("#deviceSelect")?.addEventListener("change", (event) => this._selectDevice(event.target.value));
     this.shadowRoot.querySelector("#gatewaySendSelect")?.addEventListener("change", (event) => { this._selectedGatewayId = event.target.value; this._render(); this._paint(); });
     this.shadowRoot.querySelectorAll("[data-orientation]").forEach((button) => button.addEventListener("click", () => this._setOrientation(button.dataset.orientation)));
     this.shadowRoot.querySelector("#displayTransform")?.addEventListener("change", (event) => this._setDisplayTransform(event.target.value));
@@ -2477,8 +2534,9 @@ class DratekEinkPanel extends HTMLElement {
       const battery = Number(device.battery);
       const rssi = Number(device.rssi);
       const paths = device.paths || [];
-      return `<button class="device-card ${selected ? "selected" : ""}" data-select-device="${this._escape(device.address)}">
-        <div class="device-card-top"><div><strong>${this._escape(device.physical_code)}</strong><span>${this._escape(device.name || device.address)}</span></div><span class="pill ${selected ? "good" : "muted"}">${selected ? "Vybrano" : "Vybrat"}</span></div>
+      const editing = this._editingDeviceAddress === device.address;
+      return `<div class="device-card ${selected ? "selected" : ""}">
+        <div class="device-card-top"><div><strong>${this._escape(this._deviceTitle(device))}</strong><span>${this._escape(device.display_name ? `${device.physical_code} | ${device.address}` : device.address)}</span></div><span class="pill ${selected ? "good" : "muted"}">${selected ? "Vybrano" : this._escape(device.display_name || "Bez nazvu")}</span></div>
         <div class="device-model">${this._escape(device.model)}<br><span>SDK ${this._escape(device.sdk_type)} / raw ${this._escape(device.raw_type)}</span></div>
         <div class="device-meters">
           <div class="meter-block"><label>Baterie</label><div class="battery ${this._batteryClass(battery)}"><span style="width:${this._batteryPercent(battery)}%"></span></div><strong>${Number.isFinite(battery) ? `${battery}%` : "-"}</strong></div>
@@ -2486,7 +2544,8 @@ class DratekEinkPanel extends HTMLElement {
         </div>
         <div class="route-list">${paths.map((path, index) => `<div class="route ${index === 0 ? "preferred" : ""}"><ha-icon icon="${path.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon><span class="route-name">${this._escape(path.name)}</span><span class="route-rssi signal-value ${this._signalClass(Number(path.rssi))}">${this._escape(path.rssi ?? "-")} dBm</span>${index === 0 ? `<span class="pill good">Aktivni cesta</span>` : ""}</div>`).join("")}</div>
         <div class="device-meta"><span>SW ${this._escape(device.sw)}</span><span>HW ${this._escape(device.hw)}</span><span>${this._escape(device.profile)}</span><span>${device.partial_update ? "Partial update" : "Full update"}</span></div>
-      </button>`;
+        ${editing ? `<div class="device-name-edit"><input data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Napriklad Kuchyn"><button data-device-name-save="${this._escape(device.address)}" title="Ulozit nazev"><ha-icon icon="mdi:check"></ha-icon></button><button class="secondary" data-device-name-cancel title="Zrusit"><ha-icon icon="mdi:close"></ha-icon></button></div>` : `<div class="device-actions"><button class="secondary" data-device-rename="${this._escape(device.address)}"><ha-icon icon="mdi:pencil-outline"></ha-icon>${device.display_name ? "Prejmenovat" : "Pojmenovat"}</button><button data-select-device="${this._escape(device.address)}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Otevrit v designeru</button></div>`}
+      </div>`;
     }).join("")}</div>`;
   }
 
