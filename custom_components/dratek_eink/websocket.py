@@ -13,7 +13,7 @@ from homeassistant.helpers.storage import Store
 from PIL import Image
 import voluptuous as vol
 
-from .const import PANEL_VERSION, PARTIAL_UPDATE_SDK_TYPES
+from .const import GATEWAY_FIRMWARE_VERSION, PARTIAL_UPDATE_SDK_TYPES
 from .discovery import parse_dratek_advertisement, parse_dratek_manufacturer_data
 from .gateway import (
     async_add_gateway,
@@ -607,7 +607,7 @@ async def websocket_start_gateway_ota(
     job = await async_start_gateway_ota(
         hass,
         msg["gateway_id"],
-        f"{PANEL_VERSION}-gateway",
+        GATEWAY_FIRMWARE_VERSION,
     )
     if job is None:
         connection.send_error(msg["id"], "not_found", "Gateway was not found.")

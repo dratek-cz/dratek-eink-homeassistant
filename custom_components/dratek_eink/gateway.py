@@ -153,6 +153,7 @@ async def async_gateway_status(hass: HomeAssistant, gateway: dict[str, Any]) -> 
         "message": "Online",
         "checked_at": int(time.time()),
         "gateway_id": payload.get("gateway_id"),
+        "hostname": payload.get("hostname"),
         "firmware": payload.get("firmware"),
         "chip": payload.get("chip"),
         "ip": payload.get("ip"),

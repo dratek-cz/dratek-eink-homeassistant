@@ -1,6 +1,7 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.41";
+const DRATEK_EINK_VERSION = "0.1.42";
+const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -156,7 +157,7 @@ class DratekEinkPanel extends HTMLElement {
       const result = await this._hass.callWS({ type: "dratek_eink/gateways/discover", seconds: 10 });
       this._gatewayDiscovery = result.discovered || [];
       this._gatewayResult = result.ok
-        ? { ok: true, message: `Discovery dokonceno. Nalezeno ${this._gatewayDiscovery.length} gatewayi.` }
+        ? { ok: true, message: `Discovery dokonceno. Nalezeno ${this._gatewayDiscovery.length} gateway.` }
         : { ok: false, error: result.error || "Discovery selhalo." };
     } catch (err) {
       this._gatewayResult = { ok: false, error: this._message(err) };
@@ -169,7 +170,7 @@ class DratekEinkPanel extends HTMLElement {
 
   async _addDiscoveredGateway(index) {
     const discovered = this._gatewayDiscovery[Number(index)];
-    if (!discovered) return;
+    if (!discovered || this._matchingStoredGateway(discovered)) return;
     this._gatewayForm = {
       name: discovered.name || "DRATEK eInk gateway",
       host: discovered.host || discovered.server,
@@ -1770,17 +1771,38 @@ class DratekEinkPanel extends HTMLElement {
 
   _renderGatewayWorkspace() {
     const tabs = `<div class="subtabs">
-      <button class="subtab ${this._gatewaySubtab === "manage" ? "active" : ""}" data-gateway-tab="manage"><ha-icon icon="mdi:router-wireless-settings"></ha-icon>Sprava gatewayi</button>
+      <button class="subtab ${this._gatewaySubtab === "manage" ? "active" : ""}" data-gateway-tab="manage"><ha-icon icon="mdi:router-wireless-settings"></ha-icon>Sprava gateway</button>
       <button class="subtab ${this._gatewaySubtab === "discover" ? "active" : ""}" data-gateway-tab="discover"><ha-icon icon="mdi:access-point-network"></ha-icon>Vyhledani v siti</button>
       <button class="subtab ${this._gatewaySubtab === "create" ? "active" : ""}" data-gateway-tab="create"><ha-icon icon="mdi:plus-network-outline"></ha-icon>Vytvorit gateway</button>
     </div>`;
     if (this._gatewaySubtab === "discover") {
-      return `${tabs}<div class="card"><div class="section-title"><h2>Vyhledani gatewayi v siti</h2><div class="toolbar"><button id="discoverGateways" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:access-point-network"></ha-icon>${this._gatewayBusy ? "Pracuji..." : "Vyhledat gatewaye"}</button><button id="refreshGateways" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Obnovit stav</button></div></div>${this._renderDiscoveredGateways()}</div>${this._renderGatewayResult()}`;
+      return `${tabs}<div class="card"><div class="section-title"><h2>Vyhledani gateway v siti</h2><div class="toolbar"><button id="discoverGateways" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:access-point-network"></ha-icon>${this._gatewayBusy ? "Pracuji..." : "Vyhledat gatewaye"}</button><button id="refreshGateways" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Obnovit stav</button></div></div>${this._renderDiscoveredGateways()}</div>${this._renderGatewayResult()}`;
     }
     if (this._gatewaySubtab === "create") {
       return `${tabs}<div class="card"><div class="section-title"><h2>Vytvorit vlastni gateway</h2><div class="toolbar"><button id="refreshSerialPorts" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:usb-port"></ha-icon>Nacist porty</button><button id="serialStatus" class="secondary" ${this._gatewayBusy || !this._flashForm.port ? "disabled" : ""}><ha-icon icon="mdi:console"></ha-icon>USB status</button><button id="serialWifi" class="secondary" ${this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid ? "disabled" : ""}><ha-icon icon="mdi:wifi-cog"></ha-icon>Poslat Wi-Fi</button><button id="flashGateway" ${this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid ? "disabled" : ""}><ha-icon icon="mdi:chip"></ha-icon>Flashnout ESP32</button></div></div>${this._renderNoSerialPortsWarning()}<div class="row"><div class="field"><label>USB / serial port</label><select id="flashPort">${this._serialPorts.length ? this._serialPorts.map((port) => `<option value="${this._escape(port.device)}" ${port.device === this._flashForm.port ? "selected" : ""}>${this._escape(port.device)} - ${this._escape(port.description || port.name || "")}</option>`).join("") : `<option value="">Zadny port nenalezen</option>`}</select></div><div class="field"><label>Typ ESP32</label><select id="flashChip"><option value="esp32s3" ${this._flashForm.chip === "esp32s3" ? "selected" : ""}>ESP32-S3</option><option value="esp32" ${this._flashForm.chip === "esp32" ? "selected" : ""}>ESP32 / ESP32-WROOM</option></select></div></div><div class="row"><div class="field"><label>Nazev gatewaye</label><input id="flashHostname" value="${this._escape(this._flashForm.hostname)}" placeholder="dratek-eink-gateway_112016022026"></div><div class="field"><label>Wi-Fi SSID</label><input id="flashSsid" value="${this._escape(this._flashForm.ssid)}" placeholder="Nazev Wi-Fi"></div></div><div class="row"><div class="field"><label>Wi-Fi heslo</label><input id="flashPassword" type="password" value="${this._escape(this._flashForm.password)}" placeholder="Heslo"></div><div class="field"><label>Firmware</label><input value="${this._flashForm.chip === "esp32s3" ? "ESP32-S3 build" : "ESP32 build"}" disabled></div></div>${this._renderFlashResult()}${this._renderSerialResult()}</div>`;
     }
-    return `${tabs}<div class="card"><div class="section-title"><h2>Sprava gatewayi</h2><button id="refreshGateways" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Obnovit stav</button></div>${this._renderGateways()}${this._renderOtaResult()}</div>${this._renderGatewayResult()}`;
+    return `${tabs}<div class="card"><div class="section-title"><h2>Sprava gateway</h2><button id="refreshGateways" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Obnovit stav</button></div>${this._renderGateways()}${this._renderOtaResult()}</div>${this._renderGatewayResult()}`;
+  }
+
+  _normalizeGatewayIdentity(value) {
+    return String(value || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/$/, "").replace(/\.$/, "");
+  }
+
+  _matchingStoredGateway(discovered) {
+    const discoveredId = this._normalizeGatewayIdentity(discovered.gateway_id);
+    const discoveredHosts = new Set([
+      discovered.host,
+      discovered.server,
+      discovered.name,
+    ].map((value) => this._normalizeGatewayIdentity(value)).filter(Boolean));
+    return this._gateways.find((gateway) => {
+      const status = gateway.status || {};
+      if (discoveredId && discoveredId === this._normalizeGatewayIdentity(status.gateway_id)) return true;
+      return [gateway.host, status.ip, status.hostname]
+        .map((value) => this._normalizeGatewayIdentity(value))
+        .filter(Boolean)
+        .some((value) => discoveredHosts.has(value));
+    }) || null;
   }
 
   _renderTopology(devices) {
@@ -1803,11 +1825,14 @@ class DratekEinkPanel extends HTMLElement {
     if (!this._gatewayDiscovery.length) {
       return `<div class="inspector-empty"><ha-icon icon="mdi:access-point-network"></ha-icon><p>Klikni na vyhledani. Gatewaye se hledaji pres mDNS sluzbu v lokalni siti.</p></div>`;
     }
-    return `<div class="device-grid">${this._gatewayDiscovery.map((gateway, index) => `<div class="device-card">
-      <div class="device-card-top"><div><strong>${this._escape(gateway.name || "DRATEK eInk gateway")}</strong><span>${this._escape(gateway.server || gateway.host)}</span></div><span class="pill good">Nalezena</span></div>
+    return `<div class="device-grid">${this._gatewayDiscovery.map((gateway, index) => {
+      const stored = this._matchingStoredGateway(gateway);
+      return `<div class="device-card">
+      <div class="device-card-top"><div><strong>${this._escape(stored?.name || gateway.name || "DRATEK eInk gateway")}</strong><span>${this._escape(gateway.server || gateway.host)}</span></div><span class="pill ${stored ? "muted" : "good"}">${stored ? "Jiz pridana" : "Nalezena"}</span></div>
       <div class="device-meta"><span>IP ${this._escape(gateway.host || "-")}</span><span>FW ${this._escape(gateway.firmware || "-")}</span><span>ID ${this._escape(gateway.gateway_id || "-")}</span></div>
-      <div class="toolbar"><button data-add-discovered-gateway="${index}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:plus-network-outline"></ha-icon>Pridat</button></div>
-    </div>`).join("")}</div>`;
+      <div class="toolbar">${stored ? `<span class="pill good"><ha-icon icon="mdi:check-circle-outline"></ha-icon>Ulozena jako ${this._escape(stored.name)}</span>` : `<button data-add-discovered-gateway="${index}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:plus-network-outline"></ha-icon>Pridat</button>`}</div>
+    </div>`;
+    }).join("")}</div>`;
   }
 
   _renderFlashResult() {
@@ -1866,8 +1891,8 @@ class DratekEinkPanel extends HTMLElement {
       const cls = online ? "good" : unknown ? "warn" : "bad";
       const text = online ? "Online" : unknown ? "Neovereno" : "Offline";
       const otaReady = online && status.ota_supported === true;
-      const currentFirmware = status.firmware === `${DRATEK_EINK_VERSION}-gateway`;
-      const otaLabel = otaReady ? (currentFirmware ? "Preinstalovat OTA" : "Aktualizovat FW") : "Nejprve USB flash";
+      const currentFirmware = CURRENT_GATEWAY_FIRMWARES.has(String(status.firmware || "").trim());
+      const otaLabel = currentFirmware ? "Firmware aktualni" : otaReady ? "Aktualizovat FW" : "Nejprve USB flash";
       const editing = this._editingGatewayId === gateway.id;
       const wifiRssi = Number(status.wifi_rssi);
       return `<div class="device-card">
@@ -1893,7 +1918,7 @@ class DratekEinkPanel extends HTMLElement {
           <span>Prenos ${this._escape(status.transfer_status || "-")}</span>
           <span>OTA slot ${status.update_partition_size ? `${Math.round(Number(status.update_partition_size) / 1024)} kB` : "-"}</span>
         </div>
-        <div class="toolbar"><button class="secondary" data-gateway-rename="${this._escape(gateway.id)}" ${this._gatewayBusy || editing ? "disabled" : ""}><ha-icon icon="mdi:pencil-outline"></ha-icon>Prejmenovat</button><button data-gateway-scan="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:radar"></ha-icon>BLE scan</button><button data-gateway-ota="${this._escape(gateway.id)}" ${this._gatewayBusy || !otaReady ? "disabled" : ""} title="${otaReady ? "Nahrat firmware z aktualni instalace HA" : "OTA se aktivuje prvnim USB flashem verze 0.1.38"}"><ha-icon icon="mdi:update"></ha-icon>${otaLabel}</button><button class="secondary" data-gateway-refresh="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Status</button><button class="danger" data-gateway-delete="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat</button></div>
+        <div class="toolbar"><button class="secondary" data-gateway-rename="${this._escape(gateway.id)}" ${this._gatewayBusy || editing ? "disabled" : ""}><ha-icon icon="mdi:pencil-outline"></ha-icon>Prejmenovat</button><button data-gateway-scan="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:radar"></ha-icon>BLE scan</button><button data-gateway-ota="${this._escape(gateway.id)}" ${this._gatewayBusy || !otaReady || currentFirmware ? "disabled" : ""} title="${currentFirmware ? "Gateway ma aktualni firmware" : otaReady ? "Nahrat aktualni firmware z instalace HA" : "OTA se aktivuje prvnim USB flashem verze 0.1.38"}"><ha-icon icon="${currentFirmware ? "mdi:check-circle-outline" : "mdi:update"}"></ha-icon>${otaLabel}</button><button class="secondary" data-gateway-refresh="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>Status</button><button class="danger" data-gateway-delete="${this._escape(gateway.id)}" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat</button></div>
       </div>`;
     }).join("")}</div>`;
   }

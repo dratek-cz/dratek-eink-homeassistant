@@ -1,5 +1,13 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.42
+
+- sjednocen text `Sprava gateway` v cele uzivatelske casti
+- verze Home Assistant integrace a firmware gateway jsou nyni verzovany nezavisle
+- funkcne shodne firmware 0.1.40 a 0.1.41 se zobrazuji jako aktualni a nenabizeji zbytecnou OTA aktualizaci
+- gateway nalezena pres mDNS se porovna s ulozenymi podle ID, IP a hostname
+- u jiz ulozene gateway se zobrazi jeji uzivatelsky nazev a nenabizi se tlacitko Pridat
+
 ## Novinky ve verzi 0.1.41
 
 - pridana hlavni karta Fronta zapisu s zivym stavem cekajicich a probihajicich prenosu
@@ -15,9 +23,9 @@
 - seznam displeju spojuje integrovane Bluetooth v Home Assistantu a vsechny ulozene gatewaye
 - u kazdeho displeje je videt dostupna cesta, jeji signal a automaticky vybrana nejlepsi cesta
 - nova graficka mapa zobrazuje vazby mezi Home Assistantem, pojmenovanymi gatewayemi a displeji
-- sprava gatewayi je rozdelena na samostatne karty pro spravu, vyhledani v siti a vytvoreni gatewaye
+- sprava gateway je rozdelena na samostatne karty pro spravu, vyhledani v siti a vytvoreni gatewaye
 - gateway lze kdykoliv prejmenovat, napr. na `Gateway chodba` nebo `Gateway patro`
-- sprava gatewayi zobrazuje graficky Wi-Fi signal a stav BLE sluzby
+- sprava gateway zobrazuje graficky Wi-Fi signal a stav BLE sluzby
 - firmware gatewaye vraci kompletni vyrobni BLE data, takze HA rozpozna model i u displeje dostupneho pouze pres gateway
 
 ## Novinky ve verzi 0.1.39
@@ -90,7 +98,7 @@
 - mDNS oznameni gatewaye se automaticky obnovi po vypadku a navratu Wi-Fi
 - firmware zapina automaticke znovupripojeni Wi-Fi a periodicky obnovuje mDNS registraci
 - gateway se oznamuje jako vlastni sluzba `_dratek-eink-gateway._tcp` i standardni HTTP sluzba
-- vyhledavani gatewayi v Home Assistantu ceka na mDNS 10 sekund misto 5
+- vyhledavani gateway v Home Assistantu ceka na mDNS 10 sekund misto 5
 - odesilani dat nadale pouziva nalezenou IP adresu, aby mDNS neovlivnovalo stabilitu prenosu
 
 ## Novinky ve verzi 0.1.30
@@ -99,7 +107,7 @@
 - gateway potvrdi prijeti obrazku okamzite a Home Assistant pak prubezne nacita stav a log prenosu
 - odstranena rekurzivni obsluha HTTP serveru uvnitr BLE prenosu, ktera mohla zpusobit `Server disconnected`
 - base64 payload se zbytecne nekopiruje a prenosovy log ma omezenou velikost
-- BLE scan a dalsi prenos jsou pri obsazene gatewayi bezpecne odmitnuty chybou `gateway_busy`
+- BLE scan a dalsi prenos jsou pri obsazene gateway bezpecne odmitnuty chybou `gateway_busy`
 - diagnostika gatewaye ukazuje duvod restartu, minimalni volnou heap a nejvetsi souvisly blok pameti
 - Wi-Fi uspavani je behem provozu gatewaye vypnute kvuli stabilite soubezneho Wi-Fi a BLE provozu
 
