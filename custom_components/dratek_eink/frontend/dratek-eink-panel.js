@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.51";
+const DRATEK_EINK_VERSION = "0.1.52";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -69,6 +69,8 @@ class DratekEinkPanel extends HTMLElement {
     this._historyLimit = 60;
     this._propertyEditActive = false;
     this._propertyEditTimer = null;
+    this._designerFontReady = false;
+    this._designerFontLoading = null;
     this._handleKeyDown = (event) => this._onKeyDown(event);
     this._stopTypingShortcut = (event) => {
       if (this._isTypingEvent(event)) event.stopPropagation();
@@ -1928,6 +1930,7 @@ class DratekEinkPanel extends HTMLElement {
     const object = this._selectedObject();
     this.shadowRoot.innerHTML = `
       <style>
+        @font-face{font-family:"DRATEK eInk Sans";src:url("/dratek_eink_static/fonts/Arimo-wght.ttf") format("truetype");font-style:normal;font-weight:400 700;font-display:block}
         :host{display:block;min-height:100%;color:var(--primary-text-color);background:linear-gradient(180deg,var(--primary-background-color),var(--secondary-background-color));font-family:Roboto,Arial,sans-serif}
         *{box-sizing:border-box} .page{max-width:1680px;margin:0 auto;padding:18px;display:grid;gap:14px}
         h1{margin:0;font-size:24px;font-weight:850;letter-spacing:0}h2{margin:0;font-size:13px;text-transform:uppercase;color:var(--secondary-text-color);letter-spacing:.08em}.subtitle{color:var(--secondary-text-color);font-size:13px;margin-top:3px}
@@ -1988,7 +1991,22 @@ class DratekEinkPanel extends HTMLElement {
       </div>
       ${this._renderSymbolDialog()}${this._renderVariablesDialog()}${this._renderTemplateDialog()}${this._renderNewProjectDialog()}`;
     this._bind();
+    this._ensureDesignerFont();
     this._paint();
+  }
+
+  _ensureDesignerFont() {
+    if (!document.fonts || this._designerFontReady || this._designerFontLoading) return;
+    this._designerFontLoading = Promise.all([
+      document.fonts.load('600 24px "DRATEK eInk Sans"'),
+      document.fonts.load('700 24px "DRATEK eInk Sans"'),
+    ]).then(() => {
+      this._designerFontReady = true;
+      this._designerFontLoading = null;
+      this._paint();
+    }).catch(() => {
+      this._designerFontLoading = null;
+    });
   }
 
   _renderToolSidebar() {
@@ -2649,7 +2667,7 @@ class DratekEinkPanel extends HTMLElement {
         ? (this._variables[object.variableName] ?? object.text ?? "")
       : (object.text || "");
     const lines = String(value).split("\n");
-    const family = "Arial";
+    const family = '"DRATEK eInk Sans"';
     const weight = object.bold ? "700 " : "600 ";
     const padding = Math.max(0, Number(object.padding || 0));
     const availableW = Math.max(1, box.w - padding * 2);

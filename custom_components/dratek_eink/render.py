@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import io
+from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
@@ -17,15 +18,28 @@ def display_size(sdk_type: int) -> tuple[int, int]:
 
 
 def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    bundled_font = Path(__file__).parent / "frontend" / "fonts" / "Arimo-wght.ttf"
+    try:
+        font = ImageFont.truetype(str(bundled_font), int(size))
+        if hasattr(font, "set_variation_by_axes"):
+            font.set_variation_by_axes([700 if bold else 600])
+        return font
+    except (OSError, TypeError, ValueError):
+        pass
+
     regular_fonts = (
+        "LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
         "DejaVuSans.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
     )
     bold_fonts = (
+        "LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
         "DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
     )
     for font_name in bold_fonts if bold else regular_fonts:
         try:
