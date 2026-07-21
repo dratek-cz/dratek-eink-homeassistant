@@ -1,5 +1,14 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.55
+
+- Inspector v designeru je rozdělený do přehledných sekcí pro pozici, obsah, vzhled a datový zdroj
+- barvy textu, výplní, rámečků, grafů, QR a EAN kódů se vybírají pomocí skutečných barevných vzorků
+- rotace, zarovnání textu a typ grafu používají rychlé ikonové přepínače
+- volby jako tučné písmo, automatické přizpůsobení, mřížka nebo zachování poměru stran mají sjednocené karty s ikonami
+- záhlaví Inspectoru zobrazuje ikonu a název právě vybraného objektu
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.51
 
 - promenny text lze zapnout pro automaticke odeslani pri zmene navazane entity nebo Pomocnika Home Assistantu
