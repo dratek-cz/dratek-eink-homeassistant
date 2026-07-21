@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.53";
+const DRATEK_EINK_VERSION = "0.1.54";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -39,7 +39,6 @@ class DratekEinkPanel extends HTMLElement {
     this._activeTab = "devices";
     this._deviceViewMode = this._loadUiPreference("device-view-mode", "auto");
     this._topologyViewMode = this._loadUiPreference("topology-view-mode", "auto");
-    this._expandedDevices = new Set();
     this._queue = { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0 };
     this._queuePollTimer = null;
     this._gateways = [];
@@ -1978,7 +1977,8 @@ class DratekEinkPanel extends HTMLElement {
         @media(max-width:1180px){.editor-shell,.status-grid{grid-template-columns:1fr}.queue-summary{grid-template-columns:1fr 1fr}.left,.right,.layers-panel,.properties-panel{position:static;grid-column:auto}.tabbar,.subtabs{width:100%}.tab,.subtab{flex:1}.workspace{min-height:420px}}
         @media(max-width:720px){.topology-row,.queue-row{grid-template-columns:1fr}.queue-summary,.file-menu-grid,.file-actions,.file-backstage,.project-choice-grid{grid-template-columns:1fr}.file-rail{display:grid;grid-template-columns:1fr 1fr}.file-rail-title{grid-column:1/-1}.ribbon{flex-wrap:wrap}.ribbon-project{width:100%;order:3}.ribbon-menu{left:8px;right:8px;top:94px;min-width:0}.designer-context{align-items:flex-start}.topology-link{width:2px;height:26px;justify-self:center}.topology-link:after{right:-4px;top:auto;bottom:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #0f766e}.topology-link span{white-space:normal}.route{grid-template-columns:auto minmax(0,1fr) auto}.route-rssi{grid-column:2}.gateway-health{grid-template-columns:1fr}}
         .view-menu{left:420px}.tools-menu{left:315px}.layout-menu{left:205px}
-        @media(max-width:720px){.ribbon-menu{left:8px;right:8px}.density-switch span{display:none}.device-grid.mode-list .device-card{grid-template-columns:1fr auto}.device-grid.mode-list .device-card-details{grid-column:1/-1;grid-template-columns:1fr}}
+        .toolbar>.density-toolbar{margin-left:auto}.density-row{display:flex;justify-content:flex-end;margin:10px 0 12px}.density-toolbar{justify-content:flex-end}.device-grid.mode-compact .minimal-card{grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:10px 11px}.device-grid.mode-compact .minimal-card .compact-metrics{grid-column:1/-1}.device-grid.mode-list .minimal-card{grid-template-columns:minmax(220px,1.2fr) minmax(390px,1.8fr) auto;gap:12px;padding:8px 11px}.compact-identity{min-width:0}.compact-identity strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px}.compact-identity span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;color:var(--secondary-text-color);font-size:11px}.compact-metrics{display:flex;align-items:center;gap:12px;min-width:0}.compact-stat{display:flex;align-items:center;gap:6px;min-width:0;font-size:11px;color:var(--secondary-text-color);white-space:nowrap}.compact-stat .signal-bars{height:17px}.compact-stat .signal-bars span{width:5px}.mini-battery{width:42px;height:8px}.compact-route{flex:1}.compact-route span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.compact-open{min-width:34px;min-height:34px;padding:6px}
+        @media(max-width:720px){.ribbon-menu{left:8px;right:8px}.density-switch span{display:none}.device-grid.mode-list .device-card{grid-template-columns:1fr auto}.device-grid.mode-list .device-card-details{grid-column:1/-1;grid-template-columns:1fr}.device-grid.mode-list .minimal-card .compact-metrics{grid-column:1/-1;grid-row:2}.compact-metrics{flex-wrap:wrap}.compact-open{grid-column:2;grid-row:1}}
       </style>
       <div class="page">
         <div class="topbar">
@@ -1987,7 +1987,7 @@ class DratekEinkPanel extends HTMLElement {
         <div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezene displeje</button><button class="tab ${this._activeTab === "designer" ? "active" : ""}" data-tab="designer" ${device ? "" : "disabled"} title="${device ? "Otevřít designer" : "Nejprve vyberte displej"}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Designer</button><button class="tab ${this._activeTab === "queue" ? "active" : ""}" data-tab="queue"><ha-icon icon="mdi:tray-full"></ha-icon>Fronta zapisu${this._queue.queued || this._queue.writing ? `<span class="pill warn">${this._queue.queued + this._queue.writing}</span>` : ""}</button><button class="tab ${this._activeTab === "gateways" ? "active" : ""}" data-tab="gateways"><ha-icon icon="mdi:router-wireless"></ha-icon>Gatewaye</button></div>
         <div style="${this._activeTab === "devices" ? "" : "display:none"}">
           <div class="card"><div class="toolbar" style="margin-bottom:12px"><button id="scanDevicesTab" ${this._loading ? "disabled" : ""}><ha-icon icon="mdi:bluetooth-searching"></ha-icon>${this._loading ? "Vyhledavam..." : "Spustit scan"}</button>${this._renderDensityControl("devices", this._deviceViewMode, result.devices.length)}</div>${this._renderDeviceCards(result.devices, device && device.address)}</div>
-          <div class="card"><div class="section-title"><h2>Mapa pripojeni</h2><span class="pill muted">${result.devices.reduce((sum, item) => sum + (item.paths || []).length, 0)} dostupnych cest</span></div><div style="margin:10px 0 12px">${this._renderDensityControl("topology", this._topologyViewMode, result.devices.reduce((sum, item) => sum + (item.paths || []).length, 0))}</div>${this._renderTopology(result.devices)}</div>
+          <div class="card"><div class="section-title"><h2>Mapa pripojeni</h2><span class="pill muted">${result.devices.reduce((sum, item) => sum + (item.paths || []).length, 0)} dostupnych cest</span></div><div class="density-row">${this._renderDensityControl("topology", this._topologyViewMode, result.devices.reduce((sum, item) => sum + (item.paths || []).length, 0))}</div>${this._renderTopology(result.devices)}</div>
         </div>
         <div class="designer-section ${device ? "" : "locked"}" style="${this._activeTab === "designer" ? "" : "display:none"}">
         ${device ? "" : `<div class="designer-lock"><ha-icon icon="mdi:monitor-lock"></ha-icon><h2>Nejprve vyberte displej</h2><p>Pracovní plocha se nastaví podle jeho rozlišení a uloženého návrhu.</p><button data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Vybrat displej</button></div>`}
@@ -2236,14 +2236,13 @@ class DratekEinkPanel extends HTMLElement {
 
   _renderDensityControl(scope, mode, count) {
     const options = [
-      ["auto", "mdi:autorenew", "Auto"],
       ["full", "mdi:view-dashboard", "Plné"],
       ["large", "mdi:view-grid-outline", "Velké"],
       ["compact", "mdi:view-grid-compact", "Malé"],
       ["list", "mdi:view-list", "Seznam"],
     ];
     const effective = this._effectiveViewMode(mode, count);
-    return `<div class="density-toolbar"><span>Zobrazení</span><div class="density-switch">${options.map(([value, icon, label]) => `<button class="${mode === value ? "active" : ""}" data-view-scope="${scope}" data-view-mode="${value}" title="${label}"><ha-icon icon="${icon}"></ha-icon><span>${label}</span></button>`).join("")}</div>${mode === "auto" ? `<span class="density-note">Automaticky: ${effective === "compact" ? "malé karty" : "plné karty"}</span>` : ""}</div>`;
+    return `<div class="density-toolbar"><span>Zobrazení</span><div class="density-switch">${options.map(([value, icon, label]) => `<button class="${effective === value ? "active" : ""}" data-view-scope="${scope}" data-view-mode="${value}" title="${label}"><ha-icon icon="${icon}"></ha-icon><span>${label}</span></button>`).join("")}</div></div>`;
   }
 
   _renderTopology(devices) {
@@ -2516,13 +2515,6 @@ class DratekEinkPanel extends HTMLElement {
       if (scope === "devices") this._deviceViewMode = mode;
       else this._topologyViewMode = mode;
       this._saveUiPreference(`${scope === "devices" ? "device" : "topology"}-view-mode`, mode);
-      this._render();
-      this._paint();
-    }));
-    this.shadowRoot.querySelectorAll("[data-device-expand]").forEach((button) => button.addEventListener("click", () => {
-      const address = button.dataset.deviceExpand;
-      if (this._expandedDevices.has(address)) this._expandedDevices.delete(address);
-      else this._expandedDevices.add(address);
       this._render();
       this._paint();
     }));
@@ -3264,9 +3256,19 @@ class DratekEinkPanel extends HTMLElement {
       const rssi = Number(device.rssi);
       const paths = device.paths || [];
       const editing = this._editingDeviceAddress === device.address;
-      const canCollapse = mode === "compact" || mode === "list";
-      const expanded = !canCollapse || this._expandedDevices.has(device.address);
-      return `<div class="device-card ${selected ? "selected" : ""} ${expanded ? "expanded" : "collapsed"}">
+      const preferredPath = paths[0];
+      if (mode === "compact" || mode === "list") {
+        return `<div class="device-card minimal-card ${selected ? "selected" : ""}">
+          <div class="compact-identity"><strong>${this._escape(this._deviceTitle(device))}</strong><span>${this._escape(device.physical_code)} · ${this._escape(device.model)}</span></div>
+          <div class="compact-metrics">
+            <div class="compact-stat" title="Baterie CR2450"><ha-icon icon="mdi:battery-medium"></ha-icon><div class="mini-battery battery ${this._batteryClass(battery.percent)}"><span style="width:${this._batteryPercent(battery.percent)}%"></span></div><strong>${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></div>
+            <div class="compact-stat" title="Síla signálu">${this._renderSignalBars(rssi)}<strong class="signal-value ${this._signalClass(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>
+            <div class="compact-stat compact-route" title="Aktivní cesta"><ha-icon icon="${preferredPath?.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon><span>${this._escape(preferredPath?.name || "Bez dostupné cesty")}</span></div>
+          </div>
+          <button class="compact-open" data-select-device="${this._escape(device.address)}" title="Otevřít v designeru"><ha-icon icon="mdi:vector-square-edit"></ha-icon></button>
+        </div>`;
+      }
+      return `<div class="device-card ${selected ? "selected" : ""}">
         <div class="device-card-top"><div><strong>${this._escape(this._deviceTitle(device))}</strong><span>${this._escape(device.display_name ? `${device.physical_code} | ${device.address}` : device.address)}</span></div><span class="pill ${selected ? "good" : "muted"}">${selected ? "Vybrano" : this._escape(device.display_name || "Bez nazvu")}</span></div>
         <div class="device-card-details">
         <div class="device-model">${this._escape(device.model)}<br><span>SDK ${this._escape(device.sdk_type)} / raw ${this._escape(device.raw_type)}</span></div>
@@ -3278,7 +3280,6 @@ class DratekEinkPanel extends HTMLElement {
         <div class="device-meta"><span>SW ${this._escape(device.sw)}</span><span>HW ${this._escape(device.hw)}</span><span>${this._escape(device.profile)}</span><span>${device.partial_update ? "Partial update" : "Full update"}</span></div>
         ${editing ? `<div class="device-name-edit"><input data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Napriklad Kuchyn"><button data-device-name-save="${this._escape(device.address)}" title="Ulozit nazev"><ha-icon icon="mdi:check"></ha-icon></button><button class="secondary" data-device-name-cancel title="Zrusit"><ha-icon icon="mdi:close"></ha-icon></button></div>` : `<div class="device-actions"><button class="secondary" data-device-rename="${this._escape(device.address)}"><ha-icon icon="mdi:pencil-outline"></ha-icon>${device.display_name ? "Prejmenovat" : "Pojmenovat"}</button><button data-select-device="${this._escape(device.address)}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Otevrit v designeru</button></div>`}
         </div>
-        ${canCollapse ? `<div class="device-card-expand-row"><button class="device-expand" data-device-expand="${this._escape(device.address)}" title="${expanded ? "Skrýt podrobnosti" : "Zobrazit podrobnosti"}"><ha-icon icon="mdi:chevron-${expanded ? "up" : "down"}"></ha-icon><span>${expanded ? "Méně" : "Detail"}</span></button></div>` : ""}
       </div>`;
     }).join("")}</div>`;
   }
