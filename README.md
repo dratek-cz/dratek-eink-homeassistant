@@ -1,5 +1,12 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.62
+
+- model EPA LCD 296x128 1 BWR se SDK typem 51 používá potvrzovaný GATT zápis každého obrazového bloku
+- odmítnutý blok tohoto modelu se zopakuje až třikrát místo pokračování s neúplným obrazem
+- ostatní typy displejů si zachovávají dosavadní rychlý zápis bez potvrzení jednotlivých bloků
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.61
 
 - nad segmentovanou ikonou je název Baterie nebo Signál a naměřená hodnota je přehledně pod ní

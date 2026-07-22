@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 FINAL_CONFIRMATION_TIMEOUT_SECONDS = 15
+WRITE_ACK_SDK_TYPES = {51}
 
 
 class TransferCompletionTimeout(TimeoutError):
@@ -172,19 +173,23 @@ class DratekTransfer:
             if first_block >= total_blocks:
                 raise RuntimeError(f"Display requested invalid block {first_block}/{total_blocks}")
 
+            require_block_ack = int(sdk_type) in WRITE_ACK_SDK_TYPES
+            if require_block_ack:
+                self.log(f"SDK type {sdk_type} requires a GATT acknowledgement for every image block.")
             for block_number in range(first_block, total_blocks):
-                await self._write_char(
+                await self._write_image_block(
                     client,
                     write_char,
                     _next_block(payload, block_size, block_number),
-                    f"block {block_number}",
-                    response=False,
+                    block_number,
+                    require_response=require_block_ack,
                 )
-                await asyncio.sleep(0.02)
+                await asyncio.sleep(0.005 if require_block_ack else 0.02)
                 if block_number == first_block or block_number % 10 == 0 or block_number == total_blocks - 1:
                     sent = block_number - first_block + 1
                     percent = int((sent / total_blocks) * 100)
-                    self.log(f"Sent block {block_number + 1}/{total_blocks} ({percent}%).")
+                    verb = "Acknowledged" if require_block_ack else "Sent"
+                    self.log(f"{verb} block {block_number + 1}/{total_blocks} ({percent}%).")
 
             while True:
                 try:
@@ -283,6 +288,35 @@ class DratekTransfer:
         else:
             self.log(f"Write {label}: {_format_bytes(data)}")
         await client.write_gatt_char(char, data, response=response)
+
+    async def _write_image_block(
+        self,
+        client,
+        write_char,
+        data: bytes,
+        block_number: int,
+        *,
+        require_response: bool,
+    ) -> None:
+        max_attempts = 3 if require_response else 1
+        for attempt in range(1, max_attempts + 1):
+            try:
+                await self._write_char(
+                    client,
+                    write_char,
+                    data,
+                    f"block {block_number}",
+                    response=require_response,
+                )
+                return
+            except Exception as exc:  # noqa: BLE stacks expose platform-specific write errors
+                if attempt >= max_attempts:
+                    raise
+                self.log(
+                    f"Image block {block_number} was not acknowledged ({exc}); "
+                    f"retrying {attempt + 1}/{max_attempts}."
+                )
+                await asyncio.sleep(0.1)
 
     async def _request_block_size(self, client, control_char, responses: queue.Queue[bytes]) -> int:
         attempts: list[bool] = []
