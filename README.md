@@ -1,5 +1,15 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.56
+
+- každá karta nalezeného displeje zobrazuje živý náhled jeho uloženého pracovního návrhu
+- náhled je zasazený do tvaru fyzického eInk displeje podle dodaného vzoru včetně svislého výrobního kódu
+- rámeček i zobrazovací plocha se automaticky přizpůsobují rozlišení a orientaci konkrétního displeje
+- náhledy fungují v plném, kompaktním i seznamovém zobrazení a používají skutečné černé, bílé a červené eInk barvy
+- proměnné napojené na entity Home Assistantu se v náhledu vykreslují s aktuální hodnotou
+- displej bez uloženého návrhu zobrazuje jasně označenou prázdnou obrazovku
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.55
 
 - Inspector v designeru je rozdělený do přehledných sekcí pro pozici, obsah, vzhled a datový zdroj
