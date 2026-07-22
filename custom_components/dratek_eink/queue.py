@@ -17,6 +17,7 @@ QUEUE_DATA_KEY = "transfer_queue"
 HISTORY_LIMIT = 20
 MANUAL_COOLDOWN_SECONDS = 50
 TRANSFER_JOB_TIMEOUT_SECONDS = 240
+LEGACY_COMPLETION_TIMEOUT_MARKER = "waiting for the display to confirm the completed refresh"
 
 TransferRunner = Callable[[Callable[[str], None]], Awaitable[dict[str, Any]]]
 
@@ -31,6 +32,8 @@ class TransferQueue:
         self._device_locks: dict[str, asyncio.Lock] = {}
         self._manual_pending: dict[str, int] = {}
         self._manual_cooldown_until: dict[str, float] = {}
+        self._automatic_tasks: dict[str, tuple[str, asyncio.Task[Any]]] = {}
+        self._preempted_jobs: set[str] = set()
         self._load_lock = asyncio.Lock()
         self._save_lock = asyncio.Lock()
         self._loaded = False
@@ -43,8 +46,28 @@ class TransferQueue:
                 return
             data = await Store(self.hass, QUEUE_STORE_VERSION, QUEUE_STORE_KEY).async_load()
             jobs = data.get("jobs", []) if isinstance(data, dict) else []
-            self._jobs = [job for job in jobs if isinstance(job, dict)][-HISTORY_LIMIT:]
+            repaired_history = False
+            self._jobs = []
+            for stored_job in jobs:
+                if not isinstance(stored_job, dict):
+                    continue
+                job = dict(stored_job)
+                if (
+                    job.get("status") == "failed"
+                    and LEGACY_COMPLETION_TIMEOUT_MARKER in str(job.get("error") or "").lower()
+                ):
+                    job["status"] = "succeeded"
+                    job["error"] = ""
+                    job["log"] = [
+                        *list(job.get("log") or []),
+                        "The complete payload was sent; missing final confirmation was treated as accepted.",
+                    ][-80:]
+                    repaired_history = True
+                self._jobs.append(job)
+            self._jobs = self._jobs[-HISTORY_LIMIT:]
             self._loaded = True
+            if repaired_history:
+                await self._save_history()
 
     async def async_submit(
         self,
@@ -72,13 +95,32 @@ class TransferQueue:
             "error": "",
             "log": [],
         }
+        manual = operation != "entity_update"
+        if not manual:
+            skip_reason = self._automatic_skip_reason(normalized_address)
+            if skip_reason:
+                self._jobs.append(job)
+                self._prune()
+                return await self._skip_automatic_update(job, skip_reason)
+
         self._jobs.append(job)
         self._prune()
-        manual = operation != "entity_update"
         if manual:
             self._manual_pending[normalized_address] = self._manual_pending.get(normalized_address, 0) + 1
+            self._preempt_automatic_update(normalized_address)
+        else:
+            current_task = asyncio.current_task()
+            if current_task is not None:
+                self._automatic_tasks[normalized_address] = (job["id"], current_task)
         try:
             return await self._run(job, runner)
+        except asyncio.CancelledError:
+            if not manual and job["id"] in self._preempted_jobs:
+                return await self._skip_automatic_update(
+                    job,
+                    "Automatic update cancelled because a manual upload took priority.",
+                )
+            raise
         finally:
             if manual:
                 pending = self._manual_pending.get(normalized_address, 1) - 1
@@ -89,6 +131,21 @@ class TransferQueue:
                 self._manual_cooldown_until[normalized_address] = (
                     asyncio.get_running_loop().time() + MANUAL_COOLDOWN_SECONDS
                 )
+            else:
+                active = self._automatic_tasks.get(normalized_address)
+                if active and active[0] == job["id"]:
+                    self._automatic_tasks.pop(normalized_address, None)
+                self._preempted_jobs.discard(job["id"])
+
+    def _preempt_automatic_update(self, address: str) -> None:
+        active = self._automatic_tasks.get(address)
+        if not active:
+            return
+        job_id, task = active
+        if task.done():
+            return
+        self._preempted_jobs.add(job_id)
+        task.cancel()
 
     async def _run(self, job: dict[str, Any], runner: TransferRunner) -> dict[str, Any]:
         resource_lock = self._locks.setdefault(job["resource"], asyncio.Lock())
@@ -97,6 +154,8 @@ class TransferQueue:
             if self._should_skip_automatic_update(job):
                 return await self._skip_automatic_update(job)
             async with resource_lock:
+                if self._should_skip_automatic_update(job):
+                    return await self._skip_automatic_update(job)
                 return await self._execute(job, runner)
 
     async def _execute(self, job: dict[str, Any], runner: TransferRunner) -> dict[str, Any]:
@@ -133,16 +192,28 @@ class TransferQueue:
         return result
 
     def _should_skip_automatic_update(self, job: dict[str, Any]) -> bool:
-        if job.get("operation") != "entity_update":
-            return False
-        address = job["address"]
-        if self._manual_pending.get(address, 0) > 0:
-            return True
-        return asyncio.get_running_loop().time() < self._manual_cooldown_until.get(address, 0)
+        return job.get("operation") == "entity_update" and bool(
+            self._automatic_skip_reason(job["address"], exclude_job_id=job.get("id"))
+        )
 
-    async def _skip_automatic_update(self, job: dict[str, Any]) -> dict[str, Any]:
+    def _automatic_skip_reason(self, address: str, exclude_job_id: str | None = None) -> str:
+        if self._manual_pending.get(address, 0) > 0:
+            return "Automatic update skipped because a manual upload is pending."
+        if asyncio.get_running_loop().time() < self._manual_cooldown_until.get(address, 0):
+            return "Automatic update skipped because a manual upload just finished."
+        if any(
+            job.get("id") != exclude_job_id
+            and job.get("address") == address
+            and job.get("status") in {"queued", "writing"}
+            for job in self._jobs
+        ):
+            return "Automatic update merged because this display already has an active transfer."
+        return ""
+
+    async def _skip_automatic_update(self, job: dict[str, Any], message: str | None = None) -> dict[str, Any]:
         now = int(time.time())
-        message = "Automatic update skipped because a manual upload is pending or just finished."
+        message = message or self._automatic_skip_reason(job["address"], exclude_job_id=job.get("id"))
+        message = message or "Automatic update skipped because a newer transfer takes priority."
         job["status"] = "skipped"
         job["started_at"] = now
         job["finished_at"] = now

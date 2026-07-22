@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
+FINAL_CONFIRMATION_TIMEOUT_SECONDS = 15
 
 
 class TransferCompletionTimeout(TimeoutError):
@@ -98,10 +99,13 @@ class DratekTransfer:
                 return
             except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
                 last_error = exc
-                self.log(f"Transfer attempt {attempt}/{max_attempts} failed: {exc}")
                 if isinstance(exc, TransferCompletionTimeout):
-                    self.log("The payload was already sent; not repeating it to avoid overlapping display refreshes.")
-                    break
+                    self.log(
+                        "The complete payload was accepted; this display does not send the optional "
+                        "final refresh confirmation. Treating the transfer as completed."
+                    )
+                    return
+                self.log(f"Transfer attempt {attempt}/{max_attempts} failed: {exc}")
                 transient = self._is_transient_connection_error(exc)
                 if attempt >= max_attempts or (attempt >= 3 and not transient):
                     break
@@ -185,11 +189,15 @@ class DratekTransfer:
             while True:
                 try:
                     response = await self._wait_for_next_transfer_response(
-                        responses, total_blocks, total_blocks, timeout=45
+                        responses,
+                        total_blocks,
+                        total_blocks,
+                        timeout=FINAL_CONFIRMATION_TIMEOUT_SECONDS,
                     )
                 except TimeoutError as exc:
                     raise TransferCompletionTimeout(
-                        "Timed out after 45s waiting for the display to confirm the completed refresh."
+                        f"Timed out after {FINAL_CONFIRMATION_TIMEOUT_SECONDS}s waiting for the display "
+                        "to confirm the completed refresh."
                     ) from exc
                 if not response or response[0] != 5:
                     continue

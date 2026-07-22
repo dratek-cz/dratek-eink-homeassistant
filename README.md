@@ -1,5 +1,16 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.61
+
+- nad segmentovanou ikonou je název Baterie nebo Signál a naměřená hodnota je přehledně pod ní
+- původní vodorovný ukazatel baterie byl odstraněn
+- baterie i signál používají stupnici červená, oranžová, žlutá a zelená podle aktuální úrovně
+- chybějící volitelné závěrečné potvrzení po kompletním odeslání obrazu už neoznačí přenos jako neúspěšný
+- staré chyby závěrečného potvrzení se při načtení historie opraví na úspěšně odeslané přenosy
+- duplicitní automatické aktualizace stejného displeje se neskládají ve frontě
+- ruční upload přeruší automatickou aktualizaci stejného displeje a okamžitě získá prioritu
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.60
 
 - uložené návrhy se po návratu na stránku znovu načtou do náhledů a nezůstanou označené jako prázdné
