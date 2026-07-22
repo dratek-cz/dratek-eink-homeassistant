@@ -1,5 +1,14 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.60
+
+- uložené návrhy se po návratu na stránku znovu načtou do náhledů a nezůstanou označené jako prázdné
+- cache displejů se zobrazí okamžitě a následný tichý scan na pozadí přidá nově dostupné displeje a odstraní zmizelé
+- baterie i signál používají čtyři barevné segmenty, jejichž počet a barva odpovídají aktuální úrovni
+- mapa připojení seskupuje displeje podle aktivní trasy, takže každou gateway zobrazuje pouze jednou se všemi jejími displeji
+- celá karta náhledu displeje je klikací, při najetí se modře zvýrazní a otevře designer správného zařízení
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.59
 
 - nalezené displeje se ukládají do desetiminutové lokální cache a po návratu do panelu se zobrazí okamžitě

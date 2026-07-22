@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.59";
+const DRATEK_EINK_VERSION = "0.1.60";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -8,6 +8,7 @@ class DratekEinkPanel extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
     this._loading = false;
+    this._scanInProgress = false;
     this._sending = false;
     this._deviceCacheLoadedAt = 0;
     this._result = this._loadCachedScanResult();
@@ -79,6 +80,9 @@ class DratekEinkPanel extends HTMLElement {
     this._designerFontReady = false;
     this._designerFontLoading = null;
     this._handleKeyDown = (event) => this._onKeyDown(event);
+    this._handleLocationChanged = () => {
+      if (String(window.location?.pathname || "").includes("dratek-eink")) this._scheduleAutomaticScan(0);
+    };
     this._stopTypingShortcut = (event) => {
       if (this._isTypingEvent(event)) event.stopPropagation();
     };
@@ -112,7 +116,6 @@ class DratekEinkPanel extends HTMLElement {
 
   _saveCachedScanResult(result) {
     const devices = Array.isArray(result?.devices) ? result.devices : [];
-    if (!devices.length) return;
     this._deviceCacheLoadedAt = Date.now();
     try {
       window.localStorage.setItem("dratek-eink-device-cache", JSON.stringify({ saved_at: this._deviceCacheLoadedAt, devices }));
@@ -132,11 +135,13 @@ class DratekEinkPanel extends HTMLElement {
 
   connectedCallback() {
     window.addEventListener("keydown", this._handleKeyDown);
+    window.addEventListener("location-changed", this._handleLocationChanged);
     this._scheduleAutomaticScan();
   }
 
   disconnectedCallback() {
     window.removeEventListener("keydown", this._handleKeyDown);
+    window.removeEventListener("location-changed", this._handleLocationChanged);
     window.clearTimeout(this._propertyEditTimer);
     window.clearTimeout(this._flashPollTimer);
     window.clearTimeout(this._otaPollTimer);
@@ -153,6 +158,12 @@ class DratekEinkPanel extends HTMLElement {
       this._loadProjects();
       this._loadGateways();
       this._loadSerialPorts();
+      if (this._result?.devices?.length) {
+        this._loadDevicePreviewDrafts(this._result.devices).then(() => {
+          this._render();
+          this._paint();
+        });
+      }
       this._scheduleAutomaticScan(100);
     } else if (previousSignature !== this._entityStateSignature(hass) && this._activeTab === "designer") {
       const active = this.shadowRoot.activeElement;
@@ -482,37 +493,56 @@ class DratekEinkPanel extends HTMLElement {
     }
   }
 
-  async _scan() {
-    if (!this._hass || this._loading) return;
-    this._loading = true;
-    this._error = "";
-    this._render();
+  async _scan({ background = false } = {}) {
+    if (!this._hass || this._scanInProgress) return;
+    this._scanInProgress = true;
+    if (!background) {
+      this._loading = true;
+      this._error = "";
+      this._render();
+    }
     try {
-      this._result = await this._hass.callWS({ type: "dratek_eink/scan" });
-      this._saveCachedScanResult(this._result);
-      await this._loadDevicePreviewDrafts(this._result.devices || []);
-      const found = this._result.devices.some((device) => device.address === this._selectedDeviceAddress);
+      const nextResult = await this._hass.callWS({ type: "dratek_eink/scan" });
+      this._saveCachedScanResult(nextResult);
+      const changed = this._deviceAddressSignature(this._result) !== this._deviceAddressSignature(nextResult);
+      if (!background || changed) {
+        this._result = nextResult;
+        await this._loadDevicePreviewDrafts(this._result.devices || []);
+      }
+      const found = (this._result?.devices || []).some((device) => device.address === this._selectedDeviceAddress);
       if (!found) this._selectedDeviceAddress = "";
       this._selectPreferredRoute(this._device());
     } catch (err) {
-      this._error = this._message(err);
+      if (!background) this._error = this._message(err);
     } finally {
-      this._loading = false;
-      this._render();
-      this._paint();
+      this._scanInProgress = false;
+      if (!background) this._loading = false;
+      if (!background || this._deviceAddressSignature(this._result) !== this._lastRenderedDeviceSignature) {
+        this._lastRenderedDeviceSignature = this._deviceAddressSignature(this._result);
+        this._render();
+        this._paint();
+      }
     }
+  }
+
+  _deviceAddressSignature(result = this._result) {
+    return (result?.devices || [])
+      .map((device) => String(device.address || "").toUpperCase())
+      .filter(Boolean)
+      .sort()
+      .join("|");
   }
 
   _scheduleAutomaticScan(delay = 180) {
     if (!this._hass) return;
-    if (this._hasFreshDeviceCache()) return;
     window.clearTimeout(this._automaticScanTimer);
     this._automaticScanTimer = window.setTimeout(() => {
       this._automaticScanTimer = null;
       const now = Date.now();
-      if (now - this._lastAutomaticScanAt < 5000) return;
+      if (now - this._lastAutomaticScanAt < 1000) return;
       this._lastAutomaticScanAt = now;
-      this._scan();
+      this._lastRenderedDeviceSignature = this._deviceAddressSignature(this._result);
+      this._scan({ background: true });
     }, delay);
   }
 
@@ -2009,6 +2039,8 @@ class DratekEinkPanel extends HTMLElement {
 
   _render() {
     const result = this._result || { scanner_count: 0, ble_count: 0, devices: [], ble_devices: [], debug: [] };
+    const topologyGroups = this._topologyGroups(result.devices);
+    const topologyGatewayCount = topologyGroups.filter((group) => group.path?.type === "gateway").length;
     const status = this._status();
     const device = this._device();
     const size = this._displaySize(device);
@@ -2071,6 +2103,13 @@ class DratekEinkPanel extends HTMLElement {
         @media(max-width:980px){.editor-shell{grid-template-columns:210px minmax(0,1fr);grid-template-areas:"tools canvas" "layers canvas" "inspector inspector"}.editor-shell>.left,.editor-shell>.properties-panel{position:static}.properties-panel{max-height:none}.workspace{min-height:430px}}
         @media(max-width:720px){.page{padding:10px}.editor-shell{grid-template-columns:1fr;grid-template-areas:"canvas" "tools" "inspector" "layers"}.workspace-card{order:0}.workspace{min-height:330px;padding:18px}.designer-device-bezel{border-width:6px;border-radius:13px}.canvas-head{align-items:flex-start;flex-direction:column}.designer-context{flex-wrap:wrap}.ribbon-send{order:2}.ribbon-project{width:100%;order:3}}
         :host{--dratek-teal:#009999;--dratek-teal-dark:#007a7a;--dratek-orange:#ff6600;--dratek-orange-dark:#d95700}
+        .battery-segments{position:relative;display:grid;grid-template-columns:repeat(4,5px);align-items:center;gap:2px;box-sizing:border-box;height:24px;padding:3px 5px;border:2px solid var(--divider-color);border-radius:5px;color:var(--divider-color);flex:0 0 auto;transition:border-color .18s ease,color .18s ease}.battery-segments:after{content:"";position:absolute;right:-5px;top:50%;width:3px;height:9px;border-radius:0 2px 2px 0;background:currentColor;transform:translateY(-50%)}.battery-segments span{display:block;width:5px;height:12px;border-radius:1px;background:var(--divider-color);transition:background .18s ease,box-shadow .18s ease}.battery-segments.level-1{border-color:#dc2626;color:#dc2626}.battery-segments.level-1 .on{background:#dc2626}.battery-segments.level-2{border-color:var(--dratek-orange);color:var(--dratek-orange)}.battery-segments.level-2 .on{background:var(--dratek-orange)}.battery-segments.level-3{border-color:#00b5b5;color:#00b5b5}.battery-segments.level-3 .on{background:#00b5b5}.battery-segments.level-4{border-color:var(--dratek-teal-dark);color:var(--dratek-teal-dark)}.battery-segments.level-4 .on{background:var(--dratek-teal-dark)}.battery-segments .on,.signal-bars .on{box-shadow:0 0 5px color-mix(in srgb,currentColor 36%,transparent)}
+        .signal-bars.level-1{color:#dc2626}.signal-bars.level-1 .on{background:#dc2626}.signal-bars.level-2{color:var(--dratek-orange)}.signal-bars.level-2 .on{background:var(--dratek-orange)}.signal-bars.level-3{color:#00b5b5}.signal-bars.level-3 .on{background:#00b5b5}.signal-bars.level-4{color:var(--dratek-teal-dark)}.signal-bars.level-4 .on{background:var(--dratek-teal-dark)}
+        .display-grid.density-compact .battery-segments{grid-template-columns:repeat(4,4px);height:22px;padding:3px 4px}.display-grid.density-compact .battery-segments span{width:4px;height:10px}
+        .connection-map-card{padding:18px}.connection-map-card>.section-title{align-items:flex-start;margin-bottom:16px}.connection-map-card>.section-title h2{color:var(--primary-text-color);font-size:15px;text-transform:none;letter-spacing:0}.connection-map-card>.section-title small{display:block;margin-top:4px;color:var(--secondary-text-color);font-size:11px;font-weight:500}.connection-map{display:grid;gap:14px}.connection-group{display:grid;grid-template-columns:minmax(210px,260px) 54px minmax(0,1fr);align-items:center;min-width:0;padding:14px 16px;border:1px solid var(--divider-color);border-radius:15px;background:linear-gradient(135deg,rgba(0,153,153,.055),transparent 38%,rgba(255,102,0,.025));box-shadow:0 7px 22px rgba(15,23,42,.055)}.connection-group.is-local{background:linear-gradient(135deg,rgba(0,153,153,.04),transparent 42%)}.connection-group.is-unavailable{background:linear-gradient(135deg,rgba(220,38,38,.045),transparent 42%)}.connection-hub{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:11px;min-width:0;padding:13px;border:1px solid rgba(0,153,153,.25);border-radius:12px;background:var(--card-background-color);box-shadow:0 5px 16px rgba(15,23,42,.07)}.connection-group.is-unavailable .connection-hub{border-color:rgba(220,38,38,.24)}.connection-hub-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:10px;background:rgba(0,153,153,.1);color:var(--dratek-teal-dark)}.connection-group.is-unavailable .connection-hub-icon{background:rgba(220,38,38,.09);color:#dc2626}.connection-hub-icon ha-icon{--mdc-icon-size:24px}.connection-hub-copy{min-width:0}.connection-hub-copy small,.connection-hub-copy strong,.connection-hub-copy span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.connection-hub-copy small{color:var(--dratek-teal-dark);font-size:9px;font-weight:850;text-transform:uppercase;letter-spacing:.07em}.connection-hub-copy strong{margin-top:2px;font-size:14px}.connection-hub-copy span{margin-top:3px;color:var(--secondary-text-color);font-size:10px}.connection-count{min-width:28px;height:28px;display:grid;place-items:center;border-radius:999px;background:var(--dratek-orange);color:#fff;font-size:12px;font-weight:900}.connection-bus{position:relative;height:100%;min-height:52px}.connection-bus:before{content:"";position:absolute;left:0;right:0;top:50%;height:2px;background:linear-gradient(90deg,var(--dratek-teal),var(--dratek-orange));transform:translateY(-50%)}.connection-bus span{position:absolute;right:-5px;top:50%;width:11px;height:11px;border:3px solid var(--dratek-orange);border-radius:50%;background:var(--card-background-color);transform:translateY(-50%)}.connection-devices{position:relative;display:grid;gap:8px;min-width:0}.connection-devices:before{content:"";position:absolute;left:-5px;top:24px;bottom:24px;width:2px;background:var(--dratek-orange)}.connection-device{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;width:100%;min-width:0;min-height:58px;padding:9px 11px;border:1px solid var(--divider-color);border-radius:11px;background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none;text-align:left}.connection-device:before{content:"";position:absolute;left:-5px;top:50%;width:5px;height:2px;background:var(--dratek-orange)}.connection-device:hover:not(:disabled){border-color:rgba(0,153,153,.45);background:rgba(0,153,153,.045);box-shadow:0 5px 14px rgba(15,23,42,.07)}.connection-device-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:8px;background:rgba(0,153,153,.09);color:var(--dratek-teal-dark)}.connection-device-icon ha-icon{--mdc-icon-size:20px}.connection-device-copy{min-width:0}.connection-device-copy strong,.connection-device-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.connection-device-copy strong{font-size:12px}.connection-device-copy small{margin-top:3px;color:var(--secondary-text-color);font-size:9px;font-weight:500}.connection-device-signal{display:grid;grid-template-columns:auto auto;align-items:end;justify-items:end;gap:1px 7px;min-width:70px}.connection-device-signal>.signal-bars{grid-row:1/3;height:20px}.connection-device-signal>.signal-bars span{width:5px}.connection-device-signal>small{font-size:9px;white-space:nowrap}.connection-active{color:var(--dratek-teal);line-height:1}.connection-active ha-icon{--mdc-icon-size:14px}
+        @media(max-width:900px){.connection-group{grid-template-columns:minmax(190px,240px) 38px minmax(0,1fr);padding:12px}.connection-device{grid-template-columns:auto minmax(0,1fr)}.connection-device-signal{grid-column:2;justify-self:start;grid-template-columns:auto auto auto;align-items:center;justify-items:start}.connection-device-signal>.signal-bars{grid-row:auto}}
+        @media(max-width:620px){.connection-map-card{padding:14px}.connection-map-card>.section-title{display:grid;gap:8px}.connection-group{grid-template-columns:1fr;padding:11px}.connection-bus{height:28px;min-height:28px}.connection-bus:before{left:50%;right:auto;top:0;bottom:0;width:2px;height:auto;background:linear-gradient(180deg,var(--dratek-teal),var(--dratek-orange));transform:translateX(-50%)}.connection-bus span{right:auto;left:50%;top:auto;bottom:-5px;transform:translateX(-50%)}.connection-devices:before{left:10px;top:-5px;bottom:auto;width:calc(100% - 20px);height:2px}.connection-device:before{left:10px;top:-12px;width:2px;height:12px}.connection-device-signal{grid-column:1/-1;margin-left:44px}}
+        .display-tile[data-device-card-open]{cursor:pointer;outline:none}.display-tile[data-device-card-open]:hover{border-color:#168fe0;box-shadow:0 0 0 2px rgba(22,143,224,.17),0 16px 40px rgba(15,23,42,.13)}.display-tile[data-device-card-open]:focus-visible{border-color:#168fe0;box-shadow:0 0 0 3px rgba(22,143,224,.28),0 16px 40px rgba(15,23,42,.13)}.display-tile.selected{border-color:#168fe0;box-shadow:0 0 0 2px rgba(22,143,224,.18),0 14px 38px rgba(15,23,42,.12)}.display-tile[data-device-card-open] button,.display-tile[data-device-card-open] input{cursor:auto}.display-tile[data-device-card-open] button{cursor:pointer}
       </style>
       <div class="page">
         <div class="topbar">
@@ -2079,7 +2118,7 @@ class DratekEinkPanel extends HTMLElement {
         <div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezene displeje</button><button class="tab ${this._activeTab === "designer" ? "active" : ""}" data-tab="designer" ${device ? "" : "disabled"} title="${device ? "Otevřít designer" : "Nejprve vyberte displej"}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Designer</button><button class="tab ${this._activeTab === "queue" ? "active" : ""}" data-tab="queue"><ha-icon icon="mdi:tray-full"></ha-icon>Fronta zapisu${this._queue.queued || this._queue.writing ? `<span class="pill warn">${this._queue.queued + this._queue.writing}</span>` : ""}</button><button class="tab ${this._activeTab === "gateways" ? "active" : ""}" data-tab="gateways"><ha-icon icon="mdi:router-wireless"></ha-icon>Gatewaye</button></div>
         <div style="${this._activeTab === "devices" ? "" : "display:none"}">
           <div class="card"><div class="toolbar" style="margin-bottom:12px"><button id="scanDevicesTab" class="secondary" ${this._loading ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>${this._loading ? "Hledám displeje..." : "Obnovit"}</button>${this._renderDensityControl("devices", this._deviceViewMode, result.devices.length)}</div>${this._renderDeviceCards(result.devices, device && device.address)}</div>
-          <div class="card"><div class="section-title"><h2>Mapa pripojeni</h2><span class="pill muted">${result.devices.reduce((sum, item) => sum + (item.paths || []).length, 0)} dostupnych cest</span></div><div class="density-row">${this._renderDensityControl("topology", this._topologyViewMode, result.devices.reduce((sum, item) => sum + (item.paths || []).length, 0))}</div>${this._renderTopology(result.devices)}</div>
+          <div class="card connection-map-card"><div class="section-title"><div><h2>Mapa připojení</h2><small>Každá gateway je zobrazena pouze jednou se všemi připojenými displeji.</small></div><span class="pill muted">${topologyGatewayCount} ${topologyGatewayCount === 1 ? "gateway" : "gatewayů"} · ${result.devices.length} ${result.devices.length === 1 ? "displej" : "displejů"}</span></div>${this._renderTopology(result.devices, topologyGroups)}</div>
         </div>
         <div class="designer-section ${device ? "" : "locked"}" style="${this._activeTab === "designer" ? "" : "display:none"}">
         ${device ? "" : `<div class="designer-lock"><ha-icon icon="mdi:monitor-lock"></ha-icon><h2>Nejprve vyberte displej</h2><p>Pracovní plocha se nastaví podle jeho rozlišení a uloženého návrhu.</p><button data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Vybrat displej</button></div>`}
@@ -2337,20 +2376,56 @@ class DratekEinkPanel extends HTMLElement {
     return `<div class="density-toolbar"><span>Zobrazení</span><div class="density-switch">${options.map(([value, icon, label]) => `<button class="${effective === value ? "active" : ""}" data-view-scope="${scope}" data-view-mode="${value}" title="${label}"><ha-icon icon="${icon}"></ha-icon><span>${label}</span></button>`).join("")}</div></div>`;
   }
 
-  _renderTopology(devices) {
-    const paths = devices.flatMap((device) => (device.paths || []).map((path) => ({ device, path })));
-    if (!paths.length) {
-      return `<div class="inspector-empty"><ha-icon icon="mdi:lan-disconnect"></ha-icon><p>Zatim neni dostupna zadna cesta k displeji.</p></div>`;
+  _topologyGroups(devices) {
+    const groups = new Map();
+    (devices || []).forEach((device) => {
+      const paths = device.paths || [];
+      const preferred = device.preferred_path || null;
+      const matchingPath = preferred
+        ? paths.find((path) => path.type === preferred.type && String(path.id ?? "") === String(preferred.id ?? ""))
+        : null;
+      const path = matchingPath ? { ...preferred, ...matchingPath } : (preferred || paths[0] || null);
+      const identity = path
+        ? (path.id || path.gateway_id || path.host || path.name || "default")
+        : "unavailable";
+      const key = `${path?.type || "unavailable"}:${String(identity).trim().toLowerCase()}`;
+      if (!groups.has(key)) groups.set(key, { key, path, devices: [] });
+      groups.get(key).devices.push({
+        device,
+        rssi: Number(path?.rssi ?? device.rssi),
+        preferred: Boolean(preferred),
+      });
+    });
+    return [...groups.values()].sort((a, b) => {
+      const rank = (group) => group.path?.type === "gateway" ? 0 : group.path?.type === "local" ? 1 : 2;
+      return rank(a) - rank(b) || String(a.path?.name || "").localeCompare(String(b.path?.name || ""), "cs");
+    });
+  }
+
+  _renderTopology(devices, preparedGroups = null) {
+    const groups = preparedGroups || this._topologyGroups(devices);
+    if (!groups.length) {
+      return `<div class="inspector-empty"><ha-icon icon="mdi:lan-disconnect"></ha-icon><p>Zatím není dostupný žádný displej.</p></div>`;
     }
-    const mode = this._effectiveViewMode(this._topologyViewMode, paths.length);
-    return `<div class="topology mode-${mode}">${paths.map(({ device, path }) => {
-      const local = path.type === "local";
-      const preferred = device.preferred_path?.type === path.type && device.preferred_path?.id === path.id;
-      return `<div class="topology-row">
-        <div class="topology-node"><ha-icon icon="${local ? "mdi:home-assistant" : "mdi:router-wireless"}"></ha-icon><div><strong>${this._escape(path.name)}</strong><small>${local ? "Integrovane BLE / proxy" : this._escape(path.host || "Wi-Fi gateway")}</small></div></div>
-        <div class="topology-link"><span class="signal-value ${this._signalClass(Number(path.rssi))}">${this._escape(path.rssi ?? "-")} dBm${preferred ? " | nejlepsi cesta" : ""}</span></div>
-        <div class="topology-node"><ha-icon icon="mdi:tablet-dashboard"></ha-icon><div><strong>${this._escape(this._deviceTitle(device))}</strong><small>${this._escape(device.physical_code)} | ${this._escape(device.model)}</small></div></div>
-      </div>`;
+    return `<div class="connection-map">${groups.map((group) => {
+      const path = group.path;
+      const local = path?.type === "local";
+      const gateway = path?.type === "gateway";
+      const name = path?.name || (local ? "Home Assistant Bluetooth" : "Bez dostupné trasy");
+      const detail = local ? "Integrované Bluetooth / proxy" : gateway ? (path.host || "Wi-Fi gateway") : "Displej momentálně nemá známou cestu";
+      return `<section class="connection-group ${gateway ? "is-gateway" : local ? "is-local" : "is-unavailable"}">
+        <div class="connection-hub">
+          <span class="connection-hub-icon"><ha-icon icon="${gateway ? "mdi:router-wireless" : local ? "mdi:home-assistant" : "mdi:lan-disconnect"}"></ha-icon></span>
+          <div class="connection-hub-copy"><small>${gateway ? "DRATEK gateway" : local ? "Home Assistant" : "Nedostupné"}</small><strong>${this._escape(name)}</strong><span>${this._escape(detail)}</span></div>
+          <span class="connection-count">${group.devices.length}</span>
+        </div>
+        <div class="connection-bus" aria-hidden="true"><span></span></div>
+        <div class="connection-devices">${group.devices.map(({ device, rssi, preferred }) => `<button class="connection-device" data-select-device="${this._escape(device.address)}" title="Otevřít ${this._escape(this._deviceTitle(device))} v designeru">
+          <span class="connection-device-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></span>
+          <span class="connection-device-copy"><strong>${this._escape(this._deviceTitle(device))}</strong><small>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</small></span>
+          <span class="connection-device-signal">${this._renderSignalBars(rssi)}<small class="signal-value ${this._signalClass(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</small>${preferred ? `<span class="connection-active" title="Aktivní cesta"><ha-icon icon="mdi:check-circle"></ha-icon></span>` : ""}</span>
+        </button>`).join("")}</div>
+      </section>`;
     }).join("")}</div>`;
   }
 
@@ -2535,12 +2610,24 @@ class DratekEinkPanel extends HTMLElement {
       this._render();
       this._paint();
     }));
-    this.shadowRoot.querySelectorAll("[data-select-device]").forEach((button) => button.addEventListener("click", async () => {
-      await this._selectDevice(button.dataset.selectDevice);
+    const openDeviceDesigner = async (address) => {
+      await this._selectDevice(address);
       this._activeTab = "designer";
       this._render();
       this._paint();
-    }));
+    };
+    this.shadowRoot.querySelectorAll("[data-select-device]").forEach((button) => button.addEventListener("click", () => openDeviceDesigner(button.dataset.selectDevice)));
+    this.shadowRoot.querySelectorAll("[data-device-card-open]").forEach((card) => {
+      card.addEventListener("click", (event) => {
+        if (event.target.closest("button,input,select,textarea,a")) return;
+        openDeviceDesigner(card.dataset.deviceCardOpen);
+      });
+      card.addEventListener("keydown", (event) => {
+        if (event.target !== card || !["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        openDeviceDesigner(card.dataset.deviceCardOpen);
+      });
+    });
     this.shadowRoot.querySelectorAll("[data-device-rename]").forEach((button) => button.addEventListener("click", () => {
       const device = (this._result?.devices || []).find((item) => item.address === button.dataset.deviceRename);
       if (!device) return;
@@ -3494,7 +3581,7 @@ class DratekEinkPanel extends HTMLElement {
       const editing = this._editingDeviceAddress === device.address;
       const preferredPath = paths[0];
       const previewSize = this._devicePreviewSize(device);
-      return `<article class="display-tile ${selected ? "selected" : ""}">
+      return `<article class="display-tile ${selected ? "selected" : ""}" data-device-card-open="${this._escape(device.address)}" role="button" tabindex="0" aria-label="Otevřít ${this._escape(this._deviceTitle(device))} v designeru">
         <header class="display-tile-header">
           <span class="display-online-dot" title="Displej je dostupný"></span>
           <div class="display-tile-identity"><strong>${this._escape(this._deviceTitle(device))}</strong><span>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</span></div>
@@ -3502,7 +3589,7 @@ class DratekEinkPanel extends HTMLElement {
         </header>
         ${mode === "list" ? "" : `<div class="display-preview-slot">${this._renderDevicePreview(device, mode)}</div>`}
         <div class="display-health">
-          <div class="display-health-item display-battery-item" title="Odhad zbývající kapacity CR2450"><ha-icon icon="mdi:battery-medium"></ha-icon><span><small>Baterie</small><strong>${Number.isFinite(battery.percent) ? `${battery.percent} % · ${this._formatBatteryVoltage(battery.voltage)}` : "-"}</strong><span class="battery ${this._batteryClass(battery.percent)}"><span style="width:${this._batteryPercent(battery.percent)}%"></span></span></span></div>
+          <div class="display-health-item display-battery-item" title="Odhad zbývající kapacity CR2450">${this._renderBatterySegments(battery.percent)}<span><small>Baterie</small><strong>${Number.isFinite(battery.percent) ? `${battery.percent} % · ${this._formatBatteryVoltage(battery.voltage)}` : "-"}</strong><span class="battery ${this._batteryClass(battery.percent)}"><span style="width:${this._batteryPercent(battery.percent)}%"></span></span></span></div>
           <div class="display-health-item display-signal-item">${this._renderSignalBars(rssi)}<span><small>Signál</small><strong class="signal-value ${this._signalClass(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></span></div>
           <div class="display-health-item display-health-route"><ha-icon icon="${preferredPath?.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon><span><small>Připojení</small><strong>${this._escape(preferredPath?.name || "Nedostupné")}</strong></span></div>
         </div>
@@ -3562,6 +3649,20 @@ class DratekEinkPanel extends HTMLElement {
     return "low";
   }
 
+  _batteryLevel(value) {
+    if (!Number.isFinite(value) || value <= 0) return 0;
+    if (value >= 75) return 4;
+    if (value >= 50) return 3;
+    if (value >= 25) return 2;
+    return 1;
+  }
+
+  _renderBatterySegments(value) {
+    const level = this._batteryLevel(value);
+    const label = Number.isFinite(value) ? `Baterie ${Math.round(value)} %, ${level} ze 4 dílků` : "Stav baterie není dostupný";
+    return `<div class="battery-segments level-${level}" role="img" aria-label="${label}" title="${label}">${[1, 2, 3, 4].map((cell) => `<span class="${cell <= level ? "on" : ""}"></span>`).join("")}</div>`;
+  }
+
   _signalLevel(rssi) {
     if (!Number.isFinite(rssi)) return 0;
     if (rssi >= -55) return 4;
@@ -3589,7 +3690,8 @@ class DratekEinkPanel extends HTMLElement {
 
   _renderSignalBars(rssi) {
     const level = this._signalLevel(rssi);
-    return `<div class="signal-bars level-${level}">${[1, 2, 3, 4].map((bar) => `<span class="${bar <= level ? "on" : ""}"></span>`).join("")}</div>`;
+    const label = Number.isFinite(rssi) ? `Signál ${rssi} dBm, ${level} ze 4 dílků` : "Síla signálu není dostupná";
+    return `<div class="signal-bars level-${level}" role="img" aria-label="${label}" title="${label}">${[1, 2, 3, 4].map((bar) => `<span class="${bar <= level ? "on" : ""}"></span>`).join("")}</div>`;
   }
 
   _renderBleDevices(devices) {
