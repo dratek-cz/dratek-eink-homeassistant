@@ -4,6 +4,15 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.69
+
+- po načtení JSON API se zobrazí průzkumník nalezených datových polí s ukázkou hodnot a počtem položek
+- uživatel může z rozbalovacího seznamu vybrat samostatně hodnoty grafu a textové nebo časové popisky
+- podporované jsou projekce polí z pole objektů, například `slots[].czk` a `slots[].t`
+- pro graf se automaticky předvybere první nalezená číselná řada a odpovídající textová řada ze stejné části JSON
+- vybrané cesty, načtená data i popisky se ukládají s vlastním prvkem a znovu používají při každém nahrání návrhu
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.68
 
 - na hlavní liště přibyla knihovna **Vytvořit vlastní prvek** pro opakovaně použitelné prvky Home Assistantu

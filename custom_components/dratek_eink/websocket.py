@@ -954,6 +954,7 @@ async def websocket_save_custom_element(
         "entity_attribute": str(source.get("entity_attribute") or "").strip()[:120],
         "url": str(source.get("url") or "").strip()[:2048],
         "json_path": str(source.get("json_path") or "").strip()[:255],
+        "label_json_path": str(source.get("label_json_path") or "").strip()[:255],
         "label": str(source.get("label") or "").strip()[:120],
         "unit": str(source.get("unit") or "").strip()[:32],
         "color": "red" if source.get("color") == "red" else "black",
@@ -962,6 +963,7 @@ async def websocket_save_custom_element(
         "off_symbol": str(source.get("off_symbol") or "○")[:8],
         "on_values": str(source.get("on_values") or "on,true,1,open,home")[:255],
         "sample_data": str(source.get("sample_data") or "")[:65535],
+        "sample_labels": str(source.get("sample_labels") or "")[:65535],
         "width_percent": _clamped_int(source.get("width_percent"), 55, 10, 100),
         "height_percent": _clamped_int(source.get("height_percent"), 35, 10, 100),
         "updated_at": now,
@@ -999,15 +1001,70 @@ async def websocket_delete_custom_element(
 
 
 def _json_path_value(value: Any, path: str) -> Any:
-    current = value
-    for part in (item for item in path.replace("[", ".").replace("]", "").split(".") if item):
+    """Resolve object paths and project fields from arrays using [] or [*]."""
+    parts = [part for part in path.replace("[*]", "[]").split(".") if part]
+
+    def _walk(current: Any, index: int) -> Any:
+        if index >= len(parts):
+            return current
+        part = parts[index]
+        project = part.endswith("[]")
+        key = part[:-2] if project else part
+        if project:
+            sequence = current.get(key) if key and isinstance(current, dict) else current
+            if not isinstance(sequence, list):
+                raise KeyError(part)
+            return [_walk(item, index + 1) for item in sequence]
         if isinstance(current, list):
-            current = current[int(part)]
-        elif isinstance(current, dict):
-            current = current[part]
-        else:
-            raise KeyError(part)
-    return current
+            if key.isdigit():
+                return _walk(current[int(key)], index + 1)
+            return [_walk(item, index) for item in current]
+        if isinstance(current, dict):
+            return _walk(current[key], index + 1)
+        raise KeyError(part)
+
+    return _walk(value, 0)
+
+
+def _json_field_options(value: Any, prefix: str = "", depth: int = 0) -> list[dict[str, Any]]:
+    """Return selectable scalar and series fields from a JSON response."""
+    if depth > 6:
+        return []
+    fields: list[dict[str, Any]] = []
+    if isinstance(value, dict):
+        for key, item in list(value.items())[:80]:
+            path = f"{prefix}.{key}" if prefix else str(key)
+            fields.extend(_json_field_options(item, path, depth + 1))
+        return fields[:160]
+    if isinstance(value, list):
+        scalar_items = [item for item in value if not isinstance(item, (dict, list)) and item is not None]
+        if scalar_items and len(scalar_items) == len([item for item in value if item is not None]):
+            numeric = all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in scalar_items)
+            fields.append({
+                "path": prefix,
+                "kind": "number_series" if numeric else "text_series",
+                "count": len(scalar_items),
+                "preview": [str(item)[:60] for item in scalar_items[:4]],
+            })
+            return fields
+        first_object = next((item for item in value if isinstance(item, dict)), None)
+        if first_object is not None:
+            array_prefix = f"{prefix}[]" if prefix else "[]"
+            objects = [item for item in value if isinstance(item, dict)]
+            for key in list(first_object)[:80]:
+                projected = [item.get(key) for item in objects if item.get(key) is not None]
+                path = f"{array_prefix}.{key}"
+                fields.extend(_json_field_options(projected, path, depth + 1))
+        return fields[:160]
+    if prefix and value is not None:
+        numeric = isinstance(value, (int, float)) and not isinstance(value, bool)
+        fields.append({
+            "path": prefix,
+            "kind": "number" if numeric else "text",
+            "count": 1,
+            "preview": [str(value)[:60]],
+        })
+    return fields
 
 
 @websocket_api.websocket_command(
@@ -1015,6 +1072,7 @@ def _json_path_value(value: Any, path: str) -> Any:
         "type": "dratek_eink/custom_elements/fetch_url",
         "url": str,
         vol.Optional("json_path", default=""): str,
+        vol.Optional("label_json_path", default=""): str,
     }
 )
 @websocket_api.async_response
@@ -1038,14 +1096,26 @@ async def websocket_fetch_custom_element_url(
                     raise ValueError("Response is larger than 1 MB.")
                 text = raw.decode(response.charset or "utf-8", errors="replace")
         try:
-            value: Any = json.loads(text)
+            root_value: Any = json.loads(text)
         except json.JSONDecodeError:
-            value = text.strip()
+            root_value = text.strip()
+        fields = _json_field_options(root_value)
+        value = root_value
         path = str(msg.get("json_path") or "").strip()
         if path:
-            value = _json_path_value(value, path)
+            value = _json_path_value(root_value, path)
+        labels: Any = []
+        label_path = str(msg.get("label_json_path") or "").strip()
+        if label_path:
+            labels = _json_path_value(root_value, label_path)
         serialized = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-        connection.send_result(msg["id"], {"ok": True, "value": serialized[:65535]})
+        serialized_labels = labels if isinstance(labels, str) else json.dumps(labels, ensure_ascii=False, separators=(",", ":"))
+        connection.send_result(msg["id"], {
+            "ok": True,
+            "value": serialized[:65535],
+            "labels": serialized_labels[:65535],
+            "fields": fields,
+        })
     except Exception as exc:
         connection.send_error(msg["id"], "fetch_failed", str(exc))
 
