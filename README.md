@@ -4,6 +4,16 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.70
+
+- načítání JSON API je předělané na čtyřkrokový modulární průvodce: adresa, datová sada, přiřazení a náhled
+- odpověď se automaticky rozdělí na srozumitelné datové sady a sloupce, takže uživatel nemusí znát ani psát JSON cesty
+- pro ukázkovou strukturu lze jednoduše zvolit sadu `slots`, hodnotu `czk` a popisek `t`
+- každá datová sada zobrazuje počet záznamů a každý sloupec ukázku skutečně načtených hodnot
+- chybná nebo zastaralá cesta už nezablokuje načtení struktury API a uživatel může přiřazení opravit v menu
+- výsledné technické přiřazení se zobrazuje pouze jako přehled a ukládá se automaticky s prvkem
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.69
 
 - po načtení JSON API se zobrazí průzkumník nalezených datových polí s ukázkou hodnot a počtem položek

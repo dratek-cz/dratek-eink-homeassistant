@@ -953,6 +953,9 @@ async def websocket_save_custom_element(
         "entity_id": str(source.get("entity_id") or "").strip()[:255],
         "entity_attribute": str(source.get("entity_attribute") or "").strip()[:120],
         "url": str(source.get("url") or "").strip()[:2048],
+        "collection_path": str(source.get("collection_path") or "").strip()[:255],
+        "value_field": str(source.get("value_field") or "").strip()[:120],
+        "label_field": str(source.get("label_field") or "").strip()[:120],
         "json_path": str(source.get("json_path") or "").strip()[:255],
         "label_json_path": str(source.get("label_json_path") or "").strip()[:255],
         "label": str(source.get("label") or "").strip()[:120],
@@ -1067,6 +1070,64 @@ def _json_field_options(value: Any, prefix: str = "", depth: int = 0) -> list[di
     return fields
 
 
+def _json_collections(value: Any, prefix: str = "", depth: int = 0) -> list[dict[str, Any]]:
+    """Describe JSON objects and arrays as user-friendly datasets and columns."""
+    if depth > 6:
+        return []
+    collections: list[dict[str, Any]] = []
+    if isinstance(value, dict):
+        scalar_fields = []
+        for key, item in list(value.items())[:80]:
+            if item is None or isinstance(item, (dict, list)):
+                continue
+            numeric = isinstance(item, (int, float)) and not isinstance(item, bool)
+            scalar_fields.append({"key": str(key), "kind": "number" if numeric else "text", "preview": [str(item)[:60]]})
+        if scalar_fields:
+            collections.append({"path": prefix, "label": prefix or "Kořen odpovědi", "count": 1, "fields": scalar_fields})
+        for key, item in list(value.items())[:80]:
+            child_path = f"{prefix}.{key}" if prefix else str(key)
+            collections.extend(_json_collections(item, child_path, depth + 1))
+        return collections[:120]
+    if isinstance(value, list):
+        objects = [item for item in value if isinstance(item, dict)][:512]
+        if objects:
+            keys: list[str] = []
+            for item in objects:
+                for key in item:
+                    if key not in keys and len(keys) < 80:
+                        keys.append(str(key))
+            fields = []
+            for key in keys:
+                samples = [item.get(key) for item in objects if item.get(key) is not None and not isinstance(item.get(key), (dict, list))]
+                if not samples:
+                    continue
+                numeric = all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in samples)
+                fields.append({
+                    "key": key,
+                    "kind": "number" if numeric else "text",
+                    "preview": [str(item)[:60] for item in samples[:4]],
+                })
+            if fields:
+                collections.append({"path": prefix, "label": prefix or "Seznam", "count": len(value), "fields": fields})
+            first = objects[0]
+            for key, item in list(first.items())[:80]:
+                if isinstance(item, (dict, list)):
+                    projected = [obj.get(key) for obj in objects if obj.get(key) is not None]
+                    child_path = f"{prefix}[].{key}" if prefix else str(key)
+                    collections.extend(_json_collections(projected, child_path, depth + 1))
+            return collections[:120]
+        scalars = [item for item in value if item is not None and not isinstance(item, (dict, list))]
+        if scalars:
+            numeric = all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in scalars)
+            collections.append({
+                "path": prefix,
+                "label": prefix or "Seznam hodnot",
+                "count": len(scalars),
+                "fields": [{"key": "$value", "kind": "number" if numeric else "text", "preview": [str(item)[:60] for item in scalars[:4]]}],
+            })
+    return collections[:120]
+
+
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/custom_elements/fetch_url",
@@ -1100,14 +1161,22 @@ async def websocket_fetch_custom_element_url(
         except json.JSONDecodeError:
             root_value = text.strip()
         fields = _json_field_options(root_value)
+        collections = _json_collections(root_value)
         value = root_value
+        mapping_error = ""
         path = str(msg.get("json_path") or "").strip()
         if path:
-            value = _json_path_value(root_value, path)
+            try:
+                value = _json_path_value(root_value, path)
+            except (KeyError, IndexError, TypeError, ValueError) as exc:
+                mapping_error = f"Hodnoty: cesta {path} nebyla nalezena ({exc})."
         labels: Any = []
         label_path = str(msg.get("label_json_path") or "").strip()
         if label_path:
-            labels = _json_path_value(root_value, label_path)
+            try:
+                labels = _json_path_value(root_value, label_path)
+            except (KeyError, IndexError, TypeError, ValueError) as exc:
+                mapping_error = f"{mapping_error} Popisky: cesta {label_path} nebyla nalezena ({exc}).".strip()
         serialized = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
         serialized_labels = labels if isinstance(labels, str) else json.dumps(labels, ensure_ascii=False, separators=(",", ":"))
         connection.send_result(msg["id"], {
@@ -1115,6 +1184,8 @@ async def websocket_fetch_custom_element_url(
             "value": serialized[:65535],
             "labels": serialized_labels[:65535],
             "fields": fields,
+            "collections": collections,
+            "mapping_error": mapping_error,
         })
     except Exception as exc:
         connection.send_error(msg["id"], "fetch_failed", str(exc))
