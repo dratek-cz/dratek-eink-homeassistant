@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.65";
+const DRATEK_EINK_VERSION = "0.1.66";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -2117,8 +2117,8 @@ class DratekEinkPanel extends HTMLElement {
     const object = this._selectedObject();
     const designerScreenWidth = Math.max(1, Math.round(size.width * this._zoom));
     const designerScreenHeight = Math.max(1, Math.round(size.height * this._zoom));
-    const designerFrameX = Math.max(22, Math.round(designerScreenWidth * 0.158));
-    const designerFrameY = Math.max(16, Math.round(designerScreenHeight * 0.125));
+    const designerFrameRatio = Math.max(0.48, Math.min(3.7, (size.width / size.height) * (this._orientation === "portrait" ? 0.95 : 1 / 0.95)));
+    const designerFrameWidth = Math.max(150, Math.round(designerScreenWidth / (this._orientation === "portrait" ? 0.8 : 0.76)));
     const designerBattery = this._batteryInfo(device || {});
     const designerRssi = Number(device?.rssi);
     const designerPath = device?.paths?.[0];
@@ -2205,6 +2205,14 @@ class DratekEinkPanel extends HTMLElement {
         .ribbon-menu{border-radius:12px;border-color:var(--divider-color);box-shadow:0 16px 36px rgba(15,23,42,.16)}.background-picker button{border:1px solid var(--divider-color);border-radius:9px;background:var(--card-background-color)}.background-picker button.selected{outline-color:var(--dratek-teal)}
         @media(max-width:1350px){.designer-device-primary,.designer-device-fact,.designer-device-meter,.designer-route{border:1px solid var(--divider-color)}.designer-orientation{border:1px solid rgba(255,102,0,.35)}}
         @media(max-width:760px){.designer-device-primary,.designer-device-fact,.designer-device-meter,.designer-route{border:1px solid var(--divider-color)}.designer-commandbar .ribbon-tab{flex:1}.designer-commandbar .ribbon-project{max-width:none}.tool-grid{grid-template-columns:1fr 1fr}.workspace{padding:14px}.properties-panel{max-height:none}}
+        .designer-device-strip{display:grid;grid-template-columns:minmax(190px,1.35fr) minmax(135px,.9fr) auto auto auto minmax(140px,1fr) minmax(190px,auto);gap:0;padding:8px;background:var(--card-background-color);border:1px solid var(--divider-color);box-shadow:0 6px 18px rgba(15,23,42,.055)!important;overflow:hidden}.designer-device-primary,.designer-device-fact,.designer-device-meter,.designer-route,.designer-orientation{min-height:58px;padding:7px 11px;border:0;border-right:1px solid var(--divider-color);border-radius:0;background:transparent}.designer-device-primary{border-left:0}.designer-device-mark{width:34px;height:34px}.designer-orientation{padding:6px 8px;border-right:0}.designer-orientation>div{gap:3px}.designer-orientation button{display:grid;grid-template-columns:auto 1fr;min-height:37px;padding:5px 7px;text-align:left}.designer-orientation button ha-icon{--mdc-icon-size:21px}.designer-orientation button span{font-size:9px}.designer-orientation button.active{background:var(--dratek-orange);color:#fff}
+        .editor-shell{grid-template-columns:184px minmax(0,1fr) 292px}.tool-grid{grid-template-columns:repeat(4,1fr);gap:5px}.tool-icon{position:relative;display:grid;grid-template-columns:1fr;place-items:center;min-width:0;min-height:42px;padding:5px}.tool-icon .ico{width:30px;height:30px}.tool-icon .txt{display:none}.designer-tools-panel{padding:10px}.designer-tools-panel .designer-panel-heading{margin-bottom:7px}.designer-tools-panel .action-grid{grid-template-columns:repeat(4,1fr)}.designer-tools-panel .wide-action{grid-column:1/-1}.designer-tools-panel .action-grid .icon-btn{min-width:0;padding:5px}.properties-panel{font-size:11px}.properties-panel .inspector-section{padding:8px}.properties-panel .field{margin-bottom:7px}.properties-panel .inspector-section-title{margin-bottom:6px}.properties-panel input,.properties-panel select,.properties-panel textarea{padding:7px}.properties-panel .color-option{min-height:43px}.properties-panel .toggle-card{padding:6px}.properties-panel .inspector-help{margin-top:5px;font-size:9px}.layers-panel{padding:10px}
+        .designer-device-bezel{position:relative;display:block;flex:0 0 auto;width:var(--designer-frame-width);max-width:none;aspect-ratio:var(--designer-frame-ratio);padding:0;border:8px solid #eee8e8;border-radius:18px;background:#fff;box-shadow:0 12px 30px rgba(15,23,42,.15),inset 0 0 0 1px rgba(0,0,0,.04)}.designer-device-screen{position:absolute;inset:10% 12%;width:auto;height:auto}.designer-device-screen canvas{display:block;width:100%;height:100%}.designer-device-code{left:3.1%;font-size:clamp(8px,calc(var(--designer-frame-width) / 42),22px);transform:translateY(-50%) rotate(180deg)}.designer-device-pe29 .designer-device-identification{right:2.1%;top:10%;bottom:10%;width:8.4%;gap:3px}.designer-device-pe29 .designer-device-identification .designer-device-code{font-size:clamp(8px,calc(var(--designer-frame-width) / 52),18px)}.designer-device-portrait .designer-device-identification{left:10%;right:10%;top:auto;bottom:2.1%;width:auto;height:8.4%;display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:4px}.designer-device-portrait .designer-device-identification .designer-device-code{font-size:clamp(8px,calc(var(--designer-frame-width) / 23),16px);writing-mode:horizontal-tb;transform:none}.designer-device-portrait>.designer-device-code{left:50%;top:auto;bottom:3.1%;writing-mode:horizontal-tb;transform:translateX(-50%)}.designer-device-identification .device-preview-barcode.horizontal{width:100%;height:100%}
+        .device-preview-pe29.device-preview-portrait .device-preview-identification{left:10%;right:10%;top:auto;bottom:2.1%;width:auto;height:8.4%;display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:2px}.device-preview-pe29.device-preview-portrait .device-preview-identification .device-preview-code{font-size:clamp(5px,1vw,9px);writing-mode:horizontal-tb;transform:none}.device-preview-portrait>.device-preview-code{left:50%;top:auto;bottom:3.1%;writing-mode:horizontal-tb;transform:translateX(-50%)}.device-preview-identification .device-preview-barcode.horizontal{width:100%;height:100%}
+        .designer-device-portrait .designer-device-screen{inset:12% 10%}.device-preview-portrait .device-preview-screen{inset:12% 10%}
+        @media(max-width:1350px){.designer-device-strip{grid-template-columns:repeat(4,minmax(0,1fr));gap:0}.designer-device-primary{grid-column:span 2}.designer-device-primary,.designer-device-fact,.designer-device-meter,.designer-route{border:0;border-right:1px solid var(--divider-color);border-bottom:1px solid var(--divider-color)}.designer-route{border-right:0}.designer-orientation{grid-column:span 2;border:0}.editor-shell{grid-template-columns:174px minmax(0,1fr) 280px}}
+        @media(max-width:1050px){.editor-shell{grid-template-columns:174px minmax(0,1fr)}.properties-panel{font-size:12px}}
+        @media(max-width:760px){.designer-device-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.designer-device-primary{grid-column:1/-1}.designer-device-primary,.designer-device-fact,.designer-device-meter,.designer-route{border:0;border-bottom:1px solid var(--divider-color)}.designer-device-fact:nth-of-type(even),.designer-device-meter:nth-of-type(even){border-left:1px solid var(--divider-color)}.designer-route,.designer-orientation{grid-column:1/-1}.tool-grid{grid-template-columns:repeat(4,1fr)}}
       </style>
       <div class="page">
         <div class="topbar">
@@ -2224,13 +2232,13 @@ class DratekEinkPanel extends HTMLElement {
           <div class="designer-device-meter"><small>Baterie</small><div>${this._renderBatterySegments(designerBattery.percent)}<strong>${Number.isFinite(designerBattery.percent) ? `${designerBattery.percent} %` : "-"}</strong></div></div>
           <div class="designer-device-meter"><small>Signál</small><div>${this._renderSignalBars(designerRssi)}<strong class="signal-value ${this._signalClass(designerRssi)}">${Number.isFinite(designerRssi) ? `${designerRssi} dBm` : "-"}</strong></div></div>
           <div class="designer-device-fact designer-route"><small>Připojení</small><strong><ha-icon icon="${designerPath?.type === "gateway" ? "mdi:router-wireless" : "mdi:bluetooth-connect"}"></ha-icon>${this._escape(designerPath?.name || "Nedostupné")}</strong></div>
-          <div class="designer-orientation"><small>Orientace displeje</small><div><button class="${this._orientation === "landscape" ? "active" : ""}" data-orientation="landscape"><ha-icon icon="mdi:phone-landscape"></ha-icon>Na šířku</button><button class="${this._orientation === "portrait" ? "active" : ""}" data-orientation="portrait"><ha-icon icon="mdi:phone-portrait"></ha-icon>Na výšku</button></div></div>
+          <div class="designer-orientation"><small>Orientace displeje</small><div><button class="${this._orientation === "landscape" ? "active" : ""}" data-orientation="landscape" title="Otočit displej na šířku"><ha-icon icon="mdi:monitor"></ha-icon><span>Na šířku</span></button><button class="${this._orientation === "portrait" ? "active" : ""}" data-orientation="portrait" title="Otočit displej na výšku"><ha-icon icon="mdi:monitor-vertical"></ha-icon><span>Na výšku</span></button></div></div>
         </div>
         <div class="card ribbon designer-commandbar"><div class="designer-command-group"><button id="fileMenuToggle" class="ribbon-tab menu-tab ${this._fileMenuOpen ? "active" : ""}"><ha-icon icon="mdi:file-outline"></ha-icon>Soubor</button><button id="variablesDialogOpen" class="ribbon-tab menu-tab"><ha-icon icon="mdi:variable"></ha-icon>Proměnné</button><button id="layoutMenuToggle" class="ribbon-tab menu-tab ${this._layoutMenuOpen ? "active" : ""}"><ha-icon icon="mdi:axis-arrow"></ha-icon>Mapování</button><button id="toolsMenuToggle" class="ribbon-tab menu-tab ${this._toolsMenuOpen ? "active" : ""}"><ha-icon icon="mdi:palette-outline"></ha-icon>Pozadí a zařízení</button><button id="viewMenuToggle" class="ribbon-tab menu-tab ${this._viewMenuOpen ? "active" : ""}"><ha-icon icon="mdi:magnify"></ha-icon>Zobrazení</button></div><span class="ribbon-project"><ha-icon icon="mdi:file-document-edit-outline"></ha-icon>${this._escape(this._projectName)}</span><button id="sendDesign" class="ribbon-send" ${!device || this._sending ? "disabled" : ""}><ha-icon icon="mdi:upload"></ha-icon>${this._sending ? "Odesílám..." : "Odeslat do displeje"}</button>${this._renderFileMenu()}${this._renderViewMenu()}${this._renderToolsMenu(device)}${this._renderLayoutMenu(device)}</div>
         ${this._renderSendResult()}
         <div class="editor-shell">
           ${this._renderToolSidebar()}
-          <div class="card workspace-card"><div class="canvas-head"><div class="canvas-title"><span><ha-icon icon="mdi:monitor-edit"></ha-icon></span><div><strong>Pracovní plocha</strong><small>${size.width} × ${size.height} px · ${this._orientation === "portrait" ? "na výšku" : "na šířku"}</small></div></div><div class="canvas-meta"><span><ha-icon icon="mdi:magnify"></ha-icon>${Math.round(this._zoom * 100)} %</span><span><ha-icon icon="mdi:palette-swatch-outline"></ha-icon>eInk barvy</span></div></div><div class="workspace"><div class="designer-device-bezel ${this._isPe29Device(device) ? "designer-device-pe29" : ""}" style="--designer-frame-x:${designerFrameX}px;--designer-frame-y:${designerFrameY}px">${this._isPe29Device(device) ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>${this._renderDeviceBarcode(device?.physical_code || "00.00.00.00")}</span>` : `<span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>`}<div class="designer-device-screen"><canvas id="editor" width="${size.width}" height="${size.height}" style="width:${designerScreenWidth}px;height:${designerScreenHeight}px"></canvas></div></div></div></div>
+          <div class="card workspace-card"><div class="canvas-head"><div class="canvas-title"><span><ha-icon icon="mdi:monitor-edit"></ha-icon></span><div><strong>Pracovní plocha</strong><small>${size.width} × ${size.height} px · ${this._orientation === "portrait" ? "na výšku" : "na šířku"}</small></div></div><div class="canvas-meta"><span><ha-icon icon="mdi:magnify"></ha-icon>${Math.round(this._zoom * 100)} %</span><span><ha-icon icon="mdi:palette-swatch-outline"></ha-icon>eInk barvy</span></div></div><div class="workspace"><div class="designer-device-bezel ${this._isPe29Device(device) ? "designer-device-pe29" : ""} designer-device-${this._orientation}" style="--designer-frame-ratio:${designerFrameRatio.toFixed(4)};--designer-frame-width:${designerFrameWidth}px">${this._isPe29Device(device) ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>${this._renderDeviceBarcode(device?.physical_code || "00.00.00.00", this._orientation === "portrait")}</span>` : `<span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>`}<div class="designer-device-screen"><canvas id="editor" width="${size.width}" height="${size.height}"></canvas></div></div></div></div>
           <div class="card right properties-panel"><div class="section-title inspector-title"><div class="inspector-title-main"><span class="inspector-object-icon"><ha-icon icon="${object ? this._objectIcon(object) : "mdi:tune-variant"}"></ha-icon></span><div><h2>Inspector</h2><small>${object ? this._escape(this._objectLabel(object, this._objects.indexOf(object))) : "Vlastnosti objektu"}</small></div></div><span class="pill muted">${object ? this._escape(object.type) : "bez výběru"}</span></div>${this._renderProperties(object)}</div>
           ${this._renderLayersPanel()}
         </div>
@@ -3675,7 +3683,7 @@ class DratekEinkPanel extends HTMLElement {
     return { width: sourceWidth, height: sourceHeight, draft };
   }
 
-  _renderDeviceBarcode(value) {
+  _renderDeviceBarcode(value, horizontal = false) {
     const patterns = [
       "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
       "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
@@ -3702,12 +3710,15 @@ class DratekEinkPanel extends HTMLElement {
     symbols.forEach((symbol) => {
       [...patterns[symbol]].forEach((moduleWidth, index) => {
         const width = Number(moduleWidth);
-        if (index % 2 === 0) bars.push(`<rect x="0" y="${offset}" width="54" height="${width}"></rect>`);
+        if (index % 2 === 0) bars.push(horizontal
+          ? `<rect x="${offset}" y="0" width="${width}" height="54"></rect>`
+          : `<rect x="0" y="${offset}" width="54" height="${width}"></rect>`);
         offset += width;
       });
     });
     const totalHeight = offset + 10;
-    return `<svg class="device-preview-barcode" viewBox="0 0 54 ${totalHeight}" preserveAspectRatio="none" role="img" aria-label="Čárový kód ${this._escape(text)}">${bars.join("")}</svg>`;
+    const viewBox = horizontal ? `0 0 ${totalHeight} 54` : `0 0 54 ${totalHeight}`;
+    return `<svg class="device-preview-barcode ${horizontal ? "horizontal" : "vertical"}" viewBox="${viewBox}" preserveAspectRatio="none" role="img" aria-label="Čárový kód ${this._escape(text)}">${bars.join("")}</svg>`;
   }
 
   _renderDevicePreview(device, mode = "full") {
@@ -3725,13 +3736,14 @@ class DratekEinkPanel extends HTMLElement {
     const scale = Math.min(maxCanvasWidth / sourceWidth, maxCanvasHeight / sourceHeight, 1);
     const canvasWidth = Math.max(40, Math.round(sourceWidth * scale));
     const canvasHeight = Math.max(28, Math.round(sourceHeight * scale));
-    const frameRatio = Math.max(0.48, Math.min(3.7, (sourceWidth / sourceHeight) / 0.95));
+    const portraitLayout = sourceHeight > sourceWidth;
+    const frameRatio = Math.max(0.48, Math.min(3.7, (sourceWidth / sourceHeight) * (portraitLayout ? 0.95 : 1 / 0.95)));
     const previewWidth = Math.max(sizing.minWidth, Math.min(sizing.maxWidth, Math.round(sizing.targetHeight * frameRatio)));
     const pe29Layout = this._isPe29Device(device);
     const physicalCode = device.physical_code || "00.00.00.00";
     return `<div class="device-preview-wrap preview-${previewMode}">
-      <div class="device-preview-bezel ${pe29Layout ? "device-preview-pe29" : ""}" style="--frame-ratio:${frameRatio.toFixed(4)};--preview-width:${previewWidth}px" title="Náhled ${this._escape(sourceWidth)} × ${this._escape(sourceHeight)}">
-        ${pe29Layout ? `<span class="device-preview-identification"><span class="device-preview-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode)}</span>` : `<span class="device-preview-code">${this._escape(physicalCode)}</span>`}
+      <div class="device-preview-bezel ${pe29Layout ? "device-preview-pe29" : ""} ${portraitLayout ? "device-preview-portrait" : "device-preview-landscape"}" style="--frame-ratio:${frameRatio.toFixed(4)};--preview-width:${previewWidth}px" title="Náhled ${this._escape(sourceWidth)} × ${this._escape(sourceHeight)}">
+        ${pe29Layout ? `<span class="device-preview-identification"><span class="device-preview-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, portraitLayout)}</span>` : `<span class="device-preview-code">${this._escape(physicalCode)}</span>`}
         <div class="device-preview-screen">
           <canvas data-device-preview="${this._escape(address)}" data-source-width="${sourceWidth}" data-source-height="${sourceHeight}" width="${canvasWidth}" height="${canvasHeight}"></canvas>
           ${draft ? "" : `<div class="device-preview-empty"><span><ha-icon icon="mdi:image-outline"></ha-icon>Prázdný návrh</span></div>`}

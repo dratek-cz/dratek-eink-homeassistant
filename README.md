@@ -1,5 +1,15 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.66
+
+- informace o aktivním displeji jsou sloučené do jednoho kompaktního bloku
+- přepínač orientace má výrazné ikony pro zobrazení na šířku a na výšku
+- levý panel používá úspornou mřížku ikon s názvy dostupnými po najetí myší
+- Inspector i vrstvy jsou užší a mají kompaktnější ovládací prvky
+- fyzický rámeček v designeru používá stejné proporce jako náhled na hlavní stránce
+- při otočení displeje se správně otočí také fyzické rozložení obrazovky, adresa a čárový kód
+- velikost adresy a čárového kódu v designeru se škáluje společně s náhledem zařízení
+
 ## Novinky ve verzi 0.1.65
 
 - designer má nové jednoduché moderní rozložení sjednocené s hlavní stránkou rozšíření
