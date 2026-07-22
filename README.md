@@ -1,5 +1,16 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.59
+
+- nalezené displeje se ukládají do desetiminutové lokální cache a po návratu do panelu se zobrazí okamžitě
+- automatický scan se při čerstvé cache nespouští znovu; ruční Obnovit zůstává vždy dostupné
+- zápisy stejného displeje se serializují společným zámkem i při použití rozdílných přenosových cest
+- ruční upload má přednost před čekajícími automatickými aktualizacemi a po dokončení aktivuje 50sekundový cooldown
+- zastaralé minutové automatické úlohy se bezpečně přeskočí místo hromadění ve frontě
+- závěrečné potvrzení obnovy čeká až 45 sekund a po timeoutu se celý již odeslaný obraz neposílá znovu
+- každá přenosová úloha má čtyřminutový bezpečnostní limit, po kterém se zámek vždy uvolní
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.58
 
 - designer má nové stabilní třípanelové rozložení pro nástroje, pracovní plochu, Inspector a vrstvy

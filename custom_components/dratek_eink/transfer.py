@@ -19,6 +19,10 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
+class TransferCompletionTimeout(TimeoutError):
+    """The payload was sent but the display did not confirm its final refresh."""
+
+
 def _next_block(data: bytes, block_size: int, block_number: int) -> bytes:
     chunk_size = block_size - 4
     start = block_number * chunk_size
@@ -95,6 +99,9 @@ class DratekTransfer:
             except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
                 last_error = exc
                 self.log(f"Transfer attempt {attempt}/{max_attempts} failed: {exc}")
+                if isinstance(exc, TransferCompletionTimeout):
+                    self.log("The payload was already sent; not repeating it to avoid overlapping display refreshes.")
+                    break
                 transient = self._is_transient_connection_error(exc)
                 if attempt >= max_attempts or (attempt >= 3 and not transient):
                     break
@@ -176,7 +183,14 @@ class DratekTransfer:
                     self.log(f"Sent block {block_number + 1}/{total_blocks} ({percent}%).")
 
             while True:
-                response = await self._wait_for_next_transfer_response(responses, total_blocks, total_blocks, timeout=30)
+                try:
+                    response = await self._wait_for_next_transfer_response(
+                        responses, total_blocks, total_blocks, timeout=45
+                    )
+                except TimeoutError as exc:
+                    raise TransferCompletionTimeout(
+                        "Timed out after 45s waiting for the display to confirm the completed refresh."
+                    ) from exc
                 if not response or response[0] != 5:
                     continue
                 if len(response) > 1 and response[1] == 8:

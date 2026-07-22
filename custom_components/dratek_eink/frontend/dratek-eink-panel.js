@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.58";
+const DRATEK_EINK_VERSION = "0.1.59";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -9,7 +9,8 @@ class DratekEinkPanel extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._loading = false;
     this._sending = false;
-    this._result = null;
+    this._deviceCacheLoadedAt = 0;
+    this._result = this._loadCachedScanResult();
     this._error = "";
     this._sendResult = null;
     this._selectedDeviceAddress = "";
@@ -96,6 +97,30 @@ class DratekEinkPanel extends HTMLElement {
 
   _saveUiPreference(key, value) {
     try { window.localStorage.setItem(`dratek-eink-${key}`, value); } catch (_err) { /* Browser storage can be disabled. */ }
+  }
+
+  _loadCachedScanResult() {
+    try {
+      const cached = JSON.parse(window.localStorage.getItem("dratek-eink-device-cache") || "null");
+      if (!cached || !Array.isArray(cached.devices) || !cached.devices.length) return null;
+      this._deviceCacheLoadedAt = Number(cached.saved_at) || 0;
+      return { devices: cached.devices, debug: ["Displeje obnovené z lokální cache."], ble_devices: [] };
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  _saveCachedScanResult(result) {
+    const devices = Array.isArray(result?.devices) ? result.devices : [];
+    if (!devices.length) return;
+    this._deviceCacheLoadedAt = Date.now();
+    try {
+      window.localStorage.setItem("dratek-eink-device-cache", JSON.stringify({ saved_at: this._deviceCacheLoadedAt, devices }));
+    } catch (_err) { /* Browser storage can be disabled. */ }
+  }
+
+  _hasFreshDeviceCache(maxAgeMs = 10 * 60 * 1000) {
+    return Boolean(this._result?.devices?.length) && Date.now() - this._deviceCacheLoadedAt < maxAgeMs;
   }
 
   _defaultGatewayName() {
@@ -464,6 +489,7 @@ class DratekEinkPanel extends HTMLElement {
     this._render();
     try {
       this._result = await this._hass.callWS({ type: "dratek_eink/scan" });
+      this._saveCachedScanResult(this._result);
       await this._loadDevicePreviewDrafts(this._result.devices || []);
       const found = this._result.devices.some((device) => device.address === this._selectedDeviceAddress);
       if (!found) this._selectedDeviceAddress = "";
@@ -479,6 +505,7 @@ class DratekEinkPanel extends HTMLElement {
 
   _scheduleAutomaticScan(delay = 180) {
     if (!this._hass) return;
+    if (this._hasFreshDeviceCache()) return;
     window.clearTimeout(this._automaticScanTimer);
     this._automaticScanTimer = window.setTimeout(() => {
       this._automaticScanTimer = null;
@@ -2244,9 +2271,9 @@ class DratekEinkPanel extends HTMLElement {
     <div class="card"><div class="section-title"><h2>Fronta a poslednich 20 zapisu</h2><button id="refreshQueue" class="secondary"><ha-icon icon="mdi:refresh"></ha-icon>Obnovit</button></div>
       ${queue.error ? `<div class="pill bad">${this._escape(queue.error)}</div>` : ""}
       ${jobs.length ? `<div class="queue-list">${jobs.map((job) => {
-        const labels = { queued: "Ve fronte", writing: "Zapisuji", succeeded: "Dokonceno", failed: "Selhalo" };
-        const classes = { queued: "muted", writing: "warn", succeeded: "good", failed: "bad" };
-        const icons = { queued: "mdi:tray-arrow-down", writing: "mdi:progress-upload", succeeded: "mdi:check", failed: "mdi:alert-circle-outline" };
+        const labels = { queued: "Ve frontě", writing: "Zapisuji", succeeded: "Dokončeno", failed: "Selhalo", skipped: "Přeskočeno" };
+        const classes = { queued: "muted", writing: "warn", succeeded: "good", failed: "bad", skipped: "muted" };
+        const icons = { queued: "mdi:tray-arrow-down", writing: "mdi:progress-upload", succeeded: "mdi:check", failed: "mdi:alert-circle-outline", skipped: "mdi:skip-next-circle-outline" };
         const operation = { design: "Navrh", partial_design: "Castecny zapis", text: "Text", service_text: "HA sluzba", entity_update: "Automaticka zmena entity" }[job.operation] || job.operation;
         return `<div class="queue-row ${this._escape(job.status)}">
           <div class="queue-icon"><ha-icon icon="${icons[job.status] || "mdi:help"}"></ha-icon></div>
