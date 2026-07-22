@@ -882,7 +882,7 @@ async def websocket_send_design(
             add_log(f"Sending editor design {image.width}x{image.height} to SDK type {sdk_type}.")
             if transform:
                 add_log(f"Using display transform: {transform}.")
-            transfer = DratekTransfer(log=add_log)
+            transfer = DratekTransfer(log=add_log, hass=hass)
             await transfer.send_image(address, sdk_type, image, transform)
             add_log("Design sent.")
             return {"ok": True, "address": address, "log": []}
@@ -958,7 +958,7 @@ async def websocket_send_partial_design(
                 f"{image.width}x{image.height} to SDK type {sdk_type} at "
                 f"x={msg['x']}, y={msg['y']}."
             )
-            transfer = DratekTransfer(log=add_log)
+            transfer = DratekTransfer(log=add_log, hass=hass)
             await transfer.send_partial_image(
                 address,
                 sdk_type,
@@ -1024,7 +1024,7 @@ async def websocket_send_text(
 
         async def run_transfer(add_log) -> dict[str, Any]:
             add_log(f"Rendering text '{text}' for SDK type {sdk_type}.")
-            transfer = DratekTransfer(log=add_log)
+            transfer = DratekTransfer(log=add_log, hass=hass)
             await transfer.send_image(address, sdk_type, image)
             add_log("Text sent.")
             return {"ok": True, "address": address, "text": text, "log": []}

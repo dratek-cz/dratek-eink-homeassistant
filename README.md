@@ -2,6 +2,9 @@
 
 ## Novinky ve verzi 0.1.57
 
+- panel po otevření automaticky vyhledá dostupné displeje; ruční tlačítko zůstává jen pro obnovení
+- lokální BLE přenos používá přímo connectable zařízení vybrané Bluetooth managerem Home Assistantu
+- při dočasně obsazeném Bluetooth slotu přenos počká a opakuje spojení s odstupňovanými prodlevami
 - zobrazovací plocha je přesně uprostřed těla displeje se stejně širokým levým a pravým rámečkem
 - svislý výrobní kód je umístěný přímo v levém rámečku a už neposouvá náhled obrazovky
 - odstraněný je podklad a popis pod náhledem; rozlišení je nově v čistém štítku v záhlaví karty

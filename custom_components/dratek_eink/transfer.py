@@ -5,12 +5,16 @@ import logging
 import math
 import queue
 from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from bleak import BleakClient
 from PIL import Image
 
 from .const import CONTROL_CHARS, PARTIAL_UPDATE_SDK_TYPES, WRITE_CHARS
 from .render import pack_bwr_image
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,8 +34,13 @@ def _format_bytes(data: bytes, limit: int = 80) -> str:
 
 
 class DratekTransfer:
-    def __init__(self, log: Callable[[str], None] | None = None) -> None:
+    def __init__(
+        self,
+        log: Callable[[str], None] | None = None,
+        hass: HomeAssistant | None = None,
+    ) -> None:
         self._log = log or _LOGGER.info
+        self._hass = hass
 
     def log(self, message: str) -> None:
         self._log(message)
@@ -76,17 +85,23 @@ class DratekTransfer:
         partial: tuple[int, int, int, int, int] | None = None,
     ) -> None:
         last_error: Exception | None = None
-        for attempt in range(1, 4):
-            self.log(f"Transfer attempt {attempt}/3.")
+        max_attempts = 5
+        for attempt in range(1, max_attempts + 1):
+            self.log(f"Transfer attempt {attempt}/{max_attempts}.")
             try:
                 await self._send_once(address, sdk_type, image, transform, partial)
                 self.log("Transfer completed.")
                 return
             except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
                 last_error = exc
-                self.log(f"Transfer attempt {attempt}/3 failed: {exc}")
-                if attempt < 3:
-                    await asyncio.sleep(2)
+                self.log(f"Transfer attempt {attempt}/{max_attempts} failed: {exc}")
+                transient = self._is_transient_connection_error(exc)
+                if attempt >= max_attempts or (attempt >= 3 and not transient):
+                    break
+                delay = (2, 3, 5, 8)[attempt - 1]
+                if transient:
+                    self.log(f"Bluetooth connection is temporarily unavailable; retrying in {delay}s.")
+                await asyncio.sleep(delay)
         raise last_error or RuntimeError("Transfer failed.")
 
     async def _send_once(
@@ -105,8 +120,9 @@ class DratekTransfer:
             self.log(f"Notification: {packet.hex(' ').upper()}")
             responses.put(packet)
 
+        connection_target = self._connection_target(address)
         self.log(f"Connecting to {address}...")
-        async with BleakClient(address, timeout=20.0) as client:
+        async with BleakClient(connection_target, timeout=20.0) as client:
             if not client.is_connected:
                 raise RuntimeError("Could not connect to the display.")
 
@@ -172,6 +188,52 @@ class DratekTransfer:
             if write_notify_enabled:
                 await client.stop_notify(write_char)
             await client.stop_notify(control_char)
+
+    def _connection_target(self, address: str) -> Any:
+        if self._hass is None:
+            return address
+
+        from homeassistant.components import bluetooth
+
+        ble_device = bluetooth.async_ble_device_from_address(
+            self._hass,
+            address,
+            connectable=True,
+        )
+        if ble_device is not None:
+            return ble_device
+
+        diagnostics = ""
+        try:
+            from homeassistant.components.bluetooth import BluetoothReachabilityIntent
+
+            diagnostics = bluetooth.async_address_reachability_diagnostics(
+                self._hass,
+                address,
+                BluetoothReachabilityIntent.CONNECTION,
+            )
+        except (AttributeError, ImportError):
+            pass
+        detail = f" {diagnostics}" if diagnostics else ""
+        raise RuntimeError(
+            "Bluetooth connection is temporarily unavailable; no connectable adapter "
+            f"currently has a free slot for {address}.{detail}"
+        )
+
+    @staticmethod
+    def _is_transient_connection_error(exc: Exception) -> bool:
+        message = str(exc).lower()
+        return any(
+            marker in message
+            for marker in (
+                "available connection slot",
+                "temporarily unavailable",
+                "le-connection-abort",
+                "device with address",
+                "not connected",
+                "could not connect",
+            )
+        )
 
     def _find_transfer_chars(self, client):
         fallback_control = None

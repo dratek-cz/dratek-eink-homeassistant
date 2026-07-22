@@ -162,7 +162,7 @@ class EntityAutoUpdateManager:
 
         async def run_local(add_log):
             add_log("Automatic entity update via Home Assistant Bluetooth.")
-            transfer = DratekTransfer(log=add_log)
+            transfer = DratekTransfer(log=add_log, hass=self.hass)
             await transfer.send_image(address, sdk_type, image, transform)
             return {"ok": True, "address": address, "log": []}
 

@@ -49,7 +49,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
         image = await hass.async_add_executor_job(render_text_image, sdk_type, text, font_size, color)
         async def run_transfer(add_log):
-            transfer = DratekTransfer(log=add_log)
+            transfer = DratekTransfer(log=add_log, hass=hass)
             await transfer.send_image(address, sdk_type, image)
             return {"ok": True, "address": address, "log": []}
 
