@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.62";
+const DRATEK_EINK_VERSION = "0.1.63";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -14,6 +14,9 @@ class DratekEinkPanel extends HTMLElement {
     this._result = this._loadCachedScanResult();
     this._error = "";
     this._sendResult = null;
+    this._ledSending = false;
+    this._ledResult = null;
+    this._rgbLed = { mode: "off", color: "#00a2a5", flashTime: 10 };
     this._selectedDeviceAddress = "";
     this._editingDeviceAddress = "";
     this._deviceNameDraft = "";
@@ -688,6 +691,7 @@ class DratekEinkPanel extends HTMLElement {
       width: size.width,
       height: size.height,
       variables: {},
+      rgb_led: { mode: "off", color: "#00a2a5", flash_time: 10 },
       objects: [],
     };
   }
@@ -703,6 +707,13 @@ class DratekEinkPanel extends HTMLElement {
     const size = this._displaySize(device);
     this._objects = Array.isArray(source.objects) ? structuredClone(source.objects) : [];
     this._variables = source.variables ? structuredClone(source.variables) : {};
+    const led = source.rgb_led || {};
+    this._rgbLed = {
+      mode: ["off", "on", "flash"].includes(led.mode) ? led.mode : "off",
+      color: /^#[0-9a-f]{6}$/i.test(led.color || "") ? led.color.toLowerCase() : "#00a2a5",
+      flashTime: Math.max(1, Math.min(255, Number(led.flash_time) || 10)),
+    };
+    this._ledResult = null;
     this._selectedIds = [];
     this._selectedProjectId = source.id || "";
     this._projectName = source.name || (device ? `Navrh ${this._deviceTitle(device)}` : "Novy navrh");
@@ -1829,6 +1840,11 @@ class DratekEinkPanel extends HTMLElement {
       width: size.width,
       height: size.height,
       variables: this._variables,
+      rgb_led: {
+        mode: this._rgbLed.mode,
+        color: this._rgbLed.color,
+        flash_time: this._rgbLed.flashTime,
+      },
       objects: this._objects.map(({ _img, ...object }) => object),
     };
   }
@@ -2037,6 +2053,60 @@ class DratekEinkPanel extends HTMLElement {
     }
   }
 
+  async _applyRgbLed() {
+    const device = this._device();
+    if (!device || this._ledSending) return;
+    const color = /^#[0-9a-f]{6}$/i.test(this._rgbLed.color) ? this._rgbLed.color : "#00a2a5";
+    const mode = { off: 0, on: 1, flash: 2 }[this._rgbLed.mode] ?? 0;
+    this._ledSending = true;
+    this._ledResult = null;
+    this._scheduleDraftSave();
+    this._render();
+    this._paint();
+    try {
+      this._ledResult = await this._hass.callWS({
+        type: "dratek_eink/set_rgb_led",
+        address: device.address,
+        mode,
+        flash_time: mode === 2 ? Math.max(1, Math.min(255, Number(this._rgbLed.flashTime) || 10)) : 0,
+        red: parseInt(color.slice(1, 3), 16),
+        green: parseInt(color.slice(3, 5), 16),
+        blue: parseInt(color.slice(5, 7), 16),
+      });
+    } catch (err) {
+      this._ledResult = { ok: false, error: this._message(err) };
+    } finally {
+      this._ledSending = false;
+      await this._loadQueue(false);
+      this._render();
+      this._paint();
+    }
+  }
+
+  _renderRgbLedControl(device) {
+    const colors = [
+      ["#ff2d2d", "Červená"], ["#ff7a00", "Oranžová"], ["#ffd400", "Žlutá"],
+      ["#20b15a", "Zelená"], ["#00a2a5", "Tyrkysová"], ["#2474ff", "Modrá"],
+      ["#b53cff", "Fialová"], ["#ffffff", "Bílá"],
+    ];
+    const result = this._ledResult
+      ? `<span class="led-result ${this._ledResult.ok ? "good" : "bad"}"><ha-icon icon="${this._ledResult.ok ? "mdi:check-circle-outline" : "mdi:alert-circle-outline"}"></ha-icon>${this._ledResult.ok ? "Nastavení diody bylo odesláno." : this._escape(this._ledResult.error || "Ovládání diody selhalo.")}</span>`
+      : "";
+    return `<div class="card rgb-led-card">
+      <div class="rgb-led-heading"><div class="rgb-led-title"><span class="rgb-led-icon" style="--led-color:${this._escape(this._rgbLed.color)}"><ha-icon icon="mdi:led-on"></ha-icon></span><div><h2>RGB dioda displeje</h2><small>Samostatné hardwarové ovládání; dioda není součástí grafického náhledu.</small></div></div>${result}</div>
+      <div class="rgb-led-controls">
+        <div class="field"><label>Režim</label><div class="segment-control led-mode-control">
+          <button class="segment-button ${this._rgbLed.mode === "off" ? "selected" : ""}" data-led-mode="off"><ha-icon icon="mdi:led-off"></ha-icon><span>Vypnuto</span></button>
+          <button class="segment-button ${this._rgbLed.mode === "on" ? "selected" : ""}" data-led-mode="on"><ha-icon icon="mdi:led-on"></ha-icon><span>Svítí</span></button>
+          <button class="segment-button ${this._rgbLed.mode === "flash" ? "selected" : ""}" data-led-mode="flash"><ha-icon icon="mdi:alarm-light-outline"></ha-icon><span>Bliká</span></button>
+        </div></div>
+        <div class="field led-color-field"><label>Barva</label><div class="led-color-row"><input id="rgbLedColor" type="color" value="${this._escape(this._rgbLed.color)}" ${this._rgbLed.mode === "off" ? "disabled" : ""}><div class="led-presets">${colors.map(([color, label]) => `<button type="button" data-led-color="${color}" class="led-preset ${this._rgbLed.color === color ? "selected" : ""}" style="--preset:${color}" title="${label}" ${this._rgbLed.mode === "off" ? "disabled" : ""}></button>`).join("")}</div></div></div>
+        ${this._rgbLed.mode === "flash" ? `<div class="field led-flash-field"><label for="rgbLedFlashTime">Tempo blikání <strong>${this._rgbLed.flashTime}</strong></label><input id="rgbLedFlashTime" type="range" min="1" max="255" value="${this._rgbLed.flashTime}"><small>Hodnota 1–255 podle časování firmware displeje.</small></div>` : ""}
+        <button id="applyRgbLed" class="rgb-led-apply" ${!device || this._ledSending ? "disabled" : ""}><ha-icon icon="mdi:bluetooth-connect"></ha-icon>${this._ledSending ? "Odesílám..." : "Použít na displeji"}</button>
+      </div>
+    </div>`;
+  }
+
   _render() {
     const result = this._result || { scanner_count: 0, ble_count: 0, devices: [], ble_devices: [], debug: [] };
     const topologyGroups = this._topologyGroups(result.devices);
@@ -2058,7 +2128,7 @@ class DratekEinkPanel extends HTMLElement {
         h1{margin:0;font-size:24px;font-weight:850;letter-spacing:0}h2{margin:0;font-size:13px;text-transform:uppercase;color:var(--secondary-text-color);letter-spacing:.08em}.subtitle{color:var(--secondary-text-color);font-size:13px;margin-top:3px}
         button,select,input{font:inherit}button{border:0;border-radius:8px;background:var(--primary-color);color:var(--text-primary-color,#fff);padding:9px 12px;font-weight:760;cursor:pointer;box-shadow:0 1px 0 rgba(0,0,0,.08);display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px}button:hover:not(:disabled){filter:brightness(1.03);transform:translateY(-1px)}button:disabled{opacity:.45;cursor:not-allowed;transform:none}
         ha-icon{--mdc-icon-size:18px}.primary-action{background:#0f766e}.secondary{background:var(--card-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color)}.danger{background:#b3261e;color:#fff}.ghost{background:transparent;color:var(--primary-text-color);border:1px solid transparent;box-shadow:none}
-        .topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;padding:14px 16px;box-shadow:0 10px 30px rgba(0,0,0,.07)}.brand{display:flex;align-items:center;gap:13px}.logo{width:44px;height:44px;border-radius:8px;display:grid;place-items:center;background:#111827;color:#fff;font-weight:950;letter-spacing:.5px}.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.version-badge{display:inline-flex;align-items:center;gap:5px;margin-left:8px;padding:3px 8px;border-radius:999px;background:var(--secondary-background-color);color:var(--secondary-text-color);border:1px solid var(--divider-color);font-size:11px;font-weight:850}
+        .topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;padding:10px 16px;box-shadow:0 10px 30px rgba(0,0,0,.07)}.brand{display:flex;align-items:center;gap:13px}.extension-logo{display:block;width:78px;height:68px;flex:0 0 auto;object-fit:contain;filter:drop-shadow(0 3px 7px rgba(0,0,0,.12))}.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.version-badge{display:inline-flex;align-items:center;gap:5px;margin-left:8px;padding:3px 8px;border-radius:999px;background:var(--secondary-background-color);color:var(--secondary-text-color);border:1px solid var(--divider-color);font-size:11px;font-weight:850}
         .card{background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;padding:14px;box-shadow:0 10px 28px rgba(0,0,0,.06)}.metric{color:var(--secondary-text-color);font-size:12px;margin-bottom:5px}.value{font-size:25px;font-weight:850}.pill{display:inline-flex;min-height:26px;align-items:center;border-radius:999px;padding:0 10px;font-size:12px;font-weight:800}.good{background:#d7f5df;color:#0b6b2a}.warn{background:#fff2c7;color:#775500}.bad{background:#ffd9d4;color:#9d1c0f}.muted{background:var(--secondary-background-color);color:var(--secondary-text-color)}
         .tabbar{display:flex;gap:6px;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;padding:5px;width:max-content;max-width:100%;box-shadow:0 8px 24px rgba(0,0,0,.05)}.tab{background:transparent;color:var(--secondary-text-color);box-shadow:none;border:0;border-radius:7px;padding:10px 14px}.tab.active{background:var(--primary-color);color:var(--text-primary-color,#fff)}
         .status-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}.status-tile{display:flex;align-items:center;justify-content:space-between;gap:12px}.status-icon{width:42px;height:42px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-color)}
@@ -2069,7 +2139,7 @@ class DratekEinkPanel extends HTMLElement {
         .density-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.density-toolbar>span{font-size:11px;font-weight:800;color:var(--secondary-text-color);text-transform:uppercase}.density-switch{display:flex;gap:2px;padding:3px;border:1px solid var(--divider-color);border-radius:7px;background:var(--secondary-background-color)}.density-switch button{min-height:30px;padding:5px 8px;border-radius:5px;background:transparent;color:var(--secondary-text-color);box-shadow:none;font-size:11px}.density-switch button.active{background:var(--card-background-color);color:var(--primary-color);box-shadow:0 1px 4px rgba(0,0,0,.12)}.density-switch ha-icon{--mdc-icon-size:17px}.density-note{font-size:11px;color:var(--secondary-text-color)}.device-grid.mode-large{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}.device-grid.mode-compact{grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:8px}.device-grid.mode-list{grid-template-columns:1fr;gap:7px}.device-grid.mode-compact .device-card,.device-grid.mode-list .device-card{gap:8px;padding:11px}.device-grid.mode-compact .device-card-top strong{font-size:15px}.device-grid.mode-list .device-card{grid-template-columns:minmax(220px,1.3fr) minmax(220px,1fr) auto;align-items:center}.device-grid.mode-list .device-card-top{min-width:0}.device-grid.mode-list .device-card-details{display:grid;grid-template-columns:minmax(170px,1fr) minmax(220px,1.4fr);gap:8px;align-items:center}.device-card.collapsed .device-card-details{display:none}.device-expand{background:transparent;color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none;min-width:36px;padding:7px}.device-card-expand-row{display:flex;justify-content:flex-end}.device-grid.mode-full .device-expand,.device-grid.mode-large .device-expand{display:none}.device-grid.mode-full .device-card-expand-row,.device-grid.mode-large .device-card-expand-row{display:none}
         .route-list{display:grid;gap:7px}.route{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:7px 9px;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);font-size:12px}.route.preferred{border-color:#0f766e;background:rgba(15,118,110,.08)}.route ha-icon{color:#0f766e}.route-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:780}.route-rssi{color:var(--secondary-text-color)}.topology{display:grid;gap:8px}.topology-row{display:grid;grid-template-columns:minmax(170px,1fr) minmax(80px,2fr) minmax(190px,1.2fr);align-items:center;gap:10px}.topology-node{display:flex;align-items:center;gap:9px;border:1px solid var(--divider-color);border-radius:8px;padding:10px;background:var(--card-background-color);min-width:0}.topology-node strong,.topology-node small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.topology-node small{color:var(--secondary-text-color);margin-top:2px}.topology-link{height:2px;background:var(--divider-color);position:relative}.topology-link:after{content:"";position:absolute;right:0;top:-4px;border-left:7px solid #0f766e;border-top:5px solid transparent;border-bottom:5px solid transparent}.topology-link span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--card-background-color);padding:2px 8px;color:var(--secondary-text-color);font-size:11px;white-space:nowrap}.topology.mode-large{gap:6px}.topology.mode-large .topology-node{padding:8px}.topology.mode-compact{grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:7px}.topology.mode-compact .topology-row{display:grid;grid-template-columns:1fr auto;gap:6px;border:1px solid var(--divider-color);border-radius:8px;padding:8px}.topology.mode-compact .topology-link{grid-column:1/-1;grid-row:2;height:auto;background:none}.topology.mode-compact .topology-link:after{display:none}.topology.mode-compact .topology-link span{position:static;transform:none;display:inline-flex}.topology.mode-compact .topology-node{padding:7px;border:0}.topology.mode-list .topology-row{grid-template-columns:minmax(180px,1fr) minmax(100px,.7fr) minmax(210px,1.2fr);gap:6px}.topology.mode-list .topology-node{padding:7px}.topology.mode-list .topology-node small{display:none}
         .subtabs{display:flex;gap:6px;padding:5px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);width:max-content;max-width:100%}.subtab{background:transparent;color:var(--secondary-text-color);box-shadow:none}.subtab.active{background:#0f766e;color:#fff}.gateway-name-edit{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px}.gateway-name-edit input{min-width:0;border:1px solid var(--primary-color);border-radius:7px;padding:7px;background:var(--card-background-color);color:var(--primary-text-color)}.gateway-health{display:grid;grid-template-columns:1fr 1fr;gap:10px}.health-tile{padding:10px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color)}.health-tile label{display:block;color:var(--secondary-text-color);font-size:11px;text-transform:uppercase;font-weight:800;margin-bottom:5px}
-        .empty-state{min-height:280px;display:grid;place-items:center;text-align:center;gap:9px;color:var(--secondary-text-color)}.empty-state h2{color:var(--primary-text-color);font-size:18px;text-transform:none;letter-spacing:0;margin:0}.empty-icon{width:62px;height:62px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);font-weight:950;color:var(--primary-color)}
+        .empty-state{min-height:280px;display:grid;place-items:center;text-align:center;gap:9px;color:var(--secondary-text-color)}.empty-state h2{color:var(--primary-text-color);font-size:18px;text-transform:none;letter-spacing:0;margin:0}.empty-icon{width:62px;height:62px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);font-weight:950;color:var(--primary-color)}.empty-logo{display:block;width:112px;height:96px;object-fit:contain;filter:drop-shadow(0 4px 9px rgba(0,0,0,.12))}
         .editor-shell{display:grid;grid-template-columns:250px minmax(0,1fr) 318px 250px;gap:12px;align-items:start}.left,.right,.layers-panel{position:sticky;top:12px}.designer-section{position:relative}.designer-section.locked> :not(.designer-lock){pointer-events:none;opacity:.28;filter:grayscale(1)}.designer-lock{position:absolute;z-index:15;left:50%;top:110px;transform:translateX(-50%);width:min(440px,calc(100% - 32px));padding:28px;text-align:center;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.24)}.designer-lock ha-icon{--mdc-icon-size:44px;color:#16803c}.designer-lock h2{font-size:20px;text-transform:none;margin:10px 0}.designer-lock p{color:var(--secondary-text-color)}.template-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:282px;overflow:auto;padding-right:2px}.template-hero .template-grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr));max-height:none;overflow:visible;padding-right:0}.template-card{min-height:76px;display:grid;grid-template-columns:34px 1fr;align-items:center;text-align:left;gap:9px;padding:9px;border:1px solid var(--divider-color);background:linear-gradient(180deg,var(--card-background-color),var(--secondary-background-color));color:var(--primary-text-color);box-shadow:none}.template-card ha-icon{color:var(--primary-color);--mdc-icon-size:26px}.template-card strong{display:block;font-size:12px;line-height:1.2}.template-card span{display:block;font-size:10px;color:var(--secondary-text-color);font-weight:800;text-transform:uppercase;margin-top:2px}.template-card:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}.tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.tool-icon{min-height:82px;display:grid;grid-template-rows:36px auto;place-items:center;text-align:center;padding:10px 6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.tool-icon .ico{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-color);font-size:18px;font-weight:900}.tool-icon .txt{font-size:11px;font-weight:850;color:var(--secondary-text-color);text-transform:uppercase}.tool-icon:hover:not(:disabled){border-color:var(--primary-color);background:var(--secondary-background-color)}
         .action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.icon-btn{min-height:42px;padding:7px;font-size:16px;display:grid;place-items:center}.wide-action{grid-column:span 4;font-size:13px}.panel-divider{height:1px;background:var(--divider-color);margin:14px 0}.layout-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-btn{min-height:58px;display:grid;place-items:center;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none}.layout-btn.active{background:var(--primary-color);color:var(--text-primary-color,#fff);border-color:var(--primary-color)}.transform-box{margin-top:10px;padding:10px;border:1px solid var(--divider-color);border-radius:8px;background:var(--secondary-background-color)}.transform-box small{display:block;color:var(--secondary-text-color);line-height:1.35;margin-top:6px}.properties-panel,.layers-panel{max-height:calc(100vh - 120px);overflow:auto}.layer-list{display:grid;gap:6px}.layer-row{display:grid;grid-template-columns:minmax(0,1fr) 34px 34px;gap:4px;align-items:center;padding:4px;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color)}.layer-row.selected{border-color:#16803c;background:rgba(22,128,60,.1);box-shadow:inset 3px 0 0 #16803c}.layer-main{min-width:0;justify-content:flex-start;background:transparent;color:var(--primary-text-color);box-shadow:none;padding:7px}.layer-main span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.layer-main ha-icon{color:var(--secondary-text-color);flex:0 0 auto}.layer-step{min-height:32px;padding:5px;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.layer-hint{margin:9px 0 0;color:var(--secondary-text-color);font-size:11px;line-height:1.4}.background-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding-top:9px;margin-top:7px;border-top:1px solid var(--divider-color)}.background-picker button{display:grid;place-items:center;gap:4px;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none;font-size:11px}.background-picker button.selected{outline:2px solid #16803c;outline-offset:-2px}.color-swatch{width:24px;height:20px;border:1px solid #7f7f7f;border-radius:4px}.color-swatch.white{background:#fff}.color-swatch.black{background:#000}.color-swatch.red{background:#d41414}
         .workspace-card{padding:0;overflow:hidden}.canvas-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--divider-color);background:var(--card-background-color)}.canvas-meta{display:flex;align-items:center;gap:8px;color:var(--secondary-text-color);font-size:12px}.workspace{min-height:590px;overflow:auto;display:grid;place-items:center;background:linear-gradient(45deg,rgba(127,127,127,.08) 25%,transparent 25%),linear-gradient(-45deg,rgba(127,127,127,.08) 25%,transparent 25%);background-size:18px 18px;border:0;padding:34px}
@@ -2097,11 +2167,13 @@ class DratekEinkPanel extends HTMLElement {
         @media(max-width:980px){.display-grid.density-list .display-tile{grid-template-columns:minmax(210px,1fr) minmax(260px,1.2fr);grid-template-rows:auto auto}.display-grid.density-list .display-tile-header{grid-column:1;grid-row:1}.display-grid.density-list .display-health{grid-column:2;grid-row:1}.display-grid.density-list .display-tile-actions,.display-grid.density-list .display-name-edit{grid-column:1/-1;grid-row:2}}
         @media(max-width:620px){.display-grid.density-list .display-tile{grid-template-columns:1fr;grid-template-rows:auto}.display-grid.density-list .display-tile-header,.display-grid.density-list .display-health,.display-grid.density-list .display-tile-actions,.display-grid.density-list .display-name-edit{grid-column:1;grid-row:auto}.display-grid.density-list .display-tile-actions{grid-template-columns:1fr}.display-grid.density-compact .display-tile-header{grid-template-columns:auto minmax(0,1fr)}.display-health{grid-template-columns:1fr 1fr}}
         :host{--dratek-teal:#00a2a5;--dratek-teal-dark:#007f83;--dratek-orange:#ff6b00;--dratek-orange-dark:#d95700;--dratek-ink:#172033;--primary-color:var(--dratek-teal);--accent-color:var(--dratek-orange)}
-        .page{background:linear-gradient(145deg,rgba(0,162,165,.045),transparent 34%,rgba(255,107,0,.035));border-radius:18px}.topbar{border-top:4px solid var(--dratek-teal);border-radius:12px}.brand h1{color:var(--dratek-teal-dark)}.logo{position:relative;background:var(--dratek-teal);border-radius:10px}.logo:after{content:"";position:absolute;right:-4px;bottom:6px;width:9px;height:9px;border-radius:50%;background:var(--dratek-orange);box-shadow:0 0 0 3px var(--card-background-color)}.version-badge{border-color:rgba(255,107,0,.35);background:rgba(255,107,0,.1);color:var(--dratek-orange-dark)}button{background:var(--dratek-teal)}.primary-action,.ribbon-tab.menu-tab,.ribbon-tab.menu-tab.active,.subtab.active{background:var(--dratek-teal);border-color:var(--dratek-teal)}.ribbon-tab.menu-tab:hover,.subtab.active:hover{background:var(--dratek-teal-dark)}.ribbon-send{background:var(--dratek-orange);border-color:var(--dratek-orange)}.ribbon-send:hover:not(:disabled){background:var(--dratek-orange-dark)}.tab.active{background:var(--dratek-teal)}.status-icon,.file-action ha-icon,.route ha-icon,.queue-stat ha-icon,.inspector-section-title ha-icon,.inspector-object-icon,.toggle-card>ha-icon,.format-help ha-icon,.device-status-item>ha-icon,.display-health-item>ha-icon{color:var(--dratek-teal)}.route.preferred,.display-tile.selected,.layer-row.selected,.color-option.selected{border-color:var(--dratek-teal)}.layer-row.selected{background:rgba(0,162,165,.09);box-shadow:inset 3px 0 0 var(--dratek-teal)}.color-option.selected{background:rgba(0,162,165,.08);box-shadow:inset 0 0 0 1px var(--dratek-teal)}.layout-btn.active,.layout-menu-button.active{background:var(--dratek-teal);border-color:var(--dratek-teal)}.menu-command ha-icon{color:var(--dratek-teal)}.menu-command.selected{background:rgba(0,162,165,.09);border-color:var(--dratek-teal)}.display-resolution,.resolution-chip{border-color:rgba(0,162,165,.3);background:rgba(0,162,165,.08);color:var(--dratek-teal-dark)}.display-online-dot{background:var(--dratek-teal);box-shadow:0 0 0 4px rgba(0,162,165,.14)}.signal-bars.level-2 .on{background:var(--dratek-orange)}.signal-bars.level-3 .on,.signal-bars.level-4 .on,.battery.high span{background:var(--dratek-teal)}.battery.medium span{background:var(--dratek-orange)}.signal-value.good-signal{color:var(--dratek-teal-dark)}.signal-value.warn-signal{color:var(--dratek-orange-dark)}
+        .page{background:linear-gradient(145deg,rgba(0,162,165,.045),transparent 34%,rgba(255,107,0,.035));border-radius:18px}.topbar{border-top:4px solid var(--dratek-teal);border-radius:12px}.brand h1{color:var(--dratek-teal-dark)}.version-badge{border-color:rgba(255,107,0,.35);background:rgba(255,107,0,.1);color:var(--dratek-orange-dark)}button{background:var(--dratek-teal)}.primary-action,.ribbon-tab.menu-tab,.ribbon-tab.menu-tab.active,.subtab.active{background:var(--dratek-teal);border-color:var(--dratek-teal)}.ribbon-tab.menu-tab:hover,.subtab.active:hover{background:var(--dratek-teal-dark)}.ribbon-send{background:var(--dratek-orange);border-color:var(--dratek-orange)}.ribbon-send:hover:not(:disabled){background:var(--dratek-orange-dark)}.tab.active{background:var(--dratek-teal)}.status-icon,.file-action ha-icon,.route ha-icon,.queue-stat ha-icon,.inspector-section-title ha-icon,.inspector-object-icon,.toggle-card>ha-icon,.format-help ha-icon,.device-status-item>ha-icon,.display-health-item>ha-icon{color:var(--dratek-teal)}.route.preferred,.display-tile.selected,.layer-row.selected,.color-option.selected{border-color:var(--dratek-teal)}.layer-row.selected{background:rgba(0,162,165,.09);box-shadow:inset 3px 0 0 var(--dratek-teal)}.color-option.selected{background:rgba(0,162,165,.08);box-shadow:inset 0 0 0 1px var(--dratek-teal)}.layout-btn.active,.layout-menu-button.active{background:var(--dratek-teal);border-color:var(--dratek-teal)}.menu-command ha-icon{color:var(--dratek-teal)}.menu-command.selected{background:rgba(0,162,165,.09);border-color:var(--dratek-teal)}.display-resolution,.resolution-chip{border-color:rgba(0,162,165,.3);background:rgba(0,162,165,.08);color:var(--dratek-teal-dark)}.display-online-dot{background:var(--dratek-teal);box-shadow:0 0 0 4px rgba(0,162,165,.14)}.signal-bars.level-2 .on{background:var(--dratek-orange)}.signal-bars.level-3 .on,.signal-bars.level-4 .on,.battery.high span{background:var(--dratek-teal)}.battery.medium span{background:var(--dratek-orange)}.signal-value.good-signal{color:var(--dratek-teal-dark)}.signal-value.warn-signal{color:var(--dratek-orange-dark)}
         .editor-shell{grid-template-columns:230px minmax(0,1fr) 320px;grid-template-areas:"tools canvas inspector" "layers canvas inspector";gap:14px;align-items:start}.editor-shell>.left{grid-area:tools}.editor-shell>.workspace-card{grid-area:canvas;min-width:0}.editor-shell>.properties-panel{grid-area:inspector}.editor-shell>.layers-panel{grid-area:layers}.editor-shell>.left,.editor-shell>.properties-panel{position:sticky;top:12px}.editor-shell>.layers-panel{position:static}.workspace-card{border-radius:13px;border-color:rgba(0,162,165,.22)}.canvas-head{border-bottom-color:rgba(0,162,165,.2);background:linear-gradient(90deg,rgba(0,162,165,.08),rgba(255,107,0,.055))}.canvas-meta ha-icon{color:var(--dratek-teal)}.workspace{min-width:0;padding:32px;overflow:auto;background:linear-gradient(45deg,rgba(0,162,165,.055) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,107,0,.045) 25%,transparent 25%);background-size:20px 20px}.designer-device-bezel{position:relative;display:inline-block;flex:0 0 auto;padding:var(--designer-frame-y) var(--designer-frame-x);border:8px solid #eee8e8;border-radius:18px;background:#fff;box-shadow:0 18px 46px rgba(23,32,51,.2),inset 0 0 0 1px rgba(0,0,0,.045)}.designer-device-screen{position:relative;overflow:hidden;border:1px solid rgba(0,0,0,.22);background:#fff;box-shadow:inset 0 0 5px rgba(0,0,0,.13)}.designer-device-screen canvas{display:block;background:#fff;box-shadow:none}.designer-device-code{position:absolute;z-index:2;left:calc(var(--designer-frame-x) * .26);top:50%;color:#111;font:700 clamp(7px,1vw,11px)/1 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.025em;writing-mode:vertical-rl;transform:translateY(-50%) rotate(180deg);white-space:nowrap;pointer-events:none}
+        .rgb-led-card{padding:13px 16px;border-color:rgba(0,162,165,.24);background:linear-gradient(100deg,rgba(0,162,165,.07),var(--card-background-color) 36%,rgba(255,107,0,.045))}.rgb-led-heading,.rgb-led-title,.rgb-led-controls,.led-color-row,.led-result{display:flex;align-items:center}.rgb-led-heading{justify-content:space-between;gap:12px;margin-bottom:12px}.rgb-led-title{gap:10px;min-width:0}.rgb-led-title h2{margin:0;font-size:15px}.rgb-led-title small{display:block;margin-top:2px;color:var(--secondary-text-color);font-size:11px}.rgb-led-icon{width:38px;height:38px;display:grid;place-items:center;flex:0 0 auto;border-radius:10px;background:color-mix(in srgb,var(--led-color) 18%,var(--card-background-color));color:var(--led-color);border:1px solid color-mix(in srgb,var(--led-color) 46%,var(--divider-color));text-shadow:0 0 8px var(--led-color)}.rgb-led-icon ha-icon{--mdc-icon-size:24px}.rgb-led-controls{display:grid;grid-template-columns:minmax(230px,1fr) minmax(280px,1.25fr) minmax(210px,.85fr) auto;gap:12px;align-items:end}.rgb-led-controls>.field{margin:0}.led-mode-control .segment-button{display:flex;align-items:center;justify-content:center;gap:5px}.led-mode-control .segment-button span{font-size:11px}.led-color-row{gap:9px}.led-color-row input[type=color]{width:48px;height:38px;flex:0 0 auto;padding:3px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color)}.led-presets{display:flex;flex-wrap:wrap;gap:5px}.led-preset{width:25px;min-width:25px;height:25px;min-height:25px;padding:0;border:2px solid var(--card-background-color);border-radius:50%;background:var(--preset);box-shadow:0 0 0 1px var(--divider-color)}.led-preset:hover:not(:disabled){transform:scale(1.08);background:var(--preset)}.led-preset.selected{box-shadow:0 0 0 2px var(--dratek-teal)}.led-flash-field input{width:100%;accent-color:var(--dratek-orange)}.led-flash-field label{display:flex;justify-content:space-between}.rgb-led-apply{min-height:39px;white-space:nowrap}.led-result{gap:5px;font-size:11px;font-weight:750}.led-result ha-icon{--mdc-icon-size:18px}.led-result.good{color:#16803c}.led-result.bad{color:#c62828}
         @media(max-width:1280px){.editor-shell{grid-template-columns:210px minmax(0,1fr) 285px;gap:10px}.workspace{padding:24px}.editor-shell>.properties-panel{max-height:none}}
+        @media(max-width:1120px){.rgb-led-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.rgb-led-apply{justify-self:start}}
         @media(max-width:980px){.editor-shell{grid-template-columns:210px minmax(0,1fr);grid-template-areas:"tools canvas" "layers canvas" "inspector inspector"}.editor-shell>.left,.editor-shell>.properties-panel{position:static}.properties-panel{max-height:none}.workspace{min-height:430px}}
-        @media(max-width:720px){.page{padding:10px}.editor-shell{grid-template-columns:1fr;grid-template-areas:"canvas" "tools" "inspector" "layers"}.workspace-card{order:0}.workspace{min-height:330px;padding:18px}.designer-device-bezel{border-width:6px;border-radius:13px}.canvas-head{align-items:flex-start;flex-direction:column}.designer-context{flex-wrap:wrap}.ribbon-send{order:2}.ribbon-project{width:100%;order:3}}
+        @media(max-width:720px){.page{padding:10px}.editor-shell{grid-template-columns:1fr;grid-template-areas:"canvas" "tools" "inspector" "layers"}.workspace-card{order:0}.workspace{min-height:330px;padding:18px}.designer-device-bezel{border-width:6px;border-radius:13px}.canvas-head{align-items:flex-start;flex-direction:column}.designer-context{flex-wrap:wrap}.ribbon-send{order:2}.ribbon-project{width:100%;order:3}.rgb-led-heading{align-items:flex-start;flex-direction:column}.rgb-led-controls{grid-template-columns:1fr}.rgb-led-apply{width:100%}}
         :host{--dratek-teal:#009999;--dratek-teal-dark:#007a7a;--dratek-orange:#ff6600;--dratek-orange-dark:#d95700}
         .battery-segments{position:relative;display:grid;grid-template-columns:repeat(4,5px);align-items:center;gap:2px;box-sizing:border-box;height:24px;padding:3px 5px;border:2px solid var(--divider-color);border-radius:5px;color:var(--divider-color);flex:0 0 auto;transition:border-color .18s ease,color .18s ease}.battery-segments:after{content:"";position:absolute;right:-5px;top:50%;width:3px;height:9px;border-radius:0 2px 2px 0;background:currentColor;transform:translateY(-50%)}.battery-segments span{display:block;width:5px;height:12px;border-radius:1px;background:var(--divider-color);transition:background .18s ease,box-shadow .18s ease}.battery-segments.level-1{border-color:#dc2626;color:#dc2626}.battery-segments.level-1 .on{background:#dc2626}.battery-segments.level-2{border-color:var(--dratek-orange);color:var(--dratek-orange)}.battery-segments.level-2 .on{background:var(--dratek-orange)}.battery-segments.level-3{border-color:#eab308;color:#eab308}.battery-segments.level-3 .on{background:#eab308}.battery-segments.level-4{border-color:#16a34a;color:#16a34a}.battery-segments.level-4 .on{background:#16a34a}.battery-segments .on,.signal-bars .on{box-shadow:0 0 5px color-mix(in srgb,currentColor 36%,transparent)}
         .signal-bars.level-1{color:#dc2626}.signal-bars.level-1 .on{background:#dc2626}.signal-bars.level-2{color:var(--dratek-orange)}.signal-bars.level-2 .on{background:var(--dratek-orange)}.signal-bars.level-3{color:#eab308}.signal-bars.level-3 .on{background:#eab308}.signal-bars.level-4{color:#16a34a}.signal-bars.level-4 .on{background:#16a34a}
@@ -2111,10 +2183,15 @@ class DratekEinkPanel extends HTMLElement {
         @media(max-width:620px){.connection-map-card{padding:14px}.connection-map-card>.section-title{display:grid;gap:8px}.connection-group{grid-template-columns:1fr;padding:11px}.connection-bus{height:28px;min-height:28px}.connection-bus:before{left:50%;right:auto;top:0;bottom:0;width:2px;height:auto;background:linear-gradient(180deg,var(--dratek-teal),var(--dratek-orange));transform:translateX(-50%)}.connection-bus span{right:auto;left:50%;top:auto;bottom:-5px;transform:translateX(-50%)}.connection-devices:before{left:10px;top:-5px;bottom:auto;width:calc(100% - 20px);height:2px}.connection-device:before{left:10px;top:-12px;width:2px;height:12px}.connection-device-signal{grid-column:1/-1;margin-left:44px}}
         .display-tile[data-device-card-open]{cursor:pointer;outline:none}.display-tile[data-device-card-open]:hover{border-color:#168fe0;box-shadow:0 0 0 2px rgba(22,143,224,.17),0 16px 40px rgba(15,23,42,.13)}.display-tile[data-device-card-open]:focus-visible{border-color:#168fe0;box-shadow:0 0 0 3px rgba(22,143,224,.28),0 16px 40px rgba(15,23,42,.13)}.display-tile.selected{border-color:#168fe0;box-shadow:0 0 0 2px rgba(22,143,224,.18),0 14px 38px rgba(15,23,42,.12)}.display-tile[data-device-card-open] button,.display-tile[data-device-card-open] input{cursor:auto}.display-tile[data-device-card-open] button{cursor:pointer}
         .display-health-item.display-battery-item,.display-health-item.display-signal-item{display:grid;grid-template-rows:auto 24px auto;place-items:center;align-content:center;gap:6px;text-align:center}.display-battery-item>small,.display-signal-item>small{display:block;color:var(--secondary-text-color);font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}.display-battery-item>strong,.display-signal-item>strong{display:block;margin:0;font-size:11px;white-space:nowrap}.display-battery-item>.battery-segments,.display-signal-item>.signal-bars{justify-self:center}.display-grid.density-compact .display-battery-item>small,.display-grid.density-compact .display-signal-item>small{display:block}.display-grid.density-compact .display-battery-item,.display-grid.density-compact .display-signal-item{gap:4px}
+        .connection-group{grid-template-columns:minmax(210px,260px) 72px minmax(0,1fr)}.connection-bus{min-height:58px}.connection-bus:before{left:0;right:0;top:50%;width:auto;height:2px;transform:translateY(-50%)}.connection-bus span{right:-6px;top:50%;bottom:auto;left:auto;transform:translateY(-50%)}.connection-devices{padding-left:28px}.connection-devices:before{left:0;top:29px;bottom:29px;width:2px;height:auto}.connection-devices:after{display:none}.connection-device:before{left:-28px;top:50%;width:28px;height:2px}.connection-device:after{content:"";position:absolute;left:-32px;top:50%;width:8px;height:8px;border:2px solid var(--dratek-orange);border-radius:50%;background:var(--card-background-color);transform:translateY(-50%)}
+        @media(max-width:900px) and (min-width:621px){.connection-group{grid-template-columns:minmax(190px,230px) 56px minmax(0,1fr)}.connection-devices{padding-left:22px}.connection-device:before{left:-22px;width:22px}.connection-device:after{left:-26px}}
+        @media(max-width:620px){.connection-group{grid-template-columns:1fr}.connection-bus{height:36px;min-height:36px}.connection-bus:before{left:50%;right:auto;top:0;bottom:0;width:2px;height:auto;transform:translateX(-50%)}.connection-bus span{right:auto;left:50%;top:auto;bottom:-6px;transform:translateX(-50%)}.connection-devices{padding:24px 0 0 24px}.connection-devices:before{left:0;top:0;bottom:29px;width:2px;height:auto}.connection-devices:after{content:"";position:absolute;display:block;left:0;top:0;width:50%;height:2px;background:var(--dratek-orange)}.connection-device:before{left:-24px;top:50%;width:24px;height:2px}.connection-device:after{left:-28px}}
+        .device-preview-pe29 .device-preview-identification{position:absolute;z-index:2;right:2.1%;top:10%;bottom:10%;width:8.4%;display:grid;grid-template-columns:max-content minmax(6px,1fr);align-items:center;justify-content:center;gap:2px}.device-preview-pe29 .device-preview-identification .device-preview-code{position:static;left:auto;right:auto;top:auto;font-size:clamp(6px,1.15vw,10px);writing-mode:vertical-rl;transform:rotate(180deg)}.device-preview-barcode{display:block;width:100%;height:88%;min-width:6px;overflow:visible;background:#fff;shape-rendering:crispEdges}.device-preview-barcode rect{fill:#111}
+        .designer-device-pe29 .designer-device-identification{position:absolute;z-index:3;right:calc(var(--designer-frame-x) * .16);top:var(--designer-frame-y);bottom:var(--designer-frame-y);width:calc(var(--designer-frame-x) * .68);display:grid;grid-template-columns:max-content minmax(8px,1fr);align-items:center;justify-content:center;gap:4px}.designer-device-pe29 .designer-device-identification .designer-device-code{position:static;left:auto;right:auto;top:auto;font-size:clamp(7px,1vw,11px);writing-mode:vertical-rl;transform:rotate(180deg)}.designer-device-identification .device-preview-barcode{height:88%}
       </style>
       <div class="page">
         <div class="topbar">
-          <div class="brand"><div class="logo">DE</div><div><h1>DRATEK eInk <span class="version-badge">v${DRATEK_EINK_VERSION}</span></h1><div class="subtitle">Editor sablon, BLE diagnostika a sprava displeju</div></div></div>
+          <div class="brand"><img class="extension-logo" src="/dratek_eink_static/dratek-eink-logo.png?v=${DRATEK_EINK_VERSION}" alt="DRATEK.CZ eInk"><div><h1>DRATEK eInk <span class="version-badge">v${DRATEK_EINK_VERSION}</span></h1><div class="subtitle">Editor sablon, BLE diagnostika a sprava displeju</div></div></div>
         </div>
         <div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezene displeje</button><button class="tab ${this._activeTab === "designer" ? "active" : ""}" data-tab="designer" ${device ? "" : "disabled"} title="${device ? "Otevřít designer" : "Nejprve vyberte displej"}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Designer</button><button class="tab ${this._activeTab === "queue" ? "active" : ""}" data-tab="queue"><ha-icon icon="mdi:tray-full"></ha-icon>Fronta zapisu${this._queue.queued || this._queue.writing ? `<span class="pill warn">${this._queue.queued + this._queue.writing}</span>` : ""}</button><button class="tab ${this._activeTab === "gateways" ? "active" : ""}" data-tab="gateways"><ha-icon icon="mdi:router-wireless"></ha-icon>Gatewaye</button></div>
         <div style="${this._activeTab === "devices" ? "" : "display:none"}">
@@ -2126,9 +2203,10 @@ class DratekEinkPanel extends HTMLElement {
         <div class="card designer-context"><div class="display-identity"><div class="status-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></div><div><strong>${this._escape(this._deviceTitle(device))}</strong><span>${device ? this._escape(device.address) : "Vyber displej v karte Nalezene displeje"}</span></div></div><span class="resolution-chip"><ha-icon icon="mdi:resize"></ha-icon>${size.width} x ${size.height}</span></div>
         <div class="card ribbon"><button id="fileMenuToggle" class="ribbon-tab menu-tab ${this._fileMenuOpen ? "active" : ""}"><ha-icon icon="mdi:file-outline"></ha-icon>Soubor</button><button id="variablesDialogOpen" class="ribbon-tab menu-tab"><ha-icon icon="mdi:variable"></ha-icon>Promenne</button><button id="layoutMenuToggle" class="ribbon-tab menu-tab ${this._layoutMenuOpen ? "active" : ""}"><ha-icon icon="mdi:page-layout-body"></ha-icon>Rozlozeni</button><button id="toolsMenuToggle" class="ribbon-tab menu-tab ${this._toolsMenuOpen ? "active" : ""}"><ha-icon icon="mdi:palette-outline"></ha-icon>Pozadi</button><button id="viewMenuToggle" class="ribbon-tab menu-tab ${this._viewMenuOpen ? "active" : ""}"><ha-icon icon="mdi:eye-outline"></ha-icon>Zobrazeni</button><button id="sendDesign" class="ribbon-send" ${!device || this._sending ? "disabled" : ""}><ha-icon icon="mdi:upload"></ha-icon>${this._sending ? "Odesilam..." : "Odeslat navrh"}</button><span class="ribbon-project">${this._escape(this._projectName)}</span>${this._renderFileMenu()}${this._renderViewMenu()}${this._renderToolsMenu()}${this._renderLayoutMenu(device)}</div>
         ${this._renderSendResult()}
+        ${this._renderRgbLedControl(device)}
         <div class="editor-shell">
           ${this._renderToolSidebar()}
-          <div class="card workspace-card"><div class="canvas-head"><div class="canvas-meta"><ha-icon icon="mdi:checkerboard"></ha-icon><strong>${size.width} x ${size.height}</strong><span>${this._orientation === "portrait" ? "Na výšku" : "Na šířku"}</span></div><div class="canvas-meta"><span>Zoom ${Math.round(this._zoom * 100)}%</span><span>Reálné barvy eInk</span></div></div><div class="workspace"><div class="designer-device-bezel" style="--designer-frame-x:${designerFrameX}px;--designer-frame-y:${designerFrameY}px"><span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span><div class="designer-device-screen"><canvas id="editor" width="${size.width}" height="${size.height}" style="width:${designerScreenWidth}px;height:${designerScreenHeight}px"></canvas></div></div></div></div>
+          <div class="card workspace-card"><div class="canvas-head"><div class="canvas-meta"><ha-icon icon="mdi:checkerboard"></ha-icon><strong>${size.width} x ${size.height}</strong><span>${this._orientation === "portrait" ? "Na výšku" : "Na šířku"}</span></div><div class="canvas-meta"><span>Zoom ${Math.round(this._zoom * 100)}%</span><span>Reálné barvy eInk</span></div></div><div class="workspace"><div class="designer-device-bezel ${this._isPe29Device(device) ? "designer-device-pe29" : ""}" style="--designer-frame-x:${designerFrameX}px;--designer-frame-y:${designerFrameY}px">${this._isPe29Device(device) ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>${this._renderDeviceBarcode(device?.physical_code || "00.00.00.00")}</span>` : `<span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>`}<div class="designer-device-screen"><canvas id="editor" width="${size.width}" height="${size.height}" style="width:${designerScreenWidth}px;height:${designerScreenHeight}px"></canvas></div></div></div></div>
           <div class="card right properties-panel"><div class="section-title inspector-title"><div class="inspector-title-main"><span class="inspector-object-icon"><ha-icon icon="${object ? this._objectIcon(object) : "mdi:tune-variant"}"></ha-icon></span><div><h2>Inspector</h2><small>${object ? this._escape(this._objectLabel(object, this._objects.indexOf(object))) : "Vlastnosti objektu"}</small></div></div><span class="pill muted">${object ? this._escape(object.type) : "bez výběru"}</span></div>${this._renderProperties(object)}</div>
           ${this._renderLayersPanel()}
         </div>
@@ -2642,6 +2720,35 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-device-name-cancel]").forEach((button) => button.addEventListener("click", () => { this._editingDeviceAddress = ""; this._deviceNameDraft = ""; this._render(); this._paint(); }));
     this.shadowRoot.querySelector("#sendDesign").addEventListener("click", () => this._sendDesign());
     this.shadowRoot.querySelector("#sendGatewayDesign")?.addEventListener("click", () => this._sendDesignViaGateway());
+    this.shadowRoot.querySelector("#applyRgbLed")?.addEventListener("click", () => this._applyRgbLed());
+    this.shadowRoot.querySelectorAll("[data-led-mode]").forEach((button) => button.addEventListener("click", () => {
+      this._rgbLed.mode = button.dataset.ledMode;
+      this._ledResult = null;
+      this._scheduleDraftSave();
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelectorAll("[data-led-color]").forEach((button) => button.addEventListener("click", () => {
+      this._rgbLed.color = button.dataset.ledColor;
+      this._ledResult = null;
+      this._scheduleDraftSave();
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelector("#rgbLedColor")?.addEventListener("input", (event) => {
+      this._rgbLed.color = event.target.value;
+      this._ledResult = null;
+      this._scheduleDraftSave();
+      const icon = this.shadowRoot.querySelector(".rgb-led-icon");
+      if (icon) icon.style.setProperty("--led-color", this._rgbLed.color);
+    });
+    this.shadowRoot.querySelector("#rgbLedFlashTime")?.addEventListener("input", (event) => {
+      this._rgbLed.flashTime = Math.max(1, Math.min(255, Number(event.target.value) || 10));
+      this._ledResult = null;
+      this._scheduleDraftSave();
+      const value = event.target.closest(".field")?.querySelector("label strong");
+      if (value) value.textContent = String(this._rgbLed.flashTime);
+    });
     this.shadowRoot.querySelector("#fileMenuToggle")?.addEventListener("click", () => { this._fileMenuOpen = !this._fileMenuOpen; this._viewMenuOpen = false; this._toolsMenuOpen = false; this._layoutMenuOpen = false; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#fileMenuClose")?.addEventListener("click", () => { this._fileMenuOpen = false; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#viewMenuToggle")?.addEventListener("click", () => { this._viewMenuOpen = !this._viewMenuOpen; this._fileMenuOpen = false; this._toolsMenuOpen = false; this._layoutMenuOpen = false; this._render(); this._paint(); });
@@ -3541,6 +3648,41 @@ class DratekEinkPanel extends HTMLElement {
     return { width: sourceWidth, height: sourceHeight, draft };
   }
 
+  _renderDeviceBarcode(value) {
+    const patterns = [
+      "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
+      "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
+      "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211",
+      "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313",
+      "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331",
+      "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111",
+      "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214",
+      "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111",
+      "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141",
+      "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141",
+      "114131", "311141", "411131", "211412", "211214", "211232", "2331112",
+    ];
+    const text = String(value || "00.00.00.00");
+    const dataCodes = [...text].map((character) => {
+      const code = character.charCodeAt(0);
+      return code >= 32 && code <= 126 ? code - 32 : 0;
+    });
+    const startCode = 104;
+    const checksum = (startCode + dataCodes.reduce((sum, code, index) => sum + code * (index + 1), 0)) % 103;
+    const symbols = [startCode, ...dataCodes, checksum, 106];
+    let offset = 10;
+    const bars = [];
+    symbols.forEach((symbol) => {
+      [...patterns[symbol]].forEach((moduleWidth, index) => {
+        const width = Number(moduleWidth);
+        if (index % 2 === 0) bars.push(`<rect x="0" y="${offset}" width="54" height="${width}"></rect>`);
+        offset += width;
+      });
+    });
+    const totalHeight = offset + 10;
+    return `<svg class="device-preview-barcode" viewBox="0 0 54 ${totalHeight}" preserveAspectRatio="none" role="img" aria-label="Čárový kód ${this._escape(text)}">${bars.join("")}</svg>`;
+  }
+
   _renderDevicePreview(device, mode = "full") {
     const address = String(device.address || "").toUpperCase();
     const { width: sourceWidth, height: sourceHeight, draft } = this._devicePreviewSize(device);
@@ -3558,9 +3700,11 @@ class DratekEinkPanel extends HTMLElement {
     const canvasHeight = Math.max(28, Math.round(sourceHeight * scale));
     const frameRatio = Math.max(0.48, Math.min(3.7, (sourceWidth / sourceHeight) / 0.95));
     const previewWidth = Math.max(sizing.minWidth, Math.min(sizing.maxWidth, Math.round(sizing.targetHeight * frameRatio)));
+    const pe29Layout = this._isPe29Device(device);
+    const physicalCode = device.physical_code || "00.00.00.00";
     return `<div class="device-preview-wrap preview-${previewMode}">
-      <div class="device-preview-bezel" style="--frame-ratio:${frameRatio.toFixed(4)};--preview-width:${previewWidth}px" title="Náhled ${this._escape(sourceWidth)} × ${this._escape(sourceHeight)}">
-        <span class="device-preview-code">${this._escape(device.physical_code || "00.00.00.00")}</span>
+      <div class="device-preview-bezel ${pe29Layout ? "device-preview-pe29" : ""}" style="--frame-ratio:${frameRatio.toFixed(4)};--preview-width:${previewWidth}px" title="Náhled ${this._escape(sourceWidth)} × ${this._escape(sourceHeight)}">
+        ${pe29Layout ? `<span class="device-preview-identification"><span class="device-preview-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode)}</span>` : `<span class="device-preview-code">${this._escape(physicalCode)}</span>`}
         <div class="device-preview-screen">
           <canvas data-device-preview="${this._escape(address)}" data-source-width="${sourceWidth}" data-source-height="${sourceHeight}" width="${canvasWidth}" height="${canvasHeight}"></canvas>
           ${draft ? "" : `<div class="device-preview-empty"><span><ha-icon icon="mdi:image-outline"></ha-icon>Prázdný návrh</span></div>`}
@@ -3571,7 +3715,7 @@ class DratekEinkPanel extends HTMLElement {
 
   _renderDeviceCards(devices, selectedAddress) {
     if (!devices.length) {
-      return `<div class="empty-state"><div class="empty-icon">DE</div><h2>${this._loading ? "Hledám displeje v okolí" : "V okolí zatím není žádný displej"}</h2><p>${this._loading ? "Scan se spustil automaticky po otevření panelu." : "Hledání můžeš kdykoliv zopakovat tlačítkem Obnovit."}</p></div>`;
+      return `<div class="empty-state"><img class="empty-logo" src="/dratek_eink_static/dratek-eink-logo.png?v=${DRATEK_EINK_VERSION}" alt="DRATEK.CZ eInk"><h2>${this._loading ? "Hledám displeje v okolí" : "V okolí zatím není žádný displej"}</h2><p>${this._loading ? "Scan se spustil automaticky po otevření panelu." : "Hledání můžeš kdykoliv zopakovat tlačítkem Obnovit."}</p></div>`;
     }
     const mode = this._effectiveViewMode(this._deviceViewMode, devices.length);
     return `<div class="display-grid density-${mode}">${devices.map((device) => {

@@ -84,6 +84,7 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_send_text)
     websocket_api.async_register_command(hass, websocket_send_design)
     websocket_api.async_register_command(hass, websocket_send_partial_design)
+    websocket_api.async_register_command(hass, websocket_set_rgb_led)
     websocket_api.async_register_command(hass, websocket_list_projects)
     websocket_api.async_register_command(hass, websocket_save_project)
     websocket_api.async_register_command(hass, websocket_load_project)
@@ -108,6 +109,56 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_start_gateway_ota)
     websocket_api.async_register_command(hass, websocket_gateway_ota_job)
     websocket_api.async_register_command(hass, websocket_transfer_queue)
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/set_rgb_led",
+        "address": str,
+        "mode": vol.All(int, vol.Range(min=0, max=2)),
+        "flash_time": vol.All(int, vol.Range(min=0, max=255)),
+        "red": vol.All(int, vol.Range(min=0, max=255)),
+        "green": vol.All(int, vol.Range(min=0, max=255)),
+        "blue": vol.All(int, vol.Range(min=0, max=255)),
+    }
+)
+@websocket_api.async_response
+async def websocket_set_rgb_led(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Control the RGB indicator LED over the display's local BLE connection."""
+    address = msg["address"]
+
+    async def run_transfer(add_log) -> dict[str, Any]:
+        transfer = DratekTransfer(log=add_log, hass=hass)
+        await transfer.set_rgb_led(
+            address,
+            msg["mode"],
+            msg["flash_time"],
+            msg["red"],
+            msg["green"],
+            msg["blue"],
+        )
+        return {"ok": True, "address": address, "log": []}
+
+    try:
+        result = await get_transfer_queue(hass).async_submit(
+            resource="local",
+            transport_type="local",
+            transport_name="Home Assistant Bluetooth",
+            address=address,
+            operation="rgb_led",
+            runner=run_transfer,
+        )
+    except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
+        connection.send_result(
+            msg["id"],
+            {"ok": False, "address": address, "error": str(exc), "log": []},
+        )
+        return
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.websocket_command({"type": "dratek_eink/scan"})

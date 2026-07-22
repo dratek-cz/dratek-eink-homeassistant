@@ -1,5 +1,15 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.63
+
+- mapa připojení má opravené větvení spojnic mezi jednou gatewayí a všemi jejími displeji
+- fyzický náhled modelů 296 × 128 zobrazuje svislou adresu a skutečný Code 128 čárový kód na pravé straně rámečku
+- stejné rozložení adresy a čárového kódu je použité také kolem pracovní plochy designeru
+- designer obsahuje funkční ovládání RGB diody: vypnutí, trvalé svícení, blikání, vlastní barvu a barevné předvolby
+- nastavení RGB diody se ukládá samostatně pro každý displej a odesílá se příkazem výrobního SDK `0x30`
+- nové logo DRATEK.CZ eInk nahradilo původní značku DE v záhlaví a v prázdném stavu vyhledávání
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.62
 
 - model EPA LCD 296x128 1 BWR se SDK typem 51 používá potvrzovaný GATT zápis každého obrazového bloku
