@@ -1,4 +1,15 @@
+<p align="center">
+  <img src="custom_components/dratek_eink/frontend/dratek-eink-logo.png" alt="DRATEK.CZ eInk" width="360">
+</p>
+
 # DRATEK eInk pro Home Assistant
+
+## Novinky ve verzi 0.1.67
+
+- nové logo DRATEK.CZ eInk je viditelně použité také v záhlaví repozitáře na GitHubu
+- původní brand ikony integrace byly nahrazené stejným logem, které používá panel
+- doplněné jsou světlé, tmavé a dvojnásobné varianty ikon a log pro Home Assistant 2026.3 a novější
+- HACS a obrazovky integrace Home Assistantu tak používají nové logo místo původního tmavého symbolu
 
 ## Novinky ve verzi 0.1.66
 
