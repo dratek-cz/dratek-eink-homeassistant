@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.56";
+const DRATEK_EINK_VERSION = "0.1.57";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -2006,6 +2006,9 @@ class DratekEinkPanel extends HTMLElement {
         .toolbar>.density-toolbar{margin-left:auto}.density-row{display:flex;justify-content:flex-end;margin:10px 0 12px}.density-toolbar{justify-content:flex-end}.device-grid.mode-compact .minimal-card{grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:10px 11px}.device-grid.mode-compact .minimal-card .compact-metrics{grid-column:1/-1}.device-grid.mode-list .minimal-card{grid-template-columns:minmax(220px,1.2fr) minmax(390px,1.8fr) auto;gap:12px;padding:8px 11px}.compact-identity{min-width:0}.compact-identity strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px}.compact-identity span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;color:var(--secondary-text-color);font-size:11px}.compact-metrics{display:flex;align-items:center;gap:12px;min-width:0}.compact-stat{display:flex;align-items:center;gap:6px;min-width:0;font-size:11px;color:var(--secondary-text-color);white-space:nowrap}.compact-stat .signal-bars{height:17px}.compact-stat .signal-bars span{width:5px}.mini-battery{width:42px;height:8px}.compact-route{flex:1}.compact-route span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.compact-open{min-width:34px;min-height:34px;padding:6px}
         @media(max-width:720px){.ribbon-menu{left:8px;right:8px}.density-switch span{display:none}.device-grid.mode-list .device-card{grid-template-columns:1fr auto}.device-grid.mode-list .device-card-details{grid-column:1/-1;grid-template-columns:1fr}.device-grid.mode-list .minimal-card .compact-metrics{grid-column:1/-1;grid-row:2}.compact-metrics{flex-wrap:wrap}.compact-open{grid-column:2;grid-row:1}}
         @media(max-width:720px){.device-grid.mode-list .minimal-card{grid-template-columns:minmax(0,1fr) auto}.device-grid.mode-list .compact-device-preview{grid-column:1/-1;grid-row:auto;min-width:0}.device-grid.mode-list .minimal-card .compact-identity{grid-column:1;grid-row:auto}.device-grid.mode-list .minimal-card .compact-metrics{grid-column:1/-1;grid-row:auto}.device-grid.mode-list .minimal-card .compact-open{grid-column:2;grid-row:2}.device-preview-wrap{min-height:88px}.device-preview-caption{align-items:flex-start;flex-direction:column}}
+        .device-grid{grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px}.device-card{gap:16px;padding:18px;border-radius:14px;background:var(--card-background-color);box-shadow:0 14px 34px rgba(15,23,42,.09);overflow:hidden}.device-card:before{display:none}.device-card:hover{border-color:rgba(22,128,60,.45);box-shadow:0 18px 42px rgba(15,23,42,.13)}.device-card.selected{border-color:#16803c;box-shadow:0 0 0 2px rgba(22,128,60,.14),0 18px 42px rgba(15,23,42,.13)}.device-card-top{align-items:center}.device-card-identity{display:flex;align-items:center;gap:11px;min-width:0}.device-card-identity>div{min-width:0}.device-card-identity strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.device-card-identity span,.device-card-identity small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.device-card-identity small{margin-top:2px;color:var(--secondary-text-color);font-size:10px}.device-card-icon{width:42px;height:42px;display:grid!important;place-items:center;flex:0 0 auto;border-radius:10px;background:rgba(22,128,60,.1);color:#16803c}.device-card-icon ha-icon{--mdc-icon-size:24px}.device-card-resolution{display:inline-flex;align-items:center;gap:5px;flex:0 0 auto;padding:6px 9px;border:1px solid rgba(22,128,60,.28);border-radius:7px;background:rgba(22,128,60,.07);color:#126c33;font-size:11px;font-weight:850;white-space:nowrap}.device-card-resolution ha-icon{--mdc-icon-size:15px}.device-preview-wrap{display:grid;place-items:center;min-height:0;margin:2px 0;padding:0;border-radius:0;background:none}.device-preview-bezel{position:relative;display:block;width:min(100%,var(--preview-width,460px));aspect-ratio:var(--frame-ratio,2.15);padding:0;border:7px solid #eee8e8;border-radius:15px;background:#fff;box-shadow:0 7px 18px rgba(15,23,42,.16),inset 0 0 0 1px rgba(0,0,0,.045)}.device-preview-screen{position:absolute;inset:10% 12%;width:auto;height:auto;overflow:hidden;border:1px solid rgba(0,0,0,.2);background:#fff;box-shadow:inset 0 0 4px rgba(0,0,0,.13)}.device-preview-code{position:absolute;z-index:2;left:3.1%;top:50%;justify-self:auto;color:#111;font:700 clamp(7px,1.2vw,11px)/1 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.025em;writing-mode:vertical-rl;transform:translateY(-50%) rotate(180deg);white-space:nowrap}.device-preview-caption{display:none}.device-preview-empty{font-size:9px}.device-preview-empty ha-icon{--mdc-icon-size:18px}.device-card-details{gap:12px}.device-status-strip{display:grid;grid-template-columns:1.1fr .8fr 1.2fr;gap:7px}.device-status-item{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px;min-width:0;padding:10px;border:1px solid var(--divider-color);border-radius:9px;background:var(--secondary-background-color)}.device-status-item>ha-icon{--mdc-icon-size:21px;color:#16803c}.device-status-item span,.device-status-item strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.device-status-item span{color:var(--secondary-text-color);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}.device-status-item strong{margin-top:2px;font-size:11px}.device-status-item .battery{height:5px;margin-top:6px}.device-actions{display:grid;grid-template-columns:1fr 1.35fr;gap:8px}.device-actions button{width:100%}.compact-device-preview{grid-column:1/-1;min-height:0;padding:0}.compact-device-preview .device-preview-bezel{width:min(100%,300px);padding:0;border-width:5px;border-radius:10px}.compact-device-preview .device-preview-code{left:3%;font-size:6px}.device-grid.mode-compact{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}.device-grid.mode-compact .minimal-card{position:relative;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:13px}.device-grid.mode-compact .minimal-card .compact-identity{grid-column:1;grid-row:1}.device-grid.mode-compact .minimal-card .device-card-resolution{grid-column:2;grid-row:1;align-self:start}.device-grid.mode-compact .minimal-card .compact-device-preview{grid-column:1/-1;grid-row:2}.device-grid.mode-compact .minimal-card .compact-metrics{grid-column:1/-1;grid-row:3}.device-grid.mode-compact .minimal-card .compact-open{grid-column:1/-1;grid-row:4;width:100%}.device-grid.mode-list .minimal-card{grid-template-columns:minmax(210px,.8fr) minmax(220px,1fr) auto;grid-template-rows:auto auto;gap:10px;padding:12px 14px}.device-grid.mode-list .compact-device-preview{grid-column:1;grid-row:1/3;min-width:210px}.device-grid.mode-list .minimal-card .compact-identity{grid-column:2;grid-row:1}.device-grid.mode-list .minimal-card .device-card-resolution{grid-column:3;grid-row:1;align-self:start}.device-grid.mode-list .minimal-card .compact-metrics{grid-column:2;grid-row:2}.device-grid.mode-list .minimal-card .compact-open{grid-column:3;grid-row:2;align-self:end}.device-meta{display:none!important}
+        @media(max-width:720px){.device-grid{grid-template-columns:1fr}.device-card{padding:14px}.device-card-top{align-items:flex-start}.device-card-identity strong{font-size:17px}.device-status-strip{grid-template-columns:1fr}.device-actions{grid-template-columns:1fr}.device-grid.mode-list .minimal-card{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto auto auto}.device-grid.mode-list .compact-device-preview{grid-column:1/-1;grid-row:2;min-width:0}.device-grid.mode-list .minimal-card .compact-identity{grid-column:1;grid-row:1}.device-grid.mode-list .minimal-card .device-card-resolution{grid-column:2;grid-row:1}.device-grid.mode-list .minimal-card .compact-metrics{grid-column:1/-1;grid-row:3}.device-grid.mode-list .minimal-card .compact-open{grid-column:1/-1;grid-row:4;width:100%}}
+        .device-card-top .device-card-icon{display:grid!important;margin-top:0;color:#16803c}.device-card-top .device-card-resolution{display:inline-flex;margin-top:0;color:#126c33}
       </style>
       <div class="page">
         <div class="topbar">
@@ -3377,32 +3380,35 @@ class DratekEinkPanel extends HTMLElement {
     return `<div class="transform-box"><div class="field"><label>Mapování 2,9&quot; displeje</label><select id="displayTransform">${options}</select></div><small>Pokud je obraz na PE29 posunutý, otočený nebo zrcadlený, změňte tuto volbu a návrh znovu odešlete. Volba se ukládá ke konkrétní BLE adrese displeje.</small></div>`;
   }
 
-  _renderDevicePreview(device, compact = false) {
+  _devicePreviewSize(device) {
     const address = String(device.address || "").toUpperCase();
     const draft = this._deviceDrafts[address] || null;
     const base = this._baseDisplaySize(device);
     const portrait = draft?.orientation === "portrait";
     const sourceWidth = Math.max(1, Number(draft?.width || (portrait ? Math.min(base.width, base.height) : Math.max(base.width, base.height))));
     const sourceHeight = Math.max(1, Number(draft?.height || (portrait ? Math.max(base.width, base.height) : Math.min(base.width, base.height))));
+    return { width: sourceWidth, height: sourceHeight, draft };
+  }
+
+  _renderDevicePreview(device, compact = false) {
+    const address = String(device.address || "").toUpperCase();
+    const { width: sourceWidth, height: sourceHeight, draft } = this._devicePreviewSize(device);
     const maxCanvasWidth = compact ? 260 : 420;
     const maxCanvasHeight = compact ? 120 : 240;
     const scale = Math.min(maxCanvasWidth / sourceWidth, maxCanvasHeight / sourceHeight, 1);
     const canvasWidth = Math.max(40, Math.round(sourceWidth * scale));
     const canvasHeight = Math.max(28, Math.round(sourceHeight * scale));
-    const screenRatio = sourceWidth / sourceHeight;
-    const frameRatio = Math.max(0.58, Math.min(3.7, (sourceWidth + sourceHeight * 0.28) / (sourceHeight * 1.15)));
+    const frameRatio = Math.max(0.48, Math.min(3.7, (sourceWidth / sourceHeight) / 0.95));
     const targetHeight = compact ? 104 : 232;
-    const previewWidth = Math.max(compact ? 100 : 138, Math.min(compact ? 300 : 470, Math.round(targetHeight * frameRatio)));
-    const updatedAt = Number(draft?.updated_at || 0);
+    const previewWidth = Math.max(compact ? 88 : 118, Math.min(compact ? 300 : 470, Math.round(targetHeight * frameRatio)));
     return `<div class="device-preview-wrap ${compact ? "compact-device-preview" : ""}">
       <div class="device-preview-bezel" style="--frame-ratio:${frameRatio.toFixed(4)};--preview-width:${previewWidth}px" title="Náhled ${this._escape(sourceWidth)} × ${this._escape(sourceHeight)}">
         <span class="device-preview-code">${this._escape(device.physical_code || "00.00.00.00")}</span>
-        <div class="device-preview-screen" style="aspect-ratio:${screenRatio.toFixed(4)}">
+        <div class="device-preview-screen">
           <canvas data-device-preview="${this._escape(address)}" data-source-width="${sourceWidth}" data-source-height="${sourceHeight}" width="${canvasWidth}" height="${canvasHeight}"></canvas>
           ${draft ? "" : `<div class="device-preview-empty"><span><ha-icon icon="mdi:image-outline"></ha-icon>Prázdný návrh</span></div>`}
         </div>
       </div>
-      <div class="device-preview-caption"><span><ha-icon icon="mdi:monitor-eye"></ha-icon>${draft ? "Aktuální návrh" : "Zatím bez uloženého návrhu"}</span><span>${sourceWidth} × ${sourceHeight}${updatedAt ? ` · ${this._formatTime(updatedAt)}` : ""}</span></div>
     </div>`;
   }
 
@@ -3418,29 +3424,32 @@ class DratekEinkPanel extends HTMLElement {
       const paths = device.paths || [];
       const editing = this._editingDeviceAddress === device.address;
       const preferredPath = paths[0];
+      const previewSize = this._devicePreviewSize(device);
       if (mode === "compact" || mode === "list") {
         return `<div class="device-card minimal-card ${selected ? "selected" : ""}">
+          <div class="compact-identity"><strong>${this._escape(this._deviceTitle(device))}</strong><span>${this._escape(device.model)} · ${this._escape(device.address)}</span></div>
+          <span class="device-card-resolution"><ha-icon icon="mdi:resize"></ha-icon>${previewSize.width} × ${previewSize.height}</span>
           ${this._renderDevicePreview(device, true)}
-          <div class="compact-identity"><strong>${this._escape(this._deviceTitle(device))}</strong><span>${this._escape(device.physical_code)} · ${this._escape(device.model)}</span></div>
           <div class="compact-metrics">
             <div class="compact-stat" title="Baterie CR2450"><ha-icon icon="mdi:battery-medium"></ha-icon><div class="mini-battery battery ${this._batteryClass(battery.percent)}"><span style="width:${this._batteryPercent(battery.percent)}%"></span></div><strong>${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></div>
             <div class="compact-stat" title="Síla signálu">${this._renderSignalBars(rssi)}<strong class="signal-value ${this._signalClass(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>
             <div class="compact-stat compact-route" title="Aktivní cesta"><ha-icon icon="${preferredPath?.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon><span>${this._escape(preferredPath?.name || "Bez dostupné cesty")}</span></div>
           </div>
-          <button class="compact-open" data-select-device="${this._escape(device.address)}" title="Otevřít v designeru"><ha-icon icon="mdi:vector-square-edit"></ha-icon></button>
+          <button class="compact-open" data-select-device="${this._escape(device.address)}" title="Otevřít v designeru"><ha-icon icon="mdi:vector-square-edit"></ha-icon><span>Otevřít</span></button>
         </div>`;
       }
       return `<div class="device-card ${selected ? "selected" : ""}">
-        <div class="device-card-top"><div><strong>${this._escape(this._deviceTitle(device))}</strong><span>${this._escape(device.display_name ? `${device.physical_code} | ${device.address}` : device.address)}</span></div><span class="pill ${selected ? "good" : "muted"}">${selected ? "Vybrano" : this._escape(device.display_name || "Bez nazvu")}</span></div>
+        <div class="device-card-top">
+          <div class="device-card-identity"><span class="device-card-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></span><div><strong>${this._escape(this._deviceTitle(device))}</strong><span>${this._escape(device.model)}</span><small>${this._escape(device.address)}</small></div></div>
+          <span class="device-card-resolution"><ha-icon icon="mdi:resize"></ha-icon>${previewSize.width} × ${previewSize.height}</span>
+        </div>
         ${this._renderDevicePreview(device)}
         <div class="device-card-details">
-        <div class="device-model">${this._escape(device.model)}<br><span>SDK ${this._escape(device.sdk_type)} / raw ${this._escape(device.raw_type)}</span></div>
-        <div class="device-meters">
-          <div class="meter-block" title="Odhad zbývající kapacity CR2450 podle naměřeného napětí"><label>Baterie CR2450</label><div class="battery ${this._batteryClass(battery.percent)}"><span style="width:${this._batteryPercent(battery.percent)}%"></span></div><strong>${Number.isFinite(battery.percent) ? `≈ ${battery.percent} % · ${this._formatBatteryVoltage(battery.voltage)}` : "-"}</strong></div>
-          <div class="meter-block"><label>Signal</label>${this._renderSignalBars(rssi)}<strong>${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>
+        <div class="device-status-strip">
+          <div class="device-status-item" title="Odhad zbývající kapacity CR2450"><ha-icon icon="mdi:battery-medium"></ha-icon><div><span>Baterie</span><strong>${Number.isFinite(battery.percent) ? `${battery.percent} % · ${this._formatBatteryVoltage(battery.voltage)}` : "-"}</strong><div class="battery ${this._batteryClass(battery.percent)}"><span style="width:${this._batteryPercent(battery.percent)}%"></span></div></div></div>
+          <div class="device-status-item"><ha-icon icon="mdi:signal"></ha-icon><div><span>Signál</span><strong class="signal-value ${this._signalClass(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div></div>
+          <div class="device-status-item"><ha-icon icon="${preferredPath?.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon><div><span>Připojení</span><strong>${this._escape(preferredPath?.name || "Nedostupné")}</strong></div></div>
         </div>
-        <div class="route-list">${paths.map((path, index) => `<div class="route ${index === 0 ? "preferred" : ""}"><ha-icon icon="${path.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon><span class="route-name">${this._escape(path.name)}</span><span class="route-rssi signal-value ${this._signalClass(Number(path.rssi))}">${this._escape(path.rssi ?? "-")} dBm</span>${index === 0 ? `<span class="pill good">Aktivni cesta</span>` : ""}</div>`).join("")}</div>
-        <div class="device-meta"><span>SW ${this._escape(device.sw)}</span><span>HW ${this._escape(device.hw)}</span><span>${this._escape(device.profile)}</span><span>${device.partial_update ? "Partial update" : "Full update"}</span></div>
         ${editing ? `<div class="device-name-edit"><input data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Napriklad Kuchyn"><button data-device-name-save="${this._escape(device.address)}" title="Ulozit nazev"><ha-icon icon="mdi:check"></ha-icon></button><button class="secondary" data-device-name-cancel title="Zrusit"><ha-icon icon="mdi:close"></ha-icon></button></div>` : `<div class="device-actions"><button class="secondary" data-device-rename="${this._escape(device.address)}"><ha-icon icon="mdi:pencil-outline"></ha-icon>${device.display_name ? "Prejmenovat" : "Pojmenovat"}</button><button data-select-device="${this._escape(device.address)}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Otevrit v designeru</button></div>`}
         </div>
       </div>`;

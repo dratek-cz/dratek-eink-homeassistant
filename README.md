@@ -1,5 +1,15 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.57
+
+- zobrazovací plocha je přesně uprostřed těla displeje se stejně širokým levým a pravým rámečkem
+- svislý výrobní kód je umístěný přímo v levém rámečku a už neposouvá náhled obrazovky
+- odstraněný je podklad a popis pod náhledem; rozlišení je nově v čistém štítku v záhlaví karty
+- karty displejů mají nové záhlaví, stavové bloky pro baterii, signál a připojení a sjednocené akce
+- z uživatelských karet byly odstraněné technické štítky SW, HW, interní profil a typ full/partial update
+- přepracované jsou také kompaktní, seznamové a mobilní varianty karet
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.56
 
 - každá karta nalezeného displeje zobrazuje živý náhled jeho uloženého pracovního návrhu
