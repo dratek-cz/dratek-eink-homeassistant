@@ -1,5 +1,15 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.65
+
+- designer má nové jednoduché moderní rozložení sjednocené s hlavní stránkou rozšíření
+- nad pracovní plochou je přehledný řádek s názvem, adresou, rozlišením, baterií, signálem a způsobem připojení displeje
+- orientace displeje je výrazně dostupná přímo v informačním řádku
+- katalog prvků je vlevo, fyzický náhled uprostřed a vlastnosti vybraného objektu v Inspectoru vpravo
+- nástroje, vrstvy, pracovní plocha a Inspector používají stejné karty, barvy a ovládací prvky jako hlavní stránka
+- RGB dioda je přesunutá do rozbalovacího doplňkového nastavení v nabídce Pozadí a zařízení
+- designer se plynule skládá pro užší obrazovky
+
 ## Novinky ve verzi 0.1.64
 
 - logo i font designeru se načítají ze správné statické cesty panelu `/dratek_eink_panel`
