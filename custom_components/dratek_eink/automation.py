@@ -81,10 +81,19 @@ class EntityAutoUpdateManager:
         value = state.attributes.get(attribute) if attribute else state.state
         if value is None:
             return str(binding.get("fallback", ""))
+        if binding.get("status_icons"):
+            active_values = {
+                item.strip().lower()
+                for item in str(binding.get("status_on_values") or "on,true,1,open,home").split(",")
+                if item.strip()
+            }
+            return str(binding.get("status_on_symbol") or "●") if str(value).strip().lower() in active_values else str(binding.get("status_off_symbol") or "○")
         if isinstance(value, (list, dict, tuple)):
             return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
         unit = state.attributes.get("unit_of_measurement") if binding.get("include_unit") and not attribute else ""
-        return f"{value}{f' {unit}' if unit else ''}"
+        prefix = str(binding.get("value_prefix") or "")
+        suffix = str(binding.get("value_suffix") or "")
+        return f"{prefix}{value}{f' {unit}' if unit else ''}{suffix}"
 
     @callback
     def _handle_state_change(self, event: Any) -> None:

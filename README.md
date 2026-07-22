@@ -4,6 +4,17 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.68
+
+- na hlavní liště přibyla knihovna **Vytvořit vlastní prvek** pro opakovaně použitelné prvky Home Assistantu
+- vlastní prvek může zobrazovat hodnotu, stavovou ikonu nebo čárový, plošný či sloupcový graf
+- zdrojem dat může být entita Home Assistantu včetně atributu nebo HTTP/HTTPS adresa s volitelnou cestou v JSON datech
+- stavové ikony podporují vlastní symbol zapnuto/vypnuto a nastavitelný seznam aktivních hodnot
+- prvky lze vložit do právě vybraného návrhu nebo jedním krokem uložit do návrhů všech nalezených displejů
+- prvky napojené na entity se po nahrání návrhu automaticky aktualizují stejně jako ostatní dynamický obsah
+- data z URL se znovu načtou před každým ručním odesláním návrhu a jejich dostupnost lze ověřit přímo v editoru prvku
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.67
 
 - nové logo DRATEK.CZ eInk je viditelně použité také v záhlaví repozitáře na GitHubu

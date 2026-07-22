@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 from pathlib import Path
 from typing import Any
 
@@ -123,6 +124,63 @@ def _render_bound_text(binding: dict[str, Any], value: str) -> Image.Image:
     return layer
 
 
+def _chart_values(value: str, maximum: int = 48) -> list[float]:
+    values: list[float] = []
+    try:
+        parsed = json.loads(str(value))
+        if isinstance(parsed, list):
+            values = [float(item) for item in parsed if isinstance(item, (int, float, str))]
+    except (ValueError, TypeError, json.JSONDecodeError):
+        pass
+    if not values:
+        separator = ";" if ";" in str(value) else ","
+        for item in str(value).replace("\n", separator).split(separator):
+            try:
+                values.append(float(item.strip().replace(",", ".")))
+            except ValueError:
+                continue
+    return values[-max(2, min(96, maximum)) :]
+
+
+def _render_bound_chart(binding: dict[str, Any], value: str) -> Image.Image:
+    width = max(24, round(float(binding.get("w", 24))))
+    height = max(24, round(float(binding.get("h", 24))))
+    layer = Image.new("RGBA", (width, height), (255, 255, 255, 255))
+    draw = ImageDraw.Draw(layer)
+    values = _chart_values(value, int(binding.get("maxPoints", 48)))
+    title = str(binding.get("chartTitle") or "")
+    top = 16 if title else 5
+    left, right, bottom = 22, 5, 14
+    plot_width = max(4, width - left - right)
+    plot_height = max(4, height - top - bottom)
+    if title:
+        draw.text((width / 2, 2), title, fill=(0, 0, 0, 255), font=load_font(9, True), anchor="ma")
+    draw.line((left, top, left, top + plot_height, left + plot_width, top + plot_height), fill=(0, 0, 0, 255), width=1)
+    if not values:
+        return layer
+    minimum, maximum = min(values), max(values)
+    span = max(1e-9, maximum - minimum)
+    points = [
+        (
+            left + (index / max(1, len(values) - 1)) * plot_width,
+            top + plot_height - ((item - minimum) / span) * plot_height,
+        )
+        for index, item in enumerate(values)
+    ]
+    color = (220, 20, 12, 255) if binding.get("color") == "red" else (0, 0, 0, 255)
+    if binding.get("chartType") == "bar":
+        bar_width = max(1, plot_width // max(1, len(values)) - 1)
+        for x, y in points:
+            draw.rectangle((round(x - bar_width / 2), round(y), round(x + bar_width / 2), top + plot_height), fill=color)
+    else:
+        if binding.get("chartType") == "area":
+            polygon = [(left, top + plot_height), *points, (left + plot_width, top + plot_height)]
+            draw.polygon(polygon, fill=(220, 20, 12, 255) if binding.get("color") == "red" else (210, 210, 210, 255))
+        if len(points) > 1:
+            draw.line(points, fill=color, width=max(1, int(binding.get("strokeWidth", 2))))
+    return layer
+
+
 def render_entity_bound_image(
     base_image: str,
     bindings: list[dict[str, Any]],
@@ -132,7 +190,7 @@ def render_entity_bound_image(
     image = _decode_data_image(base_image).convert("RGBA")
     for binding in bindings:
         value = values.get(str(binding.get("id")), str(binding.get("fallback", "")))
-        layer = _render_bound_text(binding, value)
+        layer = _render_bound_chart(binding, value) if binding.get("type") == "chart" else _render_bound_text(binding, value)
         x = round(float(binding.get("x", 0)))
         y = round(float(binding.get("y", 0)))
         x -= (layer.width - max(1, round(float(binding.get("w", 1))))) // 2

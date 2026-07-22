@@ -3,13 +3,16 @@ from __future__ import annotations
 import base64
 import asyncio
 import io
+import json
 import time
 import uuid
 from typing import Any
+from urllib.parse import urlparse
 
 from homeassistant.components import bluetooth, websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.storage import Store
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from PIL import Image
 import voluptuous as vol
 
@@ -91,6 +94,10 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_delete_project)
     websocket_api.async_register_command(hass, websocket_load_device_draft)
     websocket_api.async_register_command(hass, websocket_save_device_draft)
+    websocket_api.async_register_command(hass, websocket_list_custom_elements)
+    websocket_api.async_register_command(hass, websocket_save_custom_element)
+    websocket_api.async_register_command(hass, websocket_delete_custom_element)
+    websocket_api.async_register_command(hass, websocket_fetch_custom_element_url)
     websocket_api.async_register_command(hass, websocket_set_device_name)
     websocket_api.async_register_command(hass, websocket_list_gateways)
     websocket_api.async_register_command(hass, websocket_add_gateway)
@@ -333,10 +340,11 @@ def _project_store(hass: HomeAssistant) -> Store:
 async def _load_project_data(hass: HomeAssistant) -> dict[str, Any]:
     data = await _project_store(hass).async_load()
     if not isinstance(data, dict):
-        return {"projects": [], "device_drafts": {}, "device_names": {}}
+        return {"projects": [], "device_drafts": {}, "device_names": {}, "custom_elements": []}
     data.setdefault("projects", [])
     data.setdefault("device_drafts", {})
     data.setdefault("device_names", {})
+    data.setdefault("custom_elements", [])
     return data
 
 
@@ -893,6 +901,153 @@ async def websocket_save_device_draft(
     data["device_drafts"][address] = draft
     await _project_store(hass).async_save(data)
     connection.send_result(msg["id"], {"draft": draft})
+
+
+@websocket_api.websocket_command({"type": "dratek_eink/custom_elements/list"})
+@websocket_api.async_response
+async def websocket_list_custom_elements(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    data = await _load_project_data(hass)
+    elements = sorted(
+        (item for item in data["custom_elements"] if isinstance(item, dict)),
+        key=lambda item: str(item.get("name") or "").lower(),
+    )
+    connection.send_result(msg["id"], {"elements": elements})
+
+
+def _clamped_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, min(maximum, parsed))
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/custom_elements/save",
+        "element": dict,
+    }
+)
+@websocket_api.async_response
+async def websocket_save_custom_element(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    source = dict(msg["element"])
+    element_type = str(source.get("element_type") or "value")
+    if element_type not in {"value", "status", "chart"}:
+        connection.send_error(msg["id"], "invalid_type", "Unsupported custom element type.")
+        return
+    element_id = str(source.get("id") or uuid.uuid4())
+    now = int(time.time())
+    element = {
+        "id": element_id,
+        "name": str(source.get("name") or "Vlastní prvek").strip()[:80],
+        "element_type": element_type,
+        "source_type": "url" if source.get("source_type") == "url" else "entity",
+        "entity_id": str(source.get("entity_id") or "").strip()[:255],
+        "entity_attribute": str(source.get("entity_attribute") or "").strip()[:120],
+        "url": str(source.get("url") or "").strip()[:2048],
+        "json_path": str(source.get("json_path") or "").strip()[:255],
+        "label": str(source.get("label") or "").strip()[:120],
+        "unit": str(source.get("unit") or "").strip()[:32],
+        "color": "red" if source.get("color") == "red" else "black",
+        "chart_type": str(source.get("chart_type") or "line") if str(source.get("chart_type") or "line") in {"line", "bar", "area"} else "line",
+        "on_symbol": str(source.get("on_symbol") or "●")[:8],
+        "off_symbol": str(source.get("off_symbol") or "○")[:8],
+        "on_values": str(source.get("on_values") or "on,true,1,open,home")[:255],
+        "sample_data": str(source.get("sample_data") or "")[:65535],
+        "width_percent": _clamped_int(source.get("width_percent"), 55, 10, 100),
+        "height_percent": _clamped_int(source.get("height_percent"), 35, 10, 100),
+        "updated_at": now,
+    }
+    data = await _load_project_data(hass)
+    data["custom_elements"] = [
+        item for item in data["custom_elements"]
+        if isinstance(item, dict) and item.get("id") != element_id
+    ]
+    data["custom_elements"].append(element)
+    await _project_store(hass).async_save(data)
+    connection.send_result(msg["id"], {"element": element})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/custom_elements/delete",
+        "element_id": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_delete_custom_element(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    data = await _load_project_data(hass)
+    before = len(data["custom_elements"])
+    data["custom_elements"] = [
+        item for item in data["custom_elements"]
+        if isinstance(item, dict) and item.get("id") != msg["element_id"]
+    ]
+    await _project_store(hass).async_save(data)
+    connection.send_result(msg["id"], {"ok": True, "deleted": len(data["custom_elements"]) < before})
+
+
+def _json_path_value(value: Any, path: str) -> Any:
+    current = value
+    for part in (item for item in path.replace("[", ".").replace("]", "").split(".") if item):
+        if isinstance(current, list):
+            current = current[int(part)]
+        elif isinstance(current, dict):
+            current = current[part]
+        else:
+            raise KeyError(part)
+    return current
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/custom_elements/fetch_url",
+        "url": str,
+        vol.Optional("json_path", default=""): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_fetch_custom_element_url(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    url = str(msg["url"] or "").strip()
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        connection.send_error(msg["id"], "invalid_url", "URL must use HTTP or HTTPS.")
+        return
+    try:
+        session = async_get_clientsession(hass)
+        async with asyncio.timeout(12):
+            async with session.get(url, allow_redirects=True, max_redirects=3) as response:
+                response.raise_for_status()
+                raw = await response.content.read(1_048_577)
+                if len(raw) > 1_048_576:
+                    raise ValueError("Response is larger than 1 MB.")
+                text = raw.decode(response.charset or "utf-8", errors="replace")
+        try:
+            value: Any = json.loads(text)
+        except json.JSONDecodeError:
+            value = text.strip()
+        path = str(msg.get("json_path") or "").strip()
+        if path:
+            value = _json_path_value(value, path)
+        serialized = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        connection.send_result(msg["id"], {"ok": True, "value": serialized[:65535]})
+    except Exception as exc:
+        connection.send_error(msg["id"], "fetch_failed", str(exc))
 
 
 @websocket_api.websocket_command(
