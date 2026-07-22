@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.57";
+const DRATEK_EINK_VERSION = "0.1.58";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -2030,6 +2030,9 @@ class DratekEinkPanel extends HTMLElement {
         .display-preview-slot,.display-grid.density-compact .display-preview-slot,.display-grid.density-list .display-preview-slot{padding:10px 0;border-radius:0;background:none}
         @media(max-width:900px){.display-grid.density-list .display-tile{grid-template-columns:minmax(190px,.8fr) minmax(0,1fr);grid-template-rows:auto auto auto}.display-grid.density-list .display-preview-slot{grid-column:1;grid-row:1/4}.display-grid.density-list .display-tile-header,.display-grid.density-list .display-health,.display-grid.density-list .display-tile-actions,.display-grid.density-list .display-name-edit{grid-column:2;grid-row:auto}}
         @media(max-width:620px){.display-grid{grid-template-columns:1fr}.display-tile{padding:14px;border-radius:14px}.display-tile-header{grid-template-columns:auto minmax(0,1fr)}.display-resolution{grid-column:2}.display-health{grid-template-columns:1fr 1fr}.display-health-route{grid-column:1/-1}.display-tile-actions{grid-template-columns:1fr}.display-grid.density-list .display-tile{display:grid;grid-template-columns:1fr;grid-template-rows:auto}.display-grid.density-list .display-preview-slot,.display-grid.density-list .display-tile-header,.display-grid.density-list .display-health,.display-grid.density-list .display-tile-actions,.display-grid.density-list .display-name-edit{grid-column:1;grid-row:auto}}
+        .display-health-item>span{flex:1;min-width:0}.display-battery-item .battery{display:block;width:100%;height:7px;margin-top:6px;box-sizing:border-box}.display-signal-item>.signal-bars{flex:0 0 auto}.display-signal-item>.signal-bars span{width:6px}.preview-full .device-preview-bezel{border-width:7px;border-radius:14px}.preview-large .device-preview-bezel{border-width:6px;border-radius:12px}.preview-large .device-preview-code{font-size:8px}.preview-compact .device-preview-bezel{border-width:5px;border-radius:10px}.preview-compact .device-preview-code{font-size:6px}.display-grid.density-large{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}.display-grid.density-large .display-tile{grid-template-rows:auto minmax(125px,1fr) auto auto;gap:12px;padding:15px}.display-grid.density-large .display-health{grid-template-columns:1fr 1fr}.display-grid.density-large .display-health-route{grid-column:1/-1}.display-grid.density-compact{grid-template-columns:repeat(auto-fill,minmax(245px,1fr));gap:10px}.display-grid.density-compact .display-tile{grid-template-rows:auto minmax(82px,1fr) auto auto;gap:9px;padding:12px}.display-grid.density-compact .display-tile-header{grid-template-columns:auto minmax(0,1fr)}.display-grid.density-compact .display-resolution{grid-column:2;padding:4px 7px}.display-grid.density-compact .display-health-item{padding:7px 5px}.display-grid.density-compact .display-health-item small{display:none}.display-grid.density-compact .display-battery-item .battery{height:6px;margin-top:4px}.display-grid.density-list .display-tile{grid-template-columns:minmax(220px,1fr) minmax(300px,1.35fr) auto;grid-template-rows:auto;gap:12px;padding:10px 13px}.display-grid.density-list .display-tile-header{grid-column:1;grid-row:1}.display-grid.density-list .display-health{grid-column:2;grid-row:1}.display-grid.density-list .display-tile-actions,.display-grid.density-list .display-name-edit{grid-column:3;grid-row:1}.display-grid.density-list .display-tile-actions{grid-template-columns:auto auto}.display-grid.density-list .display-health-item{padding:6px 8px}.display-grid.density-list .display-preview-slot{display:none}
+        @media(max-width:980px){.display-grid.density-list .display-tile{grid-template-columns:minmax(210px,1fr) minmax(260px,1.2fr);grid-template-rows:auto auto}.display-grid.density-list .display-tile-header{grid-column:1;grid-row:1}.display-grid.density-list .display-health{grid-column:2;grid-row:1}.display-grid.density-list .display-tile-actions,.display-grid.density-list .display-name-edit{grid-column:1/-1;grid-row:2}}
+        @media(max-width:620px){.display-grid.density-list .display-tile{grid-template-columns:1fr;grid-template-rows:auto}.display-grid.density-list .display-tile-header,.display-grid.density-list .display-health,.display-grid.density-list .display-tile-actions,.display-grid.density-list .display-name-edit{grid-column:1;grid-row:auto}.display-grid.density-list .display-tile-actions{grid-template-columns:1fr}.display-grid.density-compact .display-tile-header{grid-template-columns:auto minmax(0,1fr)}.display-health{grid-template-columns:1fr 1fr}}
       </style>
       <div class="page">
         <div class="topbar">
@@ -3412,18 +3415,24 @@ class DratekEinkPanel extends HTMLElement {
     return { width: sourceWidth, height: sourceHeight, draft };
   }
 
-  _renderDevicePreview(device, compact = false) {
+  _renderDevicePreview(device, mode = "full") {
     const address = String(device.address || "").toUpperCase();
     const { width: sourceWidth, height: sourceHeight, draft } = this._devicePreviewSize(device);
-    const maxCanvasWidth = compact ? 260 : 420;
-    const maxCanvasHeight = compact ? 120 : 240;
+    const previewSizes = {
+      full: { canvasWidth: 360, canvasHeight: 205, targetHeight: 190, minWidth: 108, maxWidth: 420 },
+      large: { canvasWidth: 300, canvasHeight: 155, targetHeight: 148, minWidth: 96, maxWidth: 340 },
+      compact: { canvasWidth: 220, canvasHeight: 100, targetHeight: 92, minWidth: 78, maxWidth: 240 },
+    };
+    const previewMode = previewSizes[mode] ? mode : "full";
+    const sizing = previewSizes[previewMode];
+    const maxCanvasWidth = sizing.canvasWidth;
+    const maxCanvasHeight = sizing.canvasHeight;
     const scale = Math.min(maxCanvasWidth / sourceWidth, maxCanvasHeight / sourceHeight, 1);
     const canvasWidth = Math.max(40, Math.round(sourceWidth * scale));
     const canvasHeight = Math.max(28, Math.round(sourceHeight * scale));
     const frameRatio = Math.max(0.48, Math.min(3.7, (sourceWidth / sourceHeight) / 0.95));
-    const targetHeight = compact ? 104 : 232;
-    const previewWidth = Math.max(compact ? 88 : 118, Math.min(compact ? 300 : 470, Math.round(targetHeight * frameRatio)));
-    return `<div class="device-preview-wrap ${compact ? "compact-device-preview" : ""}">
+    const previewWidth = Math.max(sizing.minWidth, Math.min(sizing.maxWidth, Math.round(sizing.targetHeight * frameRatio)));
+    return `<div class="device-preview-wrap preview-${previewMode}">
       <div class="device-preview-bezel" style="--frame-ratio:${frameRatio.toFixed(4)};--preview-width:${previewWidth}px" title="Náhled ${this._escape(sourceWidth)} × ${this._escape(sourceHeight)}">
         <span class="device-preview-code">${this._escape(device.physical_code || "00.00.00.00")}</span>
         <div class="device-preview-screen">
@@ -3447,17 +3456,16 @@ class DratekEinkPanel extends HTMLElement {
       const editing = this._editingDeviceAddress === device.address;
       const preferredPath = paths[0];
       const previewSize = this._devicePreviewSize(device);
-      const compactPreview = mode === "compact" || mode === "list";
       return `<article class="display-tile ${selected ? "selected" : ""}">
         <header class="display-tile-header">
           <span class="display-online-dot" title="Displej je dostupný"></span>
           <div class="display-tile-identity"><strong>${this._escape(this._deviceTitle(device))}</strong><span>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</span></div>
           <span class="display-resolution"><ha-icon icon="mdi:aspect-ratio"></ha-icon>${previewSize.width} × ${previewSize.height}</span>
         </header>
-        <div class="display-preview-slot">${this._renderDevicePreview(device, compactPreview)}</div>
+        ${mode === "list" ? "" : `<div class="display-preview-slot">${this._renderDevicePreview(device, mode)}</div>`}
         <div class="display-health">
-          <div class="display-health-item" title="Odhad zbývající kapacity CR2450"><ha-icon icon="mdi:battery-medium"></ha-icon><span><small>Baterie</small><strong>${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></span></div>
-          <div class="display-health-item"><ha-icon icon="mdi:signal"></ha-icon><span><small>Signál</small><strong class="signal-value ${this._signalClass(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></span></div>
+          <div class="display-health-item display-battery-item" title="Odhad zbývající kapacity CR2450"><ha-icon icon="mdi:battery-medium"></ha-icon><span><small>Baterie</small><strong>${Number.isFinite(battery.percent) ? `${battery.percent} % · ${this._formatBatteryVoltage(battery.voltage)}` : "-"}</strong><span class="battery ${this._batteryClass(battery.percent)}"><span style="width:${this._batteryPercent(battery.percent)}%"></span></span></span></div>
+          <div class="display-health-item display-signal-item">${this._renderSignalBars(rssi)}<span><small>Signál</small><strong class="signal-value ${this._signalClass(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></span></div>
           <div class="display-health-item display-health-route"><ha-icon icon="${preferredPath?.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon><span><small>Připojení</small><strong>${this._escape(preferredPath?.name || "Nedostupné")}</strong></span></div>
         </div>
         ${editing ? `<div class="device-name-edit display-name-edit"><input data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Například Kuchyň"><button data-device-name-save="${this._escape(device.address)}" title="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button><button class="secondary" data-device-name-cancel title="Zrušit"><ha-icon icon="mdi:close"></ha-icon></button></div>` : `<footer class="display-tile-actions"><button class="secondary" data-device-rename="${this._escape(device.address)}"><ha-icon icon="mdi:pencil-outline"></ha-icon>${device.display_name ? "Přejmenovat" : "Pojmenovat"}</button><button data-select-device="${this._escape(device.address)}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Otevřít v designeru</button></footer>`}

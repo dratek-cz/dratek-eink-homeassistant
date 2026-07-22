@@ -1,5 +1,15 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.58
+
+- obnovený grafický stav baterie s procenty, napětím a barevným ukazatelem kapacity
+- obnovené dynamické sloupky signálu, které mění počet a barvu podle síly připojení
+- ikona aktivní cesty rozlišuje lokální Bluetooth a Wi-Fi gateway
+- náhled displeje se postupně zmenšuje v plném, velkém a malém zobrazení
+- seznamové zobrazení náhled skrývá a soustředí se na identitu, stav a rychlé akce
+- rozložení karet je upravené pro jednotlivé hustoty i úzké mobilní obrazovky
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.57
 
 - panel po otevření automaticky vyhledá dostupné displeje; ruční tlačítko zůstává jen pro obnovení
