@@ -2,6 +2,9 @@
 
 ## Novinky ve verzi 0.1.58
 
+- designer má nové stabilní třípanelové rozložení pro nástroje, pracovní plochu, Inspector a vrstvy
+- pracovní canvas je zasazený do stejného symetrického fyzického rámečku displeje jako náhled na hlavní stránce
+- celý panel používá barevnost Drátek.cz: tyrkysovou, oranžovou a tmavé neutrální odstíny
 - obnovený grafický stav baterie s procenty, napětím a barevným ukazatelem kapacity
 - obnovené dynamické sloupky signálu, které mění počet a barvu podle síly připojení
 - ikona aktivní cesty rozlišuje lokální Bluetooth a Wi-Fi gateway
