@@ -1,5 +1,11 @@
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.64
+
+- logo i font designeru se načítají ze správné statické cesty panelu `/dratek_eink_panel`
+- svislá adresa v náhledu displeje 296 × 128 už není otočená o 180 stupňů
+- stejný směr adresy je opravený také na fyzickém rámečku v designeru
+
 ## Novinky ve verzi 0.1.63
 
 - mapa připojení má opravené větvení spojnic mezi jednou gatewayí a všemi jejími displeji
