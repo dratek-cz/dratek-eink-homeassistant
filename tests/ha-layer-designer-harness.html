@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HA layer designer test</title>
+  <style>
+    :root {
+      --primary-text-color:#172127;--secondary-text-color:#64727b;--primary-background-color:#f2f5f5;
+      --secondary-background-color:#edf1f1;--card-background-color:#fff;--divider-color:#d8dfdf;
+      --primary-color:#00a2a5;--text-primary-color:#fff;--dratek-teal:#00a2a5;
+    }
+    body { margin:0; background:#f2f5f5; font-family:Arial,sans-serif; }
+  </style>
+</head>
+<body>
+  <script>
+    customElements.define("ha-icon", class extends HTMLElement {
+      connectedCallback() { this.textContent = "◇"; }
+    });
+    customElements.define("ha-entity-picker", class extends HTMLElement {
+      connectedCallback() {
+        this.innerHTML = '<select style="width:100%;padding:10px"><option value="">Vyberte entitu</option><option value="switch.kuchyn">Zásuvka kuchyň</option><option value="sensor.teplota">Teplota</option></select>';
+        const select = this.querySelector("select");
+        select.value = this._value || "";
+        select.addEventListener("change", () => {
+          this._value = select.value;
+          this.dispatchEvent(new CustomEvent("value-changed", { detail: { value: select.value } }));
+        });
+      }
+      set value(value) { this._value = value; }
+      get value() { return this._value || ""; }
+    });
+  </script>
+  <script type="module">
+    import "../custom_components/dratek_eink/frontend/dratek-eink-panel.js";
+    const panel = document.createElement("dratek-eink-panel");
+    panel._activeTab = "custom";
+    document.body.append(panel);
+    panel.hass = {
+      states: {
+        "switch.kuchyn": { state: "on", attributes: { friendly_name: "Zásuvka kuchyň" } },
+        "sensor.teplota": { state: "21.5", attributes: { friendly_name: "Teplota", unit_of_measurement: "°C" } },
+      },
+      callWS: async ({ type }) => {
+        if (type === "dratek_eink/custom_elements/list") return { elements: [] };
+        if (type === "dratek_eink/projects/list") return { projects: [] };
+        if (type === "dratek_eink/gateways/list") return { gateways: [] };
+        if (type === "dratek_eink/serial/ports") return { ports: [] };
+        if (type === "dratek_eink/scan") return { devices: [], ble_devices: [], debug: [] };
+        return {};
+      },
+    };
+  </script>
+</body>
+</html>

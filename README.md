@@ -4,6 +4,19 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.76
+
+- Designer HA prvků je nově samostatná knihovna vlastních rozhraní
+- každý prvek obsahuje jednu nebo více grafických vrstev pro různé stavy zařízení
+- do vrstev lze vkládat texty, tvary a vlastní obrázky, měnit jejich barvy, rozměry a polohu
+- objekty lze přesouvat přímo myší v grafickém náhledu
+- samostatný krok pravidel propojí prvek s entitou nebo atributem Home Assistantu
+- vrstvy lze přepínat podle stavů zapnuto/vypnuto, přesné hodnoty, textu nebo číselných limitů
+- výchozí vrstva se použije, pokud žádné pravidlo neplatí
+- změna entity, která nevede ke změně vybrané vrstvy, nevytvoří zbytečnou aktualizaci displeje
+- dřívější vlastní prvky se při otevření automaticky převedou do nového vrstveného formátu
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.75
 
 - opravena rozbitá ikona v README na GitHubu použitím stabilní raw adresy

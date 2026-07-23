@@ -954,6 +954,65 @@ def _normalized_icon_image(value: Any) -> str:
     return f"data:image/png;base64,{base64.b64encode(result).decode('ascii')}"
 
 
+def _normalized_layered_layers(value: Any, canvas_width: int, canvas_height: int) -> list[dict[str, Any]]:
+    """Validate graphical layers used by the Home Assistant element designer."""
+    layers: list[dict[str, Any]] = []
+    total_image_size = 0
+    if not isinstance(value, list):
+        return layers
+    for layer_index, layer_source in enumerate(value[:12]):
+        if not isinstance(layer_source, dict):
+            continue
+        layer_id = str(layer_source.get("id") or f"layer-{layer_index}")[:80]
+        objects: list[dict[str, Any]] = []
+        raw_objects = layer_source.get("objects")
+        for object_index, source in enumerate(raw_objects[:40] if isinstance(raw_objects, list) else []):
+            if not isinstance(source, dict):
+                continue
+            object_type = str(source.get("type") or "text")
+            if object_type not in {"text", "rect", "image"}:
+                continue
+            item: dict[str, Any] = {
+                "id": str(source.get("id") or f"item-{layer_index}-{object_index}")[:80],
+                "type": object_type,
+                "x": _clamped_int(source.get("x"), 0, 0, canvas_width - 1),
+                "y": _clamped_int(source.get("y"), 0, 0, canvas_height - 1),
+                "w": _clamped_int(source.get("w"), 80, 1, canvas_width),
+                "h": _clamped_int(source.get("h"), 40, 1, canvas_height),
+            }
+            if object_type == "text":
+                align = str(source.get("align") or "left")
+                item.update({
+                    "text": str(source.get("text") or "Text")[:500],
+                    "color": "red" if source.get("color") == "red" else "black",
+                    "font_size": _clamped_int(source.get("font_size"), 24, 8, 120),
+                    "bold": bool(source.get("bold")),
+                    "align": align if align in {"left", "center", "right"} else "left",
+                })
+            elif object_type == "rect":
+                fill = str(source.get("fill") or "none")
+                stroke = str(source.get("stroke") or "black")
+                item.update({
+                    "fill": fill if fill in {"none", "black", "red", "white"} else "none",
+                    "stroke": stroke if stroke in {"none", "black", "red", "white"} else "black",
+                    "stroke_width": _clamped_int(source.get("stroke_width"), 2, 1, 12),
+                })
+            else:
+                item["image"] = _normalized_icon_image(source.get("image"))
+                if not item["image"]:
+                    continue
+                total_image_size += len(item["image"])
+                if total_image_size > 8 * 1024 * 1024:
+                    raise ValueError("Obrazky ve vrstvach jsou dohromady prilis velke.")
+            objects.append(item)
+        layers.append({
+            "id": layer_id,
+            "name": str(layer_source.get("name") or f"Vrstva {layer_index + 1}").strip()[:80],
+            "objects": objects,
+        })
+    return layers
+
+
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/custom_elements/save",
@@ -968,7 +1027,7 @@ async def websocket_save_custom_element(
 ) -> None:
     source = dict(msg["element"])
     element_type = str(source.get("element_type") or "value")
-    if element_type not in {"value", "status", "chart", "icon"}:
+    if element_type not in {"value", "status", "chart", "icon", "layered"}:
         connection.send_error(msg["id"], "invalid_type", "Unsupported custom element type.")
         return
     try:
@@ -979,10 +1038,21 @@ async def websocket_save_custom_element(
     if element_type == "icon" and not icon_image:
         connection.send_error(msg["id"], "missing_icon", "Nejprve nahrajte obrázek ikony.")
         return
+    canvas_width = _clamped_int(source.get("canvas_width"), 296, 128, 800)
+    canvas_height = _clamped_int(source.get("canvas_height"), 128, 64, 480)
+    try:
+        layers = _normalized_layered_layers(source.get("layers"), canvas_width, canvas_height) if element_type == "layered" else []
+    except ValueError as exc:
+        connection.send_error(msg["id"], "invalid_layer_image", str(exc))
+        return
+    if element_type == "layered" and not layers:
+        connection.send_error(msg["id"], "missing_layers", "Prvek musi obsahovat alespon jednu vrstvu.")
+        return
+    layer_ids = {layer["id"] for layer in layers}
     element_id = str(source.get("id") or uuid.uuid4())
     now = int(time.time())
     condition_rules = []
-    for rule_source in source.get("condition_rules", [])[:8] if isinstance(source.get("condition_rules"), list) else []:
+    for rule_source in source.get("condition_rules", [])[:12] if isinstance(source.get("condition_rules"), list) else []:
         if not isinstance(rule_source, dict):
             continue
         operator = str(rule_source.get("operator") or "equals")
@@ -993,6 +1063,13 @@ async def websocket_save_custom_element(
             "value": str(rule_source.get("value") or "")[:120],
             "symbol": str(rule_source.get("symbol") or "●")[:8],
         })
+        if element_type == "layered":
+            layer_id = str(rule_source.get("layer_id") or "")
+            if layer_id not in layer_ids:
+                condition_rules.pop()
+                continue
+            condition_rules[-1]["layer_id"] = layer_id
+            condition_rules[-1]["symbol"] = layer_id
     element = {
         "id": element_id,
         "name": str(source.get("name") or "Vlastní prvek").strip()[:80],
@@ -1016,6 +1093,14 @@ async def websocket_save_custom_element(
         "width_percent": _clamped_int(source.get("width_percent"), 55, 10, 100),
         "height_percent": _clamped_int(source.get("height_percent"), 35, 10, 100),
         "icon_image": icon_image,
+        "canvas_width": canvas_width,
+        "canvas_height": canvas_height,
+        "layers": layers,
+        "default_layer_id": (
+            str(source.get("default_layer_id"))
+            if str(source.get("default_layer_id") or "") in layer_ids
+            else (layers[0]["id"] if layers else "")
+        ),
         "updated_at": now,
     }
     data = await _load_project_data(hass)

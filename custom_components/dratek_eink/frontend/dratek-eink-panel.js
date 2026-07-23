@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.75";
+const DRATEK_EINK_VERSION = "0.1.76";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -36,6 +36,12 @@ class DratekEinkPanel extends HTMLElement {
     this._customElementInspection = { collections: [] };
     this._customElementBusy = false;
     this._customElementResult = null;
+    this._customWorkspaceView = "library";
+    this._customLayerStep = "design";
+    this._customActiveLayerId = "";
+    this._customSelectedObjectId = "";
+    this._customLayerDrag = null;
+    this._customImageCache = new Map();
     this._selectedProjectId = "";
     this._projectName = "Novy navrh";
     this._fileMenuOpen = false;
@@ -571,8 +577,22 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _emptyCustomElementForm() {
+    const onLayer = {
+      id: `layer-${Date.now()}-on`, name: "Zapnuto",
+      objects: [
+        { id: `item-${Date.now()}-on-icon`, type: "text", x: 88, y: 12, w: 120, h: 62, text: "●", color: "red", font_size: 52, bold: true, align: "center" },
+        { id: `item-${Date.now()}-on-text`, type: "text", x: 58, y: 78, w: 180, h: 36, text: "ZAPNUTO", color: "black", font_size: 28, bold: true, align: "center" },
+      ],
+    };
+    const offLayer = {
+      id: `layer-${Date.now()}-off`, name: "Vypnuto",
+      objects: [
+        { id: `item-${Date.now()}-off-icon`, type: "text", x: 88, y: 12, w: 120, h: 62, text: "○", color: "black", font_size: 52, bold: true, align: "center" },
+        { id: `item-${Date.now()}-off-text`, type: "text", x: 58, y: 78, w: 180, h: 36, text: "VYPNUTO", color: "black", font_size: 28, bold: true, align: "center" },
+      ],
+    };
     return {
-      id: "", name: "", element_type: "status", source_type: "entity",
+      id: "", name: "", element_type: "layered", source_type: "entity",
       entity_id: "", entity_attribute: "", url: "", collection_path: "", value_field: "", label_field: "", json_path: "", label_json_path: "",
       label: "", unit: "", color: "black", chart_type: "line",
       history_mode: "rolling", history_points: 24,
@@ -583,11 +603,21 @@ class DratekEinkPanel extends HTMLElement {
       default_symbol: "?",
       on_symbol: "●", off_symbol: "○", on_values: "on,true,1,open,home",
       sample_data: "", sample_labels: "", icon_image: "", width_percent: 55, height_percent: 35,
+      canvas_width: 296, canvas_height: 128,
+      layers: [onLayer, offLayer],
+      condition_rules: [
+        { operator: "is_on", value: "", layer_id: onLayer.id },
+        { operator: "is_off", value: "", layer_id: offLayer.id },
+      ],
+      default_layer_id: offLayer.id,
     };
   }
 
   _customElementFormValid() {
     const form = this._customElementForm;
+    if (form.element_type === "layered") {
+      return Boolean(form.name.trim() && form.entity_id && Array.isArray(form.layers) && form.layers.length);
+    }
     return Boolean(
       form.name.trim()
       && (form.element_type === "icon" ? form.icon_image : form.entity_id)
@@ -1560,6 +1590,24 @@ class DratekEinkPanel extends HTMLElement {
     const height = Math.max(24, Math.round(size.height * (Number(element.height_percent) || 35) / 100));
     const entityId = element.entity_id || "";
     const sample = String(element.sample_data || this._customElementCurrentValue(element) || "");
+    if (element.element_type === "layered") {
+      const ratio = Math.max(0.2, Number(element.canvas_width || 296) / Math.max(1, Number(element.canvas_height || 128)));
+      let layerWidth = Math.max(48, Math.round(size.width * 0.62));
+      let layerHeight = Math.round(layerWidth / ratio);
+      if (layerHeight > size.height * 0.72) {
+        layerHeight = Math.round(size.height * 0.72);
+        layerWidth = Math.round(layerHeight * ratio);
+      }
+      return {
+        id, type: "layered", x: Math.round((size.width - layerWidth) / 2), y: Math.round((size.height - layerHeight) / 2),
+        w: layerWidth, h: layerHeight, rotation: 0, flipH: false,
+        entityId, entityAttribute: element.entity_attribute || "", autoUpdate: true,
+        customElementId: element.id || "", customLayers: structuredClone(element.layers || []),
+        customCanvasWidth: Number(element.canvas_width || 296), customCanvasHeight: Number(element.canvas_height || 128),
+        conditionRules: structuredClone((element.condition_rules || []).map((rule) => ({ operator: rule.operator, value: rule.value || "", symbol: rule.layer_id || "" }))),
+        defaultSymbol: element.default_layer_id || element.layers?.[0]?.id || "",
+      };
+    }
     if (element.element_type === "icon") {
       const side = Math.max(24, Math.round(Math.min(size.width, size.height) * (Number(element.width_percent) || 55) / 100));
       return {
@@ -2449,6 +2497,7 @@ class DratekEinkPanel extends HTMLElement {
     this._render();
     this._paint();
     requestAnimationFrame(() => {
+      this._paintCustomLayerCanvases();
       positions.forEach(([target, top, left]) => {
         target.scrollTop = top;
         target.scrollLeft = left;
@@ -2886,7 +2935,7 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _renderCustomElementsWorkspace() {
-    return this._renderHaElementDesigner();
+    return this._renderLayeredHaDesigner();
     const form = this._customElementForm;
     const meta = this._customElementMeta(form.element_type);
     const result = this._customElementResult ? `<div class="custom-result ${this._customElementResult.ok ? "good" : "bad"}"><ha-icon icon="${this._customElementResult.ok ? "mdi:check-circle-outline" : "mdi:alert-circle-outline"}"></ha-icon>${this._escape(this._customElementResult.message || this._customElementResult.error || "")}</div>` : "";
@@ -2922,6 +2971,283 @@ class DratekEinkPanel extends HTMLElement {
         </aside>
       </div>
     </div>`;
+  }
+
+  _renderLayeredHaDesigner() {
+    this._ensureLayeredCustomForm();
+    const form = this._customElementForm;
+    const result = this._customElementResult
+      ? `<div class="custom-result ${this._customElementResult.ok ? "good" : "bad"}"><ha-icon icon="${this._customElementResult.ok ? "mdi:check-circle-outline" : "mdi:alert-circle-outline"}"></ha-icon>${this._escape(this._customElementResult.message || this._customElementResult.error || "")}</div>`
+      : "";
+    const css = `<style>
+      .ha-library-view,.ha-layer-editor{display:grid;gap:14px}.ha-library-head{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:26px;border-radius:14px;background:linear-gradient(115deg,rgba(0,162,165,.12),rgba(255,122,0,.08));border:1px solid rgba(0,162,165,.32)}.ha-library-head h2{font-size:26px;text-transform:none;color:var(--primary-text-color);margin:5px 0}.ha-library-head p{margin:0;color:var(--secondary-text-color)}.ha-library-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}.ha-library-card{display:grid;gap:12px;padding:14px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color)}.ha-library-card canvas{width:100%;aspect-ratio:296/128;background:#fff;border:1px solid var(--divider-color);border-radius:8px}.ha-library-card strong,.ha-library-card small{display:block}.ha-library-card small{margin-top:3px;color:var(--secondary-text-color)}.ha-card-actions{display:flex;gap:7px}.ha-empty-library{min-height:390px;display:grid;place-items:center;align-content:center;text-align:center;gap:10px;border:1px dashed rgba(0,162,165,.45);border-radius:14px;background:var(--card-background-color)}.ha-empty-library>ha-icon{--mdc-icon-size:54px;color:var(--dratek-teal)}.ha-empty-library h3,.ha-empty-library p{margin:0}
+      .ha-editor-top{display:grid;grid-template-columns:auto minmax(220px,1fr) auto auto;align-items:end;gap:12px;padding:12px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color)}.ha-editor-top nav{display:flex;gap:7px}.ha-editor-top nav button b{display:grid;place-items:center;width:21px;height:21px;border-radius:50%;background:rgba(255,255,255,.2)}.name-field{margin:0}.ha-layer-layout{display:grid;grid-template-columns:230px minmax(420px,1fr) 260px;min-height:590px;border:1px solid var(--divider-color);border-radius:12px;overflow:hidden;background:var(--card-background-color)}.layer-list,.layer-properties{padding:13px;background:var(--secondary-background-color);overflow:auto}.panel-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:11px}.panel-heading strong,.panel-heading small{display:block}.panel-heading small{color:var(--secondary-text-color);font-size:10px}.layer-list-item{display:grid;grid-template-columns:72px 1fr;gap:8px;margin-bottom:9px;padding:8px;border:1px solid var(--divider-color);border-radius:10px;background:var(--card-background-color);cursor:pointer}.layer-list-item.active{border-color:var(--dratek-teal);box-shadow:inset 3px 0 0 var(--dratek-teal)}.layer-list-item canvas{width:72px;height:42px;background:#fff;border-radius:5px}.layer-list-item input{min-width:0;border:0;background:transparent;font-weight:800}.layer-list-item>div{grid-column:2;display:flex;gap:5px}.layer-stage{display:flex;flex-direction:column;align-items:stretch;padding:14px;min-width:0}.layer-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.layer-toolbar>span{margin-left:auto;color:var(--secondary-text-color);font-size:11px;font-weight:800}.layer-canvas-shell{flex:1;display:grid;place-items:center;margin-top:14px;padding:22px;background:radial-gradient(circle at 1px 1px,rgba(100,116,139,.24) 1px,transparent 0);background-size:18px 18px;border:1px solid var(--divider-color);border-radius:10px;overflow:auto}.layer-canvas-shell canvas{display:block;width:min(100%,820px);height:auto;max-height:490px;background:#fff;box-shadow:0 12px 36px rgba(0,0,0,.18);touch-action:none}.canvas-help{text-align:center;color:var(--secondary-text-color);font-size:11px}.layer-inspector{display:grid;gap:11px}.layer-inspector h3,.rules-card h3,.rules-source h3,.rule-preview h3{margin:0}.mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.layer-inspector-empty{display:grid;place-items:center;text-align:center;min-height:240px;color:var(--secondary-text-color)}.layer-inspector-empty ha-icon{--mdc-icon-size:42px}
+      .ha-rules-layout{display:grid;grid-template-columns:minmax(260px,.8fr) minmax(460px,1.5fr) minmax(260px,.7fr);gap:14px}.rules-source{display:flex;gap:12px;align-items:flex-start}.step-number{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:10px;background:var(--dratek-teal);color:#fff;font-weight:900}.rules-source p,.rules-title p{color:var(--secondary-text-color);font-size:11px}.rules-title,.rules-title>div{display:flex;align-items:center;justify-content:space-between;gap:10px}.layer-rules{display:grid;gap:8px;margin:14px 0}.layer-rule{display:grid;grid-template-columns:26px minmax(125px,1fr) minmax(85px,.75fr) auto minmax(115px,1fr) auto;align-items:center;gap:7px;padding:8px;border:1px solid var(--divider-color);border-radius:9px}.layer-rule>b{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:var(--secondary-background-color)}.default-layer{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:16px;padding:13px;border-radius:10px;background:rgba(0,162,165,.08);border:1px solid rgba(0,162,165,.28)}.default-layer strong,.default-layer small{display:block}.default-layer small{color:var(--secondary-text-color)}.rule-preview{align-self:start;text-align:center}.rule-preview canvas{width:100%;height:auto;background:#fff;border:1px solid var(--divider-color);border-radius:8px;margin:12px 0}.rule-preview strong,.rule-preview small{display:block}.rule-preview small{color:var(--secondary-text-color);margin-top:4px}
+      @media(max-width:1100px){.ha-layer-layout{grid-template-columns:190px 1fr}.layer-properties{grid-column:1/-1}.ha-rules-layout{grid-template-columns:1fr}.ha-editor-top{grid-template-columns:auto 1fr}.ha-editor-top nav{grid-column:1/-1}}@media(max-width:720px){.ha-library-head{display:grid}.ha-layer-layout{grid-template-columns:1fr}.layer-list{max-height:260px}.ha-editor-top{grid-template-columns:1fr}.layer-rule{grid-template-columns:26px 1fr}.layer-rule>*{grid-column:2}.layer-rule>b{grid-column:1}.ha-card-actions{flex-wrap:wrap}}
+    </style>`;
+    if (this._customWorkspaceView === "library") {
+      const cards = this._customElements.map((element) => {
+        const layer = this._customLayerForValue(element, this._customElementCurrentValue(element));
+        return `<article class="ha-library-card"><canvas width="296" height="128" data-custom-element-id="${this._escape(element.id)}" data-custom-layer-preview="${this._escape(layer?.id || "")}"></canvas><div><strong>${this._escape(element.name)}</strong><small>${this._escape(element.entity_id || "Bez entity")} · ${(element.layers || []).length || 1} vrstev</small></div><div class="ha-card-actions"><button data-custom-edit="${element.id}"><ha-icon icon="mdi:pencil-outline"></ha-icon>Upravit</button><button class="secondary" data-custom-insert="${element.id}"><ha-icon icon="mdi:vector-square-plus"></ha-icon>Do displeje</button><button class="secondary icon-btn" data-custom-delete="${element.id}" title="Smazat"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button></div></article>`;
+      }).join("");
+      return `${css}<div class="ha-library-view"><section class="ha-library-head"><div><span class="eyebrow">Knihovna vlastních rozhraní</span><h2>Designer HA prvků</h2><p>Každý prvek může mít několik grafických vrstev. Home Assistant podle pravidel vždy vybere tu správnou.</p></div><button id="customElementNew"><ha-icon icon="mdi:plus"></ha-icon>Vytvořit nový prvek</button></section>${result}${cards ? `<div class="ha-library-grid">${cards}</div>` : `<div class="ha-empty-library"><ha-icon icon="mdi:layers-plus"></ha-icon><h3>Zatím nemáte žádný vlastní prvek</h3><p>Začněte například rozhraním zásuvky se dvěma vrstvami Zapnuto a Vypnuto.</p><button id="customElementEmptyNew"><ha-icon icon="mdi:plus"></ha-icon>Vytvořit první prvek</button></div>`}</div>`;
+    }
+    const layers = form.layers || [];
+    const activeLayer = this._customActiveLayer();
+    const selected = this._customSelectedLayerObject();
+    const top = `<header class="ha-editor-top"><button id="customBackToLibrary" class="secondary"><ha-icon icon="mdi:arrow-left"></ha-icon>Knihovna</button><div class="field name-field"><label>Název prvku</label><input data-custom-element-field="name" value="${this._escape(form.name)}" placeholder="Například Zásuvka v kuchyni"></div><nav><button class="${this._customLayerStep === "design" ? "" : "secondary"}" data-custom-step="design"><b>1</b> Grafika vrstev</button><button class="${this._customLayerStep === "rules" ? "" : "secondary"}" data-custom-step="rules"><b>2</b> Pravidla zobrazení</button></nav><button id="customElementSave" ${this._customElementBusy || !this._customElementFormValid() ? "disabled" : ""}><ha-icon icon="mdi:content-save-outline"></ha-icon>${this._customElementBusy ? "Ukládám…" : "Uložit prvek"}</button></header>`;
+    return `${css}<div class="ha-layer-editor">${top}${result}${this._customLayerStep === "design" ? this._renderCustomLayerDesign(layers, activeLayer, selected) : this._renderCustomLayerRules(layers)}</div>`;
+  }
+
+  _renderCustomLayerDesign(layers, activeLayer, selected) {
+    const form = this._customElementForm;
+    const inspector = selected ? `<div class="layer-inspector"><h3>Vybraný objekt</h3>${selected.type === "text" ? `<div class="field"><label>Text</label><textarea data-layer-object="text">${this._escape(selected.text || "")}</textarea></div><div class="field"><label>Velikost písma</label><input data-layer-object="font_size" type="number" min="8" max="120" value="${Number(selected.font_size || 24)}"></div><label><input data-layer-object="bold" type="checkbox" ${selected.bold ? "checked" : ""}> Tučné písmo</label><div class="field"><label>Zarovnání</label><select data-layer-object="align"><option value="left" ${selected.align === "left" ? "selected" : ""}>Vlevo</option><option value="center" ${selected.align === "center" ? "selected" : ""}>Na střed</option><option value="right" ${selected.align === "right" ? "selected" : ""}>Vpravo</option></select></div><div class="field"><label>Barva</label><select data-layer-object="color"><option value="black" ${selected.color !== "red" ? "selected" : ""}>Černá</option><option value="red" ${selected.color === "red" ? "selected" : ""}>Červená</option></select></div>` : selected.type === "rect" ? `<div class="field"><label>Výplň</label><select data-layer-object="fill"><option value="none" ${selected.fill === "none" ? "selected" : ""}>Bez výplně</option><option value="black" ${selected.fill === "black" ? "selected" : ""}>Černá</option><option value="red" ${selected.fill === "red" ? "selected" : ""}>Červená</option><option value="white" ${selected.fill === "white" ? "selected" : ""}>Bílá</option></select></div><div class="field"><label>Obrys</label><select data-layer-object="stroke"><option value="none" ${selected.stroke === "none" ? "selected" : ""}>Bez obrysu</option><option value="black" ${selected.stroke === "black" ? "selected" : ""}>Černý</option><option value="red" ${selected.stroke === "red" ? "selected" : ""}>Červený</option></select></div>` : `<p>Nahraný obrázek můžete přesunout a změnit jeho velikost.</p>`}<div class="mini-grid">${["x","y","w","h"].map((key) => `<div class="field"><label>${key.toUpperCase()}</label><input data-layer-object="${key}" type="number" value="${Math.round(Number(selected[key] || 0))}"></div>`).join("")}</div><button id="deleteLayerObject" class="danger"><ha-icon icon="mdi:trash-can-outline"></ha-icon>Odstranit objekt</button></div>` : `<div class="layer-inspector-empty"><div><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon><p>Klikněte na objekt v náhledu a upravte jej zde.</p></div></div>`;
+    const layerList = layers.map((layer) => `<article class="layer-list-item ${layer.id === activeLayer?.id ? "active" : ""}" data-custom-layer="${this._escape(layer.id)}"><canvas width="148" height="64" data-custom-layer-preview="${this._escape(layer.id)}"></canvas><input data-custom-layer-name="${this._escape(layer.id)}" value="${this._escape(layer.name)}"><div><button data-custom-layer-copy="${this._escape(layer.id)}" class="secondary icon-btn" title="Duplikovat"><ha-icon icon="mdi:content-copy"></ha-icon></button><button data-custom-layer-delete="${this._escape(layer.id)}" class="secondary icon-btn" title="Smazat" ${layers.length <= 1 ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon></button></div></article>`).join("");
+    return `<div class="ha-layer-layout"><aside class="layer-list"><div class="panel-heading"><div><strong>Vrstvy</strong><small>Každá představuje jeden stav</small></div><button id="addCustomLayer" class="secondary icon-btn"><ha-icon icon="mdi:plus"></ha-icon></button></div>${layerList}</aside><main class="layer-stage"><div class="layer-toolbar"><button data-add-layer-object="text"><ha-icon icon="mdi:format-text"></ha-icon>Text</button><button data-add-layer-object="rect" class="secondary"><ha-icon icon="mdi:rectangle-outline"></ha-icon>Tvar</button><button id="addLayerImage" class="secondary"><ha-icon icon="mdi:image-plus-outline"></ha-icon>Obrázek</button><input id="layerImageFile" type="file" accept="image/*" hidden><span>${form.canvas_width} × ${form.canvas_height} px</span></div><div class="layer-canvas-shell"><canvas id="customLayerCanvas" width="${form.canvas_width}" height="${form.canvas_height}"></canvas></div><p class="canvas-help">Objekty přetahujte myší. Přesnou polohu, velikost, barvu a text upravíte vpravo.</p></main><aside class="layer-properties">${inspector}</aside></div>`;
+  }
+
+  _renderCustomLayerRules(layers) {
+    const form = this._customElementForm;
+    const currentValue = this._customElementCurrentValue(form);
+    const currentLayer = this._customLayerForValue(form, currentValue);
+    const operators = [["is_on","je zapnuto"],["is_off","je vypnuto"],["equals","rovná se"],["not_equals","nerovná se"],["greater","je větší než"],["greater_equal","je větší nebo rovno"],["less","je menší než"],["less_equal","je menší nebo rovno"],["contains","obsahuje"]];
+    const rules = form.condition_rules.map((rule, index) => {
+      const needsValue = !["is_on", "is_off"].includes(rule.operator);
+      return `<div class="layer-rule"><b>${index + 1}</b><select data-layer-rule-operator="${index}">${operators.map(([value,label]) => `<option value="${value}" ${rule.operator === value ? "selected" : ""}>${label}</option>`).join("")}</select><input data-layer-rule-value="${index}" value="${this._escape(rule.value || "")}" placeholder="Hodnota" ${needsValue ? "" : "disabled"}><span>zobrazí</span><select data-layer-rule-target="${index}">${layers.map((layer) => `<option value="${this._escape(layer.id)}" ${rule.layer_id === layer.id ? "selected" : ""}>${this._escape(layer.name)}</option>`).join("")}</select><button class="secondary icon-btn" data-layer-rule-delete="${index}"><ha-icon icon="mdi:close"></ha-icon></button></div>`;
+    }).join("");
+    return `<div class="ha-rules-layout"><section class="card rules-source"><span class="step-number">1</span><div><h3>Vyberte zařízení nebo senzor</h3><p>Pravidla budou reagovat na stav této entity v Home Assistantu.</p><div class="field"><label>Entita Home Assistantu</label><ha-entity-picker id="customElementEntity"></ha-entity-picker></div><div class="field"><label>Atribut entity (volitelný)</label><input data-custom-element-field="entity_attribute" value="${this._escape(form.entity_attribute || "")}" placeholder="Například temperature"></div></div></section><section class="card rules-card"><div class="rules-title"><div><span class="step-number">2</span><div><h3>Nastavte, kdy se vrstva zobrazí</h3><p>Pravidla se vyhodnocují shora dolů. Použije se první splněné.</p></div></div><span class="pill muted">Aktuálně: ${this._escape(currentValue || "bez hodnoty")}</span></div><div class="layer-rules">${rules}</div><button id="addLayerRule" class="secondary" ${form.condition_rules.length >= 12 ? "disabled" : ""}><ha-icon icon="mdi:plus"></ha-icon>Přidat pravidlo</button><div class="default-layer"><div><strong>Výchozí vrstva</strong><small>Když žádné pravidlo neplatí.</small></div><select data-custom-element-field="default_layer_id">${layers.map((layer) => `<option value="${this._escape(layer.id)}" ${form.default_layer_id === layer.id ? "selected" : ""}>${this._escape(layer.name)}</option>`).join("")}</select></div></section><aside class="card rule-preview"><h3>Aktuální výsledek</h3><canvas width="${form.canvas_width}" height="${form.canvas_height}" data-custom-layer-preview="${this._escape(currentLayer?.id || "")}"></canvas><strong>${this._escape(currentLayer?.name || "Bez vrstvy")}</strong><small>Hodnota entity: ${this._escape(currentValue || "—")}</small></aside></div>`;
+  }
+
+  _migrateCustomElementToLayers(element) {
+    if (element?.element_type === "layered") return { ...this._emptyCustomElementForm(), ...structuredClone(element) };
+    const migrated = this._emptyCustomElementForm();
+    migrated.id = element?.id || "";
+    migrated.name = element?.name || "";
+    migrated.entity_id = element?.entity_id || "";
+    migrated.entity_attribute = element?.entity_attribute || "";
+    const makeLayer = (name, text, image = "") => ({
+      id: `layer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name,
+      objects: image
+        ? [{ id: `item-${Date.now()}-image`, type: "image", x: 88, y: 4, w: 120, h: 120, image }]
+        : [{ id: `item-${Date.now()}-text`, type: "text", x: 28, y: 28, w: 240, h: 72, text, color: element?.color || "black", font_size: 36, bold: true, align: "center" }],
+    });
+    if (element?.element_type === "status") {
+      const on = makeLayer("Zapnuto", `${element.on_symbol || "●"}\n${element.label || "ZAPNUTO"}`);
+      const off = makeLayer("Vypnuto", `${element.off_symbol || "○"}\n${element.label || "VYPNUTO"}`);
+      migrated.layers = [on, off];
+      migrated.condition_rules = [{ operator: "is_on", value: "", layer_id: on.id }, { operator: "is_off", value: "", layer_id: off.id }];
+      migrated.default_layer_id = off.id;
+    } else {
+      const layer = makeLayer(
+        element?.name || "Výchozí",
+        element?.sample_data || element?.label || element?.name || "Hodnota",
+        element?.element_type === "icon" ? element.icon_image || "" : "",
+      );
+      migrated.layers = [layer];
+      migrated.condition_rules = [];
+      migrated.default_layer_id = layer.id;
+    }
+    return migrated;
+  }
+
+  _ensureLayeredCustomForm() {
+    const form = this._customElementForm;
+    if (form.element_type !== "layered") return;
+    form.canvas_width = Math.max(128, Math.min(800, Number(form.canvas_width) || 296));
+    form.canvas_height = Math.max(64, Math.min(480, Number(form.canvas_height) || 128));
+    if (!Array.isArray(form.layers) || !form.layers.length) {
+      const layer = { id: `layer-${Date.now()}`, name: "Výchozí", objects: [] };
+      form.layers = [layer];
+      form.default_layer_id = layer.id;
+    }
+    form.layers.forEach((layer, index) => {
+      layer.id ||= `layer-${Date.now()}-${index}`;
+      layer.name ||= `Vrstva ${index + 1}`;
+      if (!Array.isArray(layer.objects)) layer.objects = [];
+    });
+    if (!form.layers.some((layer) => layer.id === form.default_layer_id)) form.default_layer_id = form.layers[0].id;
+    if (!this._customActiveLayerId || !form.layers.some((layer) => layer.id === this._customActiveLayerId)) this._customActiveLayerId = form.layers[0].id;
+    if (!Array.isArray(form.condition_rules)) form.condition_rules = [];
+  }
+
+  _customActiveLayer() {
+    this._ensureLayeredCustomForm();
+    return (this._customElementForm.layers || []).find((layer) => layer.id === this._customActiveLayerId)
+      || this._customElementForm.layers?.[0] || null;
+  }
+
+  _customSelectedLayerObject() {
+    return this._customActiveLayer()?.objects?.find((object) => object.id === this._customSelectedObjectId) || null;
+  }
+
+  _customLayerForValue(element, value) {
+    const layers = Array.isArray(element.layers) ? element.layers : [];
+    const rule = (element.condition_rules || []).find((item) => this._customConditionMatches(value, item.operator || "equals", item.value || ""));
+    const id = rule?.layer_id || element.default_layer_id || layers[0]?.id;
+    return layers.find((layer) => layer.id === id) || layers[0] || null;
+  }
+
+  _drawCustomLayer(ctx, layer, width, height, sourceWidth, sourceHeight, selectedId = "", applyPreview = true) {
+    const scaleX = width / Math.max(1, sourceWidth);
+    const scaleY = height / Math.max(1, sourceHeight);
+    ctx.save();
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.scale(scaleX, scaleY);
+    for (const object of layer?.objects || []) {
+      const x = Number(object.x || 0), y = Number(object.y || 0);
+      const w = Math.max(1, Number(object.w || 1)), h = Math.max(1, Number(object.h || 1));
+      if (object.type === "rect") {
+        if (object.fill && object.fill !== "none") {
+          ctx.fillStyle = this._color(object.fill);
+          ctx.fillRect(x, y, w, h);
+        }
+        if (object.stroke && object.stroke !== "none") {
+          ctx.strokeStyle = this._color(object.stroke);
+          ctx.lineWidth = Math.max(1, Number(object.stroke_width || 2));
+          ctx.strokeRect(x, y, w, h);
+        }
+      } else if (object.type === "image" && object.image) {
+        let image = this._customImageCache.get(object.image);
+        if (!image) {
+          image = new Image();
+          image.onload = () => this._paintCustomLayerCanvases();
+          image.src = object.image;
+          this._customImageCache.set(object.image, image);
+        }
+        if (image.complete && image.naturalWidth) ctx.drawImage(image, x, y, w, h);
+      } else {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, w, h);
+        ctx.clip();
+        ctx.fillStyle = this._color(object.color || "black");
+        ctx.font = `${object.bold ? "700" : "600"} ${Math.max(8, Number(object.font_size || 24))}px "DRATEK eInk Sans",Arial,sans-serif`;
+        ctx.textAlign = object.align || "left";
+        ctx.textBaseline = "middle";
+        const textX = object.align === "center" ? x + w / 2 : object.align === "right" ? x + w : x;
+        const lines = String(object.text || "Text").split("\n");
+        const lineHeight = Math.max(10, Number(object.font_size || 24) * 1.08);
+        const startY = y + h / 2 - ((lines.length - 1) * lineHeight) / 2;
+        lines.forEach((line, index) => ctx.fillText(line, textX, startY + index * lineHeight, w));
+        ctx.restore();
+      }
+      if (selectedId === object.id) {
+        ctx.save();
+        ctx.strokeStyle = "#00a2a5";
+        ctx.lineWidth = 2 / Math.max(scaleX, scaleY);
+        ctx.setLineDash([5 / scaleX, 3 / scaleX]);
+        ctx.strokeRect(x, y, w, h);
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+    if (applyPreview) this._applyEinkPreview(ctx, width, height);
+  }
+
+  _paintCustomLayerCanvases() {
+    const form = this._customElementForm;
+    this.shadowRoot.querySelectorAll("canvas[data-custom-layer-preview]").forEach((canvas) => {
+      const owner = canvas.dataset.customElementId
+        ? this._customElements.find((element) => element.id === canvas.dataset.customElementId)
+        : form;
+      const layer = (owner?.layers || []).find((item) => item.id === canvas.dataset.customLayerPreview);
+      this._drawCustomLayer(canvas.getContext("2d"), layer, canvas.width, canvas.height, owner?.canvas_width || 296, owner?.canvas_height || 128);
+    });
+    const canvas = this.shadowRoot.querySelector("#customLayerCanvas");
+    if (canvas) this._drawCustomLayer(canvas.getContext("2d"), this._customActiveLayer(), canvas.width, canvas.height, form.canvas_width, form.canvas_height, this._customSelectedObjectId);
+  }
+
+  _addCustomLayer() {
+    this._ensureLayeredCustomForm();
+    const layer = { id: `layer-${Date.now()}`, name: `Vrstva ${this._customElementForm.layers.length + 1}`, objects: [] };
+    this._customElementForm.layers.push(layer);
+    this._customActiveLayerId = layer.id;
+    this._customSelectedObjectId = "";
+    this._stableCustomRender();
+  }
+
+  _duplicateCustomLayer(layerId) {
+    const source = this._customElementForm.layers.find((layer) => layer.id === layerId);
+    if (!source) return;
+    const copy = structuredClone(source);
+    copy.id = `layer-${Date.now()}`;
+    copy.name = `${source.name} – kopie`;
+    copy.objects = copy.objects.map((object, index) => ({ ...object, id: `item-${Date.now()}-${index}` }));
+    this._customElementForm.layers.push(copy);
+    this._customActiveLayerId = copy.id;
+    this._stableCustomRender();
+  }
+
+  _deleteCustomLayer(layerId) {
+    if (this._customElementForm.layers.length <= 1) return;
+    this._customElementForm.layers = this._customElementForm.layers.filter((layer) => layer.id !== layerId);
+    this._customElementForm.condition_rules = this._customElementForm.condition_rules.filter((rule) => rule.layer_id !== layerId);
+    if (this._customElementForm.default_layer_id === layerId) this._customElementForm.default_layer_id = this._customElementForm.layers[0].id;
+    this._customActiveLayerId = this._customElementForm.layers[0].id;
+    this._customSelectedObjectId = "";
+    this._stableCustomRender();
+  }
+
+  _addCustomLayerObject(type) {
+    const layer = this._customActiveLayer();
+    if (!layer) return;
+    const object = type === "rect"
+      ? { id: `item-${Date.now()}`, type: "rect", x: 48, y: 28, w: 120, h: 64, fill: "none", stroke: "black", stroke_width: 2 }
+      : { id: `item-${Date.now()}`, type: "text", x: 38, y: 38, w: 220, h: 52, text: "Nový text", color: "black", font_size: 28, bold: true, align: "center" };
+    layer.objects.push(object);
+    this._customSelectedObjectId = object.id;
+    this._stableCustomRender();
+  }
+
+  _setCustomLayerImage(file) {
+    if (!file || !String(file.type || "").startsWith("image/")) return;
+    if (file.size > 10 * 1024 * 1024) {
+      this._customElementResult = { ok: false, error: "Obrázek může mít maximálně 10 MB." };
+      this._stableCustomRender();
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const layer = this._customActiveLayer();
+      if (!layer) return;
+      const side = Math.round(Math.min(this._customElementForm.canvas_width, this._customElementForm.canvas_height) * 0.55);
+      const object = { id: `item-${Date.now()}`, type: "image", x: 18, y: 18, w: side, h: side, image: reader.result };
+      layer.objects.push(object);
+      this._customSelectedObjectId = object.id;
+      this._stableCustomRender();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  _customLayerCanvasPoint(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left) * this._customElementForm.canvas_width / rect.width,
+      y: (event.clientY - rect.top) * this._customElementForm.canvas_height / rect.height,
+    };
+  }
+
+  _onCustomLayerPointerDown(event) {
+    const point = this._customLayerCanvasPoint(event);
+    const object = [...(this._customActiveLayer()?.objects || [])].reverse().find((item) =>
+      point.x >= Number(item.x || 0) && point.x <= Number(item.x || 0) + Number(item.w || 0)
+      && point.y >= Number(item.y || 0) && point.y <= Number(item.y || 0) + Number(item.h || 0));
+    this._customSelectedObjectId = object?.id || "";
+    this._customLayerDrag = object ? { startX: point.x, startY: point.y, x: Number(object.x || 0), y: Number(object.y || 0) } : null;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    this._paintCustomLayerCanvases();
+  }
+
+  _onCustomLayerPointerMove(event) {
+    if (!this._customLayerDrag) return;
+    const point = this._customLayerCanvasPoint(event);
+    const object = this._customSelectedLayerObject();
+    if (!object) return;
+    object.x = Math.max(0, Math.min(this._customElementForm.canvas_width - object.w, this._customLayerDrag.x + point.x - this._customLayerDrag.startX));
+    object.y = Math.max(0, Math.min(this._customElementForm.canvas_height - object.h, this._customLayerDrag.y + point.y - this._customLayerDrag.startY));
+    this._paintCustomLayerCanvases();
   }
 
   _renderHaElementDesigner() {
@@ -3565,13 +3891,100 @@ class DratekEinkPanel extends HTMLElement {
       customIconDrop.classList.remove("dragging");
       this._setCustomIconFile(event.dataTransfer?.files?.[0]);
     });
-    this.shadowRoot.querySelector("#customElementNew")?.addEventListener("click", () => { this._customElementForm = this._emptyCustomElementForm(); this._customElementFields = []; this._customElementInspection = { collections: [] }; this._customElementResult = null; this._stableCustomRender(); });
+    const createLayeredElement = () => {
+      this._customElementForm = this._emptyCustomElementForm();
+      this._customWorkspaceView = "editor";
+      this._customLayerStep = "design";
+      this._customActiveLayerId = this._customElementForm.layers[0].id;
+      this._customSelectedObjectId = "";
+      this._customElementResult = null;
+      this._stableCustomRender();
+    };
+    this.shadowRoot.querySelector("#customElementNew")?.addEventListener("click", createLayeredElement);
+    this.shadowRoot.querySelector("#customElementEmptyNew")?.addEventListener("click", createLayeredElement);
+    this.shadowRoot.querySelector("#customBackToLibrary")?.addEventListener("click", () => {
+      this._customWorkspaceView = "library";
+      this._customElementResult = null;
+      this._stableCustomRender();
+    });
+    this.shadowRoot.querySelectorAll("[data-custom-step]").forEach((button) => button.addEventListener("click", () => {
+      this._customLayerStep = button.dataset.customStep;
+      this._stableCustomRender();
+    }));
+    this.shadowRoot.querySelector("#addCustomLayer")?.addEventListener("click", () => this._addCustomLayer());
+    this.shadowRoot.querySelectorAll("[data-custom-layer]").forEach((card) => card.addEventListener("click", (event) => {
+      if (event.target.closest("button,input")) return;
+      this._customActiveLayerId = card.dataset.customLayer;
+      this._customSelectedObjectId = "";
+      this._stableCustomRender();
+    }));
+    this.shadowRoot.querySelectorAll("[data-custom-layer-name]").forEach((input) => input.addEventListener("input", () => {
+      const layer = this._customElementForm.layers.find((item) => item.id === input.dataset.customLayerName);
+      if (layer) layer.name = input.value;
+    }));
+    this.shadowRoot.querySelectorAll("[data-custom-layer-name]").forEach((input) => input.addEventListener("change", () => this._stableCustomRender()));
+    this.shadowRoot.querySelectorAll("[data-custom-layer-copy]").forEach((button) => button.addEventListener("click", () => this._duplicateCustomLayer(button.dataset.customLayerCopy)));
+    this.shadowRoot.querySelectorAll("[data-custom-layer-delete]").forEach((button) => button.addEventListener("click", () => this._deleteCustomLayer(button.dataset.customLayerDelete)));
+    this.shadowRoot.querySelectorAll("[data-add-layer-object]").forEach((button) => button.addEventListener("click", () => this._addCustomLayerObject(button.dataset.addLayerObject)));
+    this.shadowRoot.querySelector("#addLayerImage")?.addEventListener("click", () => this.shadowRoot.querySelector("#layerImageFile")?.click());
+    this.shadowRoot.querySelector("#layerImageFile")?.addEventListener("change", (event) => this._setCustomLayerImage(event.target.files?.[0]));
+    this.shadowRoot.querySelectorAll("[data-layer-object]").forEach((input) => {
+      const update = () => {
+        const object = this._customSelectedLayerObject();
+        if (!object) return;
+        const key = input.dataset.layerObject;
+        object[key] = input.type === "checkbox" ? input.checked : input.type === "number" ? Number(input.value) : input.value;
+        this._paintCustomLayerCanvases();
+      };
+      input.addEventListener("input", update);
+      input.addEventListener("change", update);
+    });
+    this.shadowRoot.querySelector("#deleteLayerObject")?.addEventListener("click", () => {
+      const layer = this._customActiveLayer();
+      if (!layer) return;
+      layer.objects = layer.objects.filter((object) => object.id !== this._customSelectedObjectId);
+      this._customSelectedObjectId = "";
+      this._stableCustomRender();
+    });
+    const layerCanvas = this.shadowRoot.querySelector("#customLayerCanvas");
+    layerCanvas?.addEventListener("pointerdown", (event) => this._onCustomLayerPointerDown(event));
+    layerCanvas?.addEventListener("pointermove", (event) => this._onCustomLayerPointerMove(event));
+    layerCanvas?.addEventListener("pointerup", () => { this._customLayerDrag = null; this._stableCustomRender(); });
+    layerCanvas?.addEventListener("pointercancel", () => { this._customLayerDrag = null; this._stableCustomRender(); });
+    this.shadowRoot.querySelector("#addLayerRule")?.addEventListener("click", () => {
+      if (this._customElementForm.condition_rules.length >= 12) return;
+      this._customElementForm.condition_rules.push({ operator: "equals", value: "", layer_id: this._customElementForm.layers[0]?.id || "" });
+      this._stableCustomRender();
+    });
+    this.shadowRoot.querySelectorAll("[data-layer-rule-operator]").forEach((input) => input.addEventListener("change", () => {
+      const rule = this._customElementForm.condition_rules[Number(input.dataset.layerRuleOperator)];
+      if (rule) rule.operator = input.value;
+      this._stableCustomRender();
+    }));
+    this.shadowRoot.querySelectorAll("[data-layer-rule-value]").forEach((input) => input.addEventListener("input", () => {
+      const rule = this._customElementForm.condition_rules[Number(input.dataset.layerRuleValue)];
+      if (rule) rule.value = input.value;
+    }));
+    this.shadowRoot.querySelectorAll("[data-layer-rule-value]").forEach((input) => input.addEventListener("change", () => this._stableCustomRender()));
+    this.shadowRoot.querySelectorAll("[data-layer-rule-target]").forEach((input) => input.addEventListener("change", () => {
+      const rule = this._customElementForm.condition_rules[Number(input.dataset.layerRuleTarget)];
+      if (rule) rule.layer_id = input.value;
+      this._stableCustomRender();
+    }));
+    this.shadowRoot.querySelectorAll("[data-layer-rule-delete]").forEach((button) => button.addEventListener("click", () => {
+      this._customElementForm.condition_rules.splice(Number(button.dataset.layerRuleDelete), 1);
+      this._stableCustomRender();
+    }));
     this.shadowRoot.querySelector("#customElementSave")?.addEventListener("click", () => this._saveCustomElement());
     this.shadowRoot.querySelector("#customElementFetch")?.addEventListener("click", () => this._fetchCustomElementUrl());
     this.shadowRoot.querySelectorAll("[data-custom-edit]").forEach((button) => button.addEventListener("click", () => {
       const element = this._customElements.find((item) => item.id === button.dataset.customEdit);
       if (!element) return;
-      this._customElementForm = { ...this._emptyCustomElementForm(), ...structuredClone(element) };
+      this._customElementForm = this._migrateCustomElementToLayers(element);
+      this._customWorkspaceView = "editor";
+      this._customLayerStep = "design";
+      this._customActiveLayerId = this._customElementForm.layers?.[0]?.id || "";
+      this._customSelectedObjectId = "";
       this._customElementFields = [];
       this._customElementInspection = { collections: [] };
       this._customElementResult = null;
@@ -3760,6 +4173,7 @@ class DratekEinkPanel extends HTMLElement {
     const canvas = this.shadowRoot.querySelector("#editor");
     if (canvas) this._drawScene(canvas.getContext("2d"), canvas.width, canvas.height, true);
     this._paintDevicePreviews();
+    this._paintCustomLayerCanvases();
   }
 
   _paintDevicePreviews() {
@@ -3833,7 +4247,16 @@ class DratekEinkPanel extends HTMLElement {
     else if (object.type === "qr") this._drawQr(ctx, object, box);
     else if (object.type === "chart") this._drawChart(ctx, object, box);
     else if (object.type === "image") this._drawImage(ctx, object, box);
+    else if (object.type === "layered") this._drawLayeredObject(ctx, object, box);
     ctx.restore();
+  }
+
+  _drawLayeredObject(ctx, object, box) {
+    const rawValue = object.entityId ? this._entityRawValue(object) : "";
+    const rule = (object.conditionRules || []).find((item) => this._customConditionMatches(rawValue, item.operator || "equals", item.value || ""));
+    const layerId = rule?.symbol || object.defaultSymbol || object.customLayers?.[0]?.id;
+    const layer = (object.customLayers || []).find((item) => item.id === layerId) || object.customLayers?.[0];
+    this._drawCustomLayer(ctx, layer, box.w, box.h, object.customCanvasWidth || 296, object.customCanvasHeight || 128, "", false);
   }
 
   _drawText(ctx, object, box) {
@@ -4287,7 +4710,7 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _automaticTextBindings() {
-    return this._objects.filter((object) => ["text", "chart"].includes(object.type) && object.entityId && object.autoUpdate !== false);
+    return this._objects.filter((object) => ["text", "chart", "layered"].includes(object.type) && object.entityId && object.autoUpdate !== false);
   }
 
   _entityAutomationPayload() {
@@ -4306,7 +4729,15 @@ class DratekEinkPanel extends HTMLElement {
       enabled: true,
       refresh_interval_seconds: this._refreshIntervalSeconds,
       base_image: canvas.toDataURL("image/png"),
-      bindings: objects.map((object) => object.type === "chart" ? ({
+      bindings: objects.map((object) => object.type === "layered" ? ({
+        id: object.id, type: "layered", entity_id: object.entityId,
+        entity_attribute: object.entityAttribute || "", include_unit: false, fallback: object.defaultSymbol || "",
+        x: Number(object.x || 0), y: Number(object.y || 0), w: Number(object.w || 1), h: Number(object.h || 1),
+        rotation: Number(object.rotation || 0), flipH: !!object.flipH,
+        canvas_width: Number(object.customCanvasWidth || 296), canvas_height: Number(object.customCanvasHeight || 128),
+        layers: structuredClone(object.customLayers || []),
+        condition_rules: structuredClone(object.conditionRules || []), default_symbol: object.defaultSymbol || "",
+      }) : object.type === "chart" ? ({
         id: object.id, type: "chart", entity_id: object.entityId,
         entity_attribute: object.entityAttribute || "", include_unit: false, fallback: object.data || "",
         x: Number(object.x || 0), y: Number(object.y || 0), w: Number(object.w || 1), h: Number(object.h || 1),

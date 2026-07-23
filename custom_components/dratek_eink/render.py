@@ -181,6 +181,80 @@ def _render_bound_chart(binding: dict[str, Any], value: str) -> Image.Image:
     return layer
 
 
+def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
+    """Render the graphical layer selected by a Home Assistant condition."""
+    width = max(1, round(float(binding.get("w", 1))))
+    height = max(1, round(float(binding.get("h", 1))))
+    source_width = max(1, int(binding.get("canvas_width", 296)))
+    source_height = max(1, int(binding.get("canvas_height", 128)))
+    scale_x = width / source_width
+    scale_y = height / source_height
+    output = Image.new("RGBA", (width, height), (255, 255, 255, 255))
+    layers = binding.get("layers") if isinstance(binding.get("layers"), list) else []
+    selected = next((item for item in layers if isinstance(item, dict) and str(item.get("id")) == str(value)), None)
+    if selected is None:
+        selected = next(
+            (item for item in layers if isinstance(item, dict) and str(item.get("id")) == str(binding.get("default_symbol", ""))),
+            layers[0] if layers else None,
+        )
+    if not isinstance(selected, dict):
+        return output
+    draw = ImageDraw.Draw(output)
+    colors = {
+        "black": (0, 0, 0, 255),
+        "red": (220, 20, 12, 255),
+        "white": (255, 255, 255, 255),
+    }
+    for item in selected.get("objects", []):
+        if not isinstance(item, dict):
+            continue
+        x = round(float(item.get("x", 0)) * scale_x)
+        y = round(float(item.get("y", 0)) * scale_y)
+        item_width = max(1, round(float(item.get("w", 1)) * scale_x))
+        item_height = max(1, round(float(item.get("h", 1)) * scale_y))
+        item_type = item.get("type", "text")
+        if item_type == "rect":
+            fill_name = str(item.get("fill") or "none")
+            stroke_name = str(item.get("stroke") or "none")
+            if fill_name != "none":
+                draw.rectangle((x, y, x + item_width, y + item_height), fill=colors.get(fill_name, colors["black"]))
+            if stroke_name != "none":
+                draw.rectangle(
+                    (x, y, x + item_width, y + item_height),
+                    outline=colors.get(stroke_name, colors["black"]),
+                    width=max(1, round(float(item.get("stroke_width", 2)) * min(scale_x, scale_y))),
+                )
+        elif item_type == "image" and item.get("image"):
+            try:
+                icon = _decode_data_image(str(item["image"])).convert("RGBA")
+                icon.thumbnail((item_width, item_height), Image.Resampling.LANCZOS)
+                icon_x = x + (item_width - icon.width) // 2
+                icon_y = y + (item_height - icon.height) // 2
+                output.alpha_composite(icon, (icon_x, icon_y))
+            except (ValueError, TypeError, OSError):
+                continue
+        else:
+            text = str(item.get("text") or "Text")
+            font_size = max(8, round(float(item.get("font_size", 24)) * min(scale_x, scale_y)))
+            font = load_font(font_size, bool(item.get("bold")))
+            lines = text.split("\n")
+            line_height = max(1, round(font_size * 1.08))
+            start_y = y + max(0, (item_height - line_height * len(lines)) // 2)
+            align = str(item.get("align") or "left")
+            fill = colors["red"] if item.get("color") == "red" else colors["black"]
+            for index, line in enumerate(lines):
+                box = draw.textbbox((0, 0), line or " ", font=font)
+                text_width = box[2] - box[0]
+                text_x = x if align == "left" else x + item_width - text_width if align == "right" else x + (item_width - text_width) // 2
+                draw.text((text_x - box[0], start_y + index * line_height - box[1]), line, fill=fill, font=font)
+    if binding.get("flipH"):
+        output = output.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    rotation = int(binding.get("rotation", 0)) % 360
+    if rotation:
+        output = output.rotate(-rotation, expand=True, resample=Image.Resampling.BICUBIC)
+    return output
+
+
 def render_entity_bound_image(
     base_image: str,
     bindings: list[dict[str, Any]],
@@ -190,7 +264,12 @@ def render_entity_bound_image(
     image = _decode_data_image(base_image).convert("RGBA")
     for binding in bindings:
         value = values.get(str(binding.get("id")), str(binding.get("fallback", "")))
-        layer = _render_bound_chart(binding, value) if binding.get("type") == "chart" else _render_bound_text(binding, value)
+        if binding.get("type") == "chart":
+            layer = _render_bound_chart(binding, value)
+        elif binding.get("type") == "layered":
+            layer = _render_bound_layer(binding, value)
+        else:
+            layer = _render_bound_text(binding, value)
         x = round(float(binding.get("x", 0)))
         y = round(float(binding.get("y", 0)))
         x -= (layer.width - max(1, round(float(binding.get("w", 1))))) // 2
