@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.77
+
+- vlastní HA prvky lze vložit přímo z palety hlavního Designeru displeje
+- výběrové orámování objektu je samostatná UI vrstva a nikdy se neukládá do obrazu eInk
+- Designer HA prvků má nové responzivní rozložení bez překrývání panelů
+- texty, tvary a nahrané ikony lze přebarvit pro černobílý nebo červeno-černý eInk
+- přebarvení obrázků zachovává průhlednost a funguje stejně v náhledu i při renderování
+
 ## Novinky ve verzi 0.1.76
 
 - Designer HA prvků je nově samostatná knihovna vlastních rozhraní

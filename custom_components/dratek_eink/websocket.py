@@ -999,6 +999,8 @@ def _normalized_layered_layers(value: Any, canvas_width: int, canvas_height: int
                 })
             else:
                 item["image"] = _normalized_icon_image(source.get("image"))
+                tint = str(source.get("tint") or "original")
+                item["tint"] = tint if tint in {"original", "black", "red", "white"} else "original"
                 if not item["image"]:
                     continue
                 total_image_size += len(item["image"])

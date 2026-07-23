@@ -228,6 +228,11 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
             try:
                 icon = _decode_data_image(str(item["image"])).convert("RGBA")
                 icon.thumbnail((item_width, item_height), Image.Resampling.LANCZOS)
+                tint = str(item.get("tint") or "original")
+                if tint in colors:
+                    alpha = icon.getchannel("A")
+                    icon = Image.new("RGBA", icon.size, colors[tint])
+                    icon.putalpha(alpha)
                 icon_x = x + (item_width - icon.width) // 2
                 icon_y = y + (item_height - icon.height) // 2
                 output.alpha_composite(icon, (icon_x, icon_y))

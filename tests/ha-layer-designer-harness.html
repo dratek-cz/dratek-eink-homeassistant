@@ -35,19 +35,41 @@
   <script type="module">
     import "../custom_components/dratek_eink/frontend/dratek-eink-panel.js";
     const panel = document.createElement("dratek-eink-panel");
-    panel._activeTab = "custom";
+    panel._activeTab = new URLSearchParams(location.search).get("view") === "designer" ? "designer" : "custom";
+    panel._result = {
+      devices: [{
+        address: "FF:FF:92:81:46:32", physical_code: "92.81.46.32",
+        display_name: "Testovací displej", model: "EPA LCD 296x128 1 BWR",
+        sdk_type: 40, battery_percent: 55, rssi: -35,
+      }],
+      ble_devices: [], debug: [],
+    };
+    panel._selectedDeviceAddress = "FF:FF:92:81:46:32";
     document.body.append(panel);
+    const sampleElement = {
+      id: "sample-switch", name: "Zásuvka v kuchyni", element_type: "layered",
+      entity_id: "switch.kuchyn", entity_attribute: "", canvas_width: 296, canvas_height: 128,
+      default_layer_id: "off", condition_rules: [
+        { operator: "is_on", value: "", layer_id: "on" },
+        { operator: "is_off", value: "", layer_id: "off" },
+      ],
+      layers: [
+        { id: "on", name: "Zapnuto", objects: [{ id: "on-text", type: "text", x: 28, y: 35, w: 240, h: 58, text: "ZAPNUTO", color: "red", font_size: 34, bold: true, align: "center" }] },
+        { id: "off", name: "Vypnuto", objects: [{ id: "off-text", type: "text", x: 28, y: 35, w: 240, h: 58, text: "VYPNUTO", color: "black", font_size: 34, bold: true, align: "center" }] },
+      ],
+    };
     panel.hass = {
       states: {
         "switch.kuchyn": { state: "on", attributes: { friendly_name: "Zásuvka kuchyň" } },
         "sensor.teplota": { state: "21.5", attributes: { friendly_name: "Teplota", unit_of_measurement: "°C" } },
       },
       callWS: async ({ type }) => {
-        if (type === "dratek_eink/custom_elements/list") return { elements: [] };
+        if (type === "dratek_eink/custom_elements/list") return { elements: [sampleElement] };
+        if (type === "dratek_eink/device_draft/get") return { draft: null };
         if (type === "dratek_eink/projects/list") return { projects: [] };
         if (type === "dratek_eink/gateways/list") return { gateways: [] };
         if (type === "dratek_eink/serial/ports") return { ports: [] };
-        if (type === "dratek_eink/scan") return { devices: [], ble_devices: [], debug: [] };
+        if (type === "dratek_eink/scan") return panel._result;
         return {};
       },
     };
