@@ -4,6 +4,33 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.81
+
+- přidána karta `DRATEK eInk – přehled` pro hlavní dashboard Home Assistantu
+- karta zobrazuje malé náhledy displejů, barevnou baterii, sílu signálu v dBm a aktivní sloupce signálu
+- u každého displeje je vidět použitá cesta přes Home Assistant Bluetooth nebo gateway
+- součástí karty je kompaktní přehled gatewayí s online stavem, IP adresou a Wi-Fi signálem
+- kliknutí na displej otevře panel DRATEK eInk a kliknutí na gateway otevře její webové rozhraní
+- karta má grafické nastavení názvu, počtu displejů, gatewayí a intervalu obnovení
+- více karet sdílí jeden výsledek vyhledávání, aby zbytečně neopakovaly BLE scan
+
+### Přidání karty na Přehled
+
+1. Otevři hlavní dashboard a zvol **Upravit dashboard**.
+2. Klikni na **Přidat kartu**.
+3. Vyber **DRATEK eInk – přehled**.
+4. Nastav počet displejů, zobrazení gatewayí a interval obnovení.
+
+Kartu lze vložit také přes YAML:
+
+```yaml
+type: custom:dratek-eink-overview-card
+title: DRATEK eInk
+max_displays: 6
+show_gateways: true
+refresh_interval: 60
+```
+
 ## Novinky ve verzi 0.1.80
 
 - správa gatewayí má nové moderní karty ve stejném vizuálním stylu jako hlavní přehled

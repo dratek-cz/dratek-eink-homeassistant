@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 import voluptuous as vol
-from homeassistant.components import panel_custom
+from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -18,6 +18,9 @@ from .transfer import DratekTransfer
 _LOGGER = logging.getLogger(__name__)
 PANEL_URL_PATH = "dratek-eink"
 PANEL_STATIC_PATH = f"/{DOMAIN}_panel"
+OVERVIEW_CARD_MODULE_URL = (
+    f"{PANEL_STATIC_PATH}/dratek-eink-overview-card.js?v={PANEL_VERSION}"
+)
 
 SEND_TEXT_SCHEMA = vol.Schema(
     {
@@ -83,8 +86,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def _async_register_panel(hass: HomeAssistant) -> None:
     if hass.data[DOMAIN].get("panel_registered"):
+        frontend.add_extra_js_url(hass, OVERVIEW_CARD_MODULE_URL)
         return
     if PANEL_URL_PATH in hass.data.get("frontend_panels", {}):
+        frontend.add_extra_js_url(hass, OVERVIEW_CARD_MODULE_URL)
         hass.data[DOMAIN]["panel_registered"] = True
         return
 
@@ -92,6 +97,8 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
     await hass.http.async_register_static_paths(
         [StaticPathConfig(PANEL_STATIC_PATH, str(frontend_path), cache_headers=False)]
     )
+    frontend.add_extra_js_url(hass, OVERVIEW_CARD_MODULE_URL)
+
     await panel_custom.async_register_panel(
         hass,
         webcomponent_name="dratek-eink-panel",
