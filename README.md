@@ -4,6 +4,16 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.73
+
+- Designer HA prvků je zjednodušený do čtyř kroků: typ, entita, chování a vzhled
+- pokročilé atributy, jednotlivá podmínková pravidla a rozměry jsou schované v přehledných rozbalovacích blocích
+- po uložení zůstane stejný prvek otevřený k dalším úpravám a formulář se už nevymaže
+- překreslení formuláře zachovává pozici stránky, otevřené pokročilé bloky i pozici knihovny
+- spodní ukládací lišta zůstává dostupná i při úpravě delší konfigurace
+- výběr entity ignoruje duplicitní události, takže už nezpůsobuje zbytečné překreslování a nespolehlivé prokliky
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.72
 
 - změna výsledné ikony nebo dynamické hodnoty spustí vytvoření nového obrazu přibližně do 150 ms

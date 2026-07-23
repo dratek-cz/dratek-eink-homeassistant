@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.72";
+const DRATEK_EINK_VERSION = "0.1.73";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -594,8 +594,11 @@ class DratekEinkPanel extends HTMLElement {
       this._customElementResult = { ok: false, error: this._message(err) };
     }
     if (render) {
-      this._render();
-      this._paint();
+      if (this._activeTab === "custom") this._stableCustomRender();
+      else {
+        this._render();
+        this._paint();
+      }
     }
   }
 
@@ -603,18 +606,17 @@ class DratekEinkPanel extends HTMLElement {
     if (!this._hass || this._customElementBusy || !this._customElementForm.name.trim() || !this._customElementForm.entity_id) return;
     this._customElementBusy = true;
     this._customElementResult = null;
-    this._render();
+    this._stableCustomRender();
     try {
       const result = await this._hass.callWS({ type: "dratek_eink/custom_elements/save", element: this._customElementForm });
-      this._customElementForm = this._emptyCustomElementForm();
+      this._customElementForm = { ...this._emptyCustomElementForm(), ...structuredClone(result.element) };
       await this._loadCustomElements(false);
-      this._customElementResult = { ok: true, message: `Prvek „${result.element.name}“ byl uložen do knihovny.` };
+      this._customElementResult = { ok: true, message: `Prvek „${result.element.name}“ je uložený. Můžete pokračovat v úpravách nebo jej vložit do designeru.` };
     } catch (err) {
       this._customElementResult = { ok: false, error: this._message(err) };
     } finally {
       this._customElementBusy = false;
-      this._render();
-      this._paint();
+      this._stableCustomRender();
     }
   }
 
@@ -2372,6 +2374,41 @@ class DratekEinkPanel extends HTMLElement {
     </div>`;
   }
 
+  _stableCustomRender() {
+    const positions = [];
+    let node = this;
+    const visited = new Set();
+    while (node && !visited.has(node)) {
+      visited.add(node);
+      if (typeof node.scrollTop === "number" && node.scrollHeight > node.clientHeight) {
+        positions.push([node, node.scrollTop, node.scrollLeft]);
+      }
+      const root = node.getRootNode?.();
+      node = node.parentElement || (root && root.host !== node ? root.host : null);
+    }
+    const windowX = window.scrollX;
+    const windowY = window.scrollY;
+    const libraryScroll = this.shadowRoot.querySelector(".custom-library-list")?.scrollTop || 0;
+    const openDetails = [...this.shadowRoot.querySelectorAll(".ha-elements-page details")]
+      .map((detail, index) => detail.open ? index : -1)
+      .filter((index) => index >= 0);
+    this._render();
+    this._paint();
+    requestAnimationFrame(() => {
+      positions.forEach(([target, top, left]) => {
+        target.scrollTop = top;
+        target.scrollLeft = left;
+      });
+      window.scrollTo(windowX, windowY);
+      const library = this.shadowRoot.querySelector(".custom-library-list");
+      if (library) library.scrollTop = libraryScroll;
+      const details = [...this.shadowRoot.querySelectorAll(".ha-elements-page details")];
+      openDetails.forEach((index) => {
+        if (details[index]) details[index].open = true;
+      });
+    });
+  }
+
   _render() {
     const result = this._result || { scanner_count: 0, ble_count: 0, devices: [], ble_devices: [], debug: [] };
     const topologyGroups = this._topologyGroups(result.devices);
@@ -2482,8 +2519,9 @@ class DratekEinkPanel extends HTMLElement {
         .api-load-button{width:100%;min-height:54px;display:flex;align-items:center;justify-content:center;gap:10px;margin:8px 0 12px;background:var(--dratek-teal)}.api-load-button ha-icon{--mdc-icon-size:25px}.api-load-button span,.api-load-button strong,.api-load-button small{display:block;text-align:left}.api-load-button small{margin-top:2px;color:rgba(255,255,255,.78);font-size:9px}.api-mapper{display:grid;gap:12px;padding:13px;border:1px solid rgba(0,153,153,.3);border-radius:12px;background:linear-gradient(145deg,rgba(0,153,153,.07),rgba(255,102,0,.025))}.api-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}.api-steps span{display:flex;align-items:center;gap:5px;min-width:0;padding:6px;border-radius:7px;background:var(--secondary-background-color);color:var(--secondary-text-color);font-size:8px;font-weight:750}.api-steps b{width:19px;height:19px;display:grid;place-items:center;flex:0 0 auto;border-radius:50%;background:var(--divider-color);font-size:9px}.api-steps .active{color:var(--dratek-orange)}.api-steps .active b{background:var(--dratek-orange);color:#fff}.api-steps .done{color:var(--dratek-teal-dark)}.api-steps .done b{background:var(--dratek-teal);color:#fff}.api-mapping-grid{display:grid;gap:9px}.api-mapping-grid .field{margin:0}.api-mapping-grid select{font-size:11px}.api-mapping-summary,.api-mapper-empty{display:flex;align-items:center;gap:10px;padding:10px;border-radius:9px;background:var(--card-background-color);border:1px solid var(--divider-color)}.api-mapping-summary ha-icon,.api-mapper-empty ha-icon{color:var(--dratek-teal);--mdc-icon-size:26px}.api-mapping-summary strong,.api-mapping-summary span,.api-mapper-empty strong,.api-mapper-empty span{display:block}.api-mapping-summary span,.api-mapper-empty span{margin-top:3px;color:var(--secondary-text-color);font-size:9px}.api-mapping-summary code{color:var(--dratek-teal-dark);font-size:9px}
         .custom-elements-page{display:grid;gap:12px}.custom-elements-hero{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:22px;border-left:4px solid var(--dratek-teal);background:linear-gradient(110deg,rgba(0,153,153,.1),var(--card-background-color) 48%,rgba(255,102,0,.055))}.custom-elements-hero .eyebrow{display:block;margin-bottom:5px;color:var(--dratek-teal-dark);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.custom-elements-hero h2{color:var(--primary-text-color);font-size:21px;letter-spacing:0;text-transform:none}.custom-elements-hero p{max-width:820px;margin:7px 0 0;color:var(--secondary-text-color);font-size:12px;line-height:1.5}.custom-hero-icon{width:58px;height:58px;display:grid;place-items:center;flex:0 0 auto;border-radius:16px;background:var(--dratek-teal);color:#fff;box-shadow:0 9px 24px rgba(0,153,153,.22)}.custom-hero-icon ha-icon{--mdc-icon-size:32px}.custom-result{display:flex;align-items:center;gap:8px;padding:10px 13px;border-radius:10px;font-size:12px;font-weight:750}.custom-result.good{background:rgba(22,163,74,.1);color:#16803c}.custom-result.bad{background:rgba(220,38,38,.1);color:#c62828}.custom-elements-layout{display:grid;grid-template-columns:minmax(440px,1.08fr) minmax(390px,.92fr);gap:12px;align-items:start}.custom-builder,.custom-live-preview,.custom-library{border-radius:14px}.custom-type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:13px}.custom-type{min-height:70px;display:grid;place-items:center;gap:4px;padding:9px;border:1px solid var(--divider-color);background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.custom-type ha-icon{--mdc-icon-size:25px;color:var(--dratek-teal)}.custom-type span{font-size:11px}.custom-type.selected{border-color:var(--dratek-teal);background:rgba(0,153,153,.09);box-shadow:inset 0 0 0 1px var(--dratek-teal)}.custom-fetch-field button{width:100%}.custom-builder textarea{width:100%;resize:vertical;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);color:var(--primary-text-color);padding:9px}.custom-builder input[type=range]{width:100%;accent-color:var(--dratek-orange)}.custom-builder-actions{display:flex;justify-content:flex-end;margin-top:12px}.custom-builder-actions button{min-width:190px;background:var(--dratek-orange)}.custom-side{display:grid;gap:12px;position:sticky;top:12px}.custom-live-preview{min-height:190px}.custom-visual{position:relative;display:grid;place-items:center;min-height:120px;padding:16px;overflow:hidden;border:8px solid #eee8e8;border-radius:14px;background:#fff;color:#111;box-shadow:0 7px 18px rgba(15,23,42,.13);font-family:"DRATEK eInk Sans",Arial,sans-serif}.custom-visual.value{align-content:center}.custom-visual.value small{font-size:11px;font-weight:700}.custom-visual.value strong{font-size:29px}.custom-visual.value em{font-size:14px;font-style:normal}.custom-visual.status{grid-template-rows:1fr auto auto;gap:2px}.custom-visual.status strong{font-size:46px;line-height:1}.custom-visual.status.active strong{color:#d41414}.custom-visual.status span{font-size:13px;font-weight:800}.custom-visual.status small{font-size:9px;color:#666}.custom-visual.chart{align-content:stretch;justify-items:stretch}.custom-visual.chart>small{text-align:center;font-weight:800}.custom-chart-bars{height:80px;display:flex;align-items:end;justify-content:stretch;gap:3px;padding:8px 6px 0;border-left:2px solid #111;border-bottom:2px solid #111}.custom-chart-bars i{display:block;flex:1;min-width:3px;background:#d41414}.custom-library-list{display:grid;gap:9px;max-height:620px;overflow:auto;padding-right:3px}.custom-library-item{display:grid;gap:9px;padding:11px;border:1px solid var(--divider-color);border-radius:11px;background:var(--secondary-background-color)}.custom-library-head{display:flex;align-items:center;gap:9px}.custom-library-head>span{width:34px;height:34px;display:grid;place-items:center;flex:0 0 auto;border-radius:8px;background:rgba(0,153,153,.1);color:var(--dratek-teal-dark)}.custom-library-head strong,.custom-library-head small{display:block}.custom-library-head strong{font-size:13px}.custom-library-head small{margin-top:2px;color:var(--secondary-text-color);font-size:9px}.custom-library-item .custom-visual{min-height:86px;border-width:5px}.custom-library-item .custom-visual.value strong{font-size:22px}.custom-library-item .custom-visual.status strong{font-size:31px}.custom-library-item .custom-chart-bars{height:52px}.custom-library-actions{display:grid;grid-template-columns:1.2fr 1fr auto auto;gap:5px}.custom-library-actions button{min-height:34px;padding:6px 8px;font-size:9px}.custom-library-actions .icon-btn{width:34px}.tabbar .tab[data-tab=custom]{margin-left:6px;border-left:1px solid var(--divider-color)}
         .ha-entity-module,.ha-module-card,.condition-designer{display:grid;gap:11px;margin:12px 0;padding:13px;border:1px solid var(--divider-color);border-radius:12px;background:var(--secondary-background-color)}.ha-entity-module{border-color:rgba(0,153,153,.35);background:rgba(0,153,153,.055)}.ha-module-title,.condition-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.ha-module-title{justify-content:flex-start}.ha-module-title>ha-icon{width:36px;height:36px;padding:7px;border-radius:9px;background:var(--dratek-teal);color:#fff}.ha-module-title strong,.ha-module-title small,.condition-head strong,.condition-head small{display:block}.ha-module-title small,.condition-head small{margin-top:2px;color:var(--secondary-text-color);font-size:9px}.condition-templates{display:flex;flex-wrap:wrap;gap:6px}.condition-templates button{min-height:34px;font-size:9px}.condition-rules{display:grid;gap:7px}.condition-rule{position:relative;display:grid;grid-template-columns:28px minmax(130px,1.1fr) minmax(105px,.8fr) minmax(115px,.9fr) auto;align-items:end;gap:7px;padding:9px;border:1px solid var(--divider-color);border-radius:10px;background:var(--card-background-color)}.condition-rule.matches{border-color:var(--dratek-teal);box-shadow:inset 3px 0 0 var(--dratek-teal)}.condition-rule .field{margin:0}.condition-order{width:24px;height:24px;display:grid;place-items:center;align-self:center;border-radius:7px;background:var(--secondary-background-color);font-size:10px;font-weight:900}.condition-unused{opacity:.45}.condition-remove{align-self:center}.condition-match{position:absolute;right:8px;top:-8px;display:flex;align-items:center;gap:3px;padding:2px 6px;border-radius:10px;background:var(--dratek-teal);color:#fff;font-size:8px;font-weight:800}.condition-match ha-icon{--mdc-icon-size:11px}.condition-footer{display:flex;align-items:end;justify-content:space-between;gap:12px}.condition-footer>.field{min-width:220px;margin:0}.ha-hint{display:flex;align-items:center;gap:7px;padding:8px;border-radius:8px;background:var(--card-background-color);color:var(--secondary-text-color);font-size:9px}.ha-hint ha-icon{color:var(--dratek-teal)}.ha-hint code{font-weight:800}.ha-elements-page .custom-builder{overflow:visible}
+        .ha-wizard-progress{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0}.ha-wizard-progress span{display:flex;align-items:center;gap:6px;min-width:0;padding:7px 8px;border-radius:9px;background:var(--secondary-background-color);color:var(--secondary-text-color);font-size:9px;font-weight:800}.ha-wizard-progress b,.ux-step-title>b,.summary-step{width:23px;height:23px;display:grid;place-items:center;flex:0 0 auto;border-radius:50%;background:var(--divider-color);font-size:10px}.ha-wizard-progress .active{color:var(--dratek-orange-dark);box-shadow:inset 0 0 0 1px rgba(255,107,0,.35)}.ha-wizard-progress .active b{background:var(--dratek-orange);color:#fff}.ha-wizard-progress .done{color:var(--dratek-teal-dark)}.ha-wizard-progress .done b{background:var(--dratek-teal);color:#fff}.ux-step{display:grid;gap:10px;padding:13px;border:1px solid var(--divider-color);border-radius:12px}.ux-step-title{display:flex;align-items:center;gap:9px}.ux-step-title>b,.summary-step{background:var(--dratek-teal);color:#fff}.ux-step-title strong,.ux-step-title small{display:block}.ux-step-title small{margin-top:2px;color:var(--secondary-text-color);font-size:9px}.behavior-title{margin:15px 0 4px}.custom-advanced{border:1px solid var(--divider-color);border-radius:10px;background:var(--card-background-color)}.custom-advanced>summary{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;color:var(--primary-text-color);font-size:10px;font-weight:850;user-select:none}.custom-advanced>summary::marker{color:var(--dratek-teal)}.custom-advanced[open]>summary{border-bottom:1px solid var(--divider-color)}.custom-advanced>.field,.custom-advanced>.row,.custom-advanced>.condition-rules,.custom-advanced>.condition-footer{margin:10px 12px 12px}.condition-details{margin-top:2px}.condition-details .condition-rules{margin-top:12px}.appearance-settings{margin-top:12px}.appearance-settings>summary{font-size:11px}.value-ready{margin:10px 0;padding:13px}.sticky-save{position:sticky;z-index:4;bottom:0;align-items:center;justify-content:space-between;gap:12px;margin:14px -16px -16px;padding:12px 16px;border-top:1px solid var(--divider-color);border-radius:0 0 14px 14px;background:color-mix(in srgb,var(--card-background-color) 94%,transparent);box-shadow:0 -8px 18px rgba(15,23,42,.07);backdrop-filter:blur(8px)}.sticky-save>span{min-width:0;overflow:hidden;color:var(--secondary-text-color);font-size:9px;font-weight:750;text-overflow:ellipsis;white-space:nowrap}
         @media(max-width:1000px){.custom-elements-layout{grid-template-columns:1fr}.custom-side{position:static;grid-template-columns:1fr 1fr}.tabbar{width:100%;overflow-x:auto}.tabbar .tab{flex:0 0 auto}.condition-rule{grid-template-columns:28px 1fr 1fr}.condition-rule .field:nth-of-type(3){grid-column:2/4}.condition-remove{grid-column:1;grid-row:2}}
-        @media(max-width:680px){.custom-elements-hero{padding:16px}.custom-hero-icon{display:none}.custom-elements-hero h2{font-size:17px}.custom-side{grid-template-columns:1fr}.custom-type-grid{grid-template-columns:1fr}.custom-elements-layout .row{grid-template-columns:1fr}.custom-library-actions{grid-template-columns:1fr 1fr auto auto}}
+        @media(max-width:680px){.custom-elements-hero{padding:16px}.custom-hero-icon{display:none}.custom-elements-hero h2{font-size:17px}.custom-side{grid-template-columns:1fr}.custom-type-grid{grid-template-columns:repeat(3,1fr)}.custom-elements-layout .row{grid-template-columns:1fr}.custom-library-actions{grid-template-columns:1fr 1fr auto auto}.ha-wizard-progress span{justify-content:center;padding:7px 4px;font-size:0}.ha-wizard-progress b{font-size:10px}.sticky-save{align-items:stretch;flex-direction:column}.sticky-save button{width:100%}.condition-footer{align-items:stretch;flex-direction:column}.condition-footer>.field{min-width:0}}
       </style>
       <div class="page">
         <div class="topbar">
@@ -2855,6 +2893,8 @@ class DratekEinkPanel extends HTMLElement {
     const ruleEditor = `<div class="condition-designer">
       <div class="condition-head"><div><strong>Pravidla signalizace</strong><small>Vyhodnocují se shora dolů. Použije se první splněné pravidlo.</small></div><span class="pill muted">Aktuální hodnota: ${this._escape(currentValue || "—")}</span></div>
       <div class="condition-templates"><button class="secondary" data-condition-template="socket"><ha-icon icon="mdi:power-socket-eu"></ha-icon>Zásuvka ON/OFF</button><button class="secondary" data-condition-template="temperature"><ha-icon icon="mdi:thermometer-alert"></ha-icon>Teplotní limity</button><button class="secondary" data-condition-template="limit"><ha-icon icon="mdi:gauge"></ha-icon>Číselný limit</button></div>
+      <details class="custom-advanced condition-details">
+      <summary>Upravit jednotlivá pravidla (${rules.length})</summary>
       <div class="condition-rules">${rules.map((rule, index) => {
         const needsValue = !["is_on", "is_off"].includes(rule.operator);
         const matches = this._customConditionMatches(currentValue, rule.operator || "equals", rule.value || "");
@@ -2868,6 +2908,7 @@ class DratekEinkPanel extends HTMLElement {
         </article>`;
       }).join("")}</div>
       <div class="condition-footer"><button id="addConditionRule" class="secondary"><ha-icon icon="mdi:plus"></ha-icon>Přidat pravidlo</button><div class="field"><label>Ikona, když neplatí žádné pravidlo</label><select data-custom-element-field="default_symbol">${symbolOptions(form.default_symbol || "?")}<option value="?" ${form.default_symbol === "?" ? "selected" : ""}>? · Neznámý stav</option></select></div></div>
+      </details>
     </div>`;
     const graphEditor = `<div class="ha-module-card">
       <div class="ha-module-title"><ha-icon icon="mdi:chart-timeline-variant"></ha-icon><div><strong>Nastavení grafu</strong><small>Graf se automaticky překreslí při změně vybrané entity.</small></div></div>
@@ -2881,14 +2922,15 @@ class DratekEinkPanel extends HTMLElement {
       <div class="custom-elements-layout">
         <section class="card custom-builder">
           <div class="section-title"><div><h2>${form.id ? "Upravit prvek" : "Nový prvek"}</h2><div class="subtitle">${this._escape(meta.description)}</div></div><button id="customElementNew" class="secondary"><ha-icon icon="mdi:plus"></ha-icon>Nový</button></div>
-          <div class="custom-type-grid">${["status", "value", "chart"].map((type) => { const item = this._customElementMeta(type); return `<button class="custom-type ${form.element_type === type ? "selected" : ""}" data-custom-type="${type}"><ha-icon icon="${item.icon}"></ha-icon><span>${item.label}</span></button>`; }).join("")}</div>
+          <div class="ha-wizard-progress"><span class="done"><b>1</b>Typ</span><span class="${form.entity_id ? "done" : "active"}"><b>2</b>Entita</span><span class="${form.entity_id ? "active" : ""}"><b>3</b>Chování</span><span><b>4</b>Vzhled</span></div>
+          <div class="ux-step"><div class="ux-step-title"><b>1</b><div><strong>Co chcete vytvořit?</strong><small>Vyberte pouze jeden typ prvku.</small></div></div><div class="custom-type-grid">${["status", "value", "chart"].map((type) => { const item = this._customElementMeta(type); return `<button class="custom-type ${form.element_type === type ? "selected" : ""}" data-custom-type="${type}"><ha-icon icon="${item.icon}"></ha-icon><span>${item.label}</span></button>`; }).join("")}</div>
           <div class="row"><div class="field"><label>Název prvku</label><input data-custom-element-field="name" value="${this._escape(form.name)}" placeholder="Například Stav zásuvky"></div><div class="field"><label>Barva prvku</label><select data-custom-element-field="color"><option value="black" ${form.color === "black" ? "selected" : ""}>Černá</option><option value="red" ${form.color === "red" ? "selected" : ""}>Červená</option></select></div></div>
-          <div class="ha-entity-module"><div class="ha-module-title"><ha-icon icon="mdi:home-assistant"></ha-icon><div><strong>Zdroj z Home Assistantu</strong><small>Vyberte zásuvku, senzor, pomocníka nebo jinou entitu.</small></div></div><div class="field"><label>Entita</label><ha-entity-picker id="customElementEntity"></ha-entity-picker></div><div class="field"><label>Atribut entity (volitelné)</label><input data-custom-element-field="entity_attribute" value="${this._escape(form.entity_attribute)}" placeholder="Například temperature nebo prices"></div></div>
-          ${form.element_type === "status" ? ruleEditor : form.element_type === "chart" ? graphEditor : ""}
-          <div class="row"><div class="field"><label>Popisek</label><input data-custom-element-field="label" value="${this._escape(form.label)}" placeholder="Například Teplota"></div><div class="field"><label>Jednotka</label><input data-custom-element-field="unit" value="${this._escape(form.unit)}" placeholder="°C, kWh, %"></div></div>
-          ${form.element_type !== "status" ? `<div class="field"><label>Ukázková hodnota${form.element_type === "chart" ? " / počáteční data" : ""}</label><textarea data-custom-element-field="sample_data" rows="2">${this._escape(form.sample_data)}</textarea></div>` : ""}
-          <div class="row"><div class="field"><label>Šířka <strong>${form.width_percent} %</strong></label><input data-custom-element-field="width_percent" type="range" min="10" max="100" value="${form.width_percent}"></div><div class="field"><label>Výška <strong>${form.height_percent} %</strong></label><input data-custom-element-field="height_percent" type="range" min="10" max="100" value="${form.height_percent}"></div></div>
-          <div class="custom-builder-actions"><button id="customElementSave" ${this._customElementBusy || !form.name.trim() || !form.entity_id ? "disabled" : ""}><ha-icon icon="mdi:content-save-outline"></ha-icon>${form.id ? "Uložit změny" : "Přidat do knihovny"}</button></div>
+          </div>
+          <div class="ha-entity-module"><div class="ux-step-title"><b>2</b><div><strong>Vyberte zdroj z Home Assistantu</strong><small>Zásuvka, senzor, pomocník nebo jiná entita.</small></div></div><div class="field"><label>Entita</label><ha-entity-picker id="customElementEntity"></ha-entity-picker></div><details class="custom-advanced"><summary>Pokročilé: použít atribut entity</summary><div class="field"><label>Atribut entity</label><input data-custom-element-field="entity_attribute" value="${this._escape(form.entity_attribute)}" placeholder="Například temperature nebo prices"></div></details></div>
+          <div class="ux-step-title behavior-title"><b>3</b><div><strong>Nastavte chování</strong><small>${this._escape(meta.description)}</small></div></div>
+          ${form.element_type === "status" ? ruleEditor : form.element_type === "chart" ? graphEditor : `<div class="ha-hint value-ready"><ha-icon icon="mdi:check-circle-outline"></ha-icon>Hodnota entity se zobrazí přímo a při každé změně se automaticky odešle na displej.</div>`}
+          <details class="custom-advanced appearance-settings"><summary><span class="summary-step">4</span>Vzhled a velikost</summary><div class="row"><div class="field"><label>Popisek</label><input data-custom-element-field="label" value="${this._escape(form.label)}" placeholder="Například Teplota"></div>${form.element_type === "status" ? "" : `<div class="field"><label>Jednotka</label><input data-custom-element-field="unit" value="${this._escape(form.unit)}" placeholder="°C, kWh, %"></div>`}</div>${form.element_type !== "status" ? `<div class="field"><label>Ukázková hodnota${form.element_type === "chart" ? " / počáteční data" : ""}</label><textarea data-custom-element-field="sample_data" rows="2">${this._escape(form.sample_data)}</textarea></div>` : ""}<div class="row"><div class="field"><label>Šířka <strong>${form.width_percent} %</strong></label><input data-custom-element-field="width_percent" type="range" min="10" max="100" value="${form.width_percent}"></div><div class="field"><label>Výška <strong>${form.height_percent} %</strong></label><input data-custom-element-field="height_percent" type="range" min="10" max="100" value="${form.height_percent}"></div></div></details>
+          <div class="custom-builder-actions sticky-save"><span>${form.id ? `Upravujete: ${this._escape(form.name)}` : "Nový prvek"}</span><button id="customElementSave" ${this._customElementBusy || !form.name.trim() || !form.entity_id ? "disabled" : ""}><ha-icon icon="mdi:content-save-outline"></ha-icon>${this._customElementBusy ? "Ukládám..." : form.id ? "Uložit změny" : "Přidat do knihovny"}</button></div>
         </section>
         <aside class="custom-side">
           <section class="card custom-live-preview"><div class="section-title"><h2>Živý náhled</h2><span class="pill ${form.entity_id ? "good" : "warn"}">${form.entity_id ? "Napojeno" : "Bez entity"}</span></div>${this._renderCustomElementVisual(form)}</section>
@@ -3346,8 +3388,7 @@ class DratekEinkPanel extends HTMLElement {
       this._customElementForm.element_type = button.dataset.customType;
       this._customElementResult = null;
       if ((this._customElementInspection.collections || []).length) this._adoptCustomInspection(this._customElementInspection.collections);
-      this._render();
-      this._paint();
+      this._stableCustomRender();
     }));
     this.shadowRoot.querySelectorAll("[data-condition-template]").forEach((button) => button.addEventListener("click", () => {
       const templates = {
@@ -3367,26 +3408,22 @@ class DratekEinkPanel extends HTMLElement {
       };
       this._customElementForm.condition_rules = structuredClone(templates[button.dataset.conditionTemplate] || []);
       this._customElementForm.default_symbol = "?";
-      this._render();
-      this._paint();
+      this._stableCustomRender();
     }));
     this.shadowRoot.querySelector("#addConditionRule")?.addEventListener("click", () => {
       const rules = Array.isArray(this._customElementForm.condition_rules) ? this._customElementForm.condition_rules : [];
       if (rules.length < 8) rules.push({ operator: "equals", value: "", symbol: "●" });
       this._customElementForm.condition_rules = rules;
-      this._render();
-      this._paint();
+      this._stableCustomRender();
     });
     this.shadowRoot.querySelectorAll("[data-condition-remove]").forEach((button) => button.addEventListener("click", () => {
       this._customElementForm.condition_rules.splice(Number(button.dataset.conditionRemove), 1);
-      this._render();
-      this._paint();
+      this._stableCustomRender();
     }));
     this.shadowRoot.querySelectorAll("[data-condition-operator]").forEach((input) => input.addEventListener("change", () => {
       const rule = this._customElementForm.condition_rules[Number(input.dataset.conditionOperator)];
       if (rule) rule.operator = input.value;
-      this._render();
-      this._paint();
+      this._stableCustomRender();
     }));
     this.shadowRoot.querySelectorAll("[data-condition-value]").forEach((input) => input.addEventListener("input", () => {
       const rule = this._customElementForm.condition_rules[Number(input.dataset.conditionValue)];
@@ -3394,14 +3431,12 @@ class DratekEinkPanel extends HTMLElement {
       this._paint();
     }));
     this.shadowRoot.querySelectorAll("[data-condition-value]").forEach((input) => input.addEventListener("change", () => {
-      this._render();
-      this._paint();
+      this._stableCustomRender();
     }));
     this.shadowRoot.querySelectorAll("[data-condition-symbol]").forEach((input) => input.addEventListener("change", () => {
       const rule = this._customElementForm.condition_rules[Number(input.dataset.conditionSymbol)];
       if (rule) rule.symbol = input.value;
-      this._render();
-      this._paint();
+      this._stableCustomRender();
     }));
     this.shadowRoot.querySelectorAll("[data-custom-element-field]").forEach((input) => {
       const update = () => {
@@ -3418,7 +3453,7 @@ class DratekEinkPanel extends HTMLElement {
         if (fetchButton) fetchButton.disabled = this._customElementBusy || !this._customElementForm.url.trim();
       };
       input.addEventListener("input", update);
-      input.addEventListener("change", () => { update(); this._render(); this._paint(); });
+      input.addEventListener("change", () => { update(); this._stableCustomRender(); });
     });
     this.shadowRoot.querySelector("#customCollectionPath")?.addEventListener("change", (event) => {
       const collection = (this._customElementInspection.collections || []).find((item) => item.path === event.target.value);
@@ -3445,12 +3480,13 @@ class DratekEinkPanel extends HTMLElement {
       customEntity.value = this._customElementForm.entity_id || "";
       customEntity.allowCustomEntity = true;
       customEntity.addEventListener("value-changed", (event) => {
-        this._customElementForm.entity_id = event.detail?.value || "";
-        this._render();
-        this._paint();
+        const entityId = event.detail?.value || "";
+        if (entityId === this._customElementForm.entity_id) return;
+        this._customElementForm.entity_id = entityId;
+        this._stableCustomRender();
       });
     }
-    this.shadowRoot.querySelector("#customElementNew")?.addEventListener("click", () => { this._customElementForm = this._emptyCustomElementForm(); this._customElementFields = []; this._customElementInspection = { collections: [] }; this._customElementResult = null; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#customElementNew")?.addEventListener("click", () => { this._customElementForm = this._emptyCustomElementForm(); this._customElementFields = []; this._customElementInspection = { collections: [] }; this._customElementResult = null; this._stableCustomRender(); });
     this.shadowRoot.querySelector("#customElementSave")?.addEventListener("click", () => this._saveCustomElement());
     this.shadowRoot.querySelector("#customElementFetch")?.addEventListener("click", () => this._fetchCustomElementUrl());
     this.shadowRoot.querySelectorAll("[data-custom-edit]").forEach((button) => button.addEventListener("click", () => {
@@ -3460,8 +3496,7 @@ class DratekEinkPanel extends HTMLElement {
       this._customElementFields = [];
       this._customElementInspection = { collections: [] };
       this._customElementResult = null;
-      this._render();
-      this._paint();
+      this._stableCustomRender();
     }));
     this.shadowRoot.querySelectorAll("[data-custom-delete]").forEach((button) => button.addEventListener("click", () => this._deleteCustomElement(button.dataset.customDelete)));
     this.shadowRoot.querySelectorAll("[data-custom-insert]").forEach((button) => button.addEventListener("click", () => {
