@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
@@ -19,6 +20,9 @@ STORE_VERSION = 1
 DATA_KEY = "entity_auto_update_manager"
 DEBOUNCE_SECONDS = 0.15
 RETRY_AFTER_BUSY_SECONDS = 1.0
+DEFAULT_REFRESH_INTERVAL_SECONDS = 60
+MIN_REFRESH_INTERVAL_SECONDS = 30
+MAX_REFRESH_INTERVAL_SECONDS = 86400
 
 
 class EntityAutoUpdateManager:
@@ -32,6 +36,7 @@ class EntityAutoUpdateManager:
         self._timers: dict[str, Any] = {}
         self._refresh_tasks: dict[str, Any] = {}
         self._pending_refreshes: set[str] = set()
+        self._last_refresh_at: dict[str, float] = {}
         self._chart_series: dict[str, list[float]] = {}
         self._initialized = False
 
@@ -48,18 +53,46 @@ class EntityAutoUpdateManager:
         self._initialized = True
         self._refresh_listener()
 
+    @staticmethod
+    def _refresh_interval(config: dict[str, Any]) -> int:
+        try:
+            interval = int(config.get("refresh_interval_seconds") or DEFAULT_REFRESH_INTERVAL_SECONDS)
+        except (TypeError, ValueError):
+            interval = DEFAULT_REFRESH_INTERVAL_SECONDS
+        return max(MIN_REFRESH_INTERVAL_SECONDS, min(MAX_REFRESH_INTERVAL_SECONDS, interval))
+
     async def async_set_config(self, address: str, config: dict[str, Any] | None) -> None:
         await self.async_initialize()
         normalized = address.upper()
         if not config or not config.get("enabled") or not config.get("bindings"):
             self._configs.pop(normalized, None)
+            self._last_refresh_at.pop(normalized, None)
         else:
             stored = dict(config)
             stored["address"] = normalized
             stored["enabled"] = True
+            stored["refresh_interval_seconds"] = self._refresh_interval(stored)
             self._configs[normalized] = stored
+            # The configuration is saved after a manual upload. Start the safety
+            # interval now so an entity change cannot immediately write again.
+            self._last_refresh_at[normalized] = time.monotonic()
         await self._store.async_save({"configs": self._configs})
         self._refresh_listener()
+
+    async def async_set_refresh_interval(self, address: str, seconds: Any) -> None:
+        """Update the safety interval without requiring another display upload."""
+        await self.async_initialize()
+        normalized = address.upper()
+        config = self._configs.get(normalized)
+        if not config:
+            return
+        interval = self._refresh_interval({"refresh_interval_seconds": seconds})
+        if self._refresh_interval(config) == interval:
+            return
+        updated = dict(config)
+        updated["refresh_interval_seconds"] = interval
+        self._configs[normalized] = updated
+        await self._store.async_save({"configs": self._configs})
 
     def _refresh_listener(self) -> None:
         if self._unsubscribe:
@@ -197,10 +230,27 @@ class EntityAutoUpdateManager:
         try:
             while address in self._pending_refreshes:
                 self._pending_refreshes.discard(address)
+                config = self._configs.get(address)
+                if not config:
+                    return
+                interval = self._refresh_interval(config)
+                wait_seconds = max(
+                    0.0,
+                    self._last_refresh_at.get(address, 0.0) + interval - time.monotonic(),
+                )
+                if wait_seconds:
+                    await asyncio.sleep(wait_seconds)
+                # Values are read only after the wait. Changes that arrived
+                # during the interval are therefore already part of this image.
+                self._pending_refreshes.discard(address)
                 result = await self._async_refresh(address)
                 if isinstance(result, dict) and result.get("skipped"):
                     self._pending_refreshes.add(address)
                     await asyncio.sleep(RETRY_AFTER_BUSY_SECONDS)
+                else:
+                    # Count completed attempts, including failures, to protect
+                    # the panel and battery from a rapid retry loop.
+                    self._last_refresh_at[address] = time.monotonic()
         finally:
             self._refresh_tasks.pop(address, None)
 

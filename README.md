@@ -4,6 +4,18 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.74
+
+- v Designeru HA prvků přibyl nový typ **Vlastní ikona** s výběrem souboru i přetažením obrázku
+- obrázek se před uložením bezpečně zmenší, normalizuje do PNG a zbaví metadat
+- ikona se do hlavního designeru vloží jako čtvercový blok, který lze přesouvat, otáčet a měnit tažením za rohy
+- každý displej má vlastní minimální interval automatické aktualizace od 30 sekund do 24 hodin
+- výchozí bezpečný interval je jedna minuta a platí i po restartu Home Assistantu
+- změny více senzorů se během intervalu sloučí a na displej se odešle pouze jeden nejnovější obraz
+- interval lze změnit i u již aktivní automatizace bez opětovného nahrání návrhu
+- interval se počítá i po neúspěšném pokusu, aby chyba přenosu nevytvořila rychlou smyčku vybíjející baterii
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.73
 
 - Designer HA prvků je zjednodušený do čtyř kroků: typ, entita, chování a vzhled

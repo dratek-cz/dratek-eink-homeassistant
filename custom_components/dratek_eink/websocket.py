@@ -899,6 +899,10 @@ async def websocket_save_device_draft(
     data = await _load_project_data(hass)
     data["device_drafts"][address] = draft
     await _project_store(hass).async_save(data)
+    if "refresh_interval_seconds" in draft:
+        await get_entity_auto_update_manager(hass).async_set_refresh_interval(
+            address, draft["refresh_interval_seconds"]
+        )
     connection.send_result(msg["id"], {"draft": draft})
 
 
@@ -925,6 +929,31 @@ def _clamped_int(value: Any, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, parsed))
 
 
+def _normalized_icon_image(value: Any) -> str:
+    """Validate, resize and strip metadata from a user supplied icon."""
+    source = str(value or "")
+    if not source:
+        return ""
+    encoded = source.split(",", 1)[1] if "," in source else source
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+        if len(raw) > 4 * 1024 * 1024:
+            raise ValueError("Soubor ikony je příliš velký.")
+        image = Image.open(io.BytesIO(raw))
+        image.load()
+        image.thumbnail((512, 512), Image.Resampling.LANCZOS)
+        normalized = Image.new("RGBA", image.size, (255, 255, 255, 0))
+        normalized.alpha_composite(image.convert("RGBA"))
+        output = io.BytesIO()
+        normalized.save(output, format="PNG", optimize=True)
+        result = output.getvalue()
+        if len(result) > 1024 * 1024:
+            raise ValueError("Zpracovaná ikona je příliš velká.")
+    except (ValueError, TypeError, OSError) as exc:
+        raise ValueError(f"Ikonu se nepodařilo načíst: {exc}") from exc
+    return f"data:image/png;base64,{base64.b64encode(result).decode('ascii')}"
+
+
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/custom_elements/save",
@@ -939,8 +968,16 @@ async def websocket_save_custom_element(
 ) -> None:
     source = dict(msg["element"])
     element_type = str(source.get("element_type") or "value")
-    if element_type not in {"value", "status", "chart"}:
+    if element_type not in {"value", "status", "chart", "icon"}:
         connection.send_error(msg["id"], "invalid_type", "Unsupported custom element type.")
+        return
+    try:
+        icon_image = _normalized_icon_image(source.get("icon_image")) if element_type == "icon" else ""
+    except ValueError as exc:
+        connection.send_error(msg["id"], "invalid_icon", str(exc))
+        return
+    if element_type == "icon" and not icon_image:
+        connection.send_error(msg["id"], "missing_icon", "Nejprve nahrajte obrázek ikony.")
         return
     element_id = str(source.get("id") or uuid.uuid4())
     now = int(time.time())
@@ -978,6 +1015,7 @@ async def websocket_save_custom_element(
         "sample_labels": str(source.get("sample_labels") or "")[:65535],
         "width_percent": _clamped_int(source.get("width_percent"), 55, 10, 100),
         "height_percent": _clamped_int(source.get("height_percent"), 35, 10, 100),
+        "icon_image": icon_image,
         "updated_at": now,
     }
     data = await _load_project_data(hass)
