@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.80
+
+- správa gatewayí má nové moderní karty ve stejném vizuálním stylu jako hlavní přehled
+- karta graficky ukazuje hardware ESP32 nebo ESP32-S3, na kterém gateway běží
+- kliknutí kamkoliv na kartu otevře webové rozhraní gatewaye podle její IP adresy nebo hostitele
+- na kartě jsou přehledně vidět firmware, BLE, Wi-Fi signál, doba běhu a připojené displeje
+- technická diagnostika zůstává dostupná ve sbalovací části a ovládací tlačítka nevyvolávají otevření webu
+
 ## Novinky ve verzi 0.1.79
 
 - levý panel Designeru HA prvků používá přehledné svislé karty: název, náhled a akce vrstvy
