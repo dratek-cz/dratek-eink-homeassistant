@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HA layer designer test</title>
+  <style>
+    :root {
+      --primary-text-color:#172127;--secondary-text-color:#64727b;--primary-background-color:#f2f5f5;
+      --secondary-background-color:#edf1f1;--card-background-color:#fff;--divider-color:#d8dfdf;
+      --primary-color:#00a2a5;--text-primary-color:#fff;--dratek-teal:#00a2a5;
+    }
+    body { margin:0; background:#f2f5f5; font-family:Arial,sans-serif; }
+  </style>
+</head>
+<body>
+  <script>
+    customElements.define("ha-icon", class extends HTMLElement {
+      connectedCallback() { this.textContent = "◇"; }
+    });
+    customElements.define("ha-entity-picker", class extends HTMLElement {
+      connectedCallback() {
+        this.innerHTML = '<select style="width:100%;padding:10px"><option value="">Vyberte entitu</option><option value="switch.kuchyn">Zásuvka kuchyň</option><option value="sensor.teplota">Teplota</option></select>';
+        const select = this.querySelector("select");
+        select.value = this._value || "";
+        select.addEventListener("change", () => {
+          this._value = select.value;
+          this.dispatchEvent(new CustomEvent("value-changed", { detail: { value: select.value } }));
+        });
+      }
+      set value(value) { this._value = value; }
+      get value() { return this._value || ""; }
+    });
+  </script>
+  <script type="module">
+    window.open = (url) => {
+      document.documentElement.dataset.openedUrl = String(url || "");
+      return null;
+    };
+
+    import "../custom_components/dratek_eink/frontend/dratek-eink-panel.js";
+    const panel = document.createElement("dratek-eink-panel");
+    const view = new URLSearchParams(location.search).get("view");
+    panel._activeTab = view === "designer" ? "designer" : view === "gateways" ? "gateways" : "custom";
+    panel._result = {
+      devices: [{
+        address: "FF:FF:92:81:46:32", physical_code: "92.81.46.32",
+        display_name: "Testovací displej", model: "EPA LCD 296x128 1 BWR",
+        sdk_type: 40, battery_percent: 55, rssi: -35,
+        temporarily_unseen: new URLSearchParams(location.search).get("stale") === "1",
+        paths: [{ type: "gateway", id: "gateway-test", host: "192.168.1.50", name: "Gateway dílna", rssi: -42 }],
+      }],
+      ble_devices: [], debug: [],
+    };
+    panel._selectedDeviceAddress = "FF:FF:92:81:46:32";
+    document.body.append(panel);
+    const sampleElement = {
+      id: "sample-switch", name: "Zásuvka v kuchyni", element_type: "layered",
+      entity_id: "switch.kuchyn", entity_attribute: "", canvas_width: 296, canvas_height: 128,
+      default_layer_id: "off", condition_rules: [
+        { operator: "is_on", value: "", layer_id: "on" },
+        { operator: "is_off", value: "", layer_id: "off" },
+      ],
+      layers: [
+        { id: "on", name: "Zapnuto", objects: [{ id: "on-text", type: "text", x: 28, y: 35, w: 240, h: 58, text: "ZAPNUTO", color: "red", font_size: 34, bold: true, align: "center" }] },
+        { id: "off", name: "Vypnuto", objects: [{ id: "off-text", type: "text", x: 28, y: 35, w: 240, h: 58, text: "VYPNUTO", color: "black", font_size: 34, bold: true, align: "center" }] },
+      ],
+    };
+    const sampleGateway = {
+      id: "gateway-test", name: "Gateway dílna", host: "dratek-eink-gateway.local",
+      status: {
+        ok: true, message: "Online", hostname: "dratek-eink-gateway", ip: "192.168.1.50",
+        firmware: "0.1.41-gateway", chip: "esp32s3", wifi_rssi: -51, uptime_ms: 93784000,
+        ble_initialized: true, free_heap: 182340, minimum_free_heap: 143120,
+        largest_free_block: 103200, reset_reason: "POWERON_RESET", mdns_started: true,
+        transfer_status: "idle", update_partition_size: 1572864, ota_supported: true,
+      },
+    };
+    panel.hass = {
+      states: {
+        "switch.kuchyn": { state: "on", attributes: { friendly_name: "Zásuvka kuchyň" } },
+        "sensor.teplota": { state: "21.5", attributes: { friendly_name: "Teplota", unit_of_measurement: "°C" } },
+      },
+      callWS: async ({ type }) => {
+        if (type === "dratek_eink/custom_elements/list") return { elements: [sampleElement] };
+        if (type === "dratek_eink/device_drafts/list") return { drafts: {} };
+        if (type === "dratek_eink/device_drafts/load") return { draft: null };
+        if (type === "dratek_eink/projects/list") return { projects: [] };
+        if (type === "dratek_eink/gateways/list") return { gateways: [sampleGateway] };
+        if (type === "dratek_eink/serial/ports") return { ports: [] };
+        if (type === "dratek_eink/scan") return panel._result;
+        return {};
+      },
+    };
+  </script>
+</body>
+</html>
