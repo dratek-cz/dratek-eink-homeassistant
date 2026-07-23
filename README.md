@@ -1,8 +1,14 @@
 <p align="center">
-  <img src="custom_components/dratek_eink/frontend/dratek-eink-logo.png" alt="DRATEK.CZ eInk" width="360">
+  <img src="https://raw.githubusercontent.com/dratek-cz/dratek-eink-homeassistant/main/custom_components/dratek_eink/frontend/dratek-eink-logo.png" alt="DRATEK.CZ eInk" width="360">
 </p>
 
 # DRATEK eInk pro Home Assistant
+
+## Novinky ve verzi 0.1.75
+
+- opravena rozbitá ikona v README na GitHubu použitím stabilní raw adresy
+- ověřeny PNG soubory loga i všech světlých a tmavých brand variant pro Home Assistant / HACS
+- firmware gateway zůstává 0.1.41-gateway
 
 ## Novinky ve verzi 0.1.74
 
