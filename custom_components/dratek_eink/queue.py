@@ -15,7 +15,6 @@ QUEUE_STORE_KEY = "dratek_eink.transfer_queue"
 QUEUE_STORE_VERSION = 1
 QUEUE_DATA_KEY = "transfer_queue"
 HISTORY_LIMIT = 20
-MANUAL_COOLDOWN_SECONDS = 50
 TRANSFER_JOB_TIMEOUT_SECONDS = 240
 LEGACY_COMPLETION_TIMEOUT_MARKER = "waiting for the display to confirm the completed refresh"
 
@@ -31,7 +30,6 @@ class TransferQueue:
         self._locks: dict[str, asyncio.Lock] = {}
         self._device_locks: dict[str, asyncio.Lock] = {}
         self._manual_pending: dict[str, int] = {}
-        self._manual_cooldown_until: dict[str, float] = {}
         self._automatic_tasks: dict[str, tuple[str, asyncio.Task[Any]]] = {}
         self._preempted_jobs: set[str] = set()
         self._load_lock = asyncio.Lock()
@@ -128,9 +126,6 @@ class TransferQueue:
                     self._manual_pending[normalized_address] = pending
                 else:
                     self._manual_pending.pop(normalized_address, None)
-                self._manual_cooldown_until[normalized_address] = (
-                    asyncio.get_running_loop().time() + MANUAL_COOLDOWN_SECONDS
-                )
             else:
                 active = self._automatic_tasks.get(normalized_address)
                 if active and active[0] == job["id"]:
@@ -199,8 +194,6 @@ class TransferQueue:
     def _automatic_skip_reason(self, address: str, exclude_job_id: str | None = None) -> str:
         if self._manual_pending.get(address, 0) > 0:
             return "Automatic update skipped because a manual upload is pending."
-        if asyncio.get_running_loop().time() < self._manual_cooldown_until.get(address, 0):
-            return "Automatic update skipped because a manual upload just finished."
         if any(
             job.get("id") != exclude_job_id
             and job.get("address") == address

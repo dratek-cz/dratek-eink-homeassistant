@@ -4,6 +4,16 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.72
+
+- změna výsledné ikony nebo dynamické hodnoty spustí vytvoření nového obrazu přibližně do 150 ms
+- automatické překreslení už po ručním uploadu neblokuje původní 50sekundový cooldown
+- změny vzniklé během probíhajícího zápisu se sloučí a po jeho dokončení se vždy odešle nejnovější stav
+- automatický zápis přerušený ručním uploadem se po uvolnění displeje sám zopakuje
+- několik rychlých změn stejné entity nevytvoří souběžné BLE přenosy ani zbytečné duplicitní obrazy
+- u podmíněné signalizace se přenos spustí jen tehdy, když změna entity skutečně změní výsledný symbol
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.71
 
 - původní editor API prvků nahradil nový **Designer HA prvků** založený výhradně na entitách Home Assistantu

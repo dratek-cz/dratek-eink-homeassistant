@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -16,7 +17,8 @@ from .transfer import DratekTransfer
 STORE_KEY = "dratek_eink.entity_automations"
 STORE_VERSION = 1
 DATA_KEY = "entity_auto_update_manager"
-DEBOUNCE_SECONDS = 2.0
+DEBOUNCE_SECONDS = 0.15
+RETRY_AFTER_BUSY_SECONDS = 1.0
 
 
 class EntityAutoUpdateManager:
@@ -28,6 +30,8 @@ class EntityAutoUpdateManager:
         self._configs: dict[str, dict[str, Any]] = {}
         self._unsubscribe = None
         self._timers: dict[str, Any] = {}
+        self._refresh_tasks: dict[str, Any] = {}
+        self._pending_refreshes: set[str] = set()
         self._chart_series: dict[str, list[float]] = {}
         self._initialized = False
 
@@ -172,6 +176,10 @@ class EntityAutoUpdateManager:
 
     @callback
     def _schedule_refresh(self, address: str) -> None:
+        self._pending_refreshes.add(address)
+        active_task = self._refresh_tasks.get(address)
+        if active_task is not None and not active_task.done():
+            return
         cancel = self._timers.pop(address, None)
         if cancel:
             cancel()
@@ -179,11 +187,24 @@ class EntityAutoUpdateManager:
         @callback
         def _run(_now: Any) -> None:
             self._timers.pop(address, None)
-            self.hass.async_create_task(self._async_refresh(address))
+            self._refresh_tasks[address] = self.hass.async_create_task(
+                self._async_refresh_loop(address)
+            )
 
         self._timers[address] = async_call_later(self.hass, DEBOUNCE_SECONDS, _run)
 
-    async def _async_refresh(self, address: str) -> None:
+    async def _async_refresh_loop(self, address: str) -> None:
+        try:
+            while address in self._pending_refreshes:
+                self._pending_refreshes.discard(address)
+                result = await self._async_refresh(address)
+                if isinstance(result, dict) and result.get("skipped"):
+                    self._pending_refreshes.add(address)
+                    await asyncio.sleep(RETRY_AFTER_BUSY_SECONDS)
+        finally:
+            self._refresh_tasks.pop(address, None)
+
+    async def _async_refresh(self, address: str) -> dict[str, Any] | None:
         config = self._configs.get(address)
         if not config:
             return
@@ -219,7 +240,7 @@ class EntityAutoUpdateManager:
                 )
                 return result or {"ok": False, "error": "Gateway was not found.", "log": []}
 
-            await queue.async_submit(
+            return await queue.async_submit(
                 resource=f"gateway:{gateway_id}",
                 transport_type="gateway",
                 transport_name=str(config.get("transport_name") or "DRATEK eInk gateway"),
@@ -227,7 +248,6 @@ class EntityAutoUpdateManager:
                 operation="entity_update",
                 runner=run_gateway,
             )
-            return
 
         async def run_local(add_log):
             add_log("Automatic entity update via Home Assistant Bluetooth.")
@@ -235,7 +255,7 @@ class EntityAutoUpdateManager:
             await transfer.send_image(address, sdk_type, image, transform)
             return {"ok": True, "address": address, "log": []}
 
-        await queue.async_submit(
+        return await queue.async_submit(
             resource="local",
             transport_type="local",
             transport_name="Home Assistant Bluetooth",
