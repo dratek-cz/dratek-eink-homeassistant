@@ -4,6 +4,17 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.71
+
+- původní editor API prvků nahradil nový **Designer HA prvků** založený výhradně na entitách Home Assistantu
+- stavová signalizace podporuje až osm seřazených pravidel a operátory zapnuto, vypnuto, rovná se, nerovná se, větší, menší a obsahuje
+- ke každému pravidlu lze vybrat vlastní eInk symbol a nastavit výchozí symbol pro stav, kterému neodpovídá žádné pravidlo
+- připravené šablony vytvoří jedním kliknutím signalizaci zásuvky ON/OFF, teplotní limity nebo obecný číselný limit
+- graf může průběžně ukládat poslední změny číselného senzoru nebo vykreslit číselný seznam z vybraného atributu
+- pravidla i grafy se vyhodnocují při změnách entit a automaticky spouštějí překreslení displeje
+- externí API už není v uživatelském rozhraní dostupné a dřívější URL prvky se při odesílání nenačítají
+- firmware gateway zůstává 0.1.41-gateway
+
 ## Novinky ve verzi 0.1.70
 
 - načítání JSON API je předělané na čtyřkrokový modulární průvodce: adresa, datová sada, přiřazení a náhled

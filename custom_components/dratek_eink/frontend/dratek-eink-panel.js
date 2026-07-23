@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.70";
+const DRATEK_EINK_VERSION = "0.1.71";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -571,9 +571,15 @@ class DratekEinkPanel extends HTMLElement {
 
   _emptyCustomElementForm() {
     return {
-      id: "", name: "", element_type: "value", source_type: "entity",
+      id: "", name: "", element_type: "status", source_type: "entity",
       entity_id: "", entity_attribute: "", url: "", collection_path: "", value_field: "", label_field: "", json_path: "", label_json_path: "",
       label: "", unit: "", color: "black", chart_type: "line",
+      history_mode: "rolling", history_points: 24,
+      condition_rules: [
+        { operator: "is_on", value: "", symbol: "●" },
+        { operator: "is_off", value: "", symbol: "○" },
+      ],
+      default_symbol: "?",
       on_symbol: "●", off_symbol: "○", on_values: "on,true,1,open,home",
       sample_data: "", sample_labels: "", width_percent: 55, height_percent: 35,
     };
@@ -594,7 +600,7 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   async _saveCustomElement() {
-    if (!this._hass || this._customElementBusy || !this._customElementForm.name.trim()) return;
+    if (!this._hass || this._customElementBusy || !this._customElementForm.name.trim() || !this._customElementForm.entity_id) return;
     this._customElementBusy = true;
     this._customElementResult = null;
     this._render();
@@ -686,6 +692,7 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   async _refreshCustomUrlObjects() {
+    return;
     const objects = this._objects.filter((object) => object.customSourceUrl);
     for (const object of objects) {
       const result = await this._hass.callWS({
@@ -1538,20 +1545,18 @@ class DratekEinkPanel extends HTMLElement {
   _customElementObject(element, size, id = `obj-${this._nextId++}`) {
     const width = Math.max(24, Math.round(size.width * (Number(element.width_percent) || 55) / 100));
     const height = Math.max(24, Math.round(size.height * (Number(element.height_percent) || 35) / 100));
-    const entityId = element.source_type === "entity" ? (element.entity_id || "") : "";
-    const sample = String(element.sample_data || "");
+    const entityId = element.entity_id || "";
+    const sample = String(element.sample_data || this._customElementCurrentValue(element) || "");
     if (element.element_type === "chart") {
       return {
         id, type: "chart", x: Math.round((size.width - width) / 2), y: Math.round((size.height - height) / 2),
         w: width, h: height, rotation: 0, flipH: false, color: element.color || "black",
         backgroundColor: "white", chartType: element.chart_type || "line", data: sample || "1,2,3,2,4",
         chartLabels: element.sample_labels || "", chartTitle: element.label || element.name || "Graf", xLabel: "", yLabel: element.unit || "",
-        chartMin: "", chartMax: "", maxPoints: 48, showAxes: true, showGrid: true, showValues: false,
+        chartMin: "", chartMax: "", maxPoints: Number(element.history_points || 24), historyMode: element.history_mode || "rolling", showAxes: true, showGrid: true, showValues: false,
         barColor: element.color || "red", graphColor: "black", legendFontSize: 8,
         variable: !entityId, variableName: this._uniqueVariableName(`custom_${String(element.name || "graf").toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, id),
         entityId, entityAttribute: element.entity_attribute || "", customElementId: element.id || "",
-        customSourceUrl: element.source_type === "url" ? element.url || "" : "", customJsonPath: element.json_path || "",
-        customLabelJsonPath: element.label_json_path || "",
       };
     }
     const status = element.element_type === "status";
@@ -1559,7 +1564,7 @@ class DratekEinkPanel extends HTMLElement {
     return {
       id, type: "text", x: Math.round((size.width - width) / 2), y: Math.round((size.height - height) / 2),
       w: width, h: height, rotation: 0, flipH: false, color: element.color || "black",
-      text: status ? (element.off_symbol || "○") : `${label}${sample || "Hodnota"}${element.unit ? ` ${element.unit}` : ""}`,
+      text: status ? (element.default_symbol || "?") : `${label}${sample || "Hodnota"}${element.unit ? ` ${element.unit}` : ""}`,
       fontSize: Math.max(16, Math.round(Math.min(size.width, size.height) * (status ? 0.2 : 0.12))),
       fontFamily: "Arial", minFontSize: 11, bold: true, variable: true,
       variableName: this._uniqueVariableName(`custom_${String(element.name || "prvek").toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, id),
@@ -1567,7 +1572,7 @@ class DratekEinkPanel extends HTMLElement {
       autoUpdate: !!entityId, valuePrefix: status ? "" : label, valueSuffix: status || !element.unit ? "" : ` ${element.unit}`,
       statusIcons: status, statusOnSymbol: element.on_symbol || "●", statusOffSymbol: element.off_symbol || "○",
       statusOnValues: element.on_values || "on,true,1,open,home", customElementId: element.id || "",
-      customSourceUrl: element.source_type === "url" ? element.url || "" : "", customJsonPath: element.json_path || "",
+      conditionRules: structuredClone(element.condition_rules || []), defaultSymbol: element.default_symbol || "?",
     };
   }
 
@@ -2476,14 +2481,15 @@ class DratekEinkPanel extends HTMLElement {
         .json-field-picker{margin:10px 0 14px;padding:12px;border:1px solid rgba(0,153,153,.35);border-radius:11px;background:rgba(0,153,153,.055)}.json-field-title{display:flex;align-items:center;gap:9px;margin-bottom:10px;color:var(--dratek-teal-dark)}.json-field-title ha-icon{--mdc-icon-size:24px}.json-field-title strong,.json-field-title small{display:block}.json-field-title small{margin-top:2px;color:var(--secondary-text-color);font-size:9px;font-weight:550}.json-field-picker select{font-family:monospace;font-size:10px}
         .api-load-button{width:100%;min-height:54px;display:flex;align-items:center;justify-content:center;gap:10px;margin:8px 0 12px;background:var(--dratek-teal)}.api-load-button ha-icon{--mdc-icon-size:25px}.api-load-button span,.api-load-button strong,.api-load-button small{display:block;text-align:left}.api-load-button small{margin-top:2px;color:rgba(255,255,255,.78);font-size:9px}.api-mapper{display:grid;gap:12px;padding:13px;border:1px solid rgba(0,153,153,.3);border-radius:12px;background:linear-gradient(145deg,rgba(0,153,153,.07),rgba(255,102,0,.025))}.api-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}.api-steps span{display:flex;align-items:center;gap:5px;min-width:0;padding:6px;border-radius:7px;background:var(--secondary-background-color);color:var(--secondary-text-color);font-size:8px;font-weight:750}.api-steps b{width:19px;height:19px;display:grid;place-items:center;flex:0 0 auto;border-radius:50%;background:var(--divider-color);font-size:9px}.api-steps .active{color:var(--dratek-orange)}.api-steps .active b{background:var(--dratek-orange);color:#fff}.api-steps .done{color:var(--dratek-teal-dark)}.api-steps .done b{background:var(--dratek-teal);color:#fff}.api-mapping-grid{display:grid;gap:9px}.api-mapping-grid .field{margin:0}.api-mapping-grid select{font-size:11px}.api-mapping-summary,.api-mapper-empty{display:flex;align-items:center;gap:10px;padding:10px;border-radius:9px;background:var(--card-background-color);border:1px solid var(--divider-color)}.api-mapping-summary ha-icon,.api-mapper-empty ha-icon{color:var(--dratek-teal);--mdc-icon-size:26px}.api-mapping-summary strong,.api-mapping-summary span,.api-mapper-empty strong,.api-mapper-empty span{display:block}.api-mapping-summary span,.api-mapper-empty span{margin-top:3px;color:var(--secondary-text-color);font-size:9px}.api-mapping-summary code{color:var(--dratek-teal-dark);font-size:9px}
         .custom-elements-page{display:grid;gap:12px}.custom-elements-hero{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:22px;border-left:4px solid var(--dratek-teal);background:linear-gradient(110deg,rgba(0,153,153,.1),var(--card-background-color) 48%,rgba(255,102,0,.055))}.custom-elements-hero .eyebrow{display:block;margin-bottom:5px;color:var(--dratek-teal-dark);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.custom-elements-hero h2{color:var(--primary-text-color);font-size:21px;letter-spacing:0;text-transform:none}.custom-elements-hero p{max-width:820px;margin:7px 0 0;color:var(--secondary-text-color);font-size:12px;line-height:1.5}.custom-hero-icon{width:58px;height:58px;display:grid;place-items:center;flex:0 0 auto;border-radius:16px;background:var(--dratek-teal);color:#fff;box-shadow:0 9px 24px rgba(0,153,153,.22)}.custom-hero-icon ha-icon{--mdc-icon-size:32px}.custom-result{display:flex;align-items:center;gap:8px;padding:10px 13px;border-radius:10px;font-size:12px;font-weight:750}.custom-result.good{background:rgba(22,163,74,.1);color:#16803c}.custom-result.bad{background:rgba(220,38,38,.1);color:#c62828}.custom-elements-layout{display:grid;grid-template-columns:minmax(440px,1.08fr) minmax(390px,.92fr);gap:12px;align-items:start}.custom-builder,.custom-live-preview,.custom-library{border-radius:14px}.custom-type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:13px}.custom-type{min-height:70px;display:grid;place-items:center;gap:4px;padding:9px;border:1px solid var(--divider-color);background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.custom-type ha-icon{--mdc-icon-size:25px;color:var(--dratek-teal)}.custom-type span{font-size:11px}.custom-type.selected{border-color:var(--dratek-teal);background:rgba(0,153,153,.09);box-shadow:inset 0 0 0 1px var(--dratek-teal)}.custom-fetch-field button{width:100%}.custom-builder textarea{width:100%;resize:vertical;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);color:var(--primary-text-color);padding:9px}.custom-builder input[type=range]{width:100%;accent-color:var(--dratek-orange)}.custom-builder-actions{display:flex;justify-content:flex-end;margin-top:12px}.custom-builder-actions button{min-width:190px;background:var(--dratek-orange)}.custom-side{display:grid;gap:12px;position:sticky;top:12px}.custom-live-preview{min-height:190px}.custom-visual{position:relative;display:grid;place-items:center;min-height:120px;padding:16px;overflow:hidden;border:8px solid #eee8e8;border-radius:14px;background:#fff;color:#111;box-shadow:0 7px 18px rgba(15,23,42,.13);font-family:"DRATEK eInk Sans",Arial,sans-serif}.custom-visual.value{align-content:center}.custom-visual.value small{font-size:11px;font-weight:700}.custom-visual.value strong{font-size:29px}.custom-visual.value em{font-size:14px;font-style:normal}.custom-visual.status{grid-template-rows:1fr auto auto;gap:2px}.custom-visual.status strong{font-size:46px;line-height:1}.custom-visual.status.active strong{color:#d41414}.custom-visual.status span{font-size:13px;font-weight:800}.custom-visual.status small{font-size:9px;color:#666}.custom-visual.chart{align-content:stretch;justify-items:stretch}.custom-visual.chart>small{text-align:center;font-weight:800}.custom-chart-bars{height:80px;display:flex;align-items:end;justify-content:stretch;gap:3px;padding:8px 6px 0;border-left:2px solid #111;border-bottom:2px solid #111}.custom-chart-bars i{display:block;flex:1;min-width:3px;background:#d41414}.custom-library-list{display:grid;gap:9px;max-height:620px;overflow:auto;padding-right:3px}.custom-library-item{display:grid;gap:9px;padding:11px;border:1px solid var(--divider-color);border-radius:11px;background:var(--secondary-background-color)}.custom-library-head{display:flex;align-items:center;gap:9px}.custom-library-head>span{width:34px;height:34px;display:grid;place-items:center;flex:0 0 auto;border-radius:8px;background:rgba(0,153,153,.1);color:var(--dratek-teal-dark)}.custom-library-head strong,.custom-library-head small{display:block}.custom-library-head strong{font-size:13px}.custom-library-head small{margin-top:2px;color:var(--secondary-text-color);font-size:9px}.custom-library-item .custom-visual{min-height:86px;border-width:5px}.custom-library-item .custom-visual.value strong{font-size:22px}.custom-library-item .custom-visual.status strong{font-size:31px}.custom-library-item .custom-chart-bars{height:52px}.custom-library-actions{display:grid;grid-template-columns:1.2fr 1fr auto auto;gap:5px}.custom-library-actions button{min-height:34px;padding:6px 8px;font-size:9px}.custom-library-actions .icon-btn{width:34px}.tabbar .tab[data-tab=custom]{margin-left:6px;border-left:1px solid var(--divider-color)}
-        @media(max-width:1000px){.custom-elements-layout{grid-template-columns:1fr}.custom-side{position:static;grid-template-columns:1fr 1fr}.tabbar{width:100%;overflow-x:auto}.tabbar .tab{flex:0 0 auto}}
+        .ha-entity-module,.ha-module-card,.condition-designer{display:grid;gap:11px;margin:12px 0;padding:13px;border:1px solid var(--divider-color);border-radius:12px;background:var(--secondary-background-color)}.ha-entity-module{border-color:rgba(0,153,153,.35);background:rgba(0,153,153,.055)}.ha-module-title,.condition-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.ha-module-title{justify-content:flex-start}.ha-module-title>ha-icon{width:36px;height:36px;padding:7px;border-radius:9px;background:var(--dratek-teal);color:#fff}.ha-module-title strong,.ha-module-title small,.condition-head strong,.condition-head small{display:block}.ha-module-title small,.condition-head small{margin-top:2px;color:var(--secondary-text-color);font-size:9px}.condition-templates{display:flex;flex-wrap:wrap;gap:6px}.condition-templates button{min-height:34px;font-size:9px}.condition-rules{display:grid;gap:7px}.condition-rule{position:relative;display:grid;grid-template-columns:28px minmax(130px,1.1fr) minmax(105px,.8fr) minmax(115px,.9fr) auto;align-items:end;gap:7px;padding:9px;border:1px solid var(--divider-color);border-radius:10px;background:var(--card-background-color)}.condition-rule.matches{border-color:var(--dratek-teal);box-shadow:inset 3px 0 0 var(--dratek-teal)}.condition-rule .field{margin:0}.condition-order{width:24px;height:24px;display:grid;place-items:center;align-self:center;border-radius:7px;background:var(--secondary-background-color);font-size:10px;font-weight:900}.condition-unused{opacity:.45}.condition-remove{align-self:center}.condition-match{position:absolute;right:8px;top:-8px;display:flex;align-items:center;gap:3px;padding:2px 6px;border-radius:10px;background:var(--dratek-teal);color:#fff;font-size:8px;font-weight:800}.condition-match ha-icon{--mdc-icon-size:11px}.condition-footer{display:flex;align-items:end;justify-content:space-between;gap:12px}.condition-footer>.field{min-width:220px;margin:0}.ha-hint{display:flex;align-items:center;gap:7px;padding:8px;border-radius:8px;background:var(--card-background-color);color:var(--secondary-text-color);font-size:9px}.ha-hint ha-icon{color:var(--dratek-teal)}.ha-hint code{font-weight:800}.ha-elements-page .custom-builder{overflow:visible}
+        @media(max-width:1000px){.custom-elements-layout{grid-template-columns:1fr}.custom-side{position:static;grid-template-columns:1fr 1fr}.tabbar{width:100%;overflow-x:auto}.tabbar .tab{flex:0 0 auto}.condition-rule{grid-template-columns:28px 1fr 1fr}.condition-rule .field:nth-of-type(3){grid-column:2/4}.condition-remove{grid-column:1;grid-row:2}}
         @media(max-width:680px){.custom-elements-hero{padding:16px}.custom-hero-icon{display:none}.custom-elements-hero h2{font-size:17px}.custom-side{grid-template-columns:1fr}.custom-type-grid{grid-template-columns:1fr}.custom-elements-layout .row{grid-template-columns:1fr}.custom-library-actions{grid-template-columns:1fr 1fr auto auto}}
       </style>
       <div class="page">
         <div class="topbar">
           <div class="brand"><img class="extension-logo" src="/dratek_eink_panel/dratek-eink-logo.png?v=${DRATEK_EINK_VERSION}" alt="DRATEK.CZ eInk"><div><h1>DRATEK eInk <span class="version-badge">v${DRATEK_EINK_VERSION}</span></h1><div class="subtitle">Editor sablon, BLE diagnostika a sprava displeju</div></div></div>
         </div>
-        <div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezené displeje</button><button class="tab ${this._activeTab === "designer" ? "active" : ""}" data-tab="designer" ${device ? "" : "disabled"} title="${device ? "Otevřít designer" : "Nejprve vyberte displej"}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Designer</button><button class="tab ${this._activeTab === "queue" ? "active" : ""}" data-tab="queue"><ha-icon icon="mdi:tray-full"></ha-icon>Fronta zápisu${this._queue.queued || this._queue.writing ? `<span class="pill warn">${this._queue.queued + this._queue.writing}</span>` : ""}</button><button class="tab ${this._activeTab === "gateways" ? "active" : ""}" data-tab="gateways"><ha-icon icon="mdi:router-wireless"></ha-icon>Gatewaye</button><button class="tab ${this._activeTab === "custom" ? "active" : ""}" data-tab="custom"><ha-icon icon="mdi:puzzle-plus-outline"></ha-icon>Vytvořit vlastní prvek</button></div>
+        <div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezené displeje</button><button class="tab ${this._activeTab === "designer" ? "active" : ""}" data-tab="designer" ${device ? "" : "disabled"} title="${device ? "Otevřít designer" : "Nejprve vyberte displej"}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Designer</button><button class="tab ${this._activeTab === "queue" ? "active" : ""}" data-tab="queue"><ha-icon icon="mdi:tray-full"></ha-icon>Fronta zápisu${this._queue.queued || this._queue.writing ? `<span class="pill warn">${this._queue.queued + this._queue.writing}</span>` : ""}</button><button class="tab ${this._activeTab === "gateways" ? "active" : ""}" data-tab="gateways"><ha-icon icon="mdi:router-wireless"></ha-icon>Gatewaye</button><button class="tab ${this._activeTab === "custom" ? "active" : ""}" data-tab="custom"><ha-icon icon="mdi:puzzle-plus-outline"></ha-icon>Designer HA prvků</button></div>
         <div style="${this._activeTab === "devices" ? "" : "display:none"}">
           <div class="card"><div class="toolbar" style="margin-bottom:12px"><button id="scanDevicesTab" class="secondary" ${this._loading ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>${this._loading ? "Hledám displeje..." : "Obnovit"}</button>${this._renderDensityControl("devices", this._deviceViewMode, result.devices.length)}</div>${this._renderDeviceCards(result.devices, device && device.address)}</div>
           <div class="card connection-map-card"><div class="section-title"><div><h2>Mapa připojení</h2><small>Každá gateway je zobrazena pouze jednou se všemi připojenými displeji.</small></div><span class="pill muted">${topologyGatewayCount} ${topologyGatewayCount === 1 ? "gateway" : "gatewayů"} · ${result.devices.length} ${result.devices.length === 1 ? "displej" : "displejů"}</span></div>${this._renderTopology(result.devices, topologyGroups)}</div>
@@ -2710,17 +2716,50 @@ class DratekEinkPanel extends HTMLElement {
     return ({
       value: { label: "Hodnota", icon: "mdi:card-text-outline", description: "Textová hodnota senzoru, ceny nebo spotřeby." },
       status: { label: "Stavová ikona", icon: "mdi:power-socket-eu", description: "Symbol se změní podle stavu entity, například zásuvky." },
-      chart: { label: "Graf", icon: "mdi:chart-line", description: "Graf z pole hodnot entity nebo JSON odpovědi." },
+      chart: { label: "Graf", icon: "mdi:chart-line", description: "Graf z hodnot senzoru nebo číselného atributu Home Assistantu." },
     })[type] || { label: "Prvek", icon: "mdi:puzzle-outline", description: "Vlastní prvek displeje." };
   }
 
   _customElementCurrentValue(element) {
-    if (element.source_type === "entity" && element.entity_id) {
+    if (element.entity_id) {
       const state = this._hass?.states?.[element.entity_id];
       const value = element.entity_attribute ? state?.attributes?.[element.entity_attribute] : state?.state;
       if (value !== undefined && value !== null) return typeof value === "string" ? value : JSON.stringify(value);
     }
     return String(element.sample_data || "");
+  }
+
+  _customConditionMatches(value, operator, target) {
+    const current = String(value ?? "").trim().toLowerCase();
+    const expected = String(target ?? "").trim().toLowerCase();
+    const onValues = new Set(["on", "true", "1", "open", "home", "active", "heat", "heating", "playing", "unlocked"]);
+    const offValues = new Set(["off", "false", "0", "closed", "not_home", "idle", "unavailable", "unknown", "locked"]);
+    if (operator === "is_on") return onValues.has(current);
+    if (operator === "is_off") return offValues.has(current);
+    if (operator === "contains") return current.includes(expected);
+    if (["greater", "greater_equal", "less", "less_equal"].includes(operator)) {
+      const currentNumber = Number(value);
+      const targetNumber = Number(target);
+      if (!Number.isFinite(currentNumber) || !Number.isFinite(targetNumber)) return false;
+      return operator === "greater"
+        ? currentNumber > targetNumber
+        : operator === "greater_equal"
+          ? currentNumber >= targetNumber
+          : operator === "less"
+            ? currentNumber < targetNumber
+            : currentNumber <= targetNumber;
+    }
+    const equal = current === expected;
+    return operator === "not_equals" ? !equal : equal;
+  }
+
+  _customConditionSymbol(element, value) {
+    const rules = Array.isArray(element.condition_rules) ? element.condition_rules : [];
+    const match = rules.find((rule) => this._customConditionMatches(value, rule.operator || "equals", rule.value || ""));
+    if (match) return match.symbol || "●";
+    if (rules.length) return element.default_symbol || "?";
+    const active = new Set(String(element.on_values || "on,true,1,open,home").split(",").map((item) => item.trim().toLowerCase())).has(String(value).trim().toLowerCase());
+    return active ? element.on_symbol || "●" : element.off_symbol || "○";
   }
 
   _customChartPreview(value) {
@@ -2743,13 +2782,14 @@ class DratekEinkPanel extends HTMLElement {
     const value = this._customElementCurrentValue(element);
     if (element.element_type === "chart") return `<div class="custom-visual chart"><small>${this._escape(element.label || element.name || "Graf")}</small>${this._customChartPreview(value)}</div>`;
     if (element.element_type === "status") {
-      const active = new Set(String(element.on_values || "on,true,1,open,home").split(",").map((item) => item.trim().toLowerCase())).has(String(value).trim().toLowerCase());
-      return `<div class="custom-visual status ${active ? "active" : ""}"><strong>${this._escape(active ? element.on_symbol || "●" : element.off_symbol || "○")}</strong><span>${this._escape(element.label || meta.label)}</span><small>${this._escape(value || "bez hodnoty")}</small></div>`;
+      const symbol = this._customConditionSymbol(element, value);
+      return `<div class="custom-visual status"><strong>${this._escape(symbol)}</strong><span>${this._escape(element.label || meta.label)}</span><small>Aktuálně: ${this._escape(value || "bez hodnoty")}</small></div>`;
     }
     return `<div class="custom-visual value"><small>${this._escape(element.label || meta.label)}</small><strong>${this._escape(value || "Hodnota")}${element.unit ? ` <em>${this._escape(element.unit)}</em>` : ""}</strong></div>`;
   }
 
   _renderCustomElementsWorkspace() {
+    return this._renderHaElementDesigner();
     const form = this._customElementForm;
     const meta = this._customElementMeta(form.element_type);
     const result = this._customElementResult ? `<div class="custom-result ${this._customElementResult.ok ? "good" : "bad"}"><ha-icon icon="${this._customElementResult.ok ? "mdi:check-circle-outline" : "mdi:alert-circle-outline"}"></ha-icon>${this._escape(this._customElementResult.message || this._customElementResult.error || "")}</div>` : "";
@@ -2781,6 +2821,79 @@ class DratekEinkPanel extends HTMLElement {
           <section class="card custom-live-preview"><div class="section-title"><h2>Živý náhled</h2><span class="pill muted">eInk</span></div>${this._renderCustomElementVisual(form)}</section>
           <section class="card custom-library"><div class="section-title"><div><h2>Moje prvky</h2><div class="subtitle">Dostupné ve všech návrzích</div></div><span class="pill muted">${this._customElements.length}</span></div>
             ${this._customElements.length ? `<div class="custom-library-list">${this._customElements.map((element) => { const item = this._customElementMeta(element.element_type); return `<article class="custom-library-item"><div class="custom-library-head"><span><ha-icon icon="${item.icon}"></ha-icon></span><div><strong>${this._escape(element.name)}</strong><small>${item.label} · ${element.source_type === "url" ? "URL" : this._escape(element.entity_id || "bez entity")}</small></div></div>${this._renderCustomElementVisual(element)}<div class="custom-library-actions"><button data-custom-insert="${element.id}"><ha-icon icon="mdi:vector-square-plus"></ha-icon>Do designeru</button><button class="secondary" data-custom-all="${element.id}"><ha-icon icon="mdi:monitor-multiple"></ha-icon>Do všech</button><button class="secondary icon-btn" data-custom-edit="${element.id}" title="Upravit"><ha-icon icon="mdi:pencil-outline"></ha-icon></button><button class="secondary icon-btn" data-custom-delete="${element.id}" title="Smazat"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button></div></article>`; }).join("")}</div>` : `<div class="inspector-empty"><ha-icon icon="mdi:puzzle-outline"></ha-icon><p>Zatím nemáte žádný vlastní prvek.</p></div>`}
+          </section>
+        </aside>
+      </div>
+    </div>`;
+  }
+
+  _renderHaElementDesigner() {
+    const form = this._customElementForm;
+    const meta = this._customElementMeta(form.element_type);
+    const currentValue = this._customElementCurrentValue(form);
+    const result = this._customElementResult
+      ? `<div class="custom-result ${this._customElementResult.ok ? "good" : "bad"}"><ha-icon icon="${this._customElementResult.ok ? "mdi:check-circle-outline" : "mdi:alert-circle-outline"}"></ha-icon>${this._escape(this._customElementResult.message || this._customElementResult.error || "")}</div>`
+      : "";
+    const operators = [
+      ["is_on", "Je zapnuto"],
+      ["is_off", "Je vypnuto"],
+      ["equals", "Rovná se"],
+      ["not_equals", "Nerovná se"],
+      ["greater", "Je větší než"],
+      ["greater_equal", "Je větší nebo rovno"],
+      ["less", "Je menší než"],
+      ["less_equal", "Je menší nebo rovno"],
+      ["contains", "Obsahuje text"],
+    ];
+    const symbols = [
+      ["●", "Plný kruh"], ["○", "Prázdný kruh"], ["✓", "Zaškrtnuto"], ["✕", "Křížek"],
+      ["⚡", "Energie"], ["▲", "Šipka nahoru"], ["▼", "Šipka dolů"], ["!", "Varování"],
+      ["■", "Plný čtverec"], ["□", "Prázdný čtverec"],
+    ];
+    const symbolOptions = (selected) => symbols.map(([symbol, name]) => `<option value="${this._escape(symbol)}" ${symbol === selected ? "selected" : ""}>${this._escape(symbol)} · ${name}</option>`).join("");
+    const rules = Array.isArray(form.condition_rules) ? form.condition_rules : [];
+    const ruleEditor = `<div class="condition-designer">
+      <div class="condition-head"><div><strong>Pravidla signalizace</strong><small>Vyhodnocují se shora dolů. Použije se první splněné pravidlo.</small></div><span class="pill muted">Aktuální hodnota: ${this._escape(currentValue || "—")}</span></div>
+      <div class="condition-templates"><button class="secondary" data-condition-template="socket"><ha-icon icon="mdi:power-socket-eu"></ha-icon>Zásuvka ON/OFF</button><button class="secondary" data-condition-template="temperature"><ha-icon icon="mdi:thermometer-alert"></ha-icon>Teplotní limity</button><button class="secondary" data-condition-template="limit"><ha-icon icon="mdi:gauge"></ha-icon>Číselný limit</button></div>
+      <div class="condition-rules">${rules.map((rule, index) => {
+        const needsValue = !["is_on", "is_off"].includes(rule.operator);
+        const matches = this._customConditionMatches(currentValue, rule.operator || "equals", rule.value || "");
+        return `<article class="condition-rule ${matches ? "matches" : ""}">
+          <span class="condition-order">${index + 1}</span>
+          <div class="field"><label>Podmínka</label><select data-condition-operator="${index}">${operators.map(([value, label]) => `<option value="${value}" ${value === rule.operator ? "selected" : ""}>${label}</option>`).join("")}</select></div>
+          <div class="field ${needsValue ? "" : "condition-unused"}"><label>Porovnat s</label><input data-condition-value="${index}" value="${this._escape(rule.value || "")}" ${needsValue ? "" : "disabled"} placeholder="Například 25"></div>
+          <div class="field"><label>Zobrazit ikonu</label><select data-condition-symbol="${index}">${symbolOptions(rule.symbol || "●")}</select></div>
+          <button class="secondary icon-btn condition-remove" data-condition-remove="${index}" title="Odstranit pravidlo"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>
+          ${matches ? `<span class="condition-match"><ha-icon icon="mdi:check-circle"></ha-icon>Právě platí</span>` : ""}
+        </article>`;
+      }).join("")}</div>
+      <div class="condition-footer"><button id="addConditionRule" class="secondary"><ha-icon icon="mdi:plus"></ha-icon>Přidat pravidlo</button><div class="field"><label>Ikona, když neplatí žádné pravidlo</label><select data-custom-element-field="default_symbol">${symbolOptions(form.default_symbol || "?")}<option value="?" ${form.default_symbol === "?" ? "selected" : ""}>? · Neznámý stav</option></select></div></div>
+    </div>`;
+    const graphEditor = `<div class="ha-module-card">
+      <div class="ha-module-title"><ha-icon icon="mdi:chart-timeline-variant"></ha-icon><div><strong>Nastavení grafu</strong><small>Graf se automaticky překreslí při změně vybrané entity.</small></div></div>
+      <div class="row"><div class="field"><label>Zdroj bodů grafu</label><select data-custom-element-field="history_mode"><option value="rolling" ${form.history_mode !== "attribute" ? "selected" : ""}>Postupně ukládat změny senzoru</option><option value="attribute" ${form.history_mode === "attribute" ? "selected" : ""}>Použít číselný seznam z atributu</option></select></div><div class="field"><label>Počet bodů</label><input data-custom-element-field="history_points" type="number" min="2" max="96" value="${Number(form.history_points || 24)}"></div></div>
+      <div class="row"><div class="field"><label>Typ grafu</label><select data-custom-element-field="chart_type"><option value="line" ${form.chart_type === "line" ? "selected" : ""}>Spojnicový</option><option value="bar" ${form.chart_type === "bar" ? "selected" : ""}>Sloupcový</option><option value="area" ${form.chart_type === "area" ? "selected" : ""}>Plošný</option></select></div><div class="field"><label>Aktuální hodnota entity</label><input value="${this._escape(currentValue || "—")}" disabled></div></div>
+      ${form.history_mode === "attribute" ? `<div class="ha-hint"><ha-icon icon="mdi:information-outline"></ha-icon>Vyberte atribut, který obsahuje pole čísel, například <code>[1.2, 1.8, 1.4]</code>.</div>` : `<div class="ha-hint"><ha-icon icon="mdi:history"></ha-icon>Integrace si bude pamatovat posledních ${Number(form.history_points || 24)} rozdílných hodnot po dobu běhu Home Assistantu.</div>`}
+    </div>`;
+    return `<div class="custom-elements-page ha-elements-page">
+      <section class="card custom-elements-hero"><div><span class="eyebrow">Designer rozhraní Home Assistantu</span><h2>Vlastní dynamické prvky displeje</h2><p>Vyberte entitu a vytvořte graf, hodnotu nebo stavovou signalizaci. Bez externího API a bez psaní šablon.</p></div><span class="custom-hero-icon"><ha-icon icon="mdi:home-assistant"></ha-icon></span></section>
+      ${result}
+      <div class="custom-elements-layout">
+        <section class="card custom-builder">
+          <div class="section-title"><div><h2>${form.id ? "Upravit prvek" : "Nový prvek"}</h2><div class="subtitle">${this._escape(meta.description)}</div></div><button id="customElementNew" class="secondary"><ha-icon icon="mdi:plus"></ha-icon>Nový</button></div>
+          <div class="custom-type-grid">${["status", "value", "chart"].map((type) => { const item = this._customElementMeta(type); return `<button class="custom-type ${form.element_type === type ? "selected" : ""}" data-custom-type="${type}"><ha-icon icon="${item.icon}"></ha-icon><span>${item.label}</span></button>`; }).join("")}</div>
+          <div class="row"><div class="field"><label>Název prvku</label><input data-custom-element-field="name" value="${this._escape(form.name)}" placeholder="Například Stav zásuvky"></div><div class="field"><label>Barva prvku</label><select data-custom-element-field="color"><option value="black" ${form.color === "black" ? "selected" : ""}>Černá</option><option value="red" ${form.color === "red" ? "selected" : ""}>Červená</option></select></div></div>
+          <div class="ha-entity-module"><div class="ha-module-title"><ha-icon icon="mdi:home-assistant"></ha-icon><div><strong>Zdroj z Home Assistantu</strong><small>Vyberte zásuvku, senzor, pomocníka nebo jinou entitu.</small></div></div><div class="field"><label>Entita</label><ha-entity-picker id="customElementEntity"></ha-entity-picker></div><div class="field"><label>Atribut entity (volitelné)</label><input data-custom-element-field="entity_attribute" value="${this._escape(form.entity_attribute)}" placeholder="Například temperature nebo prices"></div></div>
+          ${form.element_type === "status" ? ruleEditor : form.element_type === "chart" ? graphEditor : ""}
+          <div class="row"><div class="field"><label>Popisek</label><input data-custom-element-field="label" value="${this._escape(form.label)}" placeholder="Například Teplota"></div><div class="field"><label>Jednotka</label><input data-custom-element-field="unit" value="${this._escape(form.unit)}" placeholder="°C, kWh, %"></div></div>
+          ${form.element_type !== "status" ? `<div class="field"><label>Ukázková hodnota${form.element_type === "chart" ? " / počáteční data" : ""}</label><textarea data-custom-element-field="sample_data" rows="2">${this._escape(form.sample_data)}</textarea></div>` : ""}
+          <div class="row"><div class="field"><label>Šířka <strong>${form.width_percent} %</strong></label><input data-custom-element-field="width_percent" type="range" min="10" max="100" value="${form.width_percent}"></div><div class="field"><label>Výška <strong>${form.height_percent} %</strong></label><input data-custom-element-field="height_percent" type="range" min="10" max="100" value="${form.height_percent}"></div></div>
+          <div class="custom-builder-actions"><button id="customElementSave" ${this._customElementBusy || !form.name.trim() || !form.entity_id ? "disabled" : ""}><ha-icon icon="mdi:content-save-outline"></ha-icon>${form.id ? "Uložit změny" : "Přidat do knihovny"}</button></div>
+        </section>
+        <aside class="custom-side">
+          <section class="card custom-live-preview"><div class="section-title"><h2>Živý náhled</h2><span class="pill ${form.entity_id ? "good" : "warn"}">${form.entity_id ? "Napojeno" : "Bez entity"}</span></div>${this._renderCustomElementVisual(form)}</section>
+          <section class="card custom-library"><div class="section-title"><div><h2>Moje HA prvky</h2><div class="subtitle">Dostupné ve všech návrzích</div></div><span class="pill muted">${this._customElements.length}</span></div>
+            ${this._customElements.length ? `<div class="custom-library-list">${this._customElements.map((element) => { const item = this._customElementMeta(element.element_type); return `<article class="custom-library-item"><div class="custom-library-head"><span><ha-icon icon="${item.icon}"></ha-icon></span><div><strong>${this._escape(element.name)}</strong><small>${item.label} · ${this._escape(element.entity_id || "nutno vybrat entitu")}</small></div></div>${this._renderCustomElementVisual(element)}<div class="custom-library-actions"><button data-custom-insert="${element.id}"><ha-icon icon="mdi:vector-square-plus"></ha-icon>Do designeru</button><button class="secondary" data-custom-all="${element.id}"><ha-icon icon="mdi:monitor-multiple"></ha-icon>Do všech</button><button class="secondary icon-btn" data-custom-edit="${element.id}" title="Upravit"><ha-icon icon="mdi:pencil-outline"></ha-icon></button><button class="secondary icon-btn" data-custom-delete="${element.id}" title="Smazat"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button></div></article>`; }).join("")}</div>` : `<div class="inspector-empty"><ha-icon icon="mdi:home-edit-outline"></ha-icon><p>Zatím nemáte žádný vlastní HA prvek.</p></div>`}
           </section>
         </aside>
       </div>
@@ -3236,6 +3349,60 @@ class DratekEinkPanel extends HTMLElement {
       this._render();
       this._paint();
     }));
+    this.shadowRoot.querySelectorAll("[data-condition-template]").forEach((button) => button.addEventListener("click", () => {
+      const templates = {
+        socket: [
+          { operator: "is_on", value: "", symbol: "⚡" },
+          { operator: "is_off", value: "", symbol: "○" },
+        ],
+        temperature: [
+          { operator: "greater_equal", value: "30", symbol: "▲" },
+          { operator: "less_equal", value: "10", symbol: "▼" },
+          { operator: "greater", value: "10", symbol: "✓" },
+        ],
+        limit: [
+          { operator: "greater", value: "100", symbol: "!" },
+          { operator: "less_equal", value: "100", symbol: "✓" },
+        ],
+      };
+      this._customElementForm.condition_rules = structuredClone(templates[button.dataset.conditionTemplate] || []);
+      this._customElementForm.default_symbol = "?";
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelector("#addConditionRule")?.addEventListener("click", () => {
+      const rules = Array.isArray(this._customElementForm.condition_rules) ? this._customElementForm.condition_rules : [];
+      if (rules.length < 8) rules.push({ operator: "equals", value: "", symbol: "●" });
+      this._customElementForm.condition_rules = rules;
+      this._render();
+      this._paint();
+    });
+    this.shadowRoot.querySelectorAll("[data-condition-remove]").forEach((button) => button.addEventListener("click", () => {
+      this._customElementForm.condition_rules.splice(Number(button.dataset.conditionRemove), 1);
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelectorAll("[data-condition-operator]").forEach((input) => input.addEventListener("change", () => {
+      const rule = this._customElementForm.condition_rules[Number(input.dataset.conditionOperator)];
+      if (rule) rule.operator = input.value;
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelectorAll("[data-condition-value]").forEach((input) => input.addEventListener("input", () => {
+      const rule = this._customElementForm.condition_rules[Number(input.dataset.conditionValue)];
+      if (rule) rule.value = input.value;
+      this._paint();
+    }));
+    this.shadowRoot.querySelectorAll("[data-condition-value]").forEach((input) => input.addEventListener("change", () => {
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelectorAll("[data-condition-symbol]").forEach((input) => input.addEventListener("change", () => {
+      const rule = this._customElementForm.condition_rules[Number(input.dataset.conditionSymbol)];
+      if (rule) rule.symbol = input.value;
+      this._render();
+      this._paint();
+    }));
     this.shadowRoot.querySelectorAll("[data-custom-element-field]").forEach((input) => {
       const update = () => {
         const key = input.dataset.customElementField;
@@ -3246,7 +3413,7 @@ class DratekEinkPanel extends HTMLElement {
           this._customElementInspection = { collections: [] };
         }
         const save = this.shadowRoot.querySelector("#customElementSave");
-        if (save) save.disabled = this._customElementBusy || !this._customElementForm.name.trim();
+        if (save) save.disabled = this._customElementBusy || !this._customElementForm.name.trim() || !this._customElementForm.entity_id;
         const fetchButton = this.shadowRoot.querySelector("#customElementFetch");
         if (fetchButton) fetchButton.disabled = this._customElementBusy || !this._customElementForm.url.trim();
       };
@@ -3564,7 +3731,9 @@ class DratekEinkPanel extends HTMLElement {
     const rawEntityValue = object.entityId ? this._entityRawValue(object) : undefined;
     const rawBoundValue = object.entityId ? rawEntityValue : object.variable && object.variableName ? this._variables[object.variableName] : object.text;
     const activeStatusValues = new Set(String(object.statusOnValues || "on,true,1,open,home").split(",").map((item) => item.trim().toLowerCase()).filter(Boolean));
-    const value = object.statusIcons
+    const value = Array.isArray(object.conditionRules) && object.conditionRules.length
+      ? (object.conditionRules.find((rule) => this._customConditionMatches(rawBoundValue, rule.operator || "equals", rule.value || ""))?.symbol || object.defaultSymbol || "?")
+      : object.statusIcons
       ? (activeStatusValues.has(String(rawBoundValue ?? "").trim().toLowerCase()) ? object.statusOnSymbol || "●" : object.statusOffSymbol || "○")
       : object.entityId
         ? `${object.valuePrefix || ""}${(object.valuePrefix || object.valueSuffix ? rawEntityValue : this._entityValue(object)) ?? object.text ?? ""}${object.valueSuffix || ""}`
@@ -4027,6 +4196,7 @@ class DratekEinkPanel extends HTMLElement {
         entity_attribute: object.entityAttribute || "", include_unit: false, fallback: object.data || "",
         x: Number(object.x || 0), y: Number(object.y || 0), w: Number(object.w || 1), h: Number(object.h || 1),
         chartType: object.chartType || "line", chartTitle: object.chartTitle || "", maxPoints: Number(object.maxPoints || 48),
+        history_mode: object.historyMode || "rolling",
         color: object.barColor || object.color || "black", strokeWidth: Number(object.strokeWidth || 2),
       }) : ({
         id: object.id,
@@ -4045,6 +4215,7 @@ class DratekEinkPanel extends HTMLElement {
         value_prefix: object.valuePrefix || "", value_suffix: object.valueSuffix || "",
         status_icons: !!object.statusIcons, status_on_symbol: object.statusOnSymbol || "●",
         status_off_symbol: object.statusOffSymbol || "○", status_on_values: object.statusOnValues || "on,true,1,open,home",
+        condition_rules: structuredClone(object.conditionRules || []), default_symbol: object.defaultSymbol || "?",
       })),
     };
   }

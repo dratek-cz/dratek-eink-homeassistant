@@ -28,6 +28,7 @@ class EntityAutoUpdateManager:
         self._configs: dict[str, dict[str, Any]] = {}
         self._unsubscribe = None
         self._timers: dict[str, Any] = {}
+        self._chart_series: dict[str, list[float]] = {}
         self._initialized = False
 
     async def async_initialize(self) -> None:
@@ -74,6 +75,31 @@ class EntityAutoUpdateManager:
             )
 
     @staticmethod
+    def _condition_matches(value: Any, operator: str, target: str) -> bool:
+        normalized = str(value).strip().lower()
+        expected = str(target).strip().lower()
+        if operator == "is_on":
+            return normalized in {"on", "true", "1", "open", "home", "active", "heat", "heating", "playing", "unlocked"}
+        if operator == "is_off":
+            return normalized in {"off", "false", "0", "closed", "not_home", "idle", "unavailable", "unknown", "locked"}
+        if operator == "contains":
+            return expected in normalized
+        if operator in {"greater", "greater_equal", "less", "less_equal"}:
+            try:
+                current_number = float(value)
+                target_number = float(target)
+            except (TypeError, ValueError):
+                return False
+            return {
+                "greater": current_number > target_number,
+                "greater_equal": current_number >= target_number,
+                "less": current_number < target_number,
+                "less_equal": current_number <= target_number,
+            }[operator]
+        equal = normalized == expected
+        return not equal if operator == "not_equals" else equal
+
+    @staticmethod
     def _state_value(state: Any, binding: dict[str, Any]) -> str:
         if state is None:
             return str(binding.get("fallback", ""))
@@ -81,6 +107,12 @@ class EntityAutoUpdateManager:
         value = state.attributes.get(attribute) if attribute else state.state
         if value is None:
             return str(binding.get("fallback", ""))
+        rules = binding.get("condition_rules")
+        if isinstance(rules, list) and rules:
+            for rule in rules:
+                if isinstance(rule, dict) and EntityAutoUpdateManager._condition_matches(value, str(rule.get("operator") or "equals"), str(rule.get("value") or "")):
+                    return str(rule.get("symbol") or "●")
+            return str(binding.get("default_symbol") or "○")
         if binding.get("status_icons"):
             active_values = {
                 item.strip().lower()
@@ -94,6 +126,32 @@ class EntityAutoUpdateManager:
         prefix = str(binding.get("value_prefix") or "")
         suffix = str(binding.get("value_suffix") or "")
         return f"{prefix}{value}{f' {unit}' if unit else ''}{suffix}"
+
+    def _chart_value(self, address: str, state: Any, binding: dict[str, Any]) -> str:
+        if state is None:
+            return str(binding.get("fallback", ""))
+        attribute = str(binding.get("entity_attribute") or "")
+        raw_value = state.attributes.get(attribute) if attribute else state.state
+        if binding.get("history_mode") == "attribute" or isinstance(raw_value, (list, dict, tuple)):
+            return json.dumps(raw_value, ensure_ascii=False, separators=(",", ":"))
+        try:
+            number = float(raw_value)
+        except (TypeError, ValueError):
+            return str(binding.get("fallback", ""))
+        key = f"{address}:{binding.get('id')}"
+        series = self._chart_series.setdefault(key, [])
+        if not series:
+            try:
+                fallback = json.loads(str(binding.get("fallback") or "[]"))
+                if isinstance(fallback, list):
+                    series.extend(float(item) for item in fallback if isinstance(item, (int, float)))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                pass
+        if not series or series[-1] != number:
+            series.append(number)
+        maximum = max(2, min(96, int(binding.get("maxPoints") or 24)))
+        del series[:-maximum]
+        return json.dumps(series, separators=(",", ":"))
 
     @callback
     def _handle_state_change(self, event: Any) -> None:
@@ -130,12 +188,14 @@ class EntityAutoUpdateManager:
         if not config:
             return
         bindings = config.get("bindings", [])
-        values = {
-            str(binding.get("id")): self._state_value(
-                self.hass.states.get(str(binding.get("entity_id"))), binding
+        values = {}
+        for binding in bindings:
+            state = self.hass.states.get(str(binding.get("entity_id")))
+            values[str(binding.get("id"))] = (
+                self._chart_value(address, state, binding)
+                if binding.get("type") == "chart"
+                else self._state_value(state, binding)
             )
-            for binding in bindings
-        }
         image = await self.hass.async_add_executor_job(
             render_entity_bound_image,
             str(config.get("base_image") or ""),

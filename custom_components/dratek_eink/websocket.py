@@ -97,7 +97,6 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_list_custom_elements)
     websocket_api.async_register_command(hass, websocket_save_custom_element)
     websocket_api.async_register_command(hass, websocket_delete_custom_element)
-    websocket_api.async_register_command(hass, websocket_fetch_custom_element_url)
     websocket_api.async_register_command(hass, websocket_set_device_name)
     websocket_api.async_register_command(hass, websocket_list_gateways)
     websocket_api.async_register_command(hass, websocket_add_gateway)
@@ -945,23 +944,33 @@ async def websocket_save_custom_element(
         return
     element_id = str(source.get("id") or uuid.uuid4())
     now = int(time.time())
+    condition_rules = []
+    for rule_source in source.get("condition_rules", [])[:8] if isinstance(source.get("condition_rules"), list) else []:
+        if not isinstance(rule_source, dict):
+            continue
+        operator = str(rule_source.get("operator") or "equals")
+        if operator not in {"equals", "not_equals", "greater", "greater_equal", "less", "less_equal", "contains", "is_on", "is_off"}:
+            operator = "equals"
+        condition_rules.append({
+            "operator": operator,
+            "value": str(rule_source.get("value") or "")[:120],
+            "symbol": str(rule_source.get("symbol") or "●")[:8],
+        })
     element = {
         "id": element_id,
         "name": str(source.get("name") or "Vlastní prvek").strip()[:80],
         "element_type": element_type,
-        "source_type": "url" if source.get("source_type") == "url" else "entity",
+        "source_type": "entity",
         "entity_id": str(source.get("entity_id") or "").strip()[:255],
         "entity_attribute": str(source.get("entity_attribute") or "").strip()[:120],
-        "url": str(source.get("url") or "").strip()[:2048],
-        "collection_path": str(source.get("collection_path") or "").strip()[:255],
-        "value_field": str(source.get("value_field") or "").strip()[:120],
-        "label_field": str(source.get("label_field") or "").strip()[:120],
-        "json_path": str(source.get("json_path") or "").strip()[:255],
-        "label_json_path": str(source.get("label_json_path") or "").strip()[:255],
         "label": str(source.get("label") or "").strip()[:120],
         "unit": str(source.get("unit") or "").strip()[:32],
         "color": "red" if source.get("color") == "red" else "black",
         "chart_type": str(source.get("chart_type") or "line") if str(source.get("chart_type") or "line") in {"line", "bar", "area"} else "line",
+        "history_mode": "attribute" if source.get("history_mode") == "attribute" else "rolling",
+        "history_points": _clamped_int(source.get("history_points"), 24, 2, 96),
+        "condition_rules": condition_rules,
+        "default_symbol": str(source.get("default_symbol") or "○")[:8],
         "on_symbol": str(source.get("on_symbol") or "●")[:8],
         "off_symbol": str(source.get("off_symbol") or "○")[:8],
         "on_values": str(source.get("on_values") or "on,true,1,open,home")[:255],
