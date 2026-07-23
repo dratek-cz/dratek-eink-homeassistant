@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.79
+
+- levý panel Designeru HA prvků používá přehledné svislé karty: název, náhled a akce vrstvy
+- pracovní náhled vrstvy má stejný rámeček zařízení jako Designer displeje
+- barvy textu, tvarů, ikon a obrázků se vybírají z názorné barevné palety
+- nahrané obrázky mohou zachovat původní barvy nebo být ručně přebarveny na černou, červenou či bílou
+- přidána knihovna ikon: světlo, zásuvka, teploměr, voda, dům, napájení, baterie a signál
+
 ## Novinky ve verzi 0.1.78
 
 - displej po jednom vynechaném BLE skenu okamžitě nezmizí; pět minut čeká na další reklamu

@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.78";
+const DRATEK_EINK_VERSION = "0.1.79";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -3092,11 +3092,100 @@ class DratekEinkPanel extends HTMLElement {
     return `${css}<div class="ha-layer-editor">${top}${result}${this._customLayerStep === "design" ? this._renderCustomLayerDesign(layers, activeLayer, selected) : this._renderCustomLayerRules(layers)}</div>`;
   }
 
+  _renderLayerColorPalette(property, current, label, values) {
+    const labels = { original: "Původní", none: "Bez barvy", black: "Černá", red: "Červená", white: "Bílá" };
+    const selected = values.includes(current) ? current : values[0];
+    return `<fieldset class="layer-color-field"><legend>${this._escape(label)}</legend><div class="layer-color-options">${values.map((value) => `<label class="${selected === value ? "selected" : ""}" title="${labels[value]}"><input type="radio" name="layer-${property}-${this._escape(this._customSelectedObjectId)}" data-layer-object="${property}" value="${value}" ${selected === value ? "checked" : ""}><span class="layer-color-swatch ${value}">${value === "original" ? `<ha-icon icon="mdi:palette-outline"></ha-icon>` : value === "none" ? `<ha-icon icon="mdi:cancel"></ha-icon>` : ""}</span><small>${labels[value]}</small></label>`).join("")}</div></fieldset>`;
+  }
+
+  _defaultLayerIcons() {
+    return [
+      ["light", "Světlo", "mdi:lightbulb-outline"],
+      ["socket", "Zásuvka", "mdi:power-socket-eu"],
+      ["temperature", "Teploměr", "mdi:thermometer"],
+      ["water", "Voda", "mdi:water-outline"],
+      ["home", "Dům", "mdi:home-outline"],
+      ["power", "Napájení", "mdi:power"],
+      ["battery", "Baterie", "mdi:battery-medium"],
+      ["wifi", "Signál", "mdi:wifi"],
+    ];
+  }
+
+  _renderDefaultLayerIcons() {
+    return this._defaultLayerIcons().map(([key, label, icon]) => `<button class="default-layer-icon secondary" data-default-layer-icon="${key}" title="Vložit ikonu ${this._escape(label)}"><ha-icon icon="${icon}"></ha-icon><span>${this._escape(label)}</span></button>`).join("");
+  }
+
+  _addDefaultLayerIcon(key) {
+    const layer = this._customActiveLayer();
+    if (!layer || !this._defaultLayerIcons().some(([item]) => item === key)) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, 128, 128);
+    ctx.strokeStyle = "#000";
+    ctx.fillStyle = "#000";
+    ctx.lineWidth = 9;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    const line = (...points) => {
+      ctx.beginPath();
+      ctx.moveTo(points[0], points[1]);
+      for (let index = 2; index < points.length; index += 2) ctx.lineTo(points[index], points[index + 1]);
+      ctx.stroke();
+    };
+    if (key === "light") {
+      ctx.beginPath(); ctx.arc(64, 51, 28, Math.PI * .82, Math.PI * 2.18); ctx.stroke();
+      line(43, 72, 49, 83, 79, 83, 85, 72); line(49, 95, 79, 95); line(54, 107, 74, 107);
+      [[64,8,64,18],[24,25,33,34],[104,25,95,34],[18,61,30,61],[110,61,98,61]].forEach((item) => line(...item));
+    } else if (key === "socket") {
+      ctx.strokeRect(29, 18, 70, 92); line(50, 41, 50, 57); line(78, 41, 78, 57);
+      ctx.beginPath(); ctx.arc(64, 77, 15, 0, Math.PI); ctx.stroke(); line(64, 92, 64, 110);
+    } else if (key === "temperature") {
+      ctx.beginPath(); ctx.arc(64, 94, 22, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(64, 94, 10, 0, Math.PI * 2); ctx.fill();
+      line(64, 84, 64, 30); ctx.beginPath(); ctx.arc(64, 29, 13, Math.PI, 0); ctx.stroke(); line(51,29,51,79); line(77,29,77,79);
+    } else if (key === "water") {
+      ctx.beginPath(); ctx.moveTo(64, 12); ctx.bezierCurveTo(52, 34, 29, 61, 29, 82); ctx.bezierCurveTo(29, 105, 45, 118, 64, 118); ctx.bezierCurveTo(83, 118, 99, 105, 99, 82); ctx.bezierCurveTo(99, 61, 76, 34, 64, 12); ctx.closePath(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(54, 89, 15, .3, 1.65); ctx.stroke();
+    } else if (key === "home") {
+      line(17,61,64,20,111,61); line(31,54,31,108,97,108,97,54); ctx.strokeRect(54, 75, 21, 33);
+    } else if (key === "power") {
+      ctx.beginPath(); ctx.arc(64, 68, 43, -.72, Math.PI * 1.72); ctx.stroke(); line(64, 12, 64, 65);
+    } else if (key === "battery") {
+      ctx.strokeRect(16, 37, 91, 55); ctx.fillRect(108, 51, 10, 27); ctx.fillRect(28, 49, 50, 31); line(68, 43, 50, 65, 64, 65, 51, 87);
+    } else {
+      ctx.beginPath(); ctx.arc(64, 101, 8, 0, Math.PI * 2); ctx.fill();
+      [[20,59],[34,74],[48,88]].forEach(([radius, y]) => { ctx.beginPath(); ctx.arc(64, 108, radius, Math.PI * 1.19, Math.PI * 1.81); ctx.stroke(); });
+    }
+    const side = Math.max(44, Math.round(Math.min(this._customElementForm.canvas_width, this._customElementForm.canvas_height) * .55));
+    const object = {
+      id: `item-${Date.now()}`,
+      type: "image",
+      x: Math.round((this._customElementForm.canvas_width - side) / 2),
+      y: Math.round((this._customElementForm.canvas_height - side) / 2),
+      w: side,
+      h: side,
+      image: canvas.toDataURL("image/png"),
+      tint: "black",
+    };
+    layer.objects.push(object);
+    this._customSelectedObjectId = object.id;
+    this._stableCustomRender();
+  }
+
   _renderCustomLayerDesign(layers, activeLayer, selected) {
     const form = this._customElementForm;
-    const inspector = selected ? `<div class="layer-inspector"><div class="layer-inspector-heading"><span><ha-icon icon="${selected.type === "text" ? "mdi:format-text" : selected.type === "rect" ? "mdi:rectangle-outline" : "mdi:image-outline"}"></ha-icon></span><div><h3>Vybraný objekt</h3><small>${selected.type === "text" ? "Text" : selected.type === "rect" ? "Tvar" : "Obrázek"}</small></div></div>${selected.type === "text" ? `<div class="field"><label>Text</label><textarea data-layer-object="text">${this._escape(selected.text || "")}</textarea></div><div class="field"><label>Velikost písma</label><input data-layer-object="font_size" type="number" min="8" max="120" value="${Number(selected.font_size || 24)}"></div><label class="check-row"><input data-layer-object="bold" type="checkbox" ${selected.bold ? "checked" : ""}> Tučné písmo</label><div class="field"><label>Zarovnání</label><select data-layer-object="align"><option value="left" ${selected.align === "left" ? "selected" : ""}>Vlevo</option><option value="center" ${selected.align === "center" ? "selected" : ""}>Na střed</option><option value="right" ${selected.align === "right" ? "selected" : ""}>Vpravo</option></select></div><div class="field"><label>Barva textu</label><select data-layer-object="color"><option value="black" ${selected.color !== "red" ? "selected" : ""}>Černá</option><option value="red" ${selected.color === "red" ? "selected" : ""}>Červená</option></select></div>` : selected.type === "rect" ? `<div class="field"><label>Výplň</label><select data-layer-object="fill"><option value="none" ${selected.fill === "none" ? "selected" : ""}>Bez výplně</option><option value="black" ${selected.fill === "black" ? "selected" : ""}>Černá</option><option value="red" ${selected.fill === "red" ? "selected" : ""}>Červená</option><option value="white" ${selected.fill === "white" ? "selected" : ""}>Bílá</option></select></div><div class="field"><label>Obrys</label><select data-layer-object="stroke"><option value="none" ${selected.stroke === "none" ? "selected" : ""}>Bez obrysu</option><option value="black" ${selected.stroke === "black" ? "selected" : ""}>Černý</option><option value="red" ${selected.stroke === "red" ? "selected" : ""}>Červený</option><option value="white" ${selected.stroke === "white" ? "selected" : ""}>Bílý</option></select></div>` : `<div class="field"><label>Přebarvení obrázku</label><select data-layer-object="tint"><option value="original" ${!["black","red","white"].includes(selected.tint) ? "selected" : ""}>Původní barvy</option><option value="black" ${selected.tint === "black" ? "selected" : ""}>Černá silueta</option><option value="red" ${selected.tint === "red" ? "selected" : ""}>Červená silueta</option><option value="white" ${selected.tint === "white" ? "selected" : ""}>Bílá silueta</option></select></div><p class="inspector-note">Průhlednost ikony zůstane zachovaná. Barva se použije pouze na její viditelnou část.</p>`}<div class="inspector-divider"><span>Poloha a velikost</span></div><div class="mini-grid">${["x","y","w","h"].map((key) => `<div class="field"><label>${key.toUpperCase()}</label><input data-layer-object="${key}" type="number" value="${Math.round(Number(selected[key] || 0))}"></div>`).join("")}</div><button id="deleteLayerObject" class="danger"><ha-icon icon="mdi:trash-can-outline"></ha-icon>Odstranit objekt</button></div>` : `<div class="layer-inspector-empty"><div><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon><p>Klikněte na objekt v náhledu a upravte jej zde.</p></div></div>`;
-    const layerList = layers.map((layer) => `<article class="layer-list-item ${layer.id === activeLayer?.id ? "active" : ""}" data-custom-layer="${this._escape(layer.id)}"><canvas width="148" height="64" data-custom-layer-preview="${this._escape(layer.id)}"></canvas><input data-custom-layer-name="${this._escape(layer.id)}" value="${this._escape(layer.name)}"><div><button data-custom-layer-copy="${this._escape(layer.id)}" class="secondary icon-btn" title="Duplikovat"><ha-icon icon="mdi:content-copy"></ha-icon></button><button data-custom-layer-delete="${this._escape(layer.id)}" class="secondary icon-btn" title="Smazat" ${layers.length <= 1 ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon></button></div></article>`).join("");
-    return `<div class="ha-layer-layout"><aside class="layer-list"><div class="panel-heading"><div><strong>Vrstvy</strong><small>Každá představuje jeden stav</small></div><button id="addCustomLayer" class="secondary icon-btn"><ha-icon icon="mdi:plus"></ha-icon></button></div>${layerList}</aside><main class="layer-stage"><div class="layer-toolbar"><button data-add-layer-object="text"><ha-icon icon="mdi:format-text"></ha-icon>Text</button><button data-add-layer-object="rect" class="secondary"><ha-icon icon="mdi:rectangle-outline"></ha-icon>Tvar</button><button id="addLayerImage" class="secondary"><ha-icon icon="mdi:image-plus-outline"></ha-icon>Obrázek</button><input id="layerImageFile" type="file" accept="image/*" hidden><span>${form.canvas_width} × ${form.canvas_height} px</span></div><div class="layer-canvas-shell"><canvas id="customLayerCanvas" width="${form.canvas_width}" height="${form.canvas_height}"></canvas></div><p class="canvas-help">Objekty přetahujte myší. Přesnou polohu, velikost, barvu a text upravíte vpravo.</p></main><aside class="layer-properties">${inspector}</aside></div>`;
+    const inspector = selected ? `<div class="layer-inspector"><div class="layer-inspector-heading"><span><ha-icon icon="${selected.type === "text" ? "mdi:format-text" : selected.type === "rect" ? "mdi:rectangle-outline" : "mdi:image-outline"}"></ha-icon></span><div><h3>Vybraný objekt</h3><small>${selected.type === "text" ? "Text" : selected.type === "rect" ? "Tvar" : "Obrázek"}</small></div></div>${selected.type === "text" ? `<div class="field"><label>Text</label><textarea data-layer-object="text">${this._escape(selected.text || "")}</textarea></div><div class="field"><label>Velikost písma</label><input data-layer-object="font_size" type="number" min="8" max="120" value="${Number(selected.font_size || 24)}"></div><label class="check-row"><input data-layer-object="bold" type="checkbox" ${selected.bold ? "checked" : ""}> Tučné písmo</label><div class="field"><label>Zarovnání</label><select data-layer-object="align"><option value="left" ${selected.align === "left" ? "selected" : ""}>Vlevo</option><option value="center" ${selected.align === "center" ? "selected" : ""}>Na střed</option><option value="right" ${selected.align === "right" ? "selected" : ""}>Vpravo</option></select></div>${this._renderLayerColorPalette("color", selected.color || "black", "Barva textu", ["black", "red"])}` : selected.type === "rect" ? `${this._renderLayerColorPalette("fill", selected.fill || "none", "Výplň", ["none", "black", "red", "white"])}${this._renderLayerColorPalette("stroke", selected.stroke || "black", "Obrys", ["none", "black", "red", "white"])}` : `${this._renderLayerColorPalette("tint", selected.tint || "original", "Barva obrázku", ["original", "black", "red", "white"])}<p class="inspector-note">Původní zachová barvy nahraného obrázku. Černá, červená nebo bílá vytvoří barevnou siluetu a zachová průhlednost.</p>`}<div class="inspector-divider"><span>Poloha a velikost</span></div><div class="mini-grid">${["x","y","w","h"].map((key) => `<div class="field"><label>${key.toUpperCase()}</label><input data-layer-object="${key}" type="number" value="${Math.round(Number(selected[key] || 0))}"></div>`).join("")}</div><button id="deleteLayerObject" class="danger"><ha-icon icon="mdi:trash-can-outline"></ha-icon>Odstranit objekt</button></div>` : `<div class="layer-inspector-empty"><div><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon><p>Klikněte na objekt v náhledu a upravte jej zde.</p></div></div>`;
+    const layerList = layers.map((layer) => `<article class="layer-list-item ${layer.id === activeLayer?.id ? "active" : ""}" data-custom-layer="${this._escape(layer.id)}"><div class="layer-card-title"><input data-custom-layer-name="${this._escape(layer.id)}" value="${this._escape(layer.name)}" aria-label="Název vrstvy">${layer.id === activeLayer?.id ? `<span>Aktivní</span>` : ""}</div><div class="layer-card-preview"><canvas width="296" height="128" data-custom-layer-preview="${this._escape(layer.id)}"></canvas></div><div class="layer-card-actions"><button data-custom-layer-copy="${this._escape(layer.id)}" class="secondary" title="Duplikovat vrstvu"><ha-icon icon="mdi:content-copy"></ha-icon><span>Kopírovat</span></button><button data-custom-layer-delete="${this._escape(layer.id)}" class="secondary" title="Smazat vrstvu" ${layers.length <= 1 ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon><span>Odstranit</span></button></div></article>`).join("");
+    const designCss = `<style>
+      .layer-list-item{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding:10px;cursor:pointer}.layer-list-item>*{grid-column:1!important}.layer-card-title{display:flex;align-items:center;gap:6px}.layer-card-title input{width:100%;min-width:0;padding:5px 2px;font-size:12px}.layer-card-title span{padding:3px 6px;border-radius:999px;background:rgba(0,162,165,.11);color:var(--dratek-teal);font-size:8px;font-weight:900}.layer-card-preview{padding:6px;border:5px solid #eee8e8;border-radius:9px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.1)}.layer-card-preview canvas{display:block;width:100%;height:auto;background:#fff;border:1px solid rgba(0,0,0,.14);border-radius:2px}.layer-card-actions{display:grid!important;grid-template-columns:1fr 1fr;gap:6px}.layer-card-actions button{min-width:0;min-height:31px;padding:5px;font-size:8px}.layer-card-actions button span{display:inline}.layer-card-actions ha-icon{--mdc-icon-size:15px}
+      .default-icon-library{margin-top:10px;border:1px solid var(--divider-color);border-radius:10px;background:var(--secondary-background-color)}.default-icon-library summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;cursor:pointer;list-style:none}.default-icon-library summary::-webkit-details-marker{display:none}.default-icon-library summary span{display:flex;align-items:center;gap:7px}.default-icon-library summary ha-icon{color:var(--dratek-teal)}.default-icon-library summary small{color:var(--secondary-text-color);font-size:9px}.default-icon-grid{display:grid;grid-template-columns:repeat(8,minmax(52px,1fr));gap:5px;padding:0 9px 9px}.default-layer-icon{display:grid;place-items:center;gap:3px;min-width:0;min-height:54px;padding:5px;background:var(--card-background-color);color:var(--primary-text-color)}.default-layer-icon ha-icon{--mdc-icon-size:23px;color:var(--dratek-teal)}.default-layer-icon span{font-size:8px}
+      .layer-canvas-shell{padding:clamp(18px,3vw,38px)}.layer-device-frame{display:grid;place-items:center;width:min(100%,850px);padding:clamp(14px,2.3vw,30px);border:clamp(7px,1vw,12px) solid #eee8e8;border-radius:clamp(12px,1.8vw,22px);background:#fff;box-shadow:0 14px 38px rgba(15,23,42,.17),inset 0 0 0 1px rgba(0,0,0,.04)}.layer-device-frame canvas{width:100%;max-height:min(48vh,500px);border:1px solid rgba(0,0,0,.17);box-shadow:inset 0 0 5px rgba(0,0,0,.1)}
+      .layer-color-field{margin:0;padding:0;border:0}.layer-color-field legend{margin-bottom:7px;color:var(--secondary-text-color);font-size:10px;font-weight:800}.layer-color-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.layer-color-options label{display:grid;grid-template-columns:28px minmax(0,1fr);align-items:center;gap:7px;padding:6px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);cursor:pointer}.layer-color-options label.selected{border-color:var(--dratek-teal);box-shadow:inset 0 0 0 1px var(--dratek-teal)}.layer-color-options input{position:absolute;opacity:0;pointer-events:none}.layer-color-options small{overflow:hidden;color:var(--primary-text-color);font-size:9px;font-weight:750;text-overflow:ellipsis;white-space:nowrap}.layer-color-swatch{display:grid;place-items:center;width:28px;height:28px;border:1px solid rgba(0,0,0,.2);border-radius:7px}.layer-color-swatch.black{background:#050505}.layer-color-swatch.red{background:#dc140c}.layer-color-swatch.white{background:#fff}.layer-color-swatch.original{background:conic-gradient(#00a2a5,#ff6800,#dc140c,#111,#00a2a5);color:#fff}.layer-color-swatch.none{background:repeating-linear-gradient(135deg,#fff 0 5px,#e5e7eb 5px 10px);color:#c62828}.layer-color-swatch ha-icon{--mdc-icon-size:17px}
+      @media(max-width:1050px){.default-icon-grid{grid-template-columns:repeat(4,minmax(52px,1fr))}}@media(max-width:680px){.default-icon-library summary{align-items:flex-start;flex-direction:column}.default-icon-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.layer-card-actions button span{display:none}}
+    </style>`;
+    return `${designCss}<div class="ha-layer-layout"><aside class="layer-list"><div class="panel-heading"><div><strong>Vrstvy</strong><small>Každá představuje jeden stav</small></div><button id="addCustomLayer" class="secondary icon-btn" title="Přidat vrstvu"><ha-icon icon="mdi:plus"></ha-icon></button></div>${layerList}</aside><main class="layer-stage"><div class="layer-toolbar"><button data-add-layer-object="text"><ha-icon icon="mdi:format-text"></ha-icon>Text</button><button data-add-layer-object="rect" class="secondary"><ha-icon icon="mdi:rectangle-outline"></ha-icon>Tvar</button><button id="addLayerImage" class="secondary"><ha-icon icon="mdi:image-plus-outline"></ha-icon>Vlastní obrázek</button><input id="layerImageFile" type="file" accept="image/*" hidden><span>${form.canvas_width} × ${form.canvas_height} px</span></div><details class="default-icon-library" open><summary><span><ha-icon icon="mdi:shape-plus-outline"></ha-icon><strong>Knihovna ikon</strong></span><small>Kliknutím vložíte ikonu do vrstvy</small></summary><div class="default-icon-grid">${this._renderDefaultLayerIcons()}</div></details><div class="layer-canvas-shell"><div class="layer-device-frame"><canvas id="customLayerCanvas" width="${form.canvas_width}" height="${form.canvas_height}"></canvas></div></div><p class="canvas-help">Objekty přetahujte myší. Přesnou polohu, velikost a barvy upravíte v pravém panelu.</p></main><aside class="layer-properties">${inspector}</aside></div>`;
   }
 
   _renderCustomLayerRules(layers) {
@@ -4019,18 +4108,26 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-custom-layer-copy]").forEach((button) => button.addEventListener("click", () => this._duplicateCustomLayer(button.dataset.customLayerCopy)));
     this.shadowRoot.querySelectorAll("[data-custom-layer-delete]").forEach((button) => button.addEventListener("click", () => this._deleteCustomLayer(button.dataset.customLayerDelete)));
     this.shadowRoot.querySelectorAll("[data-add-layer-object]").forEach((button) => button.addEventListener("click", () => this._addCustomLayerObject(button.dataset.addLayerObject)));
+    this.shadowRoot.querySelectorAll("[data-default-layer-icon]").forEach((button) => button.addEventListener("click", () => this._addDefaultLayerIcon(button.dataset.defaultLayerIcon)));
     this.shadowRoot.querySelector("#addLayerImage")?.addEventListener("click", () => this.shadowRoot.querySelector("#layerImageFile")?.click());
     this.shadowRoot.querySelector("#layerImageFile")?.addEventListener("change", (event) => this._setCustomLayerImage(event.target.files?.[0]));
     this.shadowRoot.querySelectorAll("[data-layer-object]").forEach((input) => {
       const update = () => {
         const object = this._customSelectedLayerObject();
-        if (!object) return;
+        if (!object || (input.type === "radio" && !input.checked)) return;
         const key = input.dataset.layerObject;
         object[key] = input.type === "checkbox" ? input.checked : input.type === "number" ? Number(input.value) : input.value;
+        if (input.type === "radio") {
+          this._stableCustomRender();
+          return;
+        }
         this._paintCustomLayerCanvases();
       };
-      input.addEventListener("input", update);
-      input.addEventListener("change", update);
+      if (input.type === "radio") input.addEventListener("change", update);
+      else {
+        input.addEventListener("input", update);
+        input.addEventListener("change", update);
+      }
     });
     this.shadowRoot.querySelector("#deleteLayerObject")?.addEventListener("click", () => {
       const layer = this._customActiveLayer();
