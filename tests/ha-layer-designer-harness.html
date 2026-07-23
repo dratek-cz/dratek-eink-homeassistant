@@ -41,6 +41,7 @@
         address: "FF:FF:92:81:46:32", physical_code: "92.81.46.32",
         display_name: "Testovací displej", model: "EPA LCD 296x128 1 BWR",
         sdk_type: 40, battery_percent: 55, rssi: -35,
+        temporarily_unseen: new URLSearchParams(location.search).get("stale") === "1",
       }],
       ble_devices: [], debug: [],
     };
@@ -65,7 +66,8 @@
       },
       callWS: async ({ type }) => {
         if (type === "dratek_eink/custom_elements/list") return { elements: [sampleElement] };
-        if (type === "dratek_eink/device_draft/get") return { draft: null };
+        if (type === "dratek_eink/device_drafts/list") return { drafts: {} };
+        if (type === "dratek_eink/device_drafts/load") return { draft: null };
         if (type === "dratek_eink/projects/list") return { projects: [] };
         if (type === "dratek_eink/gateways/list") return { gateways: [] };
         if (type === "dratek_eink/serial/ports") return { ports: [] };

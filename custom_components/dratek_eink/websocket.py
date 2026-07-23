@@ -44,6 +44,8 @@ from .transfer import DratekTransfer
 
 PROJECT_STORE_KEY = "dratek_eink.projects"
 PROJECT_STORE_VERSION = 1
+DISCOVERY_CACHE_KEY = "dratek_eink.discovery_cache"
+DISCOVERY_GRACE_SECONDS = 5 * 60
 
 
 def _battery_payload(device: Any) -> dict[str, Any]:
@@ -93,6 +95,7 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_load_project)
     websocket_api.async_register_command(hass, websocket_delete_project)
     websocket_api.async_register_command(hass, websocket_load_device_draft)
+    websocket_api.async_register_command(hass, websocket_list_device_drafts)
     websocket_api.async_register_command(hass, websocket_save_device_draft)
     websocket_api.async_register_command(hass, websocket_list_custom_elements)
     websocket_api.async_register_command(hass, websocket_save_custom_element)
@@ -296,6 +299,23 @@ async def websocket_scan(
                 "partial_update": parsed.sdk_type in PARTIAL_UPDATE_SDK_TYPES,
                 "paths": [path],
             }
+
+    now = int(time.time())
+    discovery_cache = hass.data.setdefault(DISCOVERY_CACHE_KEY, {})
+    for address, device in devices_by_address.items():
+        device["last_seen_at"] = now
+        device["temporarily_unseen"] = False
+        discovery_cache[address] = dict(device)
+    for address, cached_device in list(discovery_cache.items()):
+        if address in devices_by_address:
+            continue
+        last_seen_at = int(cached_device.get("last_seen_at") or 0)
+        if last_seen_at and now - last_seen_at <= DISCOVERY_GRACE_SECONDS:
+            retained = dict(cached_device)
+            retained["temporarily_unseen"] = True
+            devices_by_address[address] = retained
+        else:
+            discovery_cache.pop(address, None)
 
     devices = list(devices_by_address.values())
     project_data = await _load_project_data(hass)
@@ -873,6 +893,23 @@ async def websocket_load_device_draft(
     data = await _load_project_data(hass)
     draft = data["device_drafts"].get(_normalize_address(msg["address"]))
     connection.send_result(msg["id"], {"draft": draft})
+
+
+@websocket_api.websocket_command({"type": "dratek_eink/device_drafts/list"})
+@websocket_api.async_response
+async def websocket_list_device_drafts(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return all display drafts in one request for fast card previews."""
+    data = await _load_project_data(hass)
+    drafts = {
+        _normalize_address(address): draft
+        for address, draft in data["device_drafts"].items()
+        if isinstance(address, str) and isinstance(draft, dict)
+    }
+    connection.send_result(msg["id"], {"drafts": drafts})
 
 
 @websocket_api.websocket_command(

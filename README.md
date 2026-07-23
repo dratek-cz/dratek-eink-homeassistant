@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.78
+
+- displej po jednom vynechaném BLE skenu okamžitě nezmizí; pět minut čeká na další reklamu
+- dočasně nezachycený displej zůstane dostupný a je označen oranžovým stavem
+- na hlavní stránce se sken automaticky opakuje každých 30 sekund
+- návrhy displejů se načítají jedním společným požadavkem místo samostatného požadavku pro každou kartu
+- náhledy displejů a vlastní HA prvky se ihned obnoví z lokální cache
+
 ## Novinky ve verzi 0.1.77
 
 - vlastní HA prvky lze vložit přímo z palety hlavního Designeru displeje
