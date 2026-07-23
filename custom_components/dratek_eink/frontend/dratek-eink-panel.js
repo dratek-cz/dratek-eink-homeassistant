@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.82";
+const DRATEK_EINK_VERSION = "0.1.83";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -701,6 +701,7 @@ class DratekEinkPanel extends HTMLElement {
       const result = await this._hass.callWS({ type: "dratek_eink/custom_elements/list" });
       this._customElements = result.elements || [];
       this._saveCachedCustomElements();
+      (this._customElements || []).forEach((element) => this._syncCustomElementToAllObjects(element));
     } catch (err) {
       this._customElementResult = { ok: false, error: this._message(err) };
     }
@@ -713,6 +714,61 @@ class DratekEinkPanel extends HTMLElement {
     }
   }
 
+  _syncCustomElementToAllObjects(element) {
+    if (!element || !element.id) return;
+    const syncObj = (obj) => {
+      if (obj.customElementId !== element.id) return;
+      if (obj.type === "layered" || element.element_type === "layered") {
+        obj.customLayers = structuredClone(element.layers || []);
+        obj.customCanvasWidth = Number(element.canvas_width || 296);
+        obj.customCanvasHeight = Number(element.canvas_height || 128);
+        obj.conditionRules = structuredClone((element.condition_rules || []).map((rule) => ({
+          operator: rule.operator,
+          value: rule.value || "",
+          symbol: rule.layer_id || rule.symbol || "",
+        })));
+        obj.defaultSymbol = element.default_layer_id || element.layers?.[0]?.id || "";
+      }
+      if (element.entity_id) {
+        obj.entityId = element.entity_id;
+        obj.entityAttribute = element.entity_attribute || "";
+      }
+      if (element.element_type === "icon" && element.icon_image) {
+        obj.image = element.icon_image;
+      }
+      if (element.element_type === "chart") {
+        obj.chartType = element.chart_type || obj.chartType || "line";
+        obj.maxPoints = Number(element.history_points || obj.maxPoints || 24);
+        obj.historyMode = element.history_mode || obj.historyMode || "rolling";
+      }
+      if (element.element_type === "status") {
+        obj.statusOnSymbol = element.on_symbol || obj.statusOnSymbol;
+        obj.statusOffSymbol = element.off_symbol || obj.statusOffSymbol;
+        obj.statusOnValues = element.on_values || obj.statusOnValues;
+        obj.defaultSymbol = element.default_symbol || obj.defaultSymbol;
+        obj.conditionRules = structuredClone(element.condition_rules || obj.conditionRules || []);
+      }
+    };
+
+    (this._objects || []).forEach(syncObj);
+
+    if (this._projects && typeof this._projects === "object") {
+      Object.values(this._projects).forEach((project) => {
+        if (project && Array.isArray(project.objects)) {
+          project.objects.forEach(syncObj);
+        }
+      });
+    }
+
+    if (this._deviceDrafts && typeof this._deviceDrafts === "object") {
+      Object.values(this._deviceDrafts).forEach((draft) => {
+        if (draft && Array.isArray(draft.objects)) {
+          draft.objects.forEach(syncObj);
+        }
+      });
+    }
+  }
+
   async _saveCustomElement() {
     if (!this._hass || this._customElementBusy || !this._customElementFormValid()) return;
     this._customElementBusy = true;
@@ -722,11 +778,19 @@ class DratekEinkPanel extends HTMLElement {
       const result = await this._hass.callWS({ type: "dratek_eink/custom_elements/save", element: this._customElementForm });
       this._customElementForm = { ...this._emptyCustomElementForm(), ...structuredClone(result.element) };
       await this._loadCustomElements(false);
-      this._customElementResult = { ok: true, message: `Prvek „${result.element.name}“ je uložený. Můžete pokračovat v úpravách nebo jej vložit do designeru.` };
+      this._syncCustomElementToAllObjects(result.element);
+      this._saveProjects();
+      const device = this._device();
+      if (device) {
+        await this._saveCurrentDeviceDraft();
+      }
+      this._customElementResult = { ok: true, message: `Prvek „${result.element.name}“ je uložený. Všechny změny byly okamžitě promítnuty do navržených displejů.` };
     } catch (err) {
       this._customElementResult = { ok: false, error: this._message(err) };
     } finally {
       this._customElementBusy = false;
+      this._render();
+      this._paint();
       this._stableCustomRender();
     }
   }
@@ -2253,6 +2317,17 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _resizeObject(object, snapshot, dx, dy, handle) {
+    if (object.locked) return;
+    if (handle === "rotate") {
+      const cx = snapshot.x + snapshot.w / 2;
+      const cy = snapshot.y + snapshot.h / 2;
+      const startAngle = Math.atan2(this._drag.start.y - cy, this._drag.start.x - cx);
+      const currentPoint = { x: this._drag.start.x + dx, y: this._drag.start.y + dy };
+      const currentAngle = Math.atan2(currentPoint.y - cy, currentPoint.x - cx);
+      let deg = Math.round(((currentAngle - startAngle) * 180 / Math.PI) / 15) * 15;
+      object.rotation = (((snapshot.rotation || 0) + deg) % 360 + 360) % 360;
+      return;
+    }
     if (object.type === "line") {
       if (handle.includes("left")) {
         object.x = this._snapValue(snapshot.x + dx);
@@ -2759,7 +2834,7 @@ class DratekEinkPanel extends HTMLElement {
           <div class="designer-device-meter"><small>Baterie</small><div>${this._renderBatterySegments(designerBattery.percent)}<strong>${Number.isFinite(designerBattery.percent) ? `${designerBattery.percent} %` : "-"}</strong></div></div>
           <div class="designer-device-meter"><small>Signál</small><div>${this._renderSignalBars(designerRssi)}<strong class="signal-value ${this._signalClass(designerRssi)}">${Number.isFinite(designerRssi) ? `${designerRssi} dBm` : "-"}</strong></div></div>
           <div class="designer-device-fact designer-route"><small>Připojení</small><strong><ha-icon icon="${designerPath?.type === "gateway" ? "mdi:router-wireless" : "mdi:bluetooth-connect"}"></ha-icon>${this._escape(designerPath?.name || "Nedostupné")}</strong></div>
-          <div class="designer-device-fact designer-refresh"><small>Auto aktualizace</small><select id="refreshInterval" title="Nejkratší interval mezi automatickými zápisy tohoto displeje"><option value="30" ${this._refreshIntervalSeconds === 30 ? "selected" : ""}>nejdříve za 30 s</option><option value="60" ${this._refreshIntervalSeconds === 60 ? "selected" : ""}>nejdříve za 1 min</option><option value="120" ${this._refreshIntervalSeconds === 120 ? "selected" : ""}>nejdříve za 2 min</option><option value="300" ${this._refreshIntervalSeconds === 300 ? "selected" : ""}>nejdříve za 5 min</option><option value="900" ${this._refreshIntervalSeconds === 900 ? "selected" : ""}>nejdříve za 15 min</option><option value="1800" ${this._refreshIntervalSeconds === 1800 ? "selected" : ""}>nejdříve za 30 min</option><option value="3600" ${this._refreshIntervalSeconds === 3600 ? "selected" : ""}>nejdříve za 1 hod</option><option value="21600" ${this._refreshIntervalSeconds === 21600 ? "selected" : ""}>nejdříve za 6 hod</option><option value="43200" ${this._refreshIntervalSeconds === 43200 ? "selected" : ""}>nejdříve za 12 hod</option><option value="86400" ${this._refreshIntervalSeconds === 86400 ? "selected" : ""}>nejdříve za 24 hod</option></select></div>
+          <div class="designer-device-fact designer-refresh"><small>Auto aktualizace</small><select id="refreshInterval" title="Nejkratší interval mezi automatickými zápisy tohoto displeje"><option value="10" ${this._refreshIntervalSeconds === 10 ? "selected" : ""}>nejdříve za 10 s</option><option value="15" ${this._refreshIntervalSeconds === 15 ? "selected" : ""}>nejdříve za 15 s</option><option value="30" ${this._refreshIntervalSeconds === 30 ? "selected" : ""}>nejdříve za 30 s</option><option value="60" ${this._refreshIntervalSeconds === 60 ? "selected" : ""}>nejdříve za 1 min</option><option value="120" ${this._refreshIntervalSeconds === 120 ? "selected" : ""}>nejdříve za 2 min</option><option value="300" ${this._refreshIntervalSeconds === 300 ? "selected" : ""}>nejdříve za 5 min</option><option value="900" ${this._refreshIntervalSeconds === 900 ? "selected" : ""}>nejdříve za 15 min</option><option value="1800" ${this._refreshIntervalSeconds === 1800 ? "selected" : ""}>nejdříve za 30 min</option><option value="3600" ${this._refreshIntervalSeconds === 3600 ? "selected" : ""}>nejdříve za 1 hod</option><option value="21600" ${this._refreshIntervalSeconds === 21600 ? "selected" : ""}>nejdříve za 6 hod</option><option value="43200" ${this._refreshIntervalSeconds === 43200 ? "selected" : ""}>nejdříve za 12 hod</option><option value="86400" ${this._refreshIntervalSeconds === 86400 ? "selected" : ""}>nejdříve za 24 hod</option></select></div>
           <div class="designer-orientation"><small>Orientace displeje</small><div><button class="${this._orientation === "landscape" ? "active" : ""}" data-orientation="landscape" title="Otočit displej na šířku"><ha-icon icon="mdi:monitor"></ha-icon><span>Na šířku</span></button><button class="${this._orientation === "portrait" ? "active" : ""}" data-orientation="portrait" title="Otočit displej na výšku"><ha-icon icon="mdi:monitor-vertical"></ha-icon><span>Na výšku</span></button></div></div>
         </div>
         <div class="card ribbon designer-commandbar"><div class="designer-command-group"><button id="fileMenuToggle" class="ribbon-tab menu-tab ${this._fileMenuOpen ? "active" : ""}"><ha-icon icon="mdi:file-outline"></ha-icon>Soubor</button><button id="variablesDialogOpen" class="ribbon-tab menu-tab"><ha-icon icon="mdi:variable"></ha-icon>Proměnné</button><button id="layoutMenuToggle" class="ribbon-tab menu-tab ${this._layoutMenuOpen ? "active" : ""}"><ha-icon icon="mdi:axis-arrow"></ha-icon>Mapování</button><button id="toolsMenuToggle" class="ribbon-tab menu-tab ${this._toolsMenuOpen ? "active" : ""}"><ha-icon icon="mdi:palette-outline"></ha-icon>Pozadí a zařízení</button><button id="viewMenuToggle" class="ribbon-tab menu-tab ${this._viewMenuOpen ? "active" : ""}"><ha-icon icon="mdi:magnify"></ha-icon>Zobrazení</button></div><span class="ribbon-project"><ha-icon icon="mdi:file-document-edit-outline"></ha-icon>${this._escape(this._projectName)}</span><button id="sendDesign" class="ribbon-send" ${!device || this._sending ? "disabled" : ""}><ha-icon icon="mdi:upload"></ha-icon>${this._sending ? "Odesílám..." : "Odeslat do displeje"}</button>${this._renderFileMenu()}${this._renderViewMenu()}${this._renderToolsMenu(device)}${this._renderLayoutMenu(device)}</div>
@@ -2921,7 +2996,24 @@ class DratekEinkPanel extends HTMLElement {
 
   _renderLayersPanel() {
     const layers = this._objects.map((object, index) => ({ object, index })).reverse();
-    return `<div class="card layers-panel"><div class="designer-panel-heading"><span><ha-icon icon="mdi:layers-triple-outline"></ha-icon></span><div><h2>Vrstvy návrhu</h2><small>${this._objects.length} ${this._objects.length === 1 ? "objekt" : "objektů"}</small></div></div>${layers.length ? `<div class="layer-list">${layers.map(({ object, index }) => `<div class="layer-row ${this._selectedIds.includes(object.id) ? "selected" : ""}"><button class="layer-main" data-layer-select="${object.id}" title="Vybrat objekt"><ha-icon icon="${this._objectIcon(object)}"></ha-icon><span>${this._escape(this._objectLabel(object, index))}</span></button><button class="layer-step" data-layer-front="${object.id}" title="Posunout do popředí" ${index === this._objects.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-up"></ha-icon></button><button class="layer-step" data-layer-back="${object.id}" title="Posunout do pozadí" ${index === 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-down"></ha-icon></button></div>`).join("")}</div><p class="layer-hint">Nahoře je popředí. Se Shiftem lze vybrat více objektů.</p>` : `<div class="inspector-empty"><ha-icon icon="mdi:layers-outline"></ha-icon><p>Návrh zatím neobsahuje žádné objekty.</p></div>`}</div>`;
+    return `<div class="card layers-panel">
+      <div class="designer-panel-heading"><span><ha-icon icon="mdi:layers-triple-outline"></ha-icon></span><div><h2>Vrstvy návrhu</h2><small>${this._objects.length} ${this._objects.length === 1 ? "objekt" : "objektů"}</small></div></div>
+      ${layers.length ? `<div class="layer-list">${layers.map(({ object, index }) => `
+        <div class="layer-row ${this._selectedIds.includes(object.id) ? "selected" : ""} ${object.hidden ? "is-hidden" : ""} ${object.locked ? "is-locked" : ""}">
+          <button class="layer-main" data-layer-select="${object.id}" title="Vybrat objekt">
+            <ha-icon icon="${this._objectIcon(object)}"></ha-icon>
+            <span>${this._escape(object.name || this._objectLabel(object, index))}</span>
+          </button>
+          <button class="layer-action ${object.hidden ? "active" : ""}" data-layer-toggle-hide="${object.id}" title="${object.hidden ? "Zobrazit prvek" : "Skrýt prvek"}">
+            <ha-icon icon="${object.hidden ? "mdi:eye-off" : "mdi:eye"}"></ha-icon>
+          </button>
+          <button class="layer-action ${object.locked ? "active" : ""}" data-layer-toggle-lock="${object.id}" title="${object.locked ? "Odemknout prvek" : "Zamknout prvek"}">
+            <ha-icon icon="${object.locked ? "mdi:lock" : "mdi:lock-open-variant"}"></ha-icon>
+          </button>
+          <button class="layer-step" data-layer-front="${object.id}" title="Posunout nahoru" ${index === this._objects.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-up"></ha-icon></button>
+          <button class="layer-step" data-layer-back="${object.id}" title="Posunout dolů" ${index === 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-down"></ha-icon></button>
+        </div>`).join("")}</div><p class="layer-hint">Nahoře je popředí. Tlačítka oka a zámku skryjí nebo zamknou prvek.</p>` : `<div class="inspector-empty"><ha-icon icon="mdi:layers-outline"></ha-icon><p>Návrh zatím neobsahuje žádné objekty.</p></div>`}
+    </div>`;
   }
 
   _renderLayoutMenu(device) {
@@ -2969,30 +3061,161 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _renderQueue() {
-    const queue = this._queue || { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0 };
-    const jobs = queue.jobs || [];
-    const stat = (icon, value, label, cls = "") => `<div class="card queue-stat"><ha-icon icon="${icon}"></ha-icon><div><strong class="${cls}">${value || 0}</strong><span>${label}</span></div></div>`;
-    return `<div class="queue-summary">
-      ${stat("mdi:tray-full", queue.queued, "Ve fronte")}
-      ${stat("mdi:progress-upload", queue.writing, "Prave zapisuje", queue.writing ? "warn-signal" : "")}
-      ${stat("mdi:check-circle-outline", queue.succeeded, "Uspesne", "good-signal")}
-      ${stat("mdi:alert-circle-outline", queue.failed, "Neuspesne", queue.failed ? "bad-signal" : "")}
+    const queue = this._queue || { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0, skipped: 0, skipped_reasons: [], skipped_devices: [] };
+    const allJobs = queue.jobs || [];
+    const skippedReasons = queue.skipped_reasons || [];
+    const skippedDevices = queue.skipped_devices || [];
+
+    const searchQuery = (this._queueSearch || "").trim().toLowerCase();
+    const statusFilter = this._queueStatusFilter || "all";
+    const deviceFilter = this._queueDeviceFilter || "all";
+
+    const filteredJobs = allJobs.filter((job) => {
+      if (statusFilter !== "all" && job.status !== statusFilter) return false;
+      if (deviceFilter !== "all" && String(job.address || "").toUpperCase() !== deviceFilter.toUpperCase()) return false;
+      if (searchQuery) {
+        const text = `${job.address} ${job.operation} ${job.transport_name} ${job.error || ""} ${job.log ? job.log.join(" ") : ""}`.toLowerCase();
+        if (!text.includes(searchQuery)) return false;
+      }
+      return true;
+    });
+
+    const limit = Number(this._queueLimit === undefined ? 50 : this._queueLimit);
+    const displayedJobs = limit > 0 ? filteredJobs.slice(0, limit) : filteredJobs;
+
+    const stat = (icon, value, label, cls = "") => `
+      <div class="card queue-stat">
+        <ha-icon icon="${icon}"></ha-icon>
+        <div><strong class="${cls}">${value || 0}</strong><span>${label}</span></div>
+      </div>`;
+
+    const devicesList = [...new Set(allJobs.map((j) => String(j.address || "").toUpperCase()))].sort();
+
+    const skipWarningBanner = (queue.skipped > 0 || skippedReasons.length > 0) ? `
+      <div class="card queue-skip-warning">
+        <div class="warning-header">
+          <ha-icon icon="mdi:alert-decagram-outline"></ha-icon>
+          <div>
+            <strong>Upozornění: Některé automatické zápisy byly přeskočeny (${queue.skipped})</strong>
+            <small>K přeskočení dochází, pokud je interval zjišťování stavů kratší než doba zápisu na displej nebo při upřednostnění ručního zápisu z editoru.</small>
+          </div>
+        </div>
+        ${skippedReasons.length ? `<div class="warning-reasons"><strong>Důvody přeskočení:</strong><ul>${skippedReasons.map((reason) => `<li>${this._escape(reason)}</li>`).join("")}</ul></div>` : ""}
+        ${skippedDevices.length ? `<div class="warning-devices"><strong>Zasažené displeje:</strong> ${skippedDevices.map((addr) => `<span class="pill muted">${this._escape(addr)}</span>`).join(" ")}</div>` : ""}
+        <div class="warning-tip"><ha-icon icon="mdi:lightbulb-on-outline"></ha-icon><strong>Tip:</strong> Zkraťte interval nahrávání v hlavním záhlaví (např. na 10 s nebo 15 s) nebo prodlužte interval odesílání v automatizaci.</div>
+      </div>` : "";
+
+    return `
+    <style>
+      .queue-summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 12px; }
+      .queue-stat { display: flex; align-items: center; gap: 10px; padding: 12px; }
+      .queue-stat ha-icon { --mdc-icon-size: 28px; color: var(--dratek-teal); }
+      .queue-stat strong { font-size: 20px; display: block; }
+      .queue-stat span { font-size: 10px; color: var(--secondary-text-color); display: block; }
+      .queue-stat .warn-signal { color: var(--dratek-orange); }
+      .queue-stat .good-signal { color: #16803c; }
+      .queue-stat .bad-signal { color: #c62828; }
+      .queue-stat .skipped-signal { color: #d97706; }
+
+      .queue-skip-warning { padding: 14px; margin-bottom: 14px; border: 1px solid rgba(217, 119, 6, 0.4); background: rgba(217, 119, 6, 0.07); border-radius: 12px; }
+      .warning-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; color: #b45309; }
+      .warning-header ha-icon { --mdc-icon-size: 28px; }
+      .warning-header strong { font-size: 13px; display: block; }
+      .warning-header small { font-size: 10px; color: var(--secondary-text-color); display: block; margin-top: 2px; }
+      .warning-reasons { margin: 8px 0; font-size: 11px; }
+      .warning-reasons ul { margin: 4px 0 0 16px; padding: 0; }
+      .warning-devices { margin: 6px 0; font-size: 11px; }
+      .warning-tip { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding: 8px; background: var(--card-background-color); border-radius: 8px; font-size: 10px; }
+
+      .queue-controls-bar { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto auto auto auto; gap: 8px; align-items: center; margin-bottom: 12px; }
+      .queue-controls-bar input, .queue-controls-bar select { padding: 7px 9px; font-size: 11px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); }
+      .queue-row { display: grid; grid-template-columns: 36px minmax(130px, 1fr) minmax(130px, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 12px; border-bottom: 1px solid var(--divider-color); font-size: 11px; }
+      .queue-row:last-child { border-bottom: 0; }
+      .queue-row.writing { background: rgba(255, 102, 0, 0.05); }
+      .queue-row.skipped { opacity: 0.85; background: rgba(217, 119, 6, 0.04); }
+      .queue-row.failed { background: rgba(198, 40, 40, 0.05); }
+      .queue-row .queue-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--secondary-background-color); color: var(--dratek-teal); }
+      .queue-row.writing .queue-icon { color: var(--dratek-orange); }
+      .queue-row.failed .queue-icon { color: #c62828; }
+      .queue-row.skipped .queue-icon { color: #d97706; }
+      .queue-meta-info { font-size: 10px; color: var(--secondary-text-color); margin-top: 2px; }
+      .queue-row-log { grid-column: 1 / -1; margin-top: 4px; padding: 6px 9px; font-family: monospace; font-size: 9px; border-radius: 6px; background: var(--secondary-background-color); color: var(--secondary-text-color); max-height: 80px; overflow-y: auto; }
+      @media(max-width:900px) { .queue-summary { grid-template-columns: repeat(3, 1fr); } .queue-controls-bar { grid-template-columns: 1fr 1fr; } }
+    </style>
+
+    <div class="queue-summary">
+      ${stat("mdi:tray-full", queue.queued, "Ve frontě")}
+      ${stat("mdi:progress-upload", queue.writing, "Zapisuje", queue.writing ? "warn-signal" : "")}
+      ${stat("mdi:check-circle-outline", queue.succeeded, "Dokončeno", "good-signal")}
+      ${stat("mdi:skip-next-circle-outline", queue.skipped, "Přeskočeno", queue.skipped ? "skipped-signal" : "")}
+      ${stat("mdi:alert-circle-outline", queue.failed, "Selhalo", queue.failed ? "bad-signal" : "")}
     </div>
-    <div class="card"><div class="section-title"><h2>Fronta a poslednich 20 zapisu</h2><button id="refreshQueue" class="secondary"><ha-icon icon="mdi:refresh"></ha-icon>Obnovit</button></div>
+
+    ${skipWarningBanner}
+
+    <div class="card">
+      <div class="section-title">
+        <div>
+          <h2>Fronta a historie zápisů</h2>
+          <small>Zobrazeno ${displayedJobs.length} z celkem ${filteredJobs.length} záznamů (${allJobs.length} celkem v paměti)</small>
+        </div>
+      </div>
+
+      <div class="queue-controls-bar">
+        <input id="queueSearch" value="${this._escape(this._queueSearch || "")}" placeholder="Hledat MAC, zařízení, chybu...">
+        <select id="queueStatusFilter" title="Filtr stavu">
+          <option value="all" ${statusFilter === "all" ? "selected" : ""}>Všechny stavy</option>
+          <option value="writing" ${statusFilter === "writing" ? "selected" : ""}>Zapisuje</option>
+          <option value="queued" ${statusFilter === "queued" ? "selected" : ""}>Ve frontě</option>
+          <option value="succeeded" ${statusFilter === "succeeded" ? "selected" : ""}>Dokončeno</option>
+          <option value="skipped" ${statusFilter === "skipped" ? "selected" : ""}>Přeskočeno</option>
+          <option value="failed" ${statusFilter === "failed" ? "selected" : ""}>Selhalo</option>
+        </select>
+        <select id="queueDeviceFilter" title="Filtr zařízení">
+          <option value="all" ${deviceFilter === "all" ? "selected" : ""}>Všechna zařízení</option>
+          ${devicesList.map((addr) => `<option value="${this._escape(addr)}" ${deviceFilter.toUpperCase() === addr ? "selected" : ""}>${this._escape(addr)}</option>`).join("")}
+        </select>
+        <select id="queueLimit" title="Počet položek">
+          <option value="20" ${limit === 20 ? "selected" : ""}>20 položek</option>
+          <option value="50" ${limit === 50 ? "selected" : ""}>50 položek</option>
+          <option value="100" ${limit === 100 ? "selected" : ""}>100 položek</option>
+          <option value="0" ${limit === 0 ? "selected" : ""}>Všechny položky</option>
+        </select>
+        <button id="clearQueueHistory" class="secondary icon-btn" title="Vyčistit historii zápisů"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon></button>
+        <button id="refreshQueue" class="secondary"><ha-icon icon="mdi:refresh"></ha-icon>Obnovit</button>
+      </div>
+
       ${queue.error ? `<div class="pill bad">${this._escape(queue.error)}</div>` : ""}
-      ${jobs.length ? `<div class="queue-list">${jobs.map((job) => {
-        const labels = { queued: "Ve frontě", writing: "Zapisuji", succeeded: "Dokončeno", failed: "Selhalo", skipped: "Přeskočeno" };
-        const classes = { queued: "muted", writing: "warn", succeeded: "good", failed: "bad", skipped: "muted" };
-        const icons = { queued: "mdi:tray-arrow-down", writing: "mdi:progress-upload", succeeded: "mdi:check", failed: "mdi:alert-circle-outline", skipped: "mdi:skip-next-circle-outline" };
-        const operation = { design: "Navrh", partial_design: "Castecny zapis", text: "Text", service_text: "HA sluzba", entity_update: "Automaticka zmena entity" }[job.operation] || job.operation;
-        return `<div class="queue-row ${this._escape(job.status)}">
-          <div class="queue-icon"><ha-icon icon="${icons[job.status] || "mdi:help"}"></ha-icon></div>
-          <div class="queue-main"><strong>${this._escape(job.address)}</strong><small>${this._escape(operation)} | ${this._formatTime(job.created_at)}</small></div>
-          <div class="queue-route"><strong>${this._escape(job.transport_name)}</strong><small>${job.transport_type === "gateway" ? "DRATEK gateway" : "Home Assistant Bluetooth"}</small></div>
-          <span class="pill ${classes[job.status] || "muted"}">${labels[job.status] || this._escape(job.status)}</span>
-          ${job.error ? `<span class="bad-signal">${this._escape(job.error)}</span>` : `<span>${job.finished_at ? this._formatDuration(job.started_at, job.finished_at) : ""}</span>`}
-        </div>`;
-      }).join("")}</div>` : `<div class="inspector-empty"><ha-icon icon="mdi:tray"></ha-icon><p>Fronta je prazdna. Zapisy z designeru a automatizaci se zde objevi automaticky.</p></div>`}
+
+      ${displayedJobs.length ? `
+        <div class="queue-list">
+          ${displayedJobs.map((job) => {
+            const labels = { queued: "Ve frontě", writing: "Zapisuji", succeeded: "Dokončeno", failed: "Selhalo", skipped: "Přeskočeno" };
+            const classes = { queued: "muted", writing: "warn", succeeded: "good", failed: "bad", skipped: "warn" };
+            const icons = { queued: "mdi:tray-arrow-down", writing: "mdi:progress-upload", succeeded: "mdi:check", failed: "mdi:alert-circle-outline", skipped: "mdi:skip-next-circle-outline" };
+            const operation = { design: "Návrh", partial_design: "Částečný zápis", text: "Text", service_text: "HA služba", entity_update: "Změna entity" }[job.operation] || job.operation;
+            const logText = Array.isArray(job.log) && job.log.length ? job.log.slice(-3).join(" | ") : "";
+            return `
+            <div class="queue-row ${this._escape(job.status)}">
+              <div class="queue-icon"><ha-icon icon="${icons[job.status] || "mdi:help"}"></ha-icon></div>
+              <div class="queue-main">
+                <strong>${this._escape(job.address)}</strong>
+                <div class="queue-meta-info">${this._escape(operation)} · ${this._formatTime(job.created_at)}</div>
+              </div>
+              <div class="queue-route">
+                <strong>${this._escape(job.transport_name)}</strong>
+                <div class="queue-meta-info">${job.transport_type === "gateway" ? "DRATEK gateway" : "Home Assistant BLE"}</div>
+              </div>
+              <span class="pill ${classes[job.status] || "muted"}">${labels[job.status] || this._escape(job.status)}</span>
+              <div>${job.finished_at ? `<span class="pill muted">${this._formatDuration(job.started_at, job.finished_at)}</span>` : ""}</div>
+              ${(job.error || logText) ? `<div class="queue-row-log">${this._escape(job.error || logText)}</div>` : ""}
+            </div>`;
+          }).join("")}
+        </div>` : `
+        <div class="inspector-empty">
+          <ha-icon icon="mdi:tray"></ha-icon>
+          <p>${searchQuery || statusFilter !== "all" || deviceFilter !== "all" ? "Žádný záznam neodpovídá zvolenému vyhledávání a filtrům." : "Fronta je prázdná."}</p>
+        </div>`}
     </div>`;
   }
 
@@ -3827,6 +4050,26 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#scan")?.addEventListener("click", () => this._scan());
     this.shadowRoot.querySelector("#scanDevicesTab")?.addEventListener("click", () => this._scan());
     this.shadowRoot.querySelector("#refreshQueue")?.addEventListener("click", () => this._loadQueue(true));
+    this.shadowRoot.querySelector("#queueSearch")?.addEventListener("input", (event) => {
+      this._queueSearch = event.target.value;
+      this._render();
+    });
+    this.shadowRoot.querySelector("#queueStatusFilter")?.addEventListener("change", (event) => {
+      this._queueStatusFilter = event.target.value;
+      this._render();
+    });
+    this.shadowRoot.querySelector("#queueDeviceFilter")?.addEventListener("change", (event) => {
+      this._queueDeviceFilter = event.target.value;
+      this._render();
+    });
+    this.shadowRoot.querySelector("#queueLimit")?.addEventListener("change", (event) => {
+      this._queueLimit = Number(event.target.value);
+      this._render();
+    });
+    this.shadowRoot.querySelector("#clearQueueHistory")?.addEventListener("click", async () => {
+      await this._hass.callWS({ type: "dratek_eink/queue/clear" });
+      await this._loadQueue(true);
+    });
     this.shadowRoot.querySelector("#discoverGateways")?.addEventListener("click", () => this._discoverGateways());
     this.shadowRoot.querySelector("#refreshGateways")?.addEventListener("click", () => this._loadGateways(true));
     this.shadowRoot.querySelectorAll("[data-gateway-tab]").forEach((button) => button.addEventListener("click", () => {
@@ -4052,6 +4295,24 @@ class DratekEinkPanel extends HTMLElement {
     }));
     this.shadowRoot.querySelectorAll("[data-layer-front]").forEach((button) => button.addEventListener("click", () => this._moveLayerStep(button.dataset.layerFront, "front")));
     this.shadowRoot.querySelectorAll("[data-layer-back]").forEach((button) => button.addEventListener("click", () => this._moveLayerStep(button.dataset.layerBack, "back")));
+    this.shadowRoot.querySelectorAll("[data-layer-toggle-hide]").forEach((button) => button.addEventListener("click", () => {
+      const object = this._objects.find((item) => item.id === button.dataset.layerToggleHide);
+      if (object) {
+        object.hidden = !object.hidden;
+        this._render();
+        this._paint();
+        this._scheduleDraftSave();
+      }
+    }));
+    this.shadowRoot.querySelectorAll("[data-layer-toggle-lock]").forEach((button) => button.addEventListener("click", () => {
+      const object = this._objects.find((item) => item.id === button.dataset.layerToggleLock);
+      if (object) {
+        object.locked = !object.locked;
+        this._render();
+        this._paint();
+        this._scheduleDraftSave();
+      }
+    }));
     this.shadowRoot.querySelector("#deviceSelect")?.addEventListener("change", (event) => this._selectDevice(event.target.value));
     this.shadowRoot.querySelector("#gatewaySendSelect")?.addEventListener("change", (event) => { this._selectedGatewayId = event.target.value; this._render(); this._paint(); });
     this.shadowRoot.querySelectorAll("[data-orientation]").forEach((button) => button.addEventListener("click", () => this._setOrientation(button.dataset.orientation)));
@@ -4570,11 +4831,21 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _drawLayeredObject(ctx, object, box) {
-    const rawValue = object.entityId ? this._entityRawValue(object) : "";
-    const rule = (object.conditionRules || []).find((item) => this._customConditionMatches(rawValue, item.operator || "equals", item.value || ""));
-    const layerId = rule?.symbol || object.defaultSymbol || object.customLayers?.[0]?.id;
-    const layer = (object.customLayers || []).find((item) => item.id === layerId) || object.customLayers?.[0];
-    this._drawCustomLayer(ctx, layer, box.w, box.h, object.customCanvasWidth || 296, object.customCanvasHeight || 128, "", false);
+    const master = object.customElementId ? (this._customElements || []).find((e) => e.id === object.customElementId) : null;
+    const layers = master?.layers || object.customLayers || [];
+    const canvasWidth = Number(master?.canvas_width || object.customCanvasWidth || 296);
+    const canvasHeight = Number(master?.canvas_height || object.customCanvasHeight || 128);
+    const conditionRules = master
+      ? (master.condition_rules || []).map((rule) => ({ operator: rule.operator, value: rule.value || "", symbol: rule.layer_id || rule.symbol || "" }))
+      : (object.conditionRules || []);
+    const defaultSymbol = master?.default_layer_id || object.defaultSymbol || layers[0]?.id;
+    const entityId = master?.entity_id || object.entityId;
+
+    const rawValue = entityId ? this._entityRawValue({ ...object, entityId }) : "";
+    const rule = conditionRules.find((item) => this._customConditionMatches(rawValue, item.operator || "equals", item.value || ""));
+    const layerId = rule?.symbol || defaultSymbol || layers[0]?.id;
+    const layer = layers.find((item) => item.id === layerId) || layers[0];
+    this._drawCustomLayer(ctx, layer, box.w, box.h, canvasWidth, canvasHeight, "", false);
   }
 
   _drawText(ctx, object, box) {
@@ -4999,19 +5270,41 @@ class DratekEinkPanel extends HTMLElement {
 
   _drawSelection(ctx) {
     ctx.save();
-    ctx.strokeStyle = "#0078d4";
+    ctx.strokeStyle = "#009999";
     ctx.fillStyle = "#fff";
-    ctx.lineWidth = 1;
-    for (const object of this._objects.filter((item) => this._selectedIds.includes(item.id))) {
+    ctx.lineWidth = 1.5;
+    for (const object of this._objects.filter((item) => this._selectedIds.includes(item.id) && !item.hidden)) {
       const box = this._box(object);
       ctx.setLineDash([4, 2]);
       ctx.strokeRect(box.x, box.y, box.w, box.h);
       ctx.setLineDash([]);
-      for (const handle of this._handles(box)) {
-        const size = Math.max(8, 12 / this._zoom);
+      const handles = this._handles(box);
+      const rotHandle = handles.find((h) => h.name === "rotate");
+      if (rotHandle && !object.locked) {
+        ctx.beginPath();
+        ctx.moveTo(box.x + box.w / 2, box.y);
+        ctx.lineTo(rotHandle.x, rotHandle.y);
+        ctx.strokeStyle = "rgba(0, 153, 153, 0.6)";
+        ctx.stroke();
+      }
+      for (const handle of handles) {
+        if (object.locked && handle.name === "rotate") continue;
+        const isRotate = handle.name === "rotate";
+        const size = isRotate ? Math.max(10, 14 / this._zoom) : Math.max(7, 10 / this._zoom);
         const half = size / 2;
-        ctx.fillRect(handle.x - half, handle.y - half, size, size);
-        ctx.strokeRect(handle.x - half, handle.y - half, size, size);
+        ctx.beginPath();
+        if (isRotate) {
+          ctx.arc(handle.x, handle.y, half, 0, Math.PI * 2);
+          ctx.fillStyle = "#ff6600";
+          ctx.strokeStyle = "#fff";
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = object.locked ? "#f59e0b" : "#fff";
+          ctx.strokeStyle = "#009999";
+          ctx.fillRect(handle.x - half, handle.y - half, size, size);
+          ctx.strokeRect(handle.x - half, handle.y - half, size, size);
+        }
       }
     }
     if (this._drag?.mode === "marquee") {
@@ -5020,8 +5313,8 @@ class DratekEinkPanel extends HTMLElement {
       const w = Math.abs(this._drag.current.x - this._drag.start.x);
       const h = Math.abs(this._drag.current.y - this._drag.start.y);
       ctx.setLineDash([5, 3]);
-      ctx.strokeStyle = "#0078d4";
-      ctx.fillStyle = "rgba(0,120,212,.12)";
+      ctx.strokeStyle = "#009999";
+      ctx.fillStyle = "rgba(0, 153, 153, 0.12)";
       ctx.fillRect(x, y, w, h);
       ctx.strokeRect(x, y, w, h);
       ctx.setLineDash([]);
@@ -5035,11 +5328,18 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _handles(box) {
+    const cx = box.x + box.w / 2;
+    const cy = box.y + box.h / 2;
     return [
-      { name: "top-left", x: box.x, y: box.y },
-      { name: "top-right", x: box.x + box.w, y: box.y },
-      { name: "bottom-left", x: box.x, y: box.y + box.h },
-      { name: "bottom-right", x: box.x + box.w, y: box.y + box.h },
+      { name: "top-left", x: box.x, y: box.y, cursor: "nwse-resize" },
+      { name: "top-middle", x: cx, y: box.y, cursor: "ns-resize" },
+      { name: "top-right", x: box.x + box.w, y: box.y, cursor: "nesw-resize" },
+      { name: "middle-right", x: box.x + box.w, y: cy, cursor: "ew-resize" },
+      { name: "bottom-right", x: box.x + box.w, y: box.y + box.h, cursor: "nwse-resize" },
+      { name: "bottom-middle", x: cx, y: box.y + box.h, cursor: "ns-resize" },
+      { name: "bottom-left", x: box.x, y: box.y + box.h, cursor: "nesw-resize" },
+      { name: "middle-left", x: box.x, y: cy, cursor: "ew-resize" },
+      { name: "rotate", x: cx, y: box.y - 18, cursor: "grab" },
     ];
   }
 
@@ -5062,41 +5362,58 @@ class DratekEinkPanel extends HTMLElement {
     return {
       enabled: true,
       refresh_interval_seconds: this._refreshIntervalSeconds,
-      base_image: canvas.toDataURL("image/png"),
-      bindings: objects.map((object) => object.type === "layered" ? ({
-        id: object.id, type: "layered", entity_id: object.entityId,
-        entity_attribute: object.entityAttribute || "", include_unit: false, fallback: object.defaultSymbol || "",
-        x: Number(object.x || 0), y: Number(object.y || 0), w: Number(object.w || 1), h: Number(object.h || 1),
-        rotation: Number(object.rotation || 0), flipH: !!object.flipH,
-        canvas_width: Number(object.customCanvasWidth || 296), canvas_height: Number(object.customCanvasHeight || 128),
-        layers: structuredClone(object.customLayers || []),
-        condition_rules: structuredClone(object.conditionRules || []), default_symbol: object.defaultSymbol || "",
-      }) : object.type === "chart" ? ({
-        id: object.id, type: "chart", entity_id: object.entityId,
-        entity_attribute: object.entityAttribute || "", include_unit: false, fallback: object.data || "",
-        x: Number(object.x || 0), y: Number(object.y || 0), w: Number(object.w || 1), h: Number(object.h || 1),
-        chartType: object.chartType || "line", chartTitle: object.chartTitle || "", maxPoints: Number(object.maxPoints || 48),
-        history_mode: object.historyMode || "rolling",
-        color: object.barColor || object.color || "black", strokeWidth: Number(object.strokeWidth || 2),
-      }) : ({
-        id: object.id,
-        entity_id: object.entityId,
-        entity_attribute: object.entityAttribute || "",
-        include_unit: !object.entityAttribute && !object.valueSuffix,
-        fallback: object.text || "",
-        x: Number(object.x || 0), y: Number(object.y || 0),
-        w: Number(object.w || 1), h: Number(object.h || 1),
-        rotation: Number(object.rotation || 0), flipH: !!object.flipH,
-        color: effectiveColor(object.color), fontSize: Number(object.fontSize || 16),
-        minFontSize: Number(object.minFontSize || this._readableMinFontSize()),
-        bold: !!object.bold, textAlign: object.textAlign || "left",
-        verticalAlign: object.verticalAlign || "middle", autoFit: object.autoFit !== false,
-        padding: Number(object.padding || 0),
-        value_prefix: object.valuePrefix || "", value_suffix: object.valueSuffix || "",
-        status_icons: !!object.statusIcons, status_on_symbol: object.statusOnSymbol || "●",
-        status_off_symbol: object.statusOffSymbol || "○", status_on_values: object.statusOnValues || "on,true,1,open,home",
-        condition_rules: structuredClone(object.conditionRules || []), default_symbol: object.defaultSymbol || "?",
-      })),
+      bindings: objects.map((object) => {
+        if (object.type === "layered") {
+          const master = object.customElementId ? (this._customElements || []).find((e) => e.id === object.customElementId) : null;
+          const layers = master?.layers || object.customLayers || [];
+          const canvasW = Number(master?.canvas_width || object.customCanvasWidth || 296);
+          const canvasH = Number(master?.canvas_height || object.customCanvasHeight || 128);
+          const conditionRules = master
+            ? (master.condition_rules || []).map((rule) => ({ operator: rule.operator, value: rule.value || "", symbol: rule.layer_id || rule.symbol || "" }))
+            : (object.conditionRules || []);
+          const defaultSymbol = master?.default_layer_id || object.defaultSymbol || layers[0]?.id || "";
+          const entityId = master?.entity_id || object.entityId || "";
+          const entityAttr = master?.entity_attribute || object.entityAttribute || "";
+          return {
+            id: object.id, type: "layered", entity_id: entityId,
+            entity_attribute: entityAttr, include_unit: false, fallback: defaultSymbol,
+            x: Number(object.x || 0), y: Number(object.y || 0), w: Number(object.w || 1), h: Number(object.h || 1),
+            rotation: Number(object.rotation || 0), flipH: !!object.flipH,
+            canvas_width: canvasW, canvas_height: canvasH,
+            layers: structuredClone(layers),
+            condition_rules: structuredClone(conditionRules), default_symbol: defaultSymbol,
+          };
+        }
+        if (object.type === "chart") {
+          return {
+            id: object.id, type: "chart", entity_id: object.entityId,
+            entity_attribute: object.entityAttribute || "", include_unit: false, fallback: object.data || "",
+            x: Number(object.x || 0), y: Number(object.y || 0), w: Number(object.w || 1), h: Number(object.h || 1),
+            chartType: object.chartType || "line", chartTitle: object.chartTitle || "", maxPoints: Number(object.maxPoints || 48),
+            history_mode: object.historyMode || "rolling",
+            color: object.barColor || object.color || "black", strokeWidth: Number(object.strokeWidth || 2),
+          };
+        }
+        return {
+          id: object.id,
+          entity_id: object.entityId,
+          entity_attribute: object.entityAttribute || "",
+          include_unit: !object.entityAttribute && !object.valueSuffix,
+          fallback: object.text || "",
+          x: Number(object.x || 0), y: Number(object.y || 0),
+          w: Number(object.w || 1), h: Number(object.h || 1),
+          rotation: Number(object.rotation || 0), flipH: !!object.flipH,
+          color: effectiveColor(object.color), fontSize: Number(object.fontSize || 16),
+          minFontSize: Number(object.minFontSize || this._readableMinFontSize()),
+          bold: !!object.bold, textAlign: object.textAlign || "left",
+          verticalAlign: object.verticalAlign || "middle", autoFit: object.autoFit !== false,
+          padding: Number(object.padding || 0),
+          value_prefix: object.valuePrefix || "", value_suffix: object.valueSuffix || "",
+          status_icons: !!object.statusIcons, status_on_symbol: object.statusOnSymbol || "●",
+          status_off_symbol: object.statusOffSymbol || "○", status_on_values: object.statusOnValues || "on,true,1,open,home",
+          condition_rules: structuredClone(object.conditionRules || []), default_symbol: object.defaultSymbol || "?",
+        };
+      }),
     };
   }
 

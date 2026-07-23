@@ -14,7 +14,7 @@ from .const import DOMAIN
 QUEUE_STORE_KEY = "dratek_eink.transfer_queue"
 QUEUE_STORE_VERSION = 1
 QUEUE_DATA_KEY = "transfer_queue"
-HISTORY_LIMIT = 20
+HISTORY_LIMIT = 100
 TRANSFER_JOB_TIMEOUT_SECONDS = 240
 LEGACY_COMPLETION_TIMEOUT_MARKER = "waiting for the display to confirm the completed refresh"
 
@@ -235,16 +235,26 @@ class TransferQueue:
                 {"jobs": completed[-HISTORY_LIMIT:]}
             )
 
+    async def async_clear_completed(self) -> None:
+        await self._ensure_loaded()
+        self._jobs = [job for job in self._jobs if job.get("status") in {"queued", "writing"}]
+        await self._save_history()
+
     async def async_snapshot(self) -> dict[str, Any]:
         await self._ensure_loaded()
         jobs = sorted(self._jobs, key=lambda job: job.get("created_at", 0), reverse=True)
+        skipped_jobs = [job for job in jobs if job.get("status") == "skipped"]
+        skipped_reasons = list({job["log"][0] for job in skipped_jobs if job.get("log")})
+        skipped_devices = list({job.get("address", "") for job in skipped_jobs if job.get("address")})
         return {
             "jobs": jobs,
             "queued": sum(job.get("status") == "queued" for job in jobs),
             "writing": sum(job.get("status") == "writing" for job in jobs),
             "succeeded": sum(job.get("status") == "succeeded" for job in jobs),
             "failed": sum(job.get("status") == "failed" for job in jobs),
-            "skipped": sum(job.get("status") == "skipped" for job in jobs),
+            "skipped": len(skipped_jobs),
+            "skipped_reasons": skipped_reasons,
+            "skipped_devices": skipped_devices,
         }
 
 

@@ -118,6 +118,7 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_start_gateway_ota)
     websocket_api.async_register_command(hass, websocket_gateway_ota_job)
     websocket_api.async_register_command(hass, websocket_transfer_queue)
+    websocket_api.async_register_command(hass, websocket_clear_queue)
 
 
 @websocket_api.websocket_command(
@@ -593,6 +594,18 @@ async def websocket_transfer_queue(
     msg: dict[str, Any],
 ) -> None:
     connection.send_result(msg["id"], await get_transfer_queue(hass).async_snapshot())
+
+
+@websocket_api.websocket_command({"type": "dratek_eink/queue/clear"})
+@websocket_api.async_response
+async def websocket_clear_queue(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    queue = get_transfer_queue(hass)
+    await queue.async_clear_completed()
+    connection.send_result(msg["id"], await queue.async_snapshot())
 
 
 @websocket_api.websocket_command(
