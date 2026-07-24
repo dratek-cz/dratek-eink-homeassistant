@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.94";
+const DRATEK_EINK_VERSION = "0.1.95";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -84,6 +84,7 @@ class DratekEinkPanel extends HTMLElement {
     this._serialResult = null;
     this._draftSaveTimer = null;
     this._loadingDraft = false;
+    this._loadedDraftAddress = "";
     this._restoringDraft = false;
     this._symbolPickerOpen = false;
     this._symbolSearch = "";
@@ -141,7 +142,18 @@ class DratekEinkPanel extends HTMLElement {
   _loadCachedDeviceDrafts() {
     try {
       const cached = JSON.parse(window.localStorage.getItem("dratek-eink-device-drafts-cache") || "{}");
-      return cached && typeof cached === "object" && !Array.isArray(cached) ? cached : {};
+      if (!cached || typeof cached !== "object" || Array.isArray(cached)) return {};
+      return Object.fromEntries(Object.entries(cached).map(([address, draft]) => {
+        if (!draft || typeof draft !== "object" || Array.isArray(draft)) return [address, null];
+        const source = { ...draft };
+        source.objects = Array.isArray(source.objects)
+          ? source.objects.filter((item) => item && typeof item === "object" && !Array.isArray(item))
+          : source.objects && typeof source.objects === "object"
+            ? Object.values(source.objects).filter((item) => item && typeof item === "object" && !Array.isArray(item))
+            : [];
+        if (!source.variables || typeof source.variables !== "object" || Array.isArray(source.variables)) source.variables = {};
+        return [String(address).toUpperCase(), source];
+      }));
     } catch (_err) {
       return {};
     }
@@ -156,7 +168,14 @@ class DratekEinkPanel extends HTMLElement {
   _loadCachedCustomElements() {
     try {
       const cached = JSON.parse(window.localStorage.getItem("dratek-eink-custom-elements-cache") || "[]");
-      return Array.isArray(cached) ? cached : [];
+      const records = Array.isArray(cached)
+        ? cached
+        : cached && typeof cached === "object"
+          ? Object.values(cached)
+          : [];
+      return records
+        .filter((item) => item && typeof item === "object" && !Array.isArray(item))
+        .map((item) => this._normalizeStoredCustomElement(item));
     } catch (_err) {
       return [];
     }
@@ -699,7 +718,7 @@ class DratekEinkPanel extends HTMLElement {
     if (!this._hass) return;
     try {
       const result = await this._hass.callWS({ type: "dratek_eink/custom_elements/list" });
-      this._customElements = result.elements || [];
+      this._customElements = this._storedRecordList(result.elements).map((element) => this._normalizeStoredCustomElement(element));
       this._saveCachedCustomElements();
       (this._customElements || []).forEach((element) => this._syncCustomElementToAllObjects(element));
     } catch (err) {
@@ -999,7 +1018,12 @@ class DratekEinkPanel extends HTMLElement {
   async _selectDevice(address, options = {}) {
     const { saveCurrent = true, render = true } = options;
     if (!address) return;
-    if (address === this._selectedDeviceAddress && !options.forceLoad) {
+    const normalizedAddress = String(address).toUpperCase();
+    if (
+      normalizedAddress === String(this._selectedDeviceAddress || "").toUpperCase()
+      && normalizedAddress === this._loadedDraftAddress
+      && !options.forceLoad
+    ) {
       if (render) {
         this._render();
         this._paint();
@@ -1041,15 +1065,15 @@ class DratekEinkPanel extends HTMLElement {
   _applyDraft(draft) {
     this._restoringDraft = true;
     const device = this._device();
-    const source = draft || this._emptyDeviceDraft(device);
+    const source = this._normalizeStoredDraft(draft) || this._emptyDeviceDraft(device);
     this._orientation = source.orientation === "portrait" ? "portrait" : "landscape";
     this._displayTransform = source.display_transform || "rotate_cw";
     this._refreshIntervalSeconds = Math.max(30, Math.min(86400, Number(source.refresh_interval_seconds) || 60));
     this._invertColors = false;
     this._backgroundColor = ["white", "black", "red"].includes(source.background_color) ? source.background_color : "white";
     const size = this._displaySize(device);
-    this._objects = Array.isArray(source.objects) ? structuredClone(source.objects) : [];
-    this._variables = source.variables ? structuredClone(source.variables) : {};
+    this._objects = structuredClone(source.objects);
+    this._variables = structuredClone(source.variables);
     const led = source.rgb_led || {};
     this._rgbLed = {
       mode: ["off", "on", "flash"].includes(led.mode) ? led.mode : "off",
@@ -1066,6 +1090,38 @@ class DratekEinkPanel extends HTMLElement {
       this._selectedProjectId = "";
     }
     this._restoringDraft = false;
+  }
+
+  _storedRecordList(value) {
+    if (Array.isArray(value)) return value.filter((item) => item && typeof item === "object" && !Array.isArray(item));
+    if (value && typeof value === "object") return Object.values(value).filter((item) => item && typeof item === "object" && !Array.isArray(item));
+    return [];
+  }
+
+  _normalizeStoredCustomElement(element) {
+    if (!element || typeof element !== "object" || Array.isArray(element)) return {};
+    const normalized = { ...element };
+    normalized.condition_rules = this._storedRecordList(normalized.condition_rules);
+    if (normalized.element_type === "layered" || normalized.layers != null) {
+      normalized.layers = this._storedRecordList(normalized.layers).map((layer, index) => ({
+        ...layer,
+        id: String(layer.id || `layer-${index}`),
+        name: String(layer.name || `Vrstva ${index + 1}`),
+        objects: this._storedRecordList(layer.objects),
+      }));
+    }
+    return normalized;
+  }
+
+  _normalizeStoredDraft(draft) {
+    if (Array.isArray(draft)) return { ...this._emptyDeviceDraft(), objects: this._storedRecordList(draft) };
+    if (!draft || typeof draft !== "object") return null;
+    const source = { ...draft };
+    source.objects = this._storedRecordList(source.objects);
+    source.variables = source.variables && typeof source.variables === "object" && !Array.isArray(source.variables)
+      ? source.variables
+      : {};
+    return source;
   }
 
   _setOrientation(orientation) {
@@ -1241,7 +1297,9 @@ class DratekEinkPanel extends HTMLElement {
       this._deviceDrafts[String(address).toUpperCase()] = result.draft || null;
       this._saveCachedDeviceDrafts();
       this._applyDraft(result.draft || null);
+      this._loadedDraftAddress = String(address).toUpperCase();
     } catch (err) {
+      this._loadedDraftAddress = "";
       this._applyDraft(null);
       this._sendResult = { ok: false, error: `Nepodarilo se nacist navrh displeje: ${this._message(err)}`, log: [] };
     } finally {
@@ -3602,7 +3660,25 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _migrateCustomElementToLayers(element) {
-    if (element?.element_type === "layered") return { ...this._emptyCustomElementForm(), ...structuredClone(element) };
+    if (element?.element_type === "layered") {
+      const migrated = { ...this._emptyCustomElementForm(), ...structuredClone(element) };
+      migrated.layers = this._storedRecordList(migrated.layers).map((layer, index) => ({
+        ...layer,
+        id: String(layer.id || `layer-${Date.now()}-${index}`),
+        name: String(layer.name || `Vrstva ${index + 1}`),
+        objects: this._storedRecordList(layer.objects),
+      }));
+      migrated.condition_rules = this._storedRecordList(migrated.condition_rules);
+      if (!migrated.layers.length) {
+        const fallback = { id: `layer-${Date.now()}`, name: "Výchozí", objects: [] };
+        migrated.layers = [fallback];
+        migrated.default_layer_id = fallback.id;
+      }
+      if (!migrated.layers.some((layer) => layer.id === migrated.default_layer_id)) {
+        migrated.default_layer_id = migrated.layers[0].id;
+      }
+      return migrated;
+    }
     const migrated = this._emptyCustomElementForm();
     migrated.id = element?.id || "";
     migrated.name = element?.name || "";
@@ -3665,8 +3741,8 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _customLayerForValue(element, value) {
-    const layers = Array.isArray(element.layers) ? element.layers : [];
-    const rule = (element.condition_rules || []).find((item) => this._customConditionMatches(value, item.operator || "equals", item.value || ""));
+    const layers = this._storedRecordList(element.layers);
+    const rule = this._storedRecordList(element.condition_rules).find((item) => this._customConditionMatches(value, item.operator || "equals", item.value || ""));
     const id = rule?.layer_id || element.default_layer_id || layers[0]?.id;
     return layers.find((layer) => layer.id === id) || layers[0] || null;
   }
@@ -4847,7 +4923,13 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-custom-edit]").forEach((button) => button.addEventListener("click", () => {
       const element = this._customElements.find((item) => item.id === button.dataset.customEdit);
       if (!element) return;
-      this._customElementForm = this._migrateCustomElementToLayers(element);
+      try {
+        this._customElementForm = this._migrateCustomElementToLayers(element);
+      } catch (err) {
+        this._customElementResult = { ok: false, error: `Nepodařilo se načíst uložený prvek: ${this._message(err)}` };
+        this._stableCustomRender();
+        return;
+      }
       this._customWorkspaceView = "editor";
       this._customLayerStep = "design";
       this._customActiveLayerId = this._customElementForm.layers?.[0]?.id || "";
@@ -5346,12 +5428,12 @@ class DratekEinkPanel extends HTMLElement {
 
   _drawLayeredObject(ctx, object, box) {
     const master = object.customElementId ? (this._customElements || []).find((e) => e.id === object.customElementId) : null;
-    const layers = master?.layers || object.customLayers || [];
+    const layers = this._storedRecordList(master?.layers || object.customLayers);
     const canvasWidth = Number(master?.canvas_width || object.customCanvasWidth || 296);
     const canvasHeight = Number(master?.canvas_height || object.customCanvasHeight || 128);
     const conditionRules = master
-      ? (master.condition_rules || []).map((rule) => ({ operator: rule.operator, value: rule.value || "", symbol: rule.layer_id || rule.symbol || "" }))
-      : (object.conditionRules || []);
+      ? this._storedRecordList(master.condition_rules).map((rule) => ({ operator: rule.operator, value: rule.value || "", symbol: rule.layer_id || rule.symbol || "" }))
+      : this._storedRecordList(object.conditionRules);
     const defaultSymbol = master?.default_layer_id || object.defaultSymbol || layers[0]?.id;
     const entityId = master?.entity_id || object.entityId;
 
@@ -5879,12 +5961,12 @@ class DratekEinkPanel extends HTMLElement {
       bindings: objects.map((object) => {
         if (object.type === "layered") {
           const master = object.customElementId ? (this._customElements || []).find((e) => e.id === object.customElementId) : null;
-          const layers = master?.layers || object.customLayers || [];
+          const layers = this._storedRecordList(master?.layers || object.customLayers);
           const canvasW = Number(master?.canvas_width || object.customCanvasWidth || 296);
           const canvasH = Number(master?.canvas_height || object.customCanvasHeight || 128);
           const conditionRules = master
-            ? (master.condition_rules || []).map((rule) => ({ operator: rule.operator, value: rule.value || "", symbol: rule.layer_id || rule.symbol || "" }))
-            : (object.conditionRules || []);
+            ? this._storedRecordList(master.condition_rules).map((rule) => ({ operator: rule.operator, value: rule.value || "", symbol: rule.layer_id || rule.symbol || "" }))
+            : this._storedRecordList(object.conditionRules);
           const defaultSymbol = master?.default_layer_id || object.defaultSymbol || layers[0]?.id || "";
           const entityId = master?.entity_id || object.entityId || "";
           const entityAttr = master?.entity_attribute || object.entityAttribute || "";

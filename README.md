@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.95
+
+- opraveno načtení posledního návrhu po kliknutí na již předvybraný displej
+- doplněna automatická kompatibilita se staršími návrhy, které mají objekty nebo vrstvy uložené pod číselnými klíči
+- opraveno otevření starších uložených prvků v Designeru HA prvků
+- poškozená část úložiště už nezablokuje načtení ostatních návrhů a prvků
+- přidány regresní testy migrace projektového úložiště
+
 ## Novinky ve verzi 0.1.94
 
 - opraveno skutečné vykreslení rozsahů budíků `180°`, `240°` a `360°`, aby odpovídalo náhledu Designeru

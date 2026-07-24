@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.95] - 2026-07-24
+
+### Oprava načítání uložených návrhů
+- Kliknutí na již předvybraný displej nyní vždy načte jeho poslední uložený návrh, pokud ještě nebyl načtený v aktuálním editoru.
+- Projektové úložiště automaticky normalizuje starší formáty návrhů, vrstev, objektů a pravidel uložených jako seznamy nebo objekty s číselnými klíči.
+- Designer HA prvků bezpečně otevře starší vrstvené prvky a nezhavaruje kvůli nekompatibilnímu formátu pravidel.
+- Neplatná část uložených dat už nezablokuje všechny ostatní návrhy, názvy zařízení ani vlastní prvky.
+- Přidány regresní testy kompatibility starších dat a interaktivně ověřeno načtení v obou designerech.
+
+---
+
 ## [0.1.94] - 2026-07-24
 
 ### Oprava budíků, verzí a zabezpečení publikačního procesu

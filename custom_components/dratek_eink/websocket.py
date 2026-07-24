@@ -40,6 +40,7 @@ from .gateway import (
 )
 from .render import render_text_image
 from .queue import get_transfer_queue
+from .project_storage import normalize_project_data
 from .transfer import DratekTransfer
 
 PROJECT_STORE_KEY = "dratek_eink.projects"
@@ -358,18 +359,11 @@ def _project_store(hass: HomeAssistant) -> Store:
 
 
 async def _load_project_data(hass: HomeAssistant) -> dict[str, Any]:
-    data = await _project_store(hass).async_load()
-    if not isinstance(data, dict):
-        return {"projects": [], "device_drafts": {}, "device_names": {}, "custom_elements": []}
-    data.setdefault("projects", [])
-    data.setdefault("device_drafts", {})
-    data.setdefault("device_names", {})
-    data.setdefault("custom_elements", [])
-    return data
+    return normalize_project_data(await _project_store(hass).async_load())
 
 
 def _normalize_address(address: str) -> str:
-    return address.upper()
+    return str(address or "").strip().upper()
 
 
 @websocket_api.websocket_command(

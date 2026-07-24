@@ -40,8 +40,10 @@
 
     import "../custom_components/dratek_eink/frontend/dratek-eink-panel.js";
     const panel = document.createElement("dratek-eink-panel");
-    const view = new URLSearchParams(location.search).get("view");
-    panel._activeTab = view === "designer" ? "designer" : view === "gateways" ? "gateways" : "custom";
+    const params = new URLSearchParams(location.search);
+    const view = params.get("view");
+    const legacy = params.get("legacy") === "1";
+    panel._activeTab = view === "designer" ? "designer" : view === "gateways" ? "gateways" : view === "devices" ? "devices" : "custom";
     panel._result = {
       devices: [{
         address: "FF:FF:92:81:46:32", physical_code: "92.81.46.32",
@@ -66,6 +68,20 @@
         { id: "off", name: "Vypnuto", objects: [{ id: "off-text", type: "text", x: 28, y: 35, w: 240, h: 58, text: "VYPNUTO", color: "black", font_size: 34, bold: true, align: "center" }] },
       ],
     };
+    if (legacy) {
+      sampleElement.layers = Object.fromEntries(sampleElement.layers.map((layer, index) => [
+        String(index * 3),
+        { ...layer, objects: Object.fromEntries(layer.objects.map((object) => ["3", object])) },
+      ]));
+      sampleElement.condition_rules = Object.fromEntries(sampleElement.condition_rules.map((rule, index) => [String(index * 3), rule]));
+    }
+    const sampleDraft = {
+      name: "Starší uložený návrh", device_address: "FF:FF:92:81:46:32",
+      sdk_type: 40, width: 296, height: 128, orientation: "landscape",
+      variables: {}, objects: legacy
+        ? { "3": { id: "obj-3", type: "text", x: 18, y: 32, w: 260, h: 56, text: "NAČTENO", color: "red", fontSize: 32, bold: true, align: "center" } }
+        : [],
+    };
     const sampleGateway = {
       id: "gateway-test", name: "Gateway dílna", host: "dratek-eink-gateway.local",
       status: {
@@ -83,8 +99,8 @@
       },
       callWS: async ({ type }) => {
         if (type === "dratek_eink/custom_elements/list") return { elements: [sampleElement] };
-        if (type === "dratek_eink/device_drafts/list") return { drafts: {} };
-        if (type === "dratek_eink/device_drafts/load") return { draft: null };
+        if (type === "dratek_eink/device_drafts/list") return { drafts: legacy ? { "FF:FF:92:81:46:32": sampleDraft } : {} };
+        if (type === "dratek_eink/device_drafts/load") return { draft: legacy ? sampleDraft : null };
         if (type === "dratek_eink/projects/list") return { projects: [] };
         if (type === "dratek_eink/gateways/list") return { gateways: [sampleGateway] };
         if (type === "dratek_eink/serial/ports") return { ports: [] };
