@@ -169,6 +169,101 @@ class RenderWidgetTests(unittest.TestCase):
 
         self.assertNotEqual(low.tobytes(), high.tobytes())
 
+    def test_regular_and_bold_text_use_the_bundled_arimo_font(self):
+        for bold in (False, True):
+            font = render.load_font(16, bold)
+            self.assertIn("Arimo", font.getname()[0])
+
+    def test_bar_gauge_reserves_a_white_value_band(self):
+        image = self._render_objects(
+            [
+                {
+                    "id": "bar",
+                    "type": "bar_gauge",
+                    "x": 8,
+                    "y": 20,
+                    "w": 280,
+                    "h": 40,
+                    "min_value": 0,
+                    "max_value": 100,
+                    "unit": "%",
+                    "fill": "red",
+                    "stroke": "black",
+                    "show_value": True,
+                }
+            ]
+        )
+        rendered = render._render_bound_layer(
+            {
+                "w": 296,
+                "h": 128,
+                "canvas_width": 296,
+                "canvas_height": 128,
+                "default_symbol": "layer",
+                "layers": [
+                    {
+                        "id": "layer",
+                        "objects": [
+                            {
+                                "type": "bar_gauge",
+                                "x": 8,
+                                "y": 20,
+                                "w": 280,
+                                "h": 40,
+                                "min_value": 0,
+                                "max_value": 100,
+                                "unit": "%",
+                                "fill": "red",
+                                "stroke": "black",
+                                "show_value": True,
+                            }
+                        ],
+                    }
+                ],
+            },
+            "65",
+        )
+        red = (220, 20, 12, 255)
+        top_band = rendered.crop((8, 20, 288, 36))
+        track = rendered.crop((8, 37, 288, 60))
+        top_colors = {
+            top_band.getpixel((x, y))
+            for y in range(top_band.height)
+            for x in range(top_band.width)
+        }
+        track_colors = {
+            track.getpixel((x, y))
+            for y in range(track.height)
+            for x in range(track.width)
+        }
+        self.assertNotIn(red, top_colors)
+        self.assertIn(red, track_colors)
+        self.assertEqual(image.size, (296, 128))
+
+    def test_chart_layout_options_affect_the_rendered_output(self):
+        common = {
+            "w": 296,
+            "h": 128,
+            "chartType": "bar",
+            "chartTitle": "Cena energie",
+            "chartLabels": "00,01,02,03",
+            "xLabel": "hodina",
+            "yLabel": "Kc",
+            "legendFontSize": 8,
+            "showAxes": True,
+            "showGrid": True,
+            "color": "red",
+            "graphColor": "black",
+        }
+        plain = render._render_bound_chart(
+            {**common, "showValues": False}, "[3.2,2.8,4.1,3.7]"
+        )
+        labeled = render._render_bound_chart(
+            {**common, "showValues": True}, "[3.2,2.8,4.1,3.7]"
+        )
+        self.assertEqual(labeled.size, (296, 128))
+        self.assertNotEqual(plain.tobytes(), labeled.tobytes())
+
 
 if __name__ == "__main__":
     unittest.main()

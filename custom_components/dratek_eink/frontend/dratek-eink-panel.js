@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.101";
+const DRATEK_EINK_VERSION = "0.1.102";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -3983,12 +3983,16 @@ class DratekEinkPanel extends HTMLElement {
         ctx.fillStyle = this._color(object.color || "black");
         ctx.font = `${object.bold ? "700" : "600"} ${Math.max(8, Number(object.font_size || 24))}px "DRATEK eInk Sans",Arial,sans-serif`;
         ctx.textAlign = object.align || "left";
-        ctx.textBaseline = "middle";
+        ctx.textBaseline = "alphabetic";
         const textX = object.align === "center" ? x + w / 2 : object.align === "right" ? x + w : x;
         const lines = String(object.text || "Text").split("\n");
         const lineHeight = Math.max(10, Number(object.font_size || 24) * 1.08);
-        const startY = y + h / 2 - ((lines.length - 1) * lineHeight) / 2;
-        lines.forEach((line, index) => ctx.fillText(line, textX, startY + index * lineHeight, w));
+        const startY = y + Math.max(0, (h - lineHeight * lines.length) / 2);
+        lines.forEach((line, index) => {
+          const metrics = ctx.measureText(line || " ");
+          const baseline = startY + index * lineHeight + (Number(metrics.actualBoundingBoxAscent) || lineHeight * 0.8);
+          ctx.fillText(line, textX, baseline, w);
+        });
         ctx.restore();
       }
       ctx.restore();
@@ -5157,7 +5161,7 @@ class DratekEinkPanel extends HTMLElement {
     if (object.type === "text") {
       const content = this._inspectorSection("mdi:format-text", object.statusIcons ? "Signalizace" : "Text", `
         <div class="field"><label><ha-icon icon="mdi:text-box-edit-outline"></ha-icon>Obsah</label><input data-prop="text" value="${this._escape(object.text)}"></div>
-        <div class="row"><div class="field"><label><ha-icon icon="mdi:format-size"></ha-icon>Velikost</label><input data-prop="fontSize" type="number" min="${this._textMinFontSize(object)}" value="${object.fontSize}"></div><div class="field"><label><ha-icon icon="mdi:format-font"></ha-icon>Font</label><select data-prop="fontFamily"><option value="DRATEK eInk Sans" ${(object.fontFamily || "DRATEK eInk Sans") === "DRATEK eInk Sans" ? "selected" : ""}>DRATEK eInk Sans</option><option value="Arial" ${object.fontFamily === "Arial" ? "selected" : ""}>Arial</option><option value="Courier New" ${object.fontFamily === "Courier New" ? "selected" : ""}>Monospace</option><option value="Times New Roman" ${object.fontFamily === "Times New Roman" ? "selected" : ""}>Serif</option></select></div></div>
+        <div class="row"><div class="field"><label><ha-icon icon="mdi:format-size"></ha-icon>Velikost</label><input data-prop="fontSize" type="number" min="${this._textMinFontSize(object)}" value="${object.fontSize}"></div><div class="field"><label><ha-icon icon="mdi:format-font"></ha-icon>Font displeje</label><input value="DRATEK eInk Sans" disabled title="Stejný vestavěný font používá náhled i backend při automatické aktualizaci."></div></div>
         ${this._inspectorSegments("textAlign", object.textAlign || "center", [{ value: "left", label: "Vlevo", icon: "mdi:format-align-left" }, { value: "center", label: "Na střed", icon: "mdi:format-align-center" }, { value: "right", label: "Vpravo", icon: "mdi:format-align-right" }], "Vodorovné zarovnání")}
         ${this._inspectorSegments("verticalAlign", object.verticalAlign || "middle", [{ value: "top", label: "Nahoru", icon: "mdi:format-vertical-align-top" }, { value: "middle", label: "Na střed", icon: "mdi:format-vertical-align-center" }, { value: "bottom", label: "Dolů", icon: "mdi:format-vertical-align-bottom" }], "Svislé zarovnání")}
         ${object.statusIcons ? `<div class="row"><div class="field"><label>Symbol zapnuto</label><input data-prop="statusOnSymbol" value="${this._escape(object.statusOnSymbol || "●")}"></div><div class="field"><label>Symbol vypnuto</label><input data-prop="statusOffSymbol" value="${this._escape(object.statusOffSymbol || "○")}"></div></div><div class="field"><label>Hodnoty zapnutého stavu</label><input data-prop="statusOnValues" value="${this._escape(object.statusOnValues || "on,true,1,open,home")}"><small>Oddělte čárkou, například on, true, open.</small></div>` : ""}`, true);
@@ -5391,27 +5395,32 @@ class DratekEinkPanel extends HTMLElement {
     const unit = String(object.unit || "%");
     const pct = Math.max(0, Math.min(1, (val - minVal) / Math.max(0.0001, maxVal - minVal)));
     const isHorizontal = object.orientation !== "vertical";
-    ctx.fillStyle = object.fill === "white" ? "#fff" : "rgba(0,0,0,0.06)";
+    const showValue = object.show_value !== false;
+    const valueBand = showValue ? Math.min(Math.max(13, Math.round(h * 0.42)), Math.max(13, h - 8)) : 0;
+    const trackX = x + 1;
+    const trackY = y + valueBand + 1;
+    const trackW = Math.max(3, w - 2);
+    const trackH = Math.max(4, h - valueBand - 2);
+    ctx.fillStyle = "#fff";
     ctx.fillRect(x, y, w, h);
-    if (object.stroke && object.stroke !== "none") {
-      ctx.strokeStyle = this._color(object.stroke);
-      ctx.lineWidth = Math.max(1, Number(object.stroke_width || 2));
-      ctx.strokeRect(x, y, w, h);
-    }
+    ctx.strokeStyle = this._color(object.stroke && object.stroke !== "none" ? object.stroke : "black");
+    ctx.lineWidth = Math.max(1, Math.min(3, Number(object.stroke_width || 1)));
+    ctx.strokeRect(trackX + 0.5, trackY + 0.5, Math.max(1, trackW - 1), Math.max(1, trackH - 1));
     const fillColor = this._color(object.fill && object.fill !== "none" ? object.fill : object.color || "black");
     ctx.fillStyle = fillColor;
     if (isHorizontal) {
-      ctx.fillRect(x, y, Math.max(0, w * pct), h);
+      const fillW = Math.round(Math.max(0, trackW - 2) * pct);
+      if (fillW > 0) ctx.fillRect(trackX + 1, trackY + 1, fillW, Math.max(1, trackH - 2));
     } else {
-      const barH = Math.max(0, h * pct);
-      ctx.fillRect(x, y + h - barH, w, barH);
+      const barH = Math.round(Math.max(0, trackH - 2) * pct);
+      if (barH > 0) ctx.fillRect(trackX + 1, trackY + trackH - 1 - barH, Math.max(1, trackW - 2), barH);
     }
-    if (object.show_value !== false) {
-      ctx.fillStyle = pct > 0.55 && object.fill !== "none" ? "#fff" : "#000";
-      ctx.font = `700 ${Math.max(10, Math.min(22, Math.round(h * 0.45)))}px "DRATEK eInk Sans",Arial,sans-serif`;
+    if (showValue) {
+      ctx.fillStyle = "#000";
+      ctx.font = `700 ${Math.max(9, Math.min(18, valueBand - 3))}px "DRATEK eInk Sans",Arial,sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(`${Number(val.toFixed(1))} ${unit}`.trim(), x + w / 2, y + h / 2, w - 4);
+      ctx.fillText(`${Number(val.toFixed(1))} ${unit}`.trim(), x + w / 2, y + valueBand / 2, w - 4);
     }
     ctx.restore();
   }
@@ -5422,15 +5431,20 @@ class DratekEinkPanel extends HTMLElement {
     const val = sampleVal !== null ? sampleVal : resolvedVal;
     const unit = String(object.unit || "%");
     const pct = Math.max(0, Math.min(1, (val - minVal) / Math.max(0.0001, maxVal - minVal)));
-    const cx = x + w / 2;
-    const cy = y + h / 2;
-    const r = Math.max(4, Math.min(w, h) / 2 - 2);
+    const showValue = object.show_value !== false;
     const holePct = Math.max(0, Math.min(80, Number(object.hole_percent ?? 45))) / 100;
+    const separateValue = showValue && holePct < 0.32;
+    const valueBand = separateValue ? Math.min(16, Math.max(11, Math.round(h * 0.2))) : 0;
+    const cx = x + w / 2;
+    const cy = y + (h - valueBand) / 2;
+    const r = Math.max(4, Math.min(w, h - valueBand) / 2 - 2);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(x, y, w, h);
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,0.08)";
+    ctx.fillStyle = "#fff";
     ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.2)";
+    ctx.strokeStyle = "#000";
     ctx.lineWidth = 1;
     ctx.stroke();
     const startAngle = -Math.PI / 2;
@@ -5449,15 +5463,21 @@ class DratekEinkPanel extends HTMLElement {
       ctx.arc(cx, cy, holeR, 0, Math.PI * 2);
       ctx.fillStyle = "#fff";
       ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.15)";
+      ctx.strokeStyle = "#000";
       ctx.stroke();
     }
-    if (object.show_value !== false) {
-      ctx.fillStyle = holePct > 0.3 ? "#000" : "#fff";
-      ctx.font = `700 ${Math.max(9, Math.min(18, Math.round(r * 0.45)))}px "DRATEK eInk Sans",Arial,sans-serif`;
+    if (showValue) {
+      const text = `${Number(val.toFixed(1))}${unit}`;
+      const textY = separateValue ? y + h - valueBand / 2 : cy;
+      const maxTextWidth = separateValue ? Math.max(8, w - 4) : Math.max(8, r * holePct * 1.72);
+      const fontSize = separateValue
+        ? Math.max(8, Math.min(14, valueBand - 2))
+        : Math.max(7, Math.min(16, Math.round(r * Math.max(0.25, holePct) * 0.72)));
+      ctx.fillStyle = "#000";
+      ctx.font = `700 ${fontSize}px "DRATEK eInk Sans",Arial,sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(`${Number(val.toFixed(1))}${unit}`, cx, cy);
+      ctx.fillText(text, cx, textY, maxTextWidth);
     }
     ctx.restore();
   }
@@ -5468,11 +5488,13 @@ class DratekEinkPanel extends HTMLElement {
     const val = sampleVal !== null ? sampleVal : resolvedVal;
     const unit = String(object.unit || "°C");
     const pct = Math.max(0, Math.min(1, (val - minVal) / Math.max(0.0001, maxVal - minVal)));
-    const trackY = y + h * 0.55;
+    const valueBand = object.show_value !== false ? Math.min(16, Math.max(11, Math.round(h * 0.34))) : 2;
+    const labelBand = Math.min(10, Math.max(7, Math.round(h * 0.2)));
+    const trackY = y + valueBand + Math.max(4, (h - valueBand - labelBand) * 0.45);
     const margin = 12;
     const trackW = Math.max(10, w - margin * 2);
-    ctx.strokeStyle = "rgba(0,0,0,0.18)";
-    ctx.lineWidth = 6;
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 2;
     ctx.lineCap = "round";
     ctx.beginPath();
     ctx.moveTo(x + margin, trackY);
@@ -5497,16 +5519,17 @@ class DratekEinkPanel extends HTMLElement {
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.fillStyle = "#000";
-    ctx.font = '600 10px "DRATEK eInk Sans",Arial,sans-serif';
+    ctx.font = `600 ${Math.max(7, Math.min(9, labelBand))}px "DRATEK eInk Sans",Arial,sans-serif`;
     ctx.textBaseline = "bottom";
     ctx.textAlign = "left";
-    ctx.fillText(`${minVal}`, x + margin, y + h * 0.4);
+    ctx.fillText(`${minVal}`, x + margin, y + h);
     ctx.textAlign = "right";
-    ctx.fillText(`${maxVal}`, x + margin + trackW, y + h * 0.4);
+    ctx.fillText(`${maxVal}`, x + margin + trackW, y + h);
     if (object.show_value !== false) {
-      ctx.font = '700 12px "DRATEK eInk Sans",Arial,sans-serif';
+      ctx.font = `700 ${Math.max(8, Math.min(14, valueBand - 2))}px "DRATEK eInk Sans",Arial,sans-serif`;
       ctx.textAlign = "center";
-      ctx.fillText(`${Number(val.toFixed(1))} ${unit}`.trim(), x + w / 2, y + h * 0.35);
+      ctx.textBaseline = "middle";
+      ctx.fillText(`${Number(val.toFixed(1))} ${unit}`.trim(), x + w / 2, y + valueBand / 2, w - 4);
     }
     ctx.restore();
   }
@@ -5534,8 +5557,8 @@ class DratekEinkPanel extends HTMLElement {
     const color = this._color(object.color || "black");
     ctx.beginPath();
     ctx.arc(cx, cy, r, startAngle, endAngle);
-    ctx.strokeStyle = "rgba(0,0,0,0.14)";
-    ctx.lineWidth = strokeW;
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = Math.max(1, Math.min(2, strokeW));
     ctx.lineCap = "round";
     ctx.stroke();
     const currentAngle = startAngle + pct * (endAngle - startAngle);
@@ -5574,12 +5597,18 @@ class DratekEinkPanel extends HTMLElement {
     ctx.fillText(`${minVal}`, minLx, minLy);
     ctx.fillText(`${maxVal}`, maxLx, maxLy);
     if (object.show_value !== false) {
+      const text = `${Number(val.toFixed(1))} ${unit}`.trim();
+      const fontSize = Math.max(8, Math.min(16, Math.round(r * 0.34)));
+      const textY = mode === "360" ? cy : Math.min(y + h - fontSize / 2 - 1, cy + r * 0.58);
       ctx.fillStyle = "#000";
-      ctx.font = `700 ${Math.max(10, Math.min(20, Math.round(r * 0.48)))}px "DRATEK eInk Sans",Arial,sans-serif`;
+      ctx.font = `700 ${fontSize}px "DRATEK eInk Sans",Arial,sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      const textY = mode === "180" ? cy - r * 0.3 : cy;
-      ctx.fillText(`${Number(val.toFixed(1))} ${unit}`.trim(), cx, textY);
+      const textWidth = Math.min(w - 4, ctx.measureText(text).width + 6);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(cx - textWidth / 2, textY - fontSize * 0.58, textWidth, fontSize * 1.16);
+      ctx.fillStyle = "#000";
+      ctx.fillText(text, cx, textY, w - 6);
     }
     ctx.restore();
   }
@@ -5642,7 +5671,7 @@ class DratekEinkPanel extends HTMLElement {
       }
     }
     ctx.font = `${weight}${fontSize}px ${family}, Arial, sans-serif`;
-    ctx.textBaseline = "top";
+    ctx.textBaseline = "alphabetic";
     ctx.textAlign = object.textAlign || "left";
     const lineHeight = fontSize * 1.08;
     const totalHeight = lineHeight * lines.length;
@@ -5670,9 +5699,11 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _drawReadableLine(ctx, text, x, y, maxWidth) {
-    const width = ctx.measureText(text || " ").width;
+    const metrics = ctx.measureText(text || " ");
+    const width = metrics.width;
+    const baselineY = y + (Number(metrics.actualBoundingBoxAscent) || Math.max(1, parseFloat(ctx.font) * 0.8));
     if (width <= maxWidth) {
-      ctx.fillText(text, x, y);
+      ctx.fillText(text, x, baselineY);
       return;
     }
     const minScale = 0.84;
@@ -5682,7 +5713,7 @@ class DratekEinkPanel extends HTMLElement {
       output = this._ellipsizeText(ctx, text, maxWidth / minScale);
     }
     ctx.save();
-    ctx.translate(x, y);
+    ctx.translate(x, baselineY);
     ctx.scale(scale, 1);
     const localX = ctx.textAlign === "center" ? 0 : ctx.textAlign === "right" ? 0 : 0;
     ctx.fillText(output, localX, 0);
@@ -5824,7 +5855,7 @@ class DratekEinkPanel extends HTMLElement {
     const legendFontSize = Math.max(6, Math.min(18, Number(object.legendFontSize || 8)));
     const title = String(object.chartTitle || "").trim();
     const showAxes = object.showAxes !== false;
-    const left = showAxes ? Math.max(object.yLabel ? 34 : 25, Math.round(legendFontSize * 3.4)) : 5;
+    const left = showAxes ? Math.max(object.yLabel ? 46 : 25, Math.round(legendFontSize * 3.4)) : 5;
     const right = 6;
     const top = title ? Math.max(17, legendFontSize + 8) : 5;
     const bottom = showAxes ? Math.max(object.xLabel ? 22 : 14, object.xLabel ? legendFontSize * 2.4 : legendFontSize + 7) : 5;
@@ -5832,12 +5863,12 @@ class DratekEinkPanel extends HTMLElement {
     const plotH = Math.max(8, box.h - top - bottom);
 
     ctx.fillStyle = graphColor;
-    ctx.font = "700 10px Arial";
+    ctx.font = '700 10px "DRATEK eInk Sans",Arial,sans-serif';
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     if (title) ctx.fillText(title, box.w / 2, 2, Math.max(10, box.w - 8));
     if (!values.length) {
-      ctx.font = "600 9px Arial";
+      ctx.font = '600 9px "DRATEK eInk Sans",Arial,sans-serif';
       ctx.textBaseline = "middle";
       ctx.fillText("Zadejte data grafu", box.w / 2, box.h / 2);
       ctx.restore();
@@ -5883,7 +5914,7 @@ class DratekEinkPanel extends HTMLElement {
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(left, top); ctx.lineTo(left, top + plotH); ctx.lineTo(left + plotW, top + plotH); ctx.stroke();
       ctx.fillStyle = graphColor;
-      ctx.font = `600 ${legendFontSize}px Arial`;
+      ctx.font = `600 ${legendFontSize}px "DRATEK eInk Sans",Arial,sans-serif`;
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
       ctx.fillText(this._formatChartNumber(max), left - 3, top + 2);
@@ -5893,7 +5924,7 @@ class DratekEinkPanel extends HTMLElement {
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       for (const index of [...new Set(labelIndexes)]) ctx.fillText(labels[index] || String(index + 1), xFor(index), top + plotH + 3, 34);
-      ctx.font = `700 ${Math.min(18, legendFontSize + 1)}px Arial`;
+      ctx.font = `700 ${Math.min(18, legendFontSize + 1)}px "DRATEK eInk Sans",Arial,sans-serif`;
       if (object.xLabel) ctx.fillText(String(object.xLabel), left + plotW / 2, box.h - legendFontSize - 2, plotW);
       if (object.yLabel) {
         ctx.save();
@@ -5947,11 +5978,20 @@ class DratekEinkPanel extends HTMLElement {
 
     if (object.showValues) {
       ctx.fillStyle = graphColor;
-      ctx.font = `700 ${legendFontSize}px Arial`;
+      ctx.font = `700 ${legendFontSize}px "DRATEK eInk Sans",Arial,sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
       const every = values.length <= 10 ? 1 : Math.ceil(values.length / 8);
-      values.forEach((value, index) => { if (index % every === 0 || index === values.length - 1) ctx.fillText(this._formatChartNumber(value), xFor(index), yFor(value) - 2); });
+      values.forEach((value, index) => {
+        if (index % every !== 0 && index !== values.length - 1) return;
+        const text = this._formatChartNumber(value);
+        const textWidth = ctx.measureText(text).width;
+        const textY = Math.max(top + legendFontSize + 1, yFor(value) - 2);
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(xFor(index) - textWidth / 2 - 1, textY - legendFontSize - 1, textWidth + 2, legendFontSize + 2);
+        ctx.fillStyle = graphColor;
+        ctx.fillText(text, xFor(index), textY);
+      });
     }
     ctx.restore();
   }
@@ -6168,14 +6208,21 @@ class DratekEinkPanel extends HTMLElement {
           };
         }
         if (object.type === "chart") {
+          const chartType = object.chartType || "line";
           return {
             id: object.id, type: "chart", entity_id: object.entityId,
             custom_element_id: object.customElementId || "",
             entity_attribute: object.entityAttribute || "", include_unit: false, fallback: object.data || "",
             x: Number(object.x || 0), y: Number(object.y || 0), w: Number(object.w || 1), h: Number(object.h || 1),
-            chartType: object.chartType || "line", chartTitle: object.chartTitle || "", maxPoints: Number(object.maxPoints || 48),
+            chartType, chartTitle: object.chartTitle || "", chartLabels: object.chartLabels || "",
+            xLabel: object.xLabel || "", yLabel: object.yLabel || "",
+            chartMin: object.chartMin ?? "", chartMax: object.chartMax ?? "",
+            maxPoints: Number(object.maxPoints || 48), legendFontSize: Number(object.legendFontSize || 8),
+            showAxes: object.showAxes !== false, showGrid: object.showGrid !== false, showValues: !!object.showValues,
+            backgroundColor: object.backgroundColor || "white", graphColor: object.graphColor || "black",
             history_mode: object.historyMode || "rolling",
-            color: object.barColor || object.color || "black", strokeWidth: Number(object.strokeWidth || 2),
+            color: chartType === "bar" ? (object.barColor || "red") : (object.color || "black"),
+            strokeWidth: Number(object.strokeWidth || 2),
           };
         }
         return {

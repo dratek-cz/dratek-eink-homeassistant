@@ -84,6 +84,28 @@ class FrontendToolLibraryTests(unittest.TestCase):
             self.source,
         )
 
+    def test_designer_and_backend_share_the_bundled_display_font(self):
+        self.assertIn('value="DRATEK eInk Sans" disabled', self.source)
+        self.assertIn('const family = \'"DRATEK eInk Sans"\';', self.source)
+        self.assertIn('document.fonts.load(\'600 24px "DRATEK eInk Sans"\')', self.source)
+
+    def test_chart_automation_preserves_the_complete_layout(self):
+        for field in (
+            "chartLabels",
+            "xLabel",
+            "yLabel",
+            "chartMin",
+            "chartMax",
+            "legendFontSize",
+            "showAxes",
+            "showGrid",
+            "showValues",
+            "backgroundColor",
+            "graphColor",
+        ):
+            self.assertIn(field, self.source)
+        self.assertIn('chartType === "bar" ? (object.barColor', self.source)
+
 
 if __name__ == "__main__":
     unittest.main()

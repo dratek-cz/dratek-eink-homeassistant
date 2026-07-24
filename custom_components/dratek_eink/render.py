@@ -100,6 +100,40 @@ def _fit_text_font(
         font_size -= 1
 
 
+def _draw_centered_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    center_x: float,
+    center_y: float,
+    max_width: int,
+    max_height: int,
+    requested_size: int,
+    *,
+    bold: bool = True,
+    fill: tuple[int, int, int, int] = (0, 0, 0, 255),
+    minimum_size: int = 6,
+) -> int:
+    """Draw one readable line inside a strict box without covering nearby graphics."""
+    font_size = max(minimum_size, int(requested_size))
+    while font_size > minimum_size:
+        font = load_font(font_size, bold)
+        box = draw.textbbox((0, 0), text or " ", font=font)
+        if box[2] - box[0] <= max_width and box[3] - box[1] <= max_height:
+            break
+        font_size -= 1
+    font = load_font(font_size, bold)
+    box = draw.textbbox((0, 0), text or " ", font=font)
+    text_width = box[2] - box[0]
+    text_height = box[3] - box[1]
+    draw.text(
+        (round(center_x - text_width / 2 - box[0]), round(center_y - text_height / 2 - box[1])),
+        text,
+        fill=fill,
+        font=font,
+    )
+    return font_size
+
+
 def _render_bound_text(binding: dict[str, Any], value: str) -> Image.Image:
     width = max(1, round(float(binding.get("w", 1))))
     height = max(1, round(float(binding.get("h", 1))))
@@ -168,39 +202,228 @@ def _chart_values(value: str, maximum: int = 48) -> list[float]:
 def _render_bound_chart(binding: dict[str, Any], value: str) -> Image.Image:
     width = max(24, round(float(binding.get("w", 24))))
     height = max(24, round(float(binding.get("h", 24))))
-    layer = Image.new("RGBA", (width, height), (255, 255, 255, 255))
+    palette = {
+        "black": (0, 0, 0, 255),
+        "red": (220, 20, 12, 255),
+        "white": (255, 255, 255, 255),
+    }
+    background = palette.get(str(binding.get("backgroundColor") or "white"), palette["white"])
+    layer = Image.new("RGBA", (width, height), background)
     draw = ImageDraw.Draw(layer)
     values = _chart_values(value, int(binding.get("maxPoints", 48)))
     title = str(binding.get("chartTitle") or "")
-    top = 16 if title else 5
-    left, right, bottom = 22, 5, 14
+    legend_size = max(6, min(14, int(binding.get("legendFontSize", 8))))
+    show_axes = binding.get("showAxes") is not False
+    show_grid = binding.get("showGrid") is not False
+    show_values = bool(binding.get("showValues"))
+    x_label = str(binding.get("xLabel") or "")
+    y_label = str(binding.get("yLabel") or "")
+    top = max(13, legend_size + 5) if title else 3
+    right = 4
+    bottom = max(12, legend_size + 5) if show_axes else 3
+    if show_axes and x_label and height >= 64:
+        bottom += legend_size + 2
+    left = max(19, round(legend_size * 3.0)) if show_axes else 3
+    if show_axes and y_label and width >= 100:
+        left = max(44, left + legend_size * 2 + 2)
+    left = min(left, max(3, round(width * 0.3)))
     plot_width = max(4, width - left - right)
     plot_height = max(4, height - top - bottom)
+    if plot_width < 22 or plot_height < 18:
+        show_axes = False
+        show_grid = False
+        x_label = ""
+        y_label = ""
+        left, right, bottom = 3, 3, 3
+        top = max(12, legend_size + 4) if title else 3
+        plot_width = max(4, width - left - right)
+        plot_height = max(4, height - top - bottom)
     if title:
-        draw.text((width / 2, 2), title, fill=(0, 0, 0, 255), font=load_font(9, True), anchor="ma")
-    draw.line((left, top, left, top + plot_height, left + plot_width, top + plot_height), fill=(0, 0, 0, 255), width=1)
-    if not values:
-        return layer
-    minimum, maximum = min(values), max(values)
-    span = max(1e-9, maximum - minimum)
-    points = [
-        (
-            left + (index / max(1, len(values) - 1)) * plot_width,
-            top + plot_height - ((item - minimum) / span) * plot_height,
+        _draw_centered_text(
+            draw,
+            title,
+            width / 2,
+            top / 2,
+            max(8, width - 6),
+            max(7, top - 2),
+            min(legend_size + 2, 14),
         )
-        for index, item in enumerate(values)
-    ]
-    color = (220, 20, 12, 255) if binding.get("color") == "red" else (0, 0, 0, 255)
-    if binding.get("chartType") == "bar":
-        bar_width = max(1, plot_width // max(1, len(values)) - 1)
-        for x, y in points:
-            draw.rectangle((round(x - bar_width / 2), round(y), round(x + bar_width / 2), top + plot_height), fill=color)
+    if not values:
+        _draw_centered_text(
+            draw,
+            "Bez dat",
+            left + plot_width / 2,
+            top + plot_height / 2,
+            max(8, plot_width - 4),
+            max(7, plot_height - 4),
+            min(legend_size + 1, 12),
+        )
+        return layer
+
+    def optional_number(name: str) -> float | None:
+        raw = binding.get(name)
+        if raw is None or str(raw).strip() == "":
+            return None
+        try:
+            number = float(raw)
+            return number if number == number else None
+        except (TypeError, ValueError):
+            return None
+
+    explicit_min = optional_number("chartMin")
+    explicit_max = optional_number("chartMax")
+    minimum = explicit_min if explicit_min is not None else min(values)
+    maximum = explicit_max if explicit_max is not None else max(values)
+    if minimum == maximum:
+        minimum -= 1
+        maximum += 1
+    if minimum > maximum:
+        minimum, maximum = maximum, minimum
+    if explicit_min is None or explicit_max is None:
+        padding = max(0.01, (maximum - minimum) * 0.06)
+        if explicit_min is None:
+            minimum -= padding
+        if explicit_max is None:
+            maximum += padding
+    span = max(1e-9, maximum - minimum)
+    chart_type = str(binding.get("chartType") or "line")
+
+    def x_for(index: int) -> float:
+        if chart_type == "bar":
+            return left + ((index + 0.5) / max(1, len(values))) * plot_width
+        return left + (plot_width / 2 if len(values) == 1 else (index / (len(values) - 1)) * plot_width)
+
+    def y_for(item: float) -> float:
+        return top + plot_height - ((item - minimum) / span) * plot_height
+
+    points = [(x_for(index), y_for(item)) for index, item in enumerate(values)]
+    graph_color = palette.get(str(binding.get("graphColor") or "black"), palette["black"])
+    color = palette.get(str(binding.get("color") or "black"), palette["black"])
+
+    if show_grid:
+        for step in range(4):
+            grid_y = round(top + plot_height * step / 3)
+            for grid_x in range(left, left + plot_width + 1, 4):
+                draw.point((grid_x, grid_y), fill=graph_color)
+        vertical_count = min(6, max(2, len(values) - 1))
+        for step in range(vertical_count + 1):
+            grid_x = round(left + plot_width * step / vertical_count)
+            for grid_y in range(top, top + plot_height + 1, 4):
+                draw.point((grid_x, grid_y), fill=graph_color)
+
+    baseline_value = 0 if minimum <= 0 <= maximum else minimum
+    baseline_y = y_for(baseline_value)
+    if chart_type == "bar":
+        slot = plot_width / max(1, len(values))
+        bar_width = max(1, round(slot * 0.62))
+        for x_pos, y_pos in points:
+            x0 = round(x_pos - bar_width / 2)
+            y0 = round(min(y_pos, baseline_y))
+            y1 = round(max(y_pos, baseline_y))
+            draw.rectangle((x0, y0, x0 + bar_width - 1, max(y0, y1)), fill=color)
     else:
-        if binding.get("chartType") == "area":
-            polygon = [(left, top + plot_height), *points, (left + plot_width, top + plot_height)]
-            draw.polygon(polygon, fill=(220, 20, 12, 255) if binding.get("color") == "red" else (210, 210, 210, 255))
+        if chart_type == "area":
+            polygon = [(points[0][0], baseline_y), *points, (points[-1][0], baseline_y)]
+            draw.polygon(polygon, fill=color)
         if len(points) > 1:
             draw.line(points, fill=color, width=max(1, int(binding.get("strokeWidth", 2))))
+        for x_pos, y_pos in points:
+            draw.ellipse(
+                (round(x_pos) - 1, round(y_pos) - 1, round(x_pos) + 1, round(y_pos) + 1),
+                fill=color,
+            )
+
+    if show_axes:
+        draw.line(
+            (left, top, left, top + plot_height, left + plot_width, top + plot_height),
+            fill=graph_color,
+            width=1,
+        )
+        value_font = load_font(legend_size, False)
+        max_text = f"{maximum:.2f}".rstrip("0").rstrip(".")
+        min_text = f"{minimum:.2f}".rstrip("0").rstrip(".")
+        for text, text_y in ((max_text, top), (min_text, top + plot_height)):
+            box = draw.textbbox((0, 0), text, font=value_font)
+            draw.text(
+                (left - 3 - (box[2] - box[0]) - box[0], round(text_y - (box[3] - box[1]) / 2 - box[1])),
+                text,
+                fill=graph_color,
+                font=value_font,
+            )
+        labels = [
+            item.strip()
+            for item in str(binding.get("chartLabels") or "").replace(";", ",").split(",")
+            if item.strip()
+        ][-len(values) :]
+        indexes = [0, len(values) - 1]
+        if len(values) > 2 and plot_width > 120:
+            indexes.insert(1, (len(values) - 1) // 2)
+        for index in sorted(set(indexes)):
+            label = labels[index] if index < len(labels) else str(index + 1)
+            _draw_centered_text(
+                draw,
+                label,
+                x_for(index),
+                top + plot_height + legend_size / 2 + 3,
+                max(12, min(38, round(plot_width / max(2, len(indexes))))),
+                max(7, legend_size + 2),
+                legend_size,
+                bold=False,
+            )
+        if x_label and height >= 64:
+            _draw_centered_text(
+                draw,
+                x_label,
+                left + plot_width / 2,
+                height - legend_size / 2 - 1,
+                plot_width,
+                max(7, legend_size + 2),
+                min(legend_size + 1, 14),
+            )
+        if y_label and width >= 100:
+            label_layer = Image.new("RGBA", (plot_height, legend_size + 4), (255, 255, 255, 0))
+            label_draw = ImageDraw.Draw(label_layer)
+            _draw_centered_text(
+                label_draw,
+                y_label,
+                plot_height / 2,
+                (legend_size + 4) / 2,
+                plot_height,
+                legend_size + 4,
+                min(legend_size + 1, 14),
+            )
+            label_layer = label_layer.rotate(90, expand=True, resample=Image.Resampling.NEAREST)
+            layer.alpha_composite(label_layer, (1, top + max(0, (plot_height - label_layer.height) // 2)))
+
+    if show_values:
+        every = 1 if len(values) <= 10 else max(1, (len(values) + 7) // 8)
+        for index, (x_pos, y_pos) in enumerate(points):
+            if index % every and index != len(values) - 1:
+                continue
+            text = f"{values[index]:.2f}".rstrip("0").rstrip(".")
+            font = load_font(legend_size, True)
+            box = draw.textbbox((0, 0), text, font=font)
+            text_width = box[2] - box[0]
+            text_height = box[3] - box[1]
+            label_y = max(top + text_height / 2 + 1, y_pos - text_height / 2 - 2)
+            draw.rectangle(
+                (
+                    round(x_pos - text_width / 2 - 1),
+                    round(label_y - text_height / 2 - 1),
+                    round(x_pos + text_width / 2 + 1),
+                    round(label_y + text_height / 2 + 1),
+                ),
+                fill=palette["white"],
+            )
+            _draw_centered_text(
+                draw,
+                text,
+                x_pos,
+                label_y,
+                max(6, text_width + 2),
+                max(7, text_height + 2),
+                legend_size,
+            )
     return layer
 
 
@@ -291,24 +514,52 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
             pct = max(0.0, min(1.0, (numeric_val - min_val) / max(0.0001, max_val - min_val)))
             color = colors.get(item.get("fill") or item.get("color") or "black", colors["black"])
             stroke = colors.get(item.get("stroke") or "black", colors["black"])
-            if item.get("fill") and item.get("fill") != "none":
-                draw.rectangle((x, y, x + item_width, y + item_height), fill=colors.get(item.get("fill"), None))
-            if item.get("stroke") and item.get("stroke") != "none":
-                draw.rectangle((x, y, x + item_width, y + item_height), outline=stroke, width=max(1, int(item.get("stroke_width", 2))))
+            show_value = item.get("show_value") is not False
+            value_band = (
+                min(max(13, round(item_height * 0.42)), max(13, item_height - 8))
+                if show_value
+                else 0
+            )
+            track_x = x + 1
+            track_y = y + value_band + 1
+            track_w = max(3, item_width - 2)
+            track_h = max(4, item_height - value_band - 2)
+            draw.rectangle((x, y, x + item_width - 1, y + item_height - 1), fill=colors["white"])
+            draw.rectangle(
+                (track_x, track_y, track_x + track_w - 1, track_y + track_h - 1),
+                outline=stroke,
+                width=max(1, min(3, int(item.get("stroke_width", 1)))),
+            )
             if item.get("orientation") == "vertical":
-                bar_h = round(item_height * pct)
+                bar_h = round(max(0, track_h - 2) * pct)
                 if bar_h > 0:
-                    draw.rectangle((x, y + item_height - bar_h, x + item_width, y + item_height), fill=color)
+                    draw.rectangle(
+                        (
+                            track_x + 1,
+                            track_y + track_h - 1 - bar_h,
+                            track_x + track_w - 2,
+                            track_y + track_h - 2,
+                        ),
+                        fill=color,
+                    )
             else:
-                bar_w = round(item_width * pct)
+                bar_w = round(max(0, track_w - 2) * pct)
                 if bar_w > 0:
-                    draw.rectangle((x, y, x + bar_w, y + item_height), fill=color)
-            if item.get("show_value") is not False:
-                font = load_font(max(9, min(20, item_height // 2)), True)
+                    draw.rectangle(
+                        (track_x + 1, track_y + 1, track_x + bar_w, track_y + track_h - 2),
+                        fill=color,
+                    )
+            if show_value:
                 text_str = f"{round(numeric_val, 1)} {unit}".strip()
-                bbox = draw.textbbox((0, 0), text_str, font=font)
-                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-                draw.text((x + (item_width - tw) // 2, y + (item_height - th) // 2), text_str, fill=colors["white"] if pct > 0.55 else colors["black"], font=font)
+                _draw_centered_text(
+                    draw,
+                    text_str,
+                    x + item_width / 2,
+                    y + value_band / 2,
+                    max(4, item_width - 4),
+                    max(7, value_band - 2),
+                    max(9, min(18, value_band - 3)),
+                )
 
         elif item_type == "pie":
             min_val = float(item.get("min_value", 0))
@@ -316,22 +567,48 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
             unit = str(item.get("unit") or "%")
             numeric_val = _extract_item_value(item, render_value, min_val, max_val, 0.7)
             pct = max(0.0, min(1.0, (numeric_val - min_val) / max(0.0001, max_val - min_val)))
-            cx, cy = x + item_width // 2, y + item_height // 2
-            r = max(4, min(item_width, item_height) // 2 - 2)
             color = colors.get(item.get("color") or "black", colors["black"])
-            draw.ellipse((cx - r, cy - r, cx + r, cy + r), outline=colors["black"], width=1)
+            show_value = item.get("show_value") is not False
+            hole_pct = max(0.0, min(0.8, float(item.get("hole_percent", 45)) / 100.0))
+            separate_value = show_value and hole_pct < 0.32
+            value_band = min(16, max(11, round(item_height * 0.2))) if separate_value else 0
+            cx = x + item_width // 2
+            cy = y + (item_height - value_band) // 2
+            r = max(4, min(item_width, item_height - value_band) // 2 - 2)
+            draw.rectangle((x, y, x + item_width - 1, y + item_height - 1), fill=colors["white"])
+            draw.ellipse(
+                (cx - r, cy - r, cx + r, cy + r),
+                fill=colors["white"],
+                outline=colors["black"],
+                width=1,
+            )
             if pct > 0:
                 draw.pieslice((cx - r, cy - r, cx + r, cy + r), 270, 270 + pct * 360, fill=color)
-            hole_pct = float(item.get("hole_percent", 45)) / 100.0
             if hole_pct > 0:
                 hr = round(r * hole_pct)
                 draw.ellipse((cx - hr, cy - hr, cx + hr, cy + hr), fill=colors["white"], outline=colors["black"], width=1)
-            if item.get("show_value") is not False:
-                font = load_font(max(9, min(18, r // 2)), True)
+            if show_value:
                 text_str = f"{round(numeric_val, 1)}{unit}"
-                bbox = draw.textbbox((0, 0), text_str, font=font)
-                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-                draw.text((cx - tw // 2, cy - th // 2), text_str, fill=colors["black"], font=font)
+                text_y = y + item_height - value_band / 2 if separate_value else cy
+                max_text_width = (
+                    max(8, item_width - 4)
+                    if separate_value
+                    else max(8, round(r * hole_pct * 1.72))
+                )
+                requested_size = (
+                    max(8, min(14, value_band - 2))
+                    if separate_value
+                    else max(7, min(16, round(r * max(0.25, hole_pct) * 0.72)))
+                )
+                _draw_centered_text(
+                    draw,
+                    text_str,
+                    cx,
+                    text_y,
+                    max_text_width,
+                    max(7, value_band - 2) if separate_value else max(7, round(r * hole_pct * 1.4)),
+                    requested_size,
+                )
 
         elif item_type == "slider":
             min_val = float(item.get("min_value", 0))
@@ -341,20 +618,36 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
             pct = max(0.0, min(1.0, (numeric_val - min_val) / max(0.0001, max_val - min_val)))
             color = colors.get(item.get("color") or "black", colors["black"])
             margin = 10
-            track_y = y + round(item_height * 0.55)
+            show_value = item.get("show_value") is not False
+            value_band = min(16, max(11, round(item_height * 0.34))) if show_value else 2
+            label_band = min(10, max(7, round(item_height * 0.2)))
+            track_y = y + value_band + max(4, round((item_height - value_band - label_band) * 0.45))
             track_w = max(10, item_width - margin * 2)
-            draw.line([(x + margin, track_y), (x + margin + track_w, track_y)], fill=(180, 180, 180, 255), width=5)
+            draw.line([(x + margin, track_y), (x + margin + track_w, track_y)], fill=colors["black"], width=2)
             fill_w = round(track_w * pct)
             if fill_w > 0:
                 draw.line([(x + margin, track_y), (x + margin + fill_w, track_y)], fill=color, width=5)
             thumb_x = x + margin + fill_w
-            draw.ellipse((thumb_x - 7, track_y - 7, thumb_x + 7, track_y + 7), fill=color, outline=colors["white"], width=2)
-            if item.get("show_value") is not False:
-                font = load_font(max(9, min(14, item_height // 3)), True)
+            draw.ellipse((thumb_x - 6, track_y - 6, thumb_x + 6, track_y + 6), fill=color, outline=colors["white"], width=2)
+            label_font = load_font(max(7, min(9, label_band)), False)
+            min_text = str(min_val)
+            max_text = str(max_val)
+            min_box = draw.textbbox((0, 0), min_text, font=label_font)
+            max_box = draw.textbbox((0, 0), max_text, font=label_font)
+            label_y = y + item_height - max(min_box[3] - min_box[1], max_box[3] - max_box[1])
+            draw.text((x + margin - min_box[0], label_y - min_box[1]), min_text, fill=colors["black"], font=label_font)
+            draw.text((x + margin + track_w - (max_box[2] - max_box[0]) - max_box[0], label_y - max_box[1]), max_text, fill=colors["black"], font=label_font)
+            if show_value:
                 text_str = f"{round(numeric_val, 1)} {unit}".strip()
-                bbox = draw.textbbox((0, 0), text_str, font=font)
-                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-                draw.text((x + (item_width - tw) // 2, y + round(item_height * 0.2)), text_str, fill=colors["black"], font=font)
+                _draw_centered_text(
+                    draw,
+                    text_str,
+                    x + item_width / 2,
+                    y + value_band / 2,
+                    max(4, item_width - 4),
+                    max(7, value_band - 2),
+                    max(8, min(14, value_band - 2)),
+                )
 
         elif item_type in ("potentiometer", "gauge"):
             import math
@@ -381,7 +674,13 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
                 radius_height = item_height * 0.44
             cx = x + item_width // 2
             r = max(6, round(min(item_width, radius_height) - 6))
-            draw.arc((cx - r, cy - r, cx + r, cy + r), start_deg, end_deg, fill=(180, 180, 180, 255), width=stroke_w)
+            draw.arc(
+                (cx - r, cy - r, cx + r, cy + r),
+                start_deg,
+                end_deg,
+                fill=colors["black"],
+                width=max(1, min(2, stroke_w)),
+            )
             curr_deg = start_deg + pct * (end_deg - start_deg)
             if item.get("show_arc") is not False and pct > 0:
                 draw.arc((cx - r, cy - r, cx + r, cy + r), start_deg, curr_deg, fill=color, width=stroke_w)
@@ -393,11 +692,33 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
                 draw.line([(cx, cy), (nx, ny)], fill=color, width=max(2, stroke_w // 2))
                 draw.ellipse((cx - 4, cy - 4, cx + 4, cy + 4), fill=color)
             if item.get("show_value") is not False:
-                font = load_font(max(9, min(18, r // 2)), True)
                 text_str = f"{round(numeric_val, 1)} {unit}".strip()
+                font_size = max(8, min(16, round(r * 0.34)))
+                text_y = cy if arc_mode == "360" else min(
+                    y + item_height - font_size / 2 - 1,
+                    cy + r * 0.58,
+                )
+                font = load_font(font_size, True)
                 bbox = draw.textbbox((0, 0), text_str, font=font)
-                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-                draw.text((cx - tw // 2, cy - th // 2), text_str, fill=colors["black"], font=font)
+                text_width = min(item_width - 4, bbox[2] - bbox[0] + 6)
+                draw.rectangle(
+                    (
+                        round(cx - text_width / 2),
+                        round(text_y - font_size * 0.58),
+                        round(cx + text_width / 2),
+                        round(text_y + font_size * 0.58),
+                    ),
+                    fill=colors["white"],
+                )
+                _draw_centered_text(
+                    draw,
+                    text_str,
+                    cx,
+                    text_y,
+                    max(4, item_width - 6),
+                    max(7, round(font_size * 1.1)),
+                    font_size,
+                )
 
         else:
             text = str(item.get("text") or "Text")

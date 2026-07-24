@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.102
+
+- náhled i automatické překreslení používají stejný vestavěný font DRATEK eInk Sans
+- opraveny sloupcové ukazatele, koláčové grafy, slidery a budíky v náhledu i na fyzickém displeji
+- text hodnot má vlastní čitelné místo a už neleží přes grafiku nebo ručičku
+- automatické grafy zachovávají typ, osy, popisky, limity, mřížku i nastavené barvy
+
 ## Novinky ve verzi 0.1.101
 
 - náhled Designeru má při 100% zvětšení přesně stejné rozměry v pixelech jako fyzický displej

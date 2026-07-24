@@ -2,6 +2,22 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.102] - 2026-07-24
+
+### Shodné fonty a opravené grafické prvky
+- Designer i backend automatických aktualizací používají stejný přibalený proměnný font Arimo pod názvem DRATEK eInk Sans a stejné řezy 600/700.
+- Odstraněna nabídka systémových fontů, které backend fyzického displeje nemohl spolehlivě reprodukovat.
+- Zarovnání textu používá skutečnou horní hranu glyfů, takže se náhled a výsledný obraz shodují také svisle.
+- Sloupcový ukazatel má oddělený bílý pás pro hodnotu a samostatnou ohraničenou stupnici.
+- Koláčový graf přizpůsobí velikost textu otvoru; bez dostatečného otvoru přesune hodnotu do samostatného pásu.
+- Slider odděluje aktuální hodnotu, stupnici a krajní hodnoty.
+- Budík vykresluje základní oblouk černě a hodnotu v bílém poli mimo ručičku.
+- Automatický graf nově přenáší do backendu popisky, názvy os, ruční limity, velikost textu, mřížku, hodnoty a všechny barvy.
+- Backendové grafy mají adaptivní okraje a hodnoty s bílým podkladem, takže text nezakrývá datovou plochu.
+- Doplněny regresní testy fontu, grafických prvků a úplného automatizačního payloadu.
+
+---
+
 ## [0.1.101] - 2026-07-24
 
 ### Pixelově přesné náhledy displejů
