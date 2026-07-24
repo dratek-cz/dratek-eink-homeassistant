@@ -534,8 +534,6 @@ async def websocket_send_gateway_design(
             image_data = image_data.split(",", 1)[1]
         raw = base64.b64decode(image_data)
         image = Image.open(io.BytesIO(raw)).convert("RGB")
-        if msg.get("orientation", "landscape") == "portrait":
-            image = image.rotate(-90, expand=True)
         gateways = await async_load_gateways(hass)
         gateway = next((item for item in gateways if item.get("id") == msg["gateway_id"]), None)
         if gateway is None:
@@ -554,6 +552,7 @@ async def websocket_send_gateway_design(
                 msg["sdk_type"],
                 image,
                 msg.get("transform"),
+                msg.get("orientation"),
             )
             return transfer_result or {"ok": False, "error": "Gateway nebyla nalezena.", "log": []}
 
@@ -1407,14 +1406,12 @@ async def websocket_send_design(
             image_data = image_data.split(",", 1)[1]
         raw = base64.b64decode(image_data)
         image = Image.open(io.BytesIO(raw)).convert("RGB")
-        if orientation == "portrait":
-            image = image.rotate(-90, expand=True)
         async def run_transfer(add_log) -> dict[str, Any]:
             add_log(f"Sending editor design {image.width}x{image.height} to SDK type {sdk_type}.")
             if transform:
                 add_log(f"Using display transform: {transform}.")
             transfer = DratekTransfer(log=add_log, hass=hass)
-            await transfer.send_image(address, sdk_type, image, transform)
+            await transfer.send_image(address, sdk_type, image, transform, orientation)
             add_log("Design sent.")
             return {"ok": True, "address": address, "log": []}
 

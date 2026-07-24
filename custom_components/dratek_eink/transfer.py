@@ -58,8 +58,9 @@ class DratekTransfer:
         sdk_type: int,
         image: Image.Image,
         transform: str | None = None,
+        orientation: str | None = None,
     ) -> None:
-        await self._send_with_retries(address, sdk_type, image, transform, partial=None)
+        await self._send_with_retries(address, sdk_type, image, transform, partial=None, orientation=orientation)
 
     async def send_partial_image(
         self,
@@ -166,13 +167,14 @@ class DratekTransfer:
         image: Image.Image,
         transform: str | None = None,
         partial: tuple[int, int, int, int, int] | None = None,
+        orientation: str | None = None,
     ) -> None:
         last_error: Exception | None = None
         max_attempts = 5
         for attempt in range(1, max_attempts + 1):
             self.log(f"Transfer attempt {attempt}/{max_attempts}.")
             try:
-                await self._send_once(address, sdk_type, image, transform, partial)
+                await self._send_once(address, sdk_type, image, transform, partial, orientation)
                 self.log("Transfer completed.")
                 return
             except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
@@ -200,8 +202,9 @@ class DratekTransfer:
         image: Image.Image,
         transform: str | None = None,
         partial: tuple[int, int, int, int, int] | None = None,
+        orientation: str | None = None,
     ) -> None:
-        payload = pack_bwr_image(sdk_type, image, transform)
+        payload = pack_bwr_image(sdk_type, image, transform, orientation)
         responses: queue.Queue[bytes] = queue.Queue()
 
         def notify_handler(_sender, data) -> None:

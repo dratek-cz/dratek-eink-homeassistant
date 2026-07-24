@@ -353,6 +353,7 @@ async def async_send_gateway_payload(
     sdk_type: int,
     image: Image.Image,
     transform: str | None = None,
+    orientation: str | None = None,
 ) -> dict[str, Any] | None:
     gateways = await async_load_gateways(hass)
     gateway = next((item for item in gateways if item.get("id") == gateway_id), None)
@@ -366,7 +367,7 @@ async def async_send_gateway_payload(
 
     try:
         add_log(f"Packing image {image.width}x{image.height} for SDK type {sdk_type}.")
-        payload = await hass.async_add_executor_job(pack_bwr_image, sdk_type, image, transform)
+        payload = await hass.async_add_executor_job(pack_bwr_image, sdk_type, image, transform, orientation)
         add_log(f"Payload size: {len(payload)} bytes.")
         session = async_get_clientsession(hass)
         base_url = _gateway_send_base_url(gateway)

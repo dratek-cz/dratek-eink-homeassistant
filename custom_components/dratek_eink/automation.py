@@ -273,20 +273,18 @@ class EntityAutoUpdateManager:
             bindings,
             values,
         )
-        if config.get("orientation") == "portrait":
-            image = image.rotate(-90, expand=True)
-
         route_type = config.get("route_type", "local")
         gateway_id = str(config.get("gateway_id") or "")
         sdk_type = int(config["sdk_type"])
         transform = config.get("transform")
+        orientation = config.get("orientation")
         queue = get_transfer_queue(self.hass)
 
         if route_type == "gateway" and gateway_id:
             async def run_gateway(add_log):
                 add_log(f"Automatic entity update via {config.get('transport_name') or 'gateway'}.")
                 result = await async_send_gateway_payload(
-                    self.hass, gateway_id, address, sdk_type, image, transform
+                    self.hass, gateway_id, address, sdk_type, image, transform, orientation
                 )
                 return result or {"ok": False, "error": "Gateway was not found.", "log": []}
 
@@ -302,7 +300,7 @@ class EntityAutoUpdateManager:
         async def run_local(add_log):
             add_log("Automatic entity update via Home Assistant Bluetooth.")
             transfer = DratekTransfer(log=add_log, hass=self.hass)
-            await transfer.send_image(address, sdk_type, image, transform)
+            await transfer.send_image(address, sdk_type, image, transform, orientation)
             return {"ok": True, "address": address, "log": []}
 
         return await queue.async_submit(

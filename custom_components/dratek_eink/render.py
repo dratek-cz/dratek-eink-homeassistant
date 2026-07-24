@@ -309,42 +309,111 @@ def render_text_image(
 PE29_CODES = {40, 43, 46, 48, 51}
 
 
-def _apply_pe29_transform(image: Image.Image, transform: str | None) -> Image.Image:
-    mode = transform or "rotate_cw"
-    if mode == "none":
-        return image
-    if mode == "rotate_cw":
-        return image.rotate(90, expand=True)
-    if mode == "rotate_ccw":
-        return image.rotate(-90, expand=True)
-    if mode == "rotate_180":
-        return image.rotate(180, expand=True)
-    if mode == "rotate_cw_flip_lr":
-        return image.rotate(90, expand=True).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-    if mode == "rotate_cw_flip_tb":
-        return image.rotate(90, expand=True).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-    if mode == "rotate_ccw_flip_lr":
-        return image.rotate(-90, expand=True).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-    if mode == "rotate_ccw_flip_tb":
-        return image.rotate(-90, expand=True).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-    if mode == "flip_lr":
-        return image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-    if mode == "flip_tb":
-        return image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-    return image.rotate(90, expand=True)
-
-
-def pack_bwr_image(sdk_type: int, image: Image.Image, transform: str | None = None) -> bytes:
+def expected_buffer_size(sdk_type: int) -> tuple[int, int]:
+    """Get the physical hardware pixel buffer dimensions (width, height) expected by display IC."""
     code = int(sdk_type)
+    native_w, native_h = display_size(sdk_type)
+    if code in PE29_CODES:
+        return (128, 296)
+    if code in (264, 267, 270):
+        return (128, 250)
     if code == 11:
-        image = image.rotate(-90, expand=True)
-    elif code in PE29_CODES:
-        image = _apply_pe29_transform(image, transform)
+        return (104, 212)
+    return (native_w, native_h)
+
+
+def prepare_image_for_display(
+    sdk_type: int,
+    image: Image.Image,
+    transform: str | None = None,
+    orientation: str | None = None,
+) -> Image.Image:
+    """Map canvas image (landscape or portrait) to exact hardware display buffer dimensions."""
+    code = int(sdk_type)
+    target_w, target_h = expected_buffer_size(sdk_type)
+    native_w, native_h = display_size(sdk_type)
+
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+
+    is_portrait = (
+        orientation == "portrait"
+        or image.width < image.height
+    )
+
+    if code in PE29_CODES:
+        # PE29 hardware buffer is 128 wide x 296 high
+        if is_portrait:
+            # Design is 128x296 portrait layout -> ALREADY 128x296
+            if transform == "rotate_180":
+                image = image.rotate(180, expand=True)
+            elif transform == "flip_lr":
+                image = image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+            elif transform == "flip_tb":
+                image = image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+            elif transform == "rotate_ccw":
+                image = image.rotate(180, expand=True)
+        else:
+            # Design is 296x128 landscape layout -> rotate 90 deg into 128x296 buffer
+            if transform in ("none", "rotate_cw"):
+                image = image.rotate(90, expand=True)
+            elif transform == "rotate_ccw":
+                image = image.rotate(-90, expand=True)
+            elif transform == "rotate_180":
+                image = image.rotate(-90, expand=True)
+            elif transform == "flip_lr":
+                image = image.rotate(90, expand=True).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+            elif transform == "flip_tb":
+                image = image.rotate(90, expand=True).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+            else:
+                image = image.rotate(90, expand=True)
     elif code in (264, 267, 270):
-        image = image.rotate(90, expand=True).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+        if is_portrait:
+            if transform == "rotate_180":
+                image = image.rotate(180, expand=True)
+        else:
+            image = image.rotate(90, expand=True).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    elif code == 11:
+        if not is_portrait:
+            image = image.rotate(-90, expand=True)
     elif code == 75 and image.width == 300:
         image = image.rotate(90, expand=True)
+    else:
+        # General ePaper panels (native_w x native_h)
+        if native_w >= native_h:
+            if is_portrait:
+                if transform in ("rotate_ccw", "rotate_ccw_flip_lr"):
+                    image = image.rotate(90, expand=True)
+                else:
+                    image = image.rotate(-90, expand=True)
+            else:
+                if transform == "rotate_180":
+                    image = image.rotate(180, expand=True)
+                elif transform == "flip_lr":
+                    image = image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+                elif transform == "flip_tb":
+                    image = image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+        else:
+            if not is_portrait:
+                image = image.rotate(90, expand=True)
 
+    # Fail-safe dimension check: Guarantee image matches exact target buffer size
+    if image.size != (target_w, target_h):
+        if (image.height, image.width) == (target_w, target_h):
+            image = image.rotate(-90, expand=True)
+        if image.size != (target_w, target_h):
+            image = image.resize((target_w, target_h), Image.Resampling.LANCZOS)
+
+    return image
+
+
+def pack_bwr_image(
+    sdk_type: int,
+    image: Image.Image,
+    transform: str | None = None,
+    orientation: str | None = None,
+) -> bytes:
+    image = prepare_image_for_display(sdk_type, image, transform, orientation)
     width, height = image.size
     pixel_count = width * height
     if pixel_count % 8 != 0:
