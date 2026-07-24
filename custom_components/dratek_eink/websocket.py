@@ -91,6 +91,7 @@ async def _save_entity_automation(
 @callback
 def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_scan)
+    websocket_api.async_register_command(hass, websocket_render_preview)
     websocket_api.async_register_command(hass, websocket_send_text)
     websocket_api.async_register_command(hass, websocket_send_design)
     websocket_api.async_register_command(hass, websocket_send_partial_design)
@@ -174,6 +175,42 @@ async def websocket_set_rgb_led(
         )
         return
     connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/render_preview",
+        "address": str,
+        "automation": dict,
+    }
+)
+@websocket_api.async_response
+async def websocket_render_preview(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return the canonical image used by automatic display refreshes."""
+    try:
+        image = await get_entity_auto_update_manager(hass).async_render_preview(
+            msg["address"],
+            msg["automation"],
+        )
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        encoded = base64.b64encode(output.getvalue()).decode("ascii")
+    except Exception as exc:  # noqa: render failures must reach the designer
+        connection.send_error(msg["id"], "preview_failed", str(exc))
+        return
+    connection.send_result(
+        msg["id"],
+        {
+            "ok": True,
+            "image": f"data:image/png;base64,{encoded}",
+            "width": image.width,
+            "height": image.height,
+        },
+    )
 
 
 @websocket_api.websocket_command({"type": "dratek_eink/scan"})

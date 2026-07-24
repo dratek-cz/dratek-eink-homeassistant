@@ -2,6 +2,18 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.103] - 2026-07-24
+
+### Jeden renderer pro náhled, ruční zápis a automatické aktualizace
+- Přidán backendový kanonický náhled, který používá úplně stejný renderer jako automatická aktualizace displeje.
+- Designer si po změně dynamického prvku vyžádá hotový backendový PNG obraz a zobrazí jej bez vyhlazování.
+- Ruční odeslání návrhu s dynamickými prvky posílá tento kanonický PNG obraz místo odlišného prohlížečového canvasu.
+- Automatické aktualizace, náhled i ruční odeslání používají společný sběr aktuálních hodnot entit, grafických řad a podmínek vrstev.
+- Chyba backendového renderu bezpečně zastaví ruční odeslání, takže se na displej neuloží jinak vypadající meziverze.
+- Doplněny regresní testy společného sběru hodnot a použití kanonického náhledu v obou cestách odeslání.
+
+---
+
 ## [0.1.102] - 2026-07-24
 
 ### Shodné fonty a opravené grafické prvky

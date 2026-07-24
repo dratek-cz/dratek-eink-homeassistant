@@ -89,6 +89,14 @@ class _Store:
         self.saved = value
 
 
+class _States:
+    def __init__(self, states):
+        self._states = states
+
+    def get(self, entity_id):
+        return self._states.get(entity_id)
+
+
 class AutomationBindingTests(unittest.TestCase):
     def test_layered_binding_subscribes_to_widget_entities(self):
         binding = {
@@ -214,6 +222,45 @@ class AutomationBindingTests(unittest.TestCase):
         self.assertEqual("switch.socket", binding["entity_id"])
         self.assertEqual({"sensor.power", "switch.socket"}, set(binding["entity_ids"]))
         self.assertEqual("Zapnuto", binding["layers"][0]["objects"][0]["text"])
+
+    def test_preview_and_automatic_refresh_share_binding_value_collection(self):
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager.hass = types.SimpleNamespace(
+            states=_States(
+                {
+                    "sensor.temperature": _State("21.5", unit_of_measurement="°C"),
+                    "switch.socket": _State("on"),
+                    "sensor.power": _State("48", unit_of_measurement="W"),
+                }
+            )
+        )
+        manager._chart_series = {}
+        bindings = [
+            {
+                "id": "temperature",
+                "type": "chart",
+                "entity_id": "sensor.temperature",
+                "fallback": "[18,19]",
+                "maxPoints": 12,
+            },
+            {
+                "id": "socket",
+                "type": "layered",
+                "entity_id": "switch.socket",
+                "entity_ids": ["switch.socket", "sensor.power"],
+            },
+        ]
+
+        values = manager._current_binding_values(
+            "FF:FF:92:81:46:32",
+            bindings,
+        )
+
+        self.assertEqual("[18.0,19.0,21.5]", values["temperature"])
+        self.assertIn('"__selection__":"on"', values["socket"])
+        self.assertIn('"sensor.power":{"state":"48"', values["socket"])
 
 
 if __name__ == "__main__":

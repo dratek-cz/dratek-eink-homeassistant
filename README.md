@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.103
+
+- Designer zobrazuje dynamické texty a grafy přes stejný backendový renderer jako automatické aktualizace
+- ruční odeslání používá tentýž kanonický PNG obrázek, takže první automatická aktualizace už nezmění font ani rozložení grafu
+- hodnoty entit, grafické řady, vrstvy a podmínky se pro náhled i automatický zápis načítají jedinou společnou cestou
+- pokud backend nedokáže kanonický obrázek vytvořit, odeslání se bezpečně zastaví místo odeslání odlišného náhledu
+
 ## Novinky ve verzi 0.1.102
 
 - náhled i automatické překreslení používají stejný vestavěný font DRATEK eInk Sans

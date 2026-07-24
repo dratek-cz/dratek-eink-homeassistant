@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.102";
+const DRATEK_EINK_VERSION = "0.1.103";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -98,6 +98,8 @@ class DratekEinkPanel extends HTMLElement {
     this._propertyEditTimer = null;
     this._designerFontReady = false;
     this._designerFontLoading = null;
+    this._backendPreviewTimer = null;
+    this._backendPreviewRequestId = 0;
     this._handleKeyDown = (event) => this._onKeyDown(event);
     this._handleLocationChanged = () => {
       if (String(window.location?.pathname || "").includes("dratek-eink")) this._scheduleAutomaticScan(0);
@@ -239,6 +241,8 @@ class DratekEinkPanel extends HTMLElement {
     window.clearTimeout(this._otaPollTimer);
     window.clearTimeout(this._queuePollTimer);
     window.clearTimeout(this._automaticScanTimer);
+    window.clearTimeout(this._backendPreviewTimer);
+    this._backendPreviewRequestId += 1;
   }
 
   set hass(hass) {
@@ -2667,13 +2671,16 @@ class DratekEinkPanel extends HTMLElement {
     this._sendResult = null;
     this._render();
     try {
+      const image = automation.enabled
+        ? await this._renderCanonicalPreview(automation, device.address)
+        : canvas.toDataURL("image/png");
       this._sendResult = await this._hass.callWS({
         type: "dratek_eink/send_design",
         address: device.address,
         sdk_type: Number(device.sdk_type),
         orientation: this._orientation,
         transform: this._displayTransform,
-        image: canvas.toDataURL("image/png"),
+        image,
         automation,
       });
       if (this._sendResult && this._sendResult.ok) await this._saveCurrentDeviceDraft();
@@ -2701,6 +2708,9 @@ class DratekEinkPanel extends HTMLElement {
       canvas.height = size.height;
       this._drawScene(canvas.getContext("2d"), canvas.width, canvas.height, false);
       const automation = this._entityAutomationPayload();
+      const image = automation.enabled
+        ? await this._renderCanonicalPreview(automation, device.address)
+        : canvas.toDataURL("image/png");
       this._sendResult = await this._hass.callWS({
         type: "dratek_eink/gateways/send_design",
         gateway_id: this._selectedGatewayId,
@@ -2708,7 +2718,7 @@ class DratekEinkPanel extends HTMLElement {
         sdk_type: Number(device.sdk_type),
         orientation: this._orientation,
         transform: this._displayTransform,
-        image: canvas.toDataURL("image/png"),
+        image,
         automation,
       });
       if (this._sendResult && this._sendResult.ok) await this._saveCurrentDeviceDraft();
@@ -2720,6 +2730,51 @@ class DratekEinkPanel extends HTMLElement {
       this._render();
       this._paint();
     }
+  }
+
+  async _renderCanonicalPreview(automation, address = this._device()?.address) {
+    if (!automation?.enabled || !address || !this._hass) return "";
+    const result = await this._hass.callWS({
+      type: "dratek_eink/render_preview",
+      address,
+      automation,
+    });
+    if (!result?.ok || !result.image) throw new Error("Backend nevytvořil náhled displeje.");
+    return result.image;
+  }
+
+  _scheduleCanonicalDesignerPreview() {
+    window.clearTimeout(this._backendPreviewTimer);
+    const requestId = ++this._backendPreviewRequestId;
+    if (this._activeTab !== "designer" || !this._device() || !this._hass) return;
+    this._backendPreviewTimer = window.setTimeout(async () => {
+      this._backendPreviewTimer = null;
+      const device = this._device();
+      const canvas = this.shadowRoot.querySelector("#editor");
+      if (!device || !canvas || requestId !== this._backendPreviewRequestId) return;
+      const automation = this._entityAutomationPayload();
+      if (!automation.enabled) return;
+      try {
+        const source = await this._renderCanonicalPreview(automation, device.address);
+        if (
+          requestId !== this._backendPreviewRequestId
+          || this._activeTab !== "designer"
+          || this._device()?.address !== device.address
+        ) return;
+        const image = new Image();
+        image.src = source;
+        await image.decode();
+        if (requestId !== this._backendPreviewRequestId) return;
+        const context = canvas.getContext("2d");
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.imageSmoothingEnabled = false;
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      } catch (err) {
+        if (requestId === this._backendPreviewRequestId) {
+          console.warn("DRATEK eInk canonical preview failed:", err);
+        }
+      }
+    }, 120);
   }
 
   async _sendTestText() {
@@ -5293,6 +5348,7 @@ class DratekEinkPanel extends HTMLElement {
     }
     this._paintDevicePreviews();
     this._paintCustomLayerCanvases();
+    this._scheduleCanonicalDesignerPreview();
   }
 
   _paintDevicePreviews() {

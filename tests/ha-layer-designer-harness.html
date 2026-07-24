@@ -113,6 +113,10 @@
         if (type === "dratek_eink/gateways/list") return { gateways: [sampleGateway] };
         if (type === "dratek_eink/serial/ports") return { ports: [] };
         if (type === "dratek_eink/scan") return panel._result;
+        if (type === "dratek_eink/render_preview") {
+          const editor = panel.shadowRoot.querySelector("#editor");
+          return { ok: true, image: editor?.toDataURL("image/png") || request.automation?.base_image || "" };
+        }
         if (type === "dratek_eink/gateways/send_design" || type === "dratek_eink/send_design") {
           document.documentElement.dataset.automation = JSON.stringify(request.automation || {});
           return { ok: true };

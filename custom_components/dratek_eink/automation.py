@@ -329,6 +329,58 @@ class EntityAutoUpdateManager:
         del series[:-maximum]
         return json.dumps(series, separators=(",", ":"))
 
+    def _current_binding_values(
+        self,
+        address: str,
+        bindings: list[dict[str, Any]],
+    ) -> dict[str, str]:
+        """Read all binding values through the same path for previews and writes."""
+        values: dict[str, str] = {}
+        for binding in bindings:
+            state = self.hass.states.get(str(binding.get("entity_id")))
+            if binding.get("type") == "chart":
+                value = self._chart_value(address, state, binding)
+            elif binding.get("type") == "layered":
+                entity_values = {
+                    "__selection__": self._state_value(state, binding),
+                }
+                for entity_id, _attribute in _binding_sources(binding):
+                    entity_state = self.hass.states.get(entity_id)
+                    if entity_state is None:
+                        continue
+                    entity_values[entity_id] = {
+                        "state": entity_state.state,
+                        **dict(entity_state.attributes),
+                    }
+                value = json.dumps(
+                    entity_values,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            else:
+                value = self._state_value(state, binding)
+            values[str(binding.get("id"))] = value
+        return values
+
+    async def async_render_preview(
+        self,
+        address: str,
+        config: dict[str, Any],
+    ) -> Any:
+        """Render the exact image used by automatic entity refreshes."""
+        bindings = [
+            binding
+            for binding in config.get("bindings", [])
+            if isinstance(binding, dict)
+        ]
+        values = self._current_binding_values(address.upper(), bindings)
+        return await self.hass.async_add_executor_job(
+            render_entity_bound_image,
+            str(config.get("base_image") or ""),
+            bindings,
+            values,
+        )
+
     @callback
     def _handle_state_change(self, event: Any) -> None:
         entity_id = event.data.get("entity_id")
@@ -398,38 +450,7 @@ class EntityAutoUpdateManager:
         config = self._configs.get(address)
         if not config:
             return
-        bindings = config.get("bindings", [])
-        values = {}
-        for binding in bindings:
-            state = self.hass.states.get(str(binding.get("entity_id")))
-            if binding.get("type") == "chart":
-                value = self._chart_value(address, state, binding)
-            elif binding.get("type") == "layered":
-                entity_values = {
-                    "__selection__": self._state_value(state, binding),
-                }
-                for entity_id, _attribute in _binding_sources(binding):
-                    entity_state = self.hass.states.get(entity_id)
-                    if entity_state is None:
-                        continue
-                    entity_values[entity_id] = {
-                        "state": entity_state.state,
-                        **dict(entity_state.attributes),
-                    }
-                value = json.dumps(
-                    entity_values,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                )
-            else:
-                value = self._state_value(state, binding)
-            values[str(binding.get("id"))] = value
-        image = await self.hass.async_add_executor_job(
-            render_entity_bound_image,
-            str(config.get("base_image") or ""),
-            bindings,
-            values,
-        )
+        image = await self.async_render_preview(address, config)
         route_type = config.get("route_type", "local")
         gateway_id = str(config.get("gateway_id") or "")
         sdk_type = int(config["sdk_type"])

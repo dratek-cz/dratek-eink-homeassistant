@@ -106,6 +106,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
             self.assertIn(field, self.source)
         self.assertIn('chartType === "bar" ? (object.barColor', self.source)
 
+    def test_designer_and_manual_send_use_canonical_backend_preview(self):
+        self.assertIn('type: "dratek_eink/render_preview"', self.source)
+        self.assertIn("this._scheduleCanonicalDesignerPreview();", self.source)
+        self.assertIn("await this._renderCanonicalPreview(automation, device.address)", self.source)
+        self.assertIn("image,", self.source)
+
 
 if __name__ == "__main__":
     unittest.main()
