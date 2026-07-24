@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import importlib.util
+import io
 from pathlib import Path
 import sys
 import types
@@ -98,6 +100,74 @@ class RenderWidgetTests(unittest.TestCase):
             )
             digests.add(hashlib.sha256(image.tobytes()).hexdigest())
         self.assertEqual(len(digests), 3)
+
+    def test_entity_chart_is_composited_over_saved_base_image(self):
+        base = render.Image.new("RGB", (296, 128), "white")
+        output = io.BytesIO()
+        base.save(output, format="PNG")
+        base_image = "data:image/png;base64," + base64.b64encode(
+            output.getvalue()
+        ).decode("ascii")
+        binding = {
+            "id": "chart-1",
+            "type": "chart",
+            "x": 20,
+            "y": 16,
+            "w": 250,
+            "h": 96,
+            "chartType": "line",
+            "color": "red",
+        }
+
+        first = render.render_entity_bound_image(
+            base_image, [binding], {"chart-1": "[1,2,3]"}
+        )
+        second = render.render_entity_bound_image(
+            base_image, [binding], {"chart-1": "[3,1,4]"}
+        )
+
+        self.assertEqual(first.size, (296, 128))
+        self.assertNotEqual(first.tobytes(), second.tobytes())
+
+    def test_layer_widget_uses_its_own_entity_value(self):
+        binding = {
+            "w": 296,
+            "h": 128,
+            "canvas_width": 296,
+            "canvas_height": 128,
+            "entity_id": "switch.socket",
+            "default_symbol": "on",
+            "layers": [
+                {
+                    "id": "on",
+                    "objects": [
+                        {
+                            "id": "gauge",
+                            "type": "bar_gauge",
+                            "entity_id": "sensor.power",
+                            "x": 20,
+                            "y": 35,
+                            "w": 256,
+                            "h": 50,
+                            "min_value": 0,
+                            "max_value": 100,
+                            "fill": "red",
+                            "stroke": "black",
+                        }
+                    ],
+                }
+            ],
+        }
+        low = render._render_bound_layer(
+            binding,
+            '{"__selection__":"on","sensor.power":{"state":"20"}}',
+        )
+        high = render._render_bound_layer(
+            binding,
+            '{"__selection__":"on","sensor.power":{"state":"80"}}',
+        )
+
+        self.assertNotEqual(low.tobytes(), high.tobytes())
 
 
 if __name__ == "__main__":

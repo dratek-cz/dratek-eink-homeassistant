@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.96
+
+- opraveno responzivní rozložení náhledů displejů na hlavní stránce
+- baterie a signál mají stabilní samostatné bloky s nadpisem, barevnou ikonou a hodnotou
+- automatické aktualizace grafů nyní ukládají podklad návrhu potřebný k vytvoření nového obrazu
+- změna entity grafu se po nastaveném minimálním intervalu skutečně zařadí do fronty a odešle na displej
+- sledovány jsou také entity grafů a měřidel uvnitř vrstev vlastních HA prvků
+
 ## Novinky ve verzi 0.1.95
 
 - opraveno načtení posledního návrhu po kliknutí na již předvybraný displej

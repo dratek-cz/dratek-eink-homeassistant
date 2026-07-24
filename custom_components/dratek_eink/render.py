@@ -214,7 +214,29 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
     scale_y = height / source_height
     output = Image.new("RGBA", (width, height), (255, 255, 255, 255))
     layers = binding.get("layers") if isinstance(binding.get("layers"), list) else []
-    selected = next((item for item in layers if isinstance(item, dict) and str(item.get("id")) == str(value)), None)
+    render_value: Any = value
+    if isinstance(value, str) and value.lstrip().startswith("{"):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                render_value = parsed
+        except json.JSONDecodeError:
+            pass
+    selection_value: Any = render_value
+    if isinstance(render_value, dict):
+        if "__selection__" in render_value:
+            selection_value = render_value.get("__selection__")
+        else:
+            selector_entity_id = str(binding.get("entity_id") or "")
+            selector_data = render_value.get(selector_entity_id)
+            if isinstance(selector_data, dict):
+                selector_attribute = str(binding.get("entity_attribute") or "")
+                selection_value = (
+                    selector_data.get(selector_attribute)
+                    if selector_attribute
+                    else selector_data.get("state")
+                )
+    selected = next((item for item in layers if isinstance(item, dict) and str(item.get("id")) == str(selection_value)), None)
     if selected is None:
         selected = next(
             (item for item in layers if isinstance(item, dict) and str(item.get("id")) == str(binding.get("default_symbol", ""))),
@@ -265,7 +287,7 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
             min_val = float(item.get("min_value", 0))
             max_val = float(item.get("max_value", 100))
             unit = str(item.get("unit") or "%")
-            numeric_val = _extract_item_value(item, value, min_val, max_val, 0.6)
+            numeric_val = _extract_item_value(item, render_value, min_val, max_val, 0.6)
             pct = max(0.0, min(1.0, (numeric_val - min_val) / max(0.0001, max_val - min_val)))
             color = colors.get(item.get("fill") or item.get("color") or "black", colors["black"])
             stroke = colors.get(item.get("stroke") or "black", colors["black"])
@@ -292,7 +314,7 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
             min_val = float(item.get("min_value", 0))
             max_val = float(item.get("max_value", 100))
             unit = str(item.get("unit") or "%")
-            numeric_val = _extract_item_value(item, value, min_val, max_val, 0.7)
+            numeric_val = _extract_item_value(item, render_value, min_val, max_val, 0.7)
             pct = max(0.0, min(1.0, (numeric_val - min_val) / max(0.0001, max_val - min_val)))
             cx, cy = x + item_width // 2, y + item_height // 2
             r = max(4, min(item_width, item_height) // 2 - 2)
@@ -315,7 +337,7 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
             min_val = float(item.get("min_value", 0))
             max_val = float(item.get("max_value", 100))
             unit = str(item.get("unit") or "°C")
-            numeric_val = _extract_item_value(item, value, min_val, max_val, 0.5)
+            numeric_val = _extract_item_value(item, render_value, min_val, max_val, 0.5)
             pct = max(0.0, min(1.0, (numeric_val - min_val) / max(0.0001, max_val - min_val)))
             color = colors.get(item.get("color") or "black", colors["black"])
             margin = 10
@@ -340,7 +362,7 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
             min_val = float(item.get("min_value", 0))
             max_val = float(item.get("max_value", 100))
             unit = str(item.get("unit") or "°C")
-            numeric_val = _extract_item_value(item, value, min_val, max_val, 0.72)
+            numeric_val = _extract_item_value(item, render_value, min_val, max_val, 0.72)
             pct = max(0.0, min(1.0, (numeric_val - min_val) / max(0.0001, max_val - min_val)))
             color = colors.get(item.get("color") or "black", colors["black"])
             stroke_w = max(2, int(item.get("stroke_width", 6)))

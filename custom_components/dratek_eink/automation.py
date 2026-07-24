@@ -25,6 +25,48 @@ MIN_REFRESH_INTERVAL_SECONDS = 30
 MAX_REFRESH_INTERVAL_SECONDS = 86400
 
 
+def _binding_sources(binding: dict[str, Any]) -> set[tuple[str, str]]:
+    """Return every entity and attribute that can change a rendered binding."""
+    sources: set[tuple[str, str]] = set()
+    entity_id = str(binding.get("entity_id") or "")
+    if entity_id:
+        sources.add((entity_id, str(binding.get("entity_attribute") or "")))
+    if binding.get("type") != "layered":
+        return sources
+    for layer in binding.get("layers", []):
+        if not isinstance(layer, dict):
+            continue
+        for item in layer.get("objects", []):
+            if not isinstance(item, dict):
+                continue
+            item_entity_id = str(item.get("entity_id") or item.get("entityId") or "")
+            if item_entity_id:
+                sources.add(
+                    (
+                        item_entity_id,
+                        str(
+                            item.get("entity_attribute")
+                            or item.get("entityAttribute")
+                            or ""
+                        ),
+                    )
+                )
+    for extra_entity_id in binding.get("entity_ids", []):
+        normalized_extra = str(extra_entity_id or "")
+        if normalized_extra and not any(
+            source_entity_id == normalized_extra
+            for source_entity_id, _attribute in sources
+        ):
+            sources.add((normalized_extra, ""))
+    return sources
+
+
+def _source_value(state: Any, attribute: str) -> Any:
+    if state is None:
+        return None
+    return state.attributes.get(attribute) if attribute else state.state
+
+
 class EntityAutoUpdateManager:
     """Persist entity bindings and refresh displays after state changes."""
 
@@ -100,10 +142,10 @@ class EntityAutoUpdateManager:
             self._unsubscribe = None
         entity_ids = sorted(
             {
-                str(binding.get("entity_id"))
+                entity_id
                 for config in self._configs.values()
                 for binding in config.get("bindings", [])
-                if binding.get("entity_id")
+                for entity_id, _attribute in _binding_sources(binding)
             }
         )
         if entity_ids:
@@ -196,14 +238,15 @@ class EntityAutoUpdateManager:
         old_state = event.data.get("old_state")
         new_state = event.data.get("new_state")
         for address, config in self._configs.items():
-            relevant = [
-                binding
+            sources = {
+                (source_entity_id, attribute)
                 for binding in config.get("bindings", [])
-                if binding.get("entity_id") == entity_id
-            ]
-            if relevant and any(
-                self._state_value(old_state, binding) != self._state_value(new_state, binding)
-                for binding in relevant
+                for source_entity_id, attribute in _binding_sources(binding)
+                if source_entity_id == entity_id
+            }
+            if sources and any(
+                _source_value(old_state, attribute) != _source_value(new_state, attribute)
+                for _source_entity_id, attribute in sources
             ):
                 self._schedule_refresh(address)
 
@@ -262,11 +305,28 @@ class EntityAutoUpdateManager:
         values = {}
         for binding in bindings:
             state = self.hass.states.get(str(binding.get("entity_id")))
-            values[str(binding.get("id"))] = (
-                self._chart_value(address, state, binding)
-                if binding.get("type") == "chart"
-                else self._state_value(state, binding)
-            )
+            if binding.get("type") == "chart":
+                value = self._chart_value(address, state, binding)
+            elif binding.get("type") == "layered":
+                entity_values = {
+                    "__selection__": self._state_value(state, binding),
+                }
+                for entity_id, _attribute in _binding_sources(binding):
+                    entity_state = self.hass.states.get(entity_id)
+                    if entity_state is None:
+                        continue
+                    entity_values[entity_id] = {
+                        "state": entity_state.state,
+                        **dict(entity_state.attributes),
+                    }
+                value = json.dumps(
+                    entity_values,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            else:
+                value = self._state_value(state, binding)
+            values[str(binding.get("id"))] = value
         image = await self.hass.async_add_executor_job(
             render_entity_bound_image,
             str(config.get("base_image") or ""),

@@ -2,6 +2,18 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.96] - 2026-07-24
+
+### Oprava karet displejů a automatického odesílání grafů
+- Stavová část karty používá odolné dvousloupcové rozložení baterie a signálu; připojení je zobrazené přes celou šířku.
+- Nadpisy, barevné segmenty a číselné hodnoty baterie i signálu se už nepřekrývají v plném, velkém ani malém zobrazení.
+- Automatizační konfigurace ukládá čistý podklad návrhu bez dynamických objektů, takže backend dokáže při změně entity sestavit nový obraz.
+- Grafy se po změně zdrojové hodnoty zařadí do fronty s respektováním nastaveného minimálního intervalu displeje.
+- Vrstvené HA prvky sledují také entity jednotlivých grafů, budíků, posuvníků a dalších měřidel uvnitř vrstvy.
+- Přidány regresní testy kompozice grafu, hodnot ve vrstvených měřidlech a plánování aktualizace při změně atributu.
+
+---
+
 ## [0.1.95] - 2026-07-24
 
 ### Oprava načítání uložených návrhů

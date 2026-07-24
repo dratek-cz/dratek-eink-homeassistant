@@ -43,6 +43,7 @@
     const params = new URLSearchParams(location.search);
     const view = params.get("view");
     const legacy = params.get("legacy") === "1";
+    const chartMode = params.get("chart") === "1";
     panel._activeTab = view === "designer" ? "designer" : view === "gateways" ? "gateways" : view === "devices" ? "devices" : "custom";
     panel._result = {
       devices: [{
@@ -80,7 +81,13 @@
       sdk_type: 40, width: 296, height: 128, orientation: "landscape",
       variables: {}, objects: legacy
         ? { "3": { id: "obj-3", type: "text", x: 18, y: 32, w: 260, h: 56, text: "NAČTENO", color: "red", fontSize: 32, bold: true, align: "center" } }
-        : [],
+        : chartMode
+          ? [{
+              id: "chart-1", type: "chart", x: 20, y: 18, w: 256, h: 92,
+              entityId: "sensor.teplota", entityAttribute: "", autoUpdate: true,
+              data: "[18,19,20]", chartType: "line", chartTitle: "Teplota",
+            }]
+          : [],
     };
     const sampleGateway = {
       id: "gateway-test", name: "Gateway dílna", host: "dratek-eink-gateway.local",
@@ -97,14 +104,19 @@
         "switch.kuchyn": { state: "on", attributes: { friendly_name: "Zásuvka kuchyň" } },
         "sensor.teplota": { state: "21.5", attributes: { friendly_name: "Teplota", unit_of_measurement: "°C" } },
       },
-      callWS: async ({ type }) => {
+      callWS: async (request) => {
+        const { type } = request;
         if (type === "dratek_eink/custom_elements/list") return { elements: [sampleElement] };
-        if (type === "dratek_eink/device_drafts/list") return { drafts: legacy ? { "FF:FF:92:81:46:32": sampleDraft } : {} };
-        if (type === "dratek_eink/device_drafts/load") return { draft: legacy ? sampleDraft : null };
+        if (type === "dratek_eink/device_drafts/list") return { drafts: legacy || chartMode ? { "FF:FF:92:81:46:32": sampleDraft } : {} };
+        if (type === "dratek_eink/device_drafts/load") return { draft: legacy || chartMode ? sampleDraft : null };
         if (type === "dratek_eink/projects/list") return { projects: [] };
         if (type === "dratek_eink/gateways/list") return { gateways: [sampleGateway] };
         if (type === "dratek_eink/serial/ports") return { ports: [] };
         if (type === "dratek_eink/scan") return panel._result;
+        if (type === "dratek_eink/gateways/send_design" || type === "dratek_eink/send_design") {
+          document.documentElement.dataset.automation = JSON.stringify(request.automation || {});
+          return { ok: true };
+        }
         return {};
       },
     };

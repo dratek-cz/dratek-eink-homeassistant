@@ -71,6 +71,10 @@ async def _save_entity_automation(
     if "automation" not in msg:
         return
     config = dict(msg.get("automation") or {})
+    if config.get("enabled") and not config.get("base_image"):
+        # Compatibility with an older cached panel: the current upload is still
+        # a usable fallback for opaque chart and layered bindings.
+        config["base_image"] = str(msg.get("image") or "")
     config.update(
         {
             "sdk_type": int(msg["sdk_type"]),
