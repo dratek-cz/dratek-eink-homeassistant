@@ -50,6 +50,29 @@ def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFo
     return ImageFont.load_default()
 
 
+def _extract_item_value(item: dict[str, Any], value: Any, min_val: float, max_val: float, default_pct: float) -> float:
+    target_attr = item.get("entity_attribute") or item.get("entityAttribute") or item.get("target_attribute")
+    item_entity_id = str(item.get("entity_id") or item.get("entityId") or "")
+    target_val = value
+    if isinstance(value, dict):
+        if item_entity_id and item_entity_id in value:
+            ent_data = value[item_entity_id]
+            if isinstance(ent_data, dict):
+                target_val = ent_data.get(target_attr) if target_attr else ent_data.get("state")
+            else:
+                target_val = ent_data
+        elif target_attr and target_attr in value:
+            target_val = value.get(target_attr)
+        elif "state" in value:
+            target_val = value.get("state")
+    if (target_val is None or str(target_val).strip() == "") and item.get("sample_value") is not None:
+        target_val = item.get("sample_value")
+    try:
+        return float(target_val)
+    except (ValueError, TypeError):
+        return (min_val + max_val) * default_pct
+
+
 def _decode_data_image(image_data: str) -> Image.Image:
     if "," in image_data:
         image_data = image_data.split(",", 1)[1]
@@ -238,29 +261,6 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
                 output.alpha_composite(icon, (icon_x, icon_y))
             except (ValueError, TypeError, OSError):
                 continue
-def _extract_item_value(item: dict[str, Any], value: Any, min_val: float, max_val: float, default_pct: float) -> float:
-    target_attr = item.get("entity_attribute") or item.get("entityAttribute") or item.get("target_attribute")
-    item_entity_id = str(item.get("entity_id") or item.get("entityId") or "")
-    target_val = value
-    if isinstance(value, dict):
-        if item_entity_id and item_entity_id in value:
-            ent_data = value[item_entity_id]
-            if isinstance(ent_data, dict):
-                target_val = ent_data.get(target_attr) if target_attr else ent_data.get("state")
-            else:
-                target_val = ent_data
-        elif target_attr and target_attr in value:
-            target_val = value.get(target_attr)
-        elif "state" in value:
-            target_val = value.get("state")
-    if (target_val is None or str(target_val).strip() == "") and item.get("sample_value") is not None:
-        target_val = item.get("sample_value")
-    try:
-        return float(target_val)
-    except (ValueError, TypeError):
-        return (min_val + max_val) * default_pct
-
-
         elif item_type == "bar_gauge":
             min_val = float(item.get("min_value", 0))
             max_val = float(item.get("max_value", 100))

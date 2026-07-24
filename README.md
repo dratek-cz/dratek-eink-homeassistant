@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.92
+
+- **Kritická oprava načítání integrace v Home Assistantu**:
+  - Opravena syntaktická chyba v `render.py` u pomocné funkce pro čtení entit grafů, která blokovala import integrace a konfigurace v Home Assistantu.
+  - Všechny soubory integrace byly zkontrolovány a ověřeny pro bezproblémový běh.
+
 ## Novinky ve verzi 0.1.91
 
 - **Výběr Home Assistant entity pro každý objekt (grafy, ukazatele, potenciometry, texty)**:

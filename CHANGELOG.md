@@ -2,6 +2,15 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.92] - 2026-07-24
+
+### 🛠️ Critical Hotfix načítání integrace v Home Assistantu
+- **Oprava SyntaxError v `render.py`**:
+  - Opravena pozice pomocné funkce `_extract_item_value`, která se nacházela uprostřed `if/elif` větvení vykreslovací smyčky a způsobovala `SyntaxError` při importu integrace v Home Assistantu.
+  - Všechny moduly integrace nyní kompilují a načítají se v Home Assistantu bez chyb (`config_flow` & `__init__.py`).
+
+---
+
 ## [0.1.91] - 2026-07-24
 
 ### 🚀 HA Entity Picker pro grafy v Editoru prvku & Přepracování Mapy připojení
