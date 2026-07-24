@@ -1,0 +1,14 @@
+{
+  "title": "DRATEK eInk",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Aktivovat DRATEK eInk",
+        "description": "Klikni na Odeslat. Integrace se přidá do Home Assistantu a v levém menu se zobrazí položka DRATEK eInk. Vyhledávání displejů a Bluetooth diagnostika bude dostupná tam."
+      }
+    },
+    "abort": {
+      "already_configured": "Integrace DRATEK eInk už je v Home Assistantu přidaná."
+    }
+  }
+}
