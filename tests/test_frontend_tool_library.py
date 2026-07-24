@@ -66,6 +66,24 @@ class FrontendToolLibraryTests(unittest.TestCase):
         )
         self.assertIn(".connection-device:hover{transform:none}", self.source)
 
+    def test_designer_preview_uses_exact_pixel_geometry(self):
+        self.assertIn("--designer-screen-width:", self.source)
+        self.assertIn("--designer-screen-height:", self.source)
+        self.assertIn("box-sizing:content-box", self.source)
+        self.assertIn("image-rendering:pixelated", self.source)
+        self.assertIn(
+            "(event.clientX - rect.left) * canvas.width / Math.max(1, rect.width)",
+            self.source,
+        )
+
+    def test_device_cards_scale_an_already_quantized_native_canvas(self):
+        self.assertIn('const nativeCanvas = document.createElement("canvas");', self.source)
+        self.assertIn("ctx.imageSmoothingEnabled = false;", self.source)
+        self.assertIn(
+            "ctx.drawImage(nativeCanvas, 0, 0, canvas.width, canvas.height);",
+            self.source,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

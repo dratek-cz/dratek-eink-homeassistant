@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.101
+
+- náhled Designeru má při 100% zvětšení přesně stejné rozměry v pixelech jako fyzický displej
+- text, ikony i tvary se škálují bez rozmazání a bez šedých interpolovaných okrajů
+- malé náhledy na hlavní stránce se vytvářejí z hotového nativního eInk obrazu místo opakovaného přepočítávání
+
 ## Novinky ve verzi 0.1.100
 
 - baterie, signál a použitá gateway jsou v kartě displeje přehledně v jednom řádku

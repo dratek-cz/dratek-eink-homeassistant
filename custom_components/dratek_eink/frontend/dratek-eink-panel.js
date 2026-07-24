@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.100";
+const DRATEK_EINK_VERSION = "0.1.101";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -2319,8 +2319,8 @@ class DratekEinkPanel extends HTMLElement {
     const canvas = this.shadowRoot.querySelector("#editor");
     const rect = canvas.getBoundingClientRect();
     return {
-      x: (event.clientX - rect.left) / this._zoom,
-      y: (event.clientY - rect.top) / this._zoom,
+      x: (event.clientX - rect.left) * canvas.width / Math.max(1, rect.width),
+      y: (event.clientY - rect.top) * canvas.height / Math.max(1, rect.height),
     };
   }
 
@@ -2957,6 +2957,7 @@ class DratekEinkPanel extends HTMLElement {
         @media(max-width:1050px){.editor-shell{grid-template-areas:"tools canvas" "inspector inspector"}.designer-tools-panel{max-height:none;overflow:visible}.designer-layers-content .layer-list{max-height:420px}}
         @media(max-width:760px){.editor-shell{grid-template-areas:"canvas" "tools" "inspector"}.display-health,.display-grid.density-large .display-health,.display-grid.density-compact .display-health,.display-grid.density-list .display-health{grid-template-columns:minmax(58px,.65fr) minmax(58px,.65fr) minmax(90px,1.7fr)}.display-health-route{grid-column:auto}.connection-group,.connection-group.is-gateway,.connection-group.is-local,.connection-group.is-unavailable{grid-template-columns:1fr;padding:12px}.connection-bus{width:2px;height:22px;justify-self:start;margin-left:20px}.connection-bus:before{inset:0;width:2px;height:auto;transform:none}.connection-devices{padding-left:40px}.connection-devices:before{left:20px;top:0}.connection-device:before{left:-20px;width:20px}}
         @media(max-width:390px){.display-health,.display-grid.density-large .display-health,.display-grid.density-compact .display-health,.display-grid.density-list .display-health{grid-template-columns:56px 56px minmax(0,1fr);gap:4px}.display-health-item{padding:6px 3px}.display-health-route{padding-inline:5px}.display-health-route>ha-icon{display:none}.display-health-route>span{grid-column:1/-1}.display-health-route strong{font-size:9px}}
+        .designer-device-screen,.designer-device-portrait .designer-device-screen{box-sizing:content-box;inset:auto;left:50%;top:50%;width:var(--designer-screen-width);height:var(--designer-screen-height);transform:translate(-50%,-50%)}.designer-device-screen canvas,.device-preview-screen canvas,.ha-elements-page canvas{image-rendering:pixelated}
         .display-tile.is-stale{border-style:dashed}.display-online-dot.stale{background:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.16)}.display-health-route.stale ha-icon{color:#f59e0b}
       </style>
       <div class="page">
@@ -2984,7 +2985,7 @@ class DratekEinkPanel extends HTMLElement {
         ${this._renderSendResult()}
         <div class="editor-shell">
           ${this._renderToolSidebar()}
-          <div class="card workspace-card"><div class="canvas-head"><div class="canvas-title"><span><ha-icon icon="mdi:monitor-edit"></ha-icon></span><div><strong>Pracovní plocha</strong><small>${size.width} × ${size.height} px · ${this._orientation === "portrait" ? "na výšku" : "na šířku"}</small></div></div><div class="canvas-meta"><span><ha-icon icon="mdi:magnify"></ha-icon>${Math.round(this._zoom * 100)} %</span><span><ha-icon icon="mdi:palette-swatch-outline"></ha-icon>eInk barvy</span></div></div><div class="workspace"><div class="designer-device-bezel ${this._isPe29Device(device) ? "designer-device-pe29" : ""} designer-device-${this._orientation}" style="--designer-frame-ratio:${designerFrameRatio.toFixed(4)};--designer-frame-width:${designerFrameWidth}px">${this._isPe29Device(device) ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>${this._renderDeviceBarcode(device?.physical_code || "00.00.00.00", this._orientation === "portrait")}</span>` : `<span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>`}<div class="designer-device-screen"><canvas id="editor" width="${size.width}" height="${size.height}"></canvas><canvas id="editorSelection" width="${size.width}" height="${size.height}" aria-hidden="true"></canvas></div></div></div></div>
+          <div class="card workspace-card"><div class="canvas-head"><div class="canvas-title"><span><ha-icon icon="mdi:monitor-edit"></ha-icon></span><div><strong>Pracovní plocha</strong><small>${size.width} × ${size.height} px · ${this._orientation === "portrait" ? "na výšku" : "na šířku"}</small></div></div><div class="canvas-meta"><span><ha-icon icon="mdi:magnify"></ha-icon>${Math.round(this._zoom * 100)} %</span><span><ha-icon icon="mdi:palette-swatch-outline"></ha-icon>eInk barvy</span></div></div><div class="workspace"><div class="designer-device-bezel ${this._isPe29Device(device) ? "designer-device-pe29" : ""} designer-device-${this._orientation}" style="--designer-frame-ratio:${designerFrameRatio.toFixed(4)};--designer-frame-width:${designerFrameWidth}px;--designer-screen-width:${designerScreenWidth}px;--designer-screen-height:${designerScreenHeight}px">${this._isPe29Device(device) ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>${this._renderDeviceBarcode(device?.physical_code || "00.00.00.00", this._orientation === "portrait")}</span>` : `<span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>`}<div class="designer-device-screen"><canvas id="editor" width="${size.width}" height="${size.height}"></canvas><canvas id="editorSelection" width="${size.width}" height="${size.height}" aria-hidden="true"></canvas></div></div></div></div>
           <div class="card right properties-panel"><div class="section-title inspector-title"><div class="inspector-title-main"><span class="inspector-object-icon"><ha-icon icon="${object ? this._objectIcon(object) : "mdi:tune-variant"}"></ha-icon></span><div><h2>Inspector</h2><small>${object ? this._escape(this._objectLabel(object, this._objects.indexOf(object))) : "Vlastnosti objektu"}</small></div></div><span class="pill muted">${object ? this._escape(object.type) : "bez výběru"}</span></div>${this._renderProperties(object)}</div>
         </div>
         </div>
@@ -5304,6 +5305,7 @@ class DratekEinkPanel extends HTMLElement {
         const draft = this._deviceDrafts[String(canvas.dataset.devicePreview || "").toUpperCase()];
         const ctx = canvas.getContext("2d");
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.imageSmoothingEnabled = false;
         if (!draft) {
           ctx.fillStyle = "#fff";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -5315,14 +5317,11 @@ class DratekEinkPanel extends HTMLElement {
         this._variables = draft.variables || {};
         this._backgroundColor = ["white", "black", "red"].includes(draft.background_color) ? draft.background_color : "white";
         this._invertColors = !!draft.invert_colors;
-        ctx.save();
-        ctx.scale(canvas.width / sourceWidth, canvas.height / sourceHeight);
-        ctx.fillStyle = this._color(this._backgroundColor);
-        ctx.fillRect(0, 0, sourceWidth, sourceHeight);
-        for (const object of this._objects) this._drawObject(ctx, object);
-        ctx.restore();
-        if (this._invertColors) this._applyColorInversion(ctx, canvas.width, canvas.height);
-        this._applyEinkPreview(ctx, canvas.width, canvas.height);
+        const nativeCanvas = document.createElement("canvas");
+        nativeCanvas.width = sourceWidth;
+        nativeCanvas.height = sourceHeight;
+        this._drawScene(nativeCanvas.getContext("2d"), sourceWidth, sourceHeight, false);
+        ctx.drawImage(nativeCanvas, 0, 0, canvas.width, canvas.height);
       });
     } finally {
       this._objects = previous.objects;

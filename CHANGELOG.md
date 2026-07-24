@@ -2,6 +2,18 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.101] - 2026-07-24
+
+### Pixelově přesné náhledy displejů
+- Vykreslovací plocha Designeru má při 100% zvětšení přesný fyzický rozměr displeje, například `296 × 128` místo dřívějšího `294 × 126`.
+- Okraj náhledu už neubírá pixely z pracovní plochy.
+- CSS škálování canvasů používá nejbližší pixel a nevytváří šedé mezilehlé hrany kolem textu, ikon ani tvarů.
+- Souřadnice ukazatele se přepočítávají podle skutečné velikosti canvasu, takže výběr a přesouvání zůstávají přesné při libovolném zvětšení.
+- Náhledy v kartách displejů se nejprve vykreslí a převedou do eInk palety v nativním rozlišení a až potom se zmenší bez vyhlazování.
+- Doplněny regresní testy pixelové geometrie a nativního vykreslovacího řetězce.
+
+---
+
 ## [0.1.100] - 2026-07-24
 
 ### Přehlednější karty, vrstvy a mapa připojení
