@@ -61,6 +61,67 @@ def _binding_sources(binding: dict[str, Any]) -> set[tuple[str, str]]:
     return sources
 
 
+def _update_binding_from_custom_element(
+    binding: dict[str, Any],
+    element: dict[str, Any],
+) -> bool:
+    """Replace the cached rendering definition of one saved custom element."""
+    element_type = str(element.get("element_type") or "")
+    if element_type == "layered" and binding.get("type") == "layered":
+        layers = element.get("layers") if isinstance(element.get("layers"), list) else []
+        binding["layers"] = layers
+        binding["canvas_width"] = int(element.get("canvas_width") or 296)
+        binding["canvas_height"] = int(element.get("canvas_height") or 128)
+        binding["condition_rules"] = (
+            element.get("condition_rules")
+            if isinstance(element.get("condition_rules"), list)
+            else []
+        )
+        binding["default_symbol"] = str(
+            element.get("default_layer_id")
+            or (layers[0].get("id") if layers and isinstance(layers[0], dict) else "")
+        )
+        binding["fallback"] = binding["default_symbol"]
+        binding["entity_id"] = str(element.get("entity_id") or "")
+        binding["entity_attribute"] = str(element.get("entity_attribute") or "")
+        binding["entity_ids"] = []
+        binding["entity_ids"] = sorted(
+            {
+                entity_id
+                for entity_id, _attribute in _binding_sources(binding)
+            }
+        )
+        return True
+    if element_type == "chart" and binding.get("type") == "chart":
+        binding["entity_id"] = str(element.get("entity_id") or "")
+        binding["entity_attribute"] = str(element.get("entity_attribute") or "")
+        binding["chartType"] = str(element.get("chart_type") or "line")
+        binding["maxPoints"] = int(element.get("history_points") or 24)
+        binding["history_mode"] = str(element.get("history_mode") or "rolling")
+        return True
+    if element_type == "status" and binding.get("type") != "layered":
+        binding["entity_id"] = str(element.get("entity_id") or "")
+        binding["entity_attribute"] = str(element.get("entity_attribute") or "")
+        binding["status_icons"] = True
+        binding["status_on_symbol"] = str(element.get("on_symbol") or "●")
+        binding["status_off_symbol"] = str(element.get("off_symbol") or "○")
+        binding["status_on_values"] = str(
+            element.get("on_values") or "on,true,1,open,home"
+        )
+        binding["condition_rules"] = (
+            element.get("condition_rules")
+            if isinstance(element.get("condition_rules"), list)
+            else []
+        )
+        binding["default_symbol"] = str(element.get("default_symbol") or "○")
+        return True
+    if element_type == "value" and binding.get("type") not in {"chart", "layered"}:
+        binding["entity_id"] = str(element.get("entity_id") or "")
+        binding["entity_attribute"] = str(element.get("entity_attribute") or "")
+        return True
+    return False
+
+
 def _source_value(state: Any, attribute: str) -> Any:
     if state is None:
         return None
@@ -135,6 +196,42 @@ class EntityAutoUpdateManager:
         updated["refresh_interval_seconds"] = interval
         self._configs[normalized] = updated
         await self._store.async_save({"configs": self._configs})
+
+    async def async_custom_element_changed(
+        self,
+        element: dict[str, Any],
+        affected_object_ids: dict[str, set[str]],
+    ) -> list[str]:
+        """Refresh saved bindings and queue displays that use an edited element."""
+        await self.async_initialize()
+        element_id = str(element.get("id") or "")
+        affected_addresses: list[str] = []
+        for address, config in self._configs.items():
+            object_ids = affected_object_ids.get(address, set())
+            changed = False
+            bindings = config.get("bindings")
+            if not isinstance(bindings, list):
+                continue
+            for binding in bindings:
+                if not isinstance(binding, dict):
+                    continue
+                if (
+                    str(binding.get("custom_element_id") or "") != element_id
+                    and str(binding.get("id") or "") not in object_ids
+                ):
+                    continue
+                if _update_binding_from_custom_element(binding, element):
+                    binding["custom_element_id"] = element_id
+                    changed = True
+            if changed:
+                affected_addresses.append(address)
+        if not affected_addresses:
+            return []
+        await self._store.async_save({"configs": self._configs})
+        self._refresh_listener()
+        for address in affected_addresses:
+            self._schedule_refresh(address)
+        return affected_addresses
 
     def _refresh_listener(self) -> None:
         if self._unsubscribe:

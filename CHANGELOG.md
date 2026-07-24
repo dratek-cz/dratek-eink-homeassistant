@@ -2,6 +2,18 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.99] - 2026-07-24
+
+### Automatické odeslání změn z Designeru HA prvků
+- Uložení upraveného HA prvku aktualizuje jeho kopie ve všech uložených návrzích displejů.
+- Backend obnoví vrstvy, pravidla, zdrojové entity a další parametry v již aktivních automatizačních konfiguracích.
+- Všechny displeje používající upravený prvek se automaticky zařadí do fronty k překreslení.
+- Odeslání respektuje minimální interval každého displeje a při probíhajícím zápisu používá existující bezpečné opakování fronty.
+- Funguje také pro starší automatizace bez uloženého ID prvku díky dohledání objektu v návrhu displeje.
+- Přidán regresní test aktualizace vazby, změny zdrojových entit a naplánování zápisu.
+
+---
+
 ## [0.1.98] - 2026-07-24
 
 ### Mazání klávesou Delete v obou designerech

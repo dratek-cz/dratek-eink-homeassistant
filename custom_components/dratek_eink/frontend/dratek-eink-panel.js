@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.98";
+const DRATEK_EINK_VERSION = "0.1.99";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -804,7 +804,13 @@ class DratekEinkPanel extends HTMLElement {
       if (device) {
         await this._saveCurrentDeviceDraft();
       }
-      this._customElementResult = { ok: true, message: `Prvek „${result.element.name}“ je uložený. Všechny změny byly okamžitě promítnuty do navržených displejů.` };
+      const scheduledCount = Array.isArray(result.scheduled_displays) ? result.scheduled_displays.length : 0;
+      this._customElementResult = {
+        ok: true,
+        message: scheduledCount
+          ? `Prvek „${result.element.name}“ je uložený. ${scheduledCount === 1 ? "Displej byl zařazen" : `${scheduledCount} displejů bylo zařazeno`} k automatické aktualizaci.`
+          : `Prvek „${result.element.name}“ je uložený. Změny byly promítnuty do uložených návrhů.`,
+      };
     } catch (err) {
       this._customElementResult = { ok: false, error: this._message(err) };
     } finally {
@@ -6135,6 +6141,7 @@ class DratekEinkPanel extends HTMLElement {
           ].filter(Boolean))];
           return {
             id: object.id, type: "layered", entity_id: entityId,
+            custom_element_id: object.customElementId || "",
             entity_ids: entityIds,
             entity_attribute: entityAttr, include_unit: false, fallback: defaultSymbol,
             x: Number(object.x || 0), y: Number(object.y || 0), w: Number(object.w || 1), h: Number(object.h || 1),
@@ -6147,6 +6154,7 @@ class DratekEinkPanel extends HTMLElement {
         if (object.type === "chart") {
           return {
             id: object.id, type: "chart", entity_id: object.entityId,
+            custom_element_id: object.customElementId || "",
             entity_attribute: object.entityAttribute || "", include_unit: false, fallback: object.data || "",
             x: Number(object.x || 0), y: Number(object.y || 0), w: Number(object.w || 1), h: Number(object.h || 1),
             chartType: object.chartType || "line", chartTitle: object.chartTitle || "", maxPoints: Number(object.maxPoints || 48),
@@ -6156,6 +6164,7 @@ class DratekEinkPanel extends HTMLElement {
         }
         return {
           id: object.id,
+          custom_element_id: object.customElementId || "",
           entity_id: object.entityId,
           entity_attribute: object.entityAttribute || "",
           include_unit: !object.entityAttribute && !object.valueSuffix,

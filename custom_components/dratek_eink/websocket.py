@@ -1126,6 +1126,49 @@ def _normalized_layered_layers(value: Any, canvas_width: int, canvas_height: int
     return layers
 
 
+def _sync_custom_element_object(
+    obj: dict[str, Any],
+    element: dict[str, Any],
+) -> bool:
+    """Update a stored display object that references a custom element."""
+    element_id = str(element.get("id") or "")
+    if str(obj.get("customElementId") or obj.get("custom_element_id") or "") != element_id:
+        return False
+    element_type = str(element.get("element_type") or "")
+    if element_type == "layered":
+        obj["customLayers"] = element.get("layers", [])
+        obj["customCanvasWidth"] = int(element.get("canvas_width") or 296)
+        obj["customCanvasHeight"] = int(element.get("canvas_height") or 128)
+        obj["conditionRules"] = [
+            {
+                "operator": rule.get("operator"),
+                "value": rule.get("value", ""),
+                "symbol": rule.get("layer_id") or rule.get("symbol") or "",
+            }
+            for rule in element.get("condition_rules", [])
+            if isinstance(rule, dict)
+        ]
+        obj["defaultSymbol"] = str(element.get("default_layer_id") or "")
+    if element.get("entity_id"):
+        obj["entityId"] = str(element.get("entity_id") or "")
+        obj["entityAttribute"] = str(element.get("entity_attribute") or "")
+    if element_type == "chart":
+        obj["chartType"] = str(element.get("chart_type") or "line")
+        obj["maxPoints"] = int(element.get("history_points") or 24)
+        obj["historyMode"] = str(element.get("history_mode") or "rolling")
+    if element_type == "status":
+        obj["statusOnSymbol"] = str(element.get("on_symbol") or "●")
+        obj["statusOffSymbol"] = str(element.get("off_symbol") or "○")
+        obj["statusOnValues"] = str(
+            element.get("on_values") or "on,true,1,open,home"
+        )
+        obj["defaultSymbol"] = str(element.get("default_symbol") or "○")
+        obj["conditionRules"] = element.get("condition_rules", [])
+    if element_type == "icon" and element.get("icon_image"):
+        obj["image"] = element["icon_image"]
+    return True
+
+
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/custom_elements/save",
@@ -1222,8 +1265,33 @@ async def websocket_save_custom_element(
         if isinstance(item, dict) and item.get("id") != element_id
     ]
     data["custom_elements"].append(element)
+    affected_object_ids: dict[str, set[str]] = {}
+    for address, draft in data["device_drafts"].items():
+        if not isinstance(draft, dict):
+            continue
+        for obj in draft.get("objects", []):
+            if not isinstance(obj, dict) or not _sync_custom_element_object(obj, element):
+                continue
+            object_id = str(obj.get("id") or "")
+            if object_id:
+                affected_object_ids.setdefault(str(address).upper(), set()).add(object_id)
+    for project in data["projects"]:
+        if not isinstance(project, dict):
+            continue
+        for obj in project.get("objects", []):
+            if isinstance(obj, dict):
+                _sync_custom_element_object(obj, element)
     await _project_store(hass).async_save(data)
-    connection.send_result(msg["id"], {"element": element})
+    scheduled_displays = await get_entity_auto_update_manager(
+        hass
+    ).async_custom_element_changed(element, affected_object_ids)
+    connection.send_result(
+        msg["id"],
+        {
+            "element": element,
+            "scheduled_displays": scheduled_displays,
+        },
+    )
 
 
 @websocket_api.websocket_command(

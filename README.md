@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.99
+
+- úprava uloženého prvku v Designeru HA prvků se automaticky propíše také do aktivních automatizací displejů
+- dotčené displeje se po uložení prvku samy zařadí do fronty k překreslení
+- automatické odeslání respektuje nastavený minimální interval displeje a nekoliduje s probíhajícím zápisem
+
 ## Novinky ve verzi 0.1.98
 
 - klávesy `Delete` a `Backspace` mažou vybraný objekt v běžném Designeru i v Designeru HA prvků
