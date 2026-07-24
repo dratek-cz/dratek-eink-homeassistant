@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.98] - 2026-07-24
+
+### Mazání klávesou Delete v obou designerech
+- Vybraný objekt lze odstranit klávesou `Delete` nebo `Backspace` v běžném Designeru i v Designeru HA prvků.
+- Klávesové mazání je aktivní pouze při práci s návrhem a nezasahuje do psaní v textových polích, číselných polích ani výběrech.
+- Tlačítko pro odstranění objektu v Designeru HA prvků používá stejnou společnou a bezpečnou logiku.
+- Doplněn regresní test klávesové zkratky.
+
+---
+
 ## [0.1.97] - 2026-07-24
 
 ### Přehlednější Designer a přímé HA ukazatele

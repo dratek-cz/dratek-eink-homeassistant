@@ -37,6 +37,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('<details class="inspector-section"', self.source)
         self.assertIn('class="inspector-chevron"', self.source)
 
+    def test_delete_shortcut_covers_both_designers(self):
+        self.assertIn('this._deleteSelected();', self.source)
+        self.assertIn('this._deleteCustomLayerObject();', self.source)
+        self.assertIn('this._activeTab === "custom"', self.source)
+        self.assertIn('event.key === "Delete" || event.key === "Backspace"', self.source)
+
 
 if __name__ == "__main__":
     unittest.main()

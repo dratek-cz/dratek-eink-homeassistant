@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.97";
+const DRATEK_EINK_VERSION = "0.1.98";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -1246,7 +1246,19 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _onKeyDown(event) {
-    if (this._activeTab !== "designer" || !this._device() || this._isTypingEvent(event)) return;
+    if (this._isTypingEvent(event)) return;
+    if (
+      this._activeTab === "custom"
+      && this._customWorkspaceView === "editor"
+      && this._customLayerStep === "design"
+      && (event.key === "Delete" || event.key === "Backspace")
+      && this._customSelectedObjectId
+    ) {
+      event.preventDefault();
+      this._deleteCustomLayerObject();
+      return;
+    }
+    if (this._activeTab !== "designer" || !this._device()) return;
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key) && this._selectedIds.length) {
       event.preventDefault();
       const step = event.shiftKey ? 10 : 1;
@@ -4018,6 +4030,17 @@ class DratekEinkPanel extends HTMLElement {
     this._stableCustomRender();
   }
 
+  _deleteCustomLayerObject() {
+    const layer = this._customActiveLayer();
+    if (!layer || !this._customSelectedObjectId) return;
+    const previousLength = layer.objects.length;
+    layer.objects = layer.objects.filter((object) => object.id !== this._customSelectedObjectId);
+    if (layer.objects.length === previousLength) return;
+    this._customSelectedObjectId = "";
+    this._customLayerDrag = null;
+    this._stableCustomRender();
+  }
+
   _addCustomLayerObject(type) {
     const layer = this._customActiveLayer();
     if (!layer) return;
@@ -4983,13 +5006,7 @@ class DratekEinkPanel extends HTMLElement {
         input.addEventListener("change", update);
       }
     });
-    this.shadowRoot.querySelector("#deleteLayerObject")?.addEventListener("click", () => {
-      const layer = this._customActiveLayer();
-      if (!layer) return;
-      layer.objects = layer.objects.filter((object) => object.id !== this._customSelectedObjectId);
-      this._customSelectedObjectId = "";
-      this._stableCustomRender();
-    });
+    this.shadowRoot.querySelector("#deleteLayerObject")?.addEventListener("click", () => this._deleteCustomLayerObject());
     const layerCanvas = this.shadowRoot.querySelector("#customLayerCanvas");
     layerCanvas?.addEventListener("pointerdown", (event) => this._onCustomLayerPointerDown(event));
     layerCanvas?.addEventListener("pointermove", (event) => this._onCustomLayerPointerMove(event));

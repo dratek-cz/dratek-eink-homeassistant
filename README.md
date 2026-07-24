@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.98
+
+- klávesy `Delete` a `Backspace` mažou vybraný objekt v běžném Designeru i v Designeru HA prvků
+- při psaní do textových a číselných polí zůstává mazání bezpečně omezené jen na obsah pole
+
 ## Novinky ve verzi 0.1.97
 
 - běžný Designer má přehlednou knihovnu rozdělenou na Základní, Data, Stavy a Moje
