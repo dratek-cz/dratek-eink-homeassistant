@@ -4,6 +4,29 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.94
+
+- opraveno skutečné vykreslení rozsahů budíků `180°`, `240°` a `360°`, aby odpovídalo náhledu Designeru
+- sjednocena verze hlavního panelu, dashboardové karty, backendu a manifestu
+- Git remote už neobsahuje přístupový token; nahrávání používá token pouze z lokálního souboru
+- přidány automatické testy grafů, budíků a konzistence verzí
+- přidán lokální validační skript pro kontrolu Pythonu, JavaScriptu a unit testů před vydáním
+
+Bezpečné ruční vydání přes tokenový soubor:
+
+```powershell
+$env:DRATEK_GITHUB_TOKEN_FILE = "C:\bezpecna-cesta\accesstoken.txt"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\push-with-token.ps1 -PushTags
+```
+
+Token se při tomto postupu neukládá do Git remote URL ani do repozitáře.
+
+Kontroly před vydáním lze spustit příkazem:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\validate.ps1
+```
+
 ## Novinky ve verzi 0.1.93
 
 - **Oprava ukládání grafů a budíků v Editoru prvku**:

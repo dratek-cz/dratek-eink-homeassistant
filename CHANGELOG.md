@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.94] - 2026-07-24
+
+### Oprava budíků, verzí a zabezpečení publikačního procesu
+- Rozsahy budíků `180°`, `240°` a `360°` se nyní stejně vykreslují v Designeru i v obrazu odeslaném na eInk displej.
+- Verze hlavního panelu, dashboardové karty, backendu a manifestu jsou sjednoceny na `0.1.94`.
+- Git remote již neobsahuje přístupový token; bezpečný publish skript načítá token pouze z lokálního souboru.
+- Přidány automatické testy dynamických widgetů, konzistence verzí a lokální validační skript pro Python a JavaScript.
+
+---
+
 ## [0.1.93] - 2026-07-24
 
 ### 🚀 Oprava ukládání grafů v Editoru prvku

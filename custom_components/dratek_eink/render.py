@@ -335,6 +335,8 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
                 draw.text((x + (item_width - tw) // 2, y + round(item_height * 0.2)), text_str, fill=colors["black"], font=font)
 
         elif item_type in ("potentiometer", "gauge"):
+            import math
+
             min_val = float(item.get("min_value", 0))
             max_val = float(item.get("max_value", 100))
             unit = str(item.get("unit") or "°C")
@@ -342,15 +344,26 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
             pct = max(0.0, min(1.0, (numeric_val - min_val) / max(0.0001, max_val - min_val)))
             color = colors.get(item.get("color") or "black", colors["black"])
             stroke_w = max(2, int(item.get("stroke_width", 6)))
-            cx, cy = x + item_width // 2, y + round(item_height * 0.52)
-            r = max(6, min(item_width, item_height) // 2 - 8)
-            start_deg, end_deg = 135, 405
+            arc_mode = str(item.get("arc_mode") or "240")
+            if arc_mode == "180":
+                start_deg, end_deg = 180, 360
+                cy = y + round(item_height * 0.8)
+                radius_height = item_height * 0.75
+            elif arc_mode == "360":
+                start_deg, end_deg = -90, 270
+                cy = y + round(item_height * 0.52)
+                radius_height = item_height * 0.44
+            else:
+                start_deg, end_deg = 150, 390
+                cy = y + round(item_height * 0.52)
+                radius_height = item_height * 0.44
+            cx = x + item_width // 2
+            r = max(6, round(min(item_width, radius_height) - 6))
             draw.arc((cx - r, cy - r, cx + r, cy + r), start_deg, end_deg, fill=(180, 180, 180, 255), width=stroke_w)
             curr_deg = start_deg + pct * (end_deg - start_deg)
             if item.get("show_arc") is not False and pct > 0:
                 draw.arc((cx - r, cy - r, cx + r, cy + r), start_deg, curr_deg, fill=color, width=stroke_w)
             if item.get("show_needle") is not False:
-                import math
                 rad = math.radians(curr_deg)
                 needle_r = r * 0.8
                 nx = cx + math.cos(rad) * needle_r

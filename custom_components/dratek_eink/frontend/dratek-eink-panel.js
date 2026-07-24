@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.93";
+const DRATEK_EINK_VERSION = "0.1.94";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -5278,8 +5278,8 @@ class DratekEinkPanel extends HTMLElement {
     const unit = String(object.unit || "°C");
     const pct = Math.max(0, Math.min(1, (val - minVal) / Math.max(0.0001, maxVal - minVal)));
     const mode = object.arc_mode || "240";
-    let startAngle = Math.PI * 0.75;
-    let endAngle = Math.PI * 2.25;
+    let startAngle = Math.PI * (5 / 6);
+    let endAngle = Math.PI * (13 / 6);
     if (mode === "180") {
       startAngle = Math.PI;
       endAngle = Math.PI * 2;
