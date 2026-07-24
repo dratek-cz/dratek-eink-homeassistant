@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.93
+
+- **Oprava ukládání grafů a budíků v Editoru prvku**:
+  - Opravena validace ve `websocket.py`, která při uložení vlastního prvku nepropouštěla objekty typu `bar_gauge`, `pie`, `slider`, `potentiometer` a `gauge`.
+  - Všechny vytvořené grafy se nyní trvale ukládají do úložiště Home Assistantu a při opětovném otevření zůstávají bezchybně na plátně.
+
 ## Novinky ve verzi 0.1.92
 
 - **Kritická oprava načítání integrace v Home Assistantu**:

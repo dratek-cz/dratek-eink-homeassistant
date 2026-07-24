@@ -1019,7 +1019,7 @@ def _normalized_layered_layers(value: Any, canvas_width: int, canvas_height: int
             if not isinstance(source, dict):
                 continue
             object_type = str(source.get("type") or "text")
-            if object_type not in {"text", "rect", "image"}:
+            if object_type not in {"text", "rect", "image", "bar_gauge", "pie", "slider", "potentiometer", "gauge"}:
                 continue
             item: dict[str, Any] = {
                 "id": str(source.get("id") or f"item-{layer_index}-{object_index}")[:80],
@@ -1029,6 +1029,20 @@ def _normalized_layered_layers(value: Any, canvas_width: int, canvas_height: int
                 "w": _clamped_int(source.get("w"), 80, 1, canvas_width),
                 "h": _clamped_int(source.get("h"), 40, 1, canvas_height),
             }
+            if source.get("entity_id") or source.get("entityId"):
+                item["entity_id"] = str(source.get("entity_id") or source.get("entityId") or "")[:255]
+                item["entityId"] = item["entity_id"]
+            if source.get("entity_attribute") or source.get("entityAttribute"):
+                item["entity_attribute"] = str(source.get("entity_attribute") or source.get("entityAttribute") or "")[:120]
+                item["entityAttribute"] = item["entity_attribute"]
+            if source.get("sample_value") is not None and str(source.get("sample_value")).strip() != "":
+                try:
+                    item["sample_value"] = float(source.get("sample_value"))
+                except (ValueError, TypeError):
+                    pass
+            if source.get("rotation"):
+                item["rotation"] = _clamped_int(source.get("rotation"), 0, 0, 360)
+
             if object_type == "text":
                 align = str(source.get("align") or "left")
                 item.update({
@@ -1044,7 +1058,57 @@ def _normalized_layered_layers(value: Any, canvas_width: int, canvas_height: int
                 item.update({
                     "fill": fill if fill in {"none", "black", "red", "white"} else "none",
                     "stroke": stroke if stroke in {"none", "black", "red", "white"} else "black",
-                    "stroke_width": _clamped_int(source.get("stroke_width"), 2, 1, 12),
+                    "stroke_width": _clamped_int(source.get("stroke_width"), 2, 1, 20),
+                })
+            elif object_type == "bar_gauge":
+                fill = str(source.get("fill") or "black")
+                stroke = str(source.get("stroke") or "black")
+                orientation = str(source.get("orientation") or "horizontal")
+                item.update({
+                    "label": str(source.get("label") or "Ukazatel")[:120],
+                    "min_value": float(source.get("min_value") if source.get("min_value") is not None else 0),
+                    "max_value": float(source.get("max_value") if source.get("max_value") is not None else 100),
+                    "unit": str(source.get("unit") or "%")[:32],
+                    "orientation": orientation if orientation in {"horizontal", "vertical"} else "horizontal",
+                    "fill": fill if fill in {"black", "red", "white", "none"} else "black",
+                    "stroke": stroke if stroke in {"black", "red", "none"} else "black",
+                    "show_value": source.get("show_value") is not False,
+                })
+            elif object_type == "pie":
+                color = str(source.get("color") or "black")
+                item.update({
+                    "label": str(source.get("label") or "Koláčový graf")[:120],
+                    "min_value": float(source.get("min_value") if source.get("min_value") is not None else 0),
+                    "max_value": float(source.get("max_value") if source.get("max_value") is not None else 100),
+                    "unit": str(source.get("unit") or "%")[:32],
+                    "hole_percent": _clamped_int(source.get("hole_percent"), 45, 0, 80),
+                    "color": color if color in {"black", "red"} else "black",
+                    "show_value": source.get("show_value") is not False,
+                })
+            elif object_type == "slider":
+                color = str(source.get("color") or "black")
+                item.update({
+                    "label": str(source.get("label") or "Posuvník")[:120],
+                    "min_value": float(source.get("min_value") if source.get("min_value") is not None else 0),
+                    "max_value": float(source.get("max_value") if source.get("max_value") is not None else 100),
+                    "unit": str(source.get("unit") or "°C")[:32],
+                    "color": color if color in {"black", "red"} else "black",
+                    "show_value": source.get("show_value") is not False,
+                })
+            elif object_type in {"potentiometer", "gauge"}:
+                color = str(source.get("color") or "black")
+                arc_mode = str(source.get("arc_mode") or "240")
+                item.update({
+                    "label": str(source.get("label") or "Potenciometr")[:120],
+                    "min_value": float(source.get("min_value") if source.get("min_value") is not None else 0),
+                    "max_value": float(source.get("max_value") if source.get("max_value") is not None else 100),
+                    "unit": str(source.get("unit") or "°C")[:32],
+                    "color": color if color in {"black", "red"} else "black",
+                    "stroke_width": _clamped_int(source.get("stroke_width"), 6, 2, 20),
+                    "arc_mode": arc_mode if arc_mode in {"180", "240", "360"} else "240",
+                    "show_arc": source.get("show_arc") is not False,
+                    "show_needle": source.get("show_needle") is not False,
+                    "show_value": source.get("show_value") is not False,
                 })
             else:
                 item["image"] = _normalized_icon_image(source.get("image"))

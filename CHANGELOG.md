@@ -2,6 +2,15 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.93] - 2026-07-24
+
+### 🚀 Oprava ukládání grafů v Editoru prvku
+- **Podpora ukládání všech typů grafů a měřidel (`bar_gauge`, `pie`, `slider`, `potentiometer`, `gauge`)**:
+  - Opraven filtr `_normalized_layered_layers` ve `websocket.py`, který dříve odfiltrovával všechny objekty typu graf a měřidlo při uložení vlastního prvku.
+  - Všechny vytvořené grafy, indikátory i potenciometry se nyní správně ukládají do úložiště Home Assistantu a při opětovném otevření prvku zůstávají zachovány.
+
+---
+
 ## [0.1.92] - 2026-07-24
 
 ### 🛠️ Critical Hotfix načítání integrace v Home Assistantu
