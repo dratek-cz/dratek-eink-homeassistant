@@ -2,6 +2,19 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.100] - 2026-07-24
+
+### Přehlednější karty, vrstvy a mapa připojení
+- Stav baterie, síla signálu a gateway jsou v náhledu displeje sjednocené do jednoho řádku.
+- Nad ikonami baterie a signálu zůstávají viditelné názvy a pod nimi jejich aktuální hodnoty.
+- Vrstvy běžného Designeru se otevírají v samostatné záložce stejného levého panelu jako knihovna prvků.
+- Seznam vrstev má vlastní bezpečné posouvání a ovládací tlačítka už se nepřekrývají ani nezajíždějí pod panel.
+- Mapa připojení používá jednoduché souvislé čáry bez šipek, uzlů a pohybujících se spojů.
+- Opraveno napojení čar mezi gatewayí a displeji také v mobilním rozložení.
+- Doplněny regresní testy nového rozložení.
+
+---
+
 ## [0.1.99] - 2026-07-24
 
 ### Automatické odeslání změn z Designeru HA prvků

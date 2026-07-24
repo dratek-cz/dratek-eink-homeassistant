@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.99";
+const DRATEK_EINK_VERSION = "0.1.100";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -49,6 +49,7 @@ class DratekEinkPanel extends HTMLElement {
     this._toolsMenuOpen = false;
     this._layoutMenuOpen = false;
     this._toolCategory = "basic";
+    this._designerSideView = "tools";
     this._invertColors = false;
     this._variablesDialogOpen = false;
     this._templateDialogOpen = false;
@@ -2950,6 +2951,12 @@ class DratekEinkPanel extends HTMLElement {
         @media(max-width:1000px){.custom-elements-layout{grid-template-columns:1fr}.custom-side{position:static;grid-template-columns:1fr 1fr}.tabbar{width:100%;overflow-x:auto}.tabbar .tab{flex:0 0 auto}.condition-rule{grid-template-columns:28px 1fr 1fr}.condition-rule .field:nth-of-type(3){grid-column:2/4}.condition-remove{grid-column:1;grid-row:2}}
         @media(max-width:680px){.custom-elements-hero{padding:16px}.custom-hero-icon{display:none}.custom-elements-hero h2{font-size:17px}.custom-side{grid-template-columns:1fr}.custom-type-grid{grid-template-columns:repeat(2,1fr)}.custom-elements-layout .row{grid-template-columns:1fr}.custom-library-actions{grid-template-columns:1fr 1fr auto auto}.ha-wizard-progress span{justify-content:center;padding:7px 4px;font-size:0}.ha-wizard-progress b{font-size:10px}.sticky-save{align-items:stretch;flex-direction:column}.sticky-save button{width:100%}.condition-footer{align-items:stretch;flex-direction:column}.condition-footer>.field{min-width:0}.custom-icon-drop.has-image{grid-template-columns:1fr}.custom-icon-drop.has-image span{justify-self:center}}
         .designer-custom-list{display:grid;gap:6px;max-height:230px;overflow:auto;padding-right:2px}.designer-custom-item,.designer-custom-empty{width:100%;min-width:0;display:grid;grid-template-columns:54px minmax(0,1fr) auto;align-items:center;gap:7px;padding:6px;border:1px solid var(--divider-color);border-radius:9px;background:var(--card-background-color);color:var(--primary-text-color);box-shadow:none;text-align:left}.designer-custom-item canvas{width:54px;height:30px;border:1px solid var(--divider-color);border-radius:4px;background:#fff}.designer-custom-item span,.designer-custom-item strong,.designer-custom-item small,.designer-custom-empty span,.designer-custom-empty strong,.designer-custom-empty small{display:block;min-width:0}.designer-custom-item strong,.designer-custom-empty strong{overflow:hidden;font-size:10px;text-overflow:ellipsis;white-space:nowrap}.designer-custom-item small,.designer-custom-empty small{margin-top:2px;color:var(--secondary-text-color);font-size:8px}.designer-custom-item>ha-icon{color:var(--dratek-teal)}.designer-custom-empty{grid-template-columns:auto 1fr}.designer-custom-item:hover{border-color:var(--dratek-teal);background:rgba(0,162,165,.06)}
+        .editor-shell{grid-template-areas:"tools canvas inspector"}.designer-tools-panel{max-height:calc(100vh - 24px);overflow:auto}.designer-side-tabs{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:11px;padding:4px;border-radius:10px;background:var(--secondary-background-color)}.designer-side-tabs button{position:relative;min-width:0;min-height:39px;display:flex;align-items:center;justify-content:center;gap:5px;padding:6px;border:0;border-radius:7px;background:transparent;color:var(--secondary-text-color);box-shadow:none;font-size:10px;font-weight:850}.designer-side-tabs button ha-icon{--mdc-icon-size:18px}.designer-side-tabs button b{min-width:17px;padding:1px 4px;border-radius:999px;background:var(--divider-color);font-size:8px}.designer-side-tabs button.active{background:var(--card-background-color);color:var(--dratek-teal-dark);box-shadow:0 2px 6px rgba(15,23,42,.09)}.designer-side-tabs button.active b{background:var(--dratek-orange);color:#fff}.designer-layers-content .designer-panel-heading{margin-bottom:8px}.designer-layers-content .layer-list{max-height:calc(100vh - 225px);overflow:auto;padding-right:2px}.designer-layers-content .layer-row{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;padding:6px;border:1px solid transparent;border-radius:9px}.designer-layers-content .layer-main{width:100%;min-height:34px;padding:6px 7px;border-radius:7px;background:transparent}.designer-layers-content .layer-row-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}.designer-layers-content .layer-row-actions button{min-width:0;min-height:29px;padding:4px;border:0;border-radius:6px;background:var(--card-background-color);color:var(--secondary-text-color);box-shadow:none}.designer-layers-content .layer-row-actions button ha-icon{--mdc-icon-size:17px}.designer-layers-content .layer-row-actions button.active{background:rgba(0,153,153,.12);color:var(--dratek-teal-dark)}.designer-layers-content .layer-row.selected{border-color:rgba(0,153,153,.35);background:rgba(0,153,153,.08);box-shadow:inset 3px 0 0 var(--dratek-teal)}.designer-layers-content .layer-hint{padding:8px;border-radius:8px;background:var(--secondary-background-color);font-size:9px}
+        .display-health{grid-template-columns:minmax(70px,.72fr) minmax(70px,.72fr) minmax(120px,1.56fr);align-items:stretch;gap:7px}.display-health-route{grid-column:auto;grid-template-columns:auto minmax(0,1fr);align-items:center;padding-inline:9px}.display-health-route>ha-icon{grid-column:1;grid-row:1/3}.display-health-route>span{grid-column:2;grid-row:1/3}.display-battery-item,.display-signal-item{grid-template-rows:auto 24px auto;padding-inline:6px}.display-grid.density-large .display-health,.display-grid.density-compact .display-health,.display-grid.density-list .display-health{grid-template-columns:minmax(62px,.68fr) minmax(62px,.68fr) minmax(105px,1.64fr)}.display-grid.density-compact .display-health-route{grid-column:auto}.display-health-item strong{font-size:10px}.display-health-route strong{font-size:10px}.display-health-route small{display:block!important}.display-grid.density-list .display-health{min-width:270px}
+        .connection-map{gap:12px}.connection-group,.connection-group.is-gateway,.connection-group.is-local,.connection-group.is-unavailable{grid-template-columns:minmax(210px,260px) 38px minmax(0,1fr);align-items:center;padding:13px 15px;border-left:1px solid var(--divider-color);background:var(--secondary-background-color)}.connection-bus{position:relative;display:block;width:100%;height:100%;min-height:2px}.connection-bus:before{content:"";position:absolute;left:0;right:0;top:50%;height:2px;border-radius:0;background:var(--dratek-teal);transform:translateY(-50%)}.connection-bus span{display:none}.connection-devices{position:relative;display:grid;gap:8px;padding-left:26px}.connection-devices:before{content:"";position:absolute;left:0;top:29px;bottom:29px;width:2px;border-radius:0;background:var(--dratek-teal)}.connection-device:before{content:"";position:absolute;left:-26px;top:50%;width:26px;height:2px;background:var(--dratek-teal);transform:translateY(-50%)}.connection-device:after{display:none}.connection-device:hover{transform:none}.connection-device-signal{min-width:62px}
+        @media(max-width:1050px){.editor-shell{grid-template-areas:"tools canvas" "inspector inspector"}.designer-tools-panel{max-height:none;overflow:visible}.designer-layers-content .layer-list{max-height:420px}}
+        @media(max-width:760px){.editor-shell{grid-template-areas:"canvas" "tools" "inspector"}.display-health,.display-grid.density-large .display-health,.display-grid.density-compact .display-health,.display-grid.density-list .display-health{grid-template-columns:minmax(58px,.65fr) minmax(58px,.65fr) minmax(90px,1.7fr)}.display-health-route{grid-column:auto}.connection-group,.connection-group.is-gateway,.connection-group.is-local,.connection-group.is-unavailable{grid-template-columns:1fr;padding:12px}.connection-bus{width:2px;height:22px;justify-self:start;margin-left:20px}.connection-bus:before{inset:0;width:2px;height:auto;transform:none}.connection-devices{padding-left:40px}.connection-devices:before{left:20px;top:0}.connection-device:before{left:-20px;width:20px}}
+        @media(max-width:390px){.display-health,.display-grid.density-large .display-health,.display-grid.density-compact .display-health,.display-grid.density-list .display-health{grid-template-columns:56px 56px minmax(0,1fr);gap:4px}.display-health-item{padding:6px 3px}.display-health-route{padding-inline:5px}.display-health-route>ha-icon{display:none}.display-health-route>span{grid-column:1/-1}.display-health-route strong{font-size:9px}}
         .display-tile.is-stale{border-style:dashed}.display-online-dot.stale{background:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.16)}.display-health-route.stale ha-icon{color:#f59e0b}
       </style>
       <div class="page">
@@ -2979,7 +2986,6 @@ class DratekEinkPanel extends HTMLElement {
           ${this._renderToolSidebar()}
           <div class="card workspace-card"><div class="canvas-head"><div class="canvas-title"><span><ha-icon icon="mdi:monitor-edit"></ha-icon></span><div><strong>Pracovní plocha</strong><small>${size.width} × ${size.height} px · ${this._orientation === "portrait" ? "na výšku" : "na šířku"}</small></div></div><div class="canvas-meta"><span><ha-icon icon="mdi:magnify"></ha-icon>${Math.round(this._zoom * 100)} %</span><span><ha-icon icon="mdi:palette-swatch-outline"></ha-icon>eInk barvy</span></div></div><div class="workspace"><div class="designer-device-bezel ${this._isPe29Device(device) ? "designer-device-pe29" : ""} designer-device-${this._orientation}" style="--designer-frame-ratio:${designerFrameRatio.toFixed(4)};--designer-frame-width:${designerFrameWidth}px">${this._isPe29Device(device) ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>${this._renderDeviceBarcode(device?.physical_code || "00.00.00.00", this._orientation === "portrait")}</span>` : `<span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>`}<div class="designer-device-screen"><canvas id="editor" width="${size.width}" height="${size.height}"></canvas><canvas id="editorSelection" width="${size.width}" height="${size.height}" aria-hidden="true"></canvas></div></div></div></div>
           <div class="card right properties-panel"><div class="section-title inspector-title"><div class="inspector-title-main"><span class="inspector-object-icon"><ha-icon icon="${object ? this._objectIcon(object) : "mdi:tune-variant"}"></ha-icon></span><div><h2>Inspector</h2><small>${object ? this._escape(this._objectLabel(object, this._objects.indexOf(object))) : "Vlastnosti objektu"}</small></div></div><span class="pill muted">${object ? this._escape(object.type) : "bez výběru"}</span></div>${this._renderProperties(object)}</div>
-          ${this._renderLayersPanel()}
         </div>
         </div>
         <div style="${this._activeTab === "queue" ? "" : "display:none"}">${this._renderQueue()}</div>
@@ -3016,6 +3022,7 @@ class DratekEinkPanel extends HTMLElement {
   _renderToolSidebar() {
     const disabled = this._selectedIds.length ? "" : "disabled";
     const category = this._toolCategory || "basic";
+    const sideView = this._designerSideView || "tools";
     const customElementButtons = this._customElements.map((element) => {
       const previewLayer = this._customLayerForValue(element, this._customElementCurrentValue(element));
       return `<button class="designer-custom-item" data-custom-insert="${this._escape(element.id)}" title="Vložit ${this._escape(element.name)} do aktivního displeje"><canvas width="92" height="40" data-custom-element-id="${this._escape(element.id)}" data-custom-layer-preview="${this._escape(previewLayer?.id || "")}"></canvas><span><strong>${this._escape(element.name)}</strong><small>${(element.layers || []).length || 1} vrstev</small></span><ha-icon icon="mdi:plus-circle-outline"></ha-icon></button>`;
@@ -3055,35 +3062,42 @@ class DratekEinkPanel extends HTMLElement {
         ${customElementButtons ? `<div class="designer-custom-list">${customElementButtons}</div>` : `<button id="openCustomElements" class="designer-custom-empty secondary"><ha-icon icon="mdi:plus"></ha-icon><span><strong>Vytvořit první prvek</strong><small>Otevře Designer HA prvků</small></span></button>`}`,
     };
     return `<div class="card left designer-tools-panel">
-      <div class="designer-panel-heading"><span><ha-icon icon="mdi:view-grid-plus-outline"></ha-icon></span><div><h2>Knihovna prvků</h2><small>Vyberte složku</small></div></div>
-      <div class="tool-folder-tabs">
-        <button class="${category === "basic" ? "active" : ""}" data-tool-category="basic"><ha-icon icon="mdi:shape-outline"></ha-icon><span>Základní</span></button>
-        <button class="${category === "data" ? "active" : ""}" data-tool-category="data"><ha-icon icon="mdi:chart-box-outline"></ha-icon><span>Data</span></button>
-        <button class="${category === "status" ? "active" : ""}" data-tool-category="status"><ha-icon icon="mdi:toggle-switch-outline"></ha-icon><span>Stavy</span></button>
-        <button class="${category === "custom" ? "active" : ""}" data-tool-category="custom"><ha-icon icon="mdi:puzzle-outline"></ha-icon><span>Moje</span></button>
+      <div class="designer-side-tabs">
+        <button class="${sideView === "tools" ? "active" : ""}" data-designer-side="tools"><ha-icon icon="mdi:view-grid-plus-outline"></ha-icon><span>Prvky</span></button>
+        <button class="${sideView === "layers" ? "active" : ""}" data-designer-side="layers"><ha-icon icon="mdi:layers-triple-outline"></ha-icon><span>Vrstvy</span><b>${this._objects.length}</b></button>
       </div>
-      <div class="tool-folder-content">${groups[category] || groups.basic}</div>
-      <div class="panel-divider"></div>
-      <div class="designer-panel-heading compact"><span><ha-icon icon="mdi:selection-drag"></ha-icon></span><div><h2>Upravit výběr</h2><small>${this._selectedIds.length ? `${this._selectedIds.length} vybráno` : "Vyberte objekt"}</small></div></div>
-      <div class="action-grid">
-        <button id="undoAction" class="icon-btn secondary" title="Zpět (Ctrl+Z)" ${this._undoStack.length ? "" : "disabled"}><ha-icon icon="mdi:undo"></ha-icon></button>
-        <button id="redoAction" class="icon-btn secondary" title="Dopředu (Ctrl+Y)" ${this._redoStack.length ? "" : "disabled"}><ha-icon icon="mdi:redo"></ha-icon></button>
-        <button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${disabled}><ha-icon icon="mdi:content-duplicate"></ha-icon></button>
-        <button id="rotateSelected" class="icon-btn secondary" title="Otočit 90°" ${disabled}><ha-icon icon="mdi:rotate-right"></ha-icon></button>
-        <button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${disabled}><ha-icon icon="mdi:flip-horizontal"></ha-icon></button>
-        <button id="layerFront" class="icon-btn secondary" title="Do popředí" ${disabled}><ha-icon icon="mdi:arrange-bring-forward"></ha-icon></button>
-        <button id="layerBack" class="icon-btn secondary" title="Do pozadí" ${disabled}><ha-icon icon="mdi:arrange-send-backward"></ha-icon></button>
-        <button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${disabled}><ha-icon icon="mdi:format-align-left"></ha-icon></button>
-        <button id="alignCenter" class="icon-btn secondary" title="Zarovnat na střed" ${disabled}><ha-icon icon="mdi:format-align-center"></ha-icon></button>
-        <button id="alignRight" class="icon-btn secondary" title="Zarovnat vpravo" ${disabled}><ha-icon icon="mdi:format-align-right"></ha-icon></button>
-        <button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${disabled}><ha-icon icon="mdi:format-align-top"></ha-icon></button>
-        <button id="alignMiddle" class="icon-btn secondary" title="Svislý střed" ${disabled}><ha-icon icon="mdi:format-align-middle"></ha-icon></button>
-        <button id="alignBottom" class="icon-btn secondary" title="Zarovnat dolů" ${disabled}><ha-icon icon="mdi:format-align-bottom"></ha-icon></button>
-        <button id="distributeH" class="icon-btn secondary" title="Rozprostřít vodorovně" ${this._selectedIds.length > 2 ? "" : "disabled"}><ha-icon icon="mdi:distribute-horizontal-center"></ha-icon></button>
-        <button id="distributeV" class="icon-btn secondary" title="Rozprostřít svisle" ${this._selectedIds.length > 2 ? "" : "disabled"}><ha-icon icon="mdi:distribute-vertical-center"></ha-icon></button>
-        <button id="deleteSelected" class="wide-action danger" ${disabled}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat vybrané</button>
-        <button id="clearDesign" class="wide-action secondary"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vyčistit plochu</button>
+      <div class="designer-side-pane" style="${sideView === "tools" ? "" : "display:none"}">
+        <div class="designer-panel-heading"><span><ha-icon icon="mdi:view-grid-plus-outline"></ha-icon></span><div><h2>Knihovna prvků</h2><small>Vyberte složku</small></div></div>
+        <div class="tool-folder-tabs">
+          <button class="${category === "basic" ? "active" : ""}" data-tool-category="basic"><ha-icon icon="mdi:shape-outline"></ha-icon><span>Základní</span></button>
+          <button class="${category === "data" ? "active" : ""}" data-tool-category="data"><ha-icon icon="mdi:chart-box-outline"></ha-icon><span>Data</span></button>
+          <button class="${category === "status" ? "active" : ""}" data-tool-category="status"><ha-icon icon="mdi:toggle-switch-outline"></ha-icon><span>Stavy</span></button>
+          <button class="${category === "custom" ? "active" : ""}" data-tool-category="custom"><ha-icon icon="mdi:puzzle-outline"></ha-icon><span>Moje</span></button>
+        </div>
+        <div class="tool-folder-content">${groups[category] || groups.basic}</div>
+        <div class="panel-divider"></div>
+        <div class="designer-panel-heading compact"><span><ha-icon icon="mdi:selection-drag"></ha-icon></span><div><h2>Upravit výběr</h2><small>${this._selectedIds.length ? `${this._selectedIds.length} vybráno` : "Vyberte objekt"}</small></div></div>
+        <div class="action-grid">
+          <button id="undoAction" class="icon-btn secondary" title="Zpět (Ctrl+Z)" ${this._undoStack.length ? "" : "disabled"}><ha-icon icon="mdi:undo"></ha-icon></button>
+          <button id="redoAction" class="icon-btn secondary" title="Dopředu (Ctrl+Y)" ${this._redoStack.length ? "" : "disabled"}><ha-icon icon="mdi:redo"></ha-icon></button>
+          <button id="duplicateSelected" class="icon-btn secondary" title="Duplikovat" ${disabled}><ha-icon icon="mdi:content-duplicate"></ha-icon></button>
+          <button id="rotateSelected" class="icon-btn secondary" title="Otočit 90°" ${disabled}><ha-icon icon="mdi:rotate-right"></ha-icon></button>
+          <button id="mirrorSelected" class="icon-btn secondary" title="Zrcadlit" ${disabled}><ha-icon icon="mdi:flip-horizontal"></ha-icon></button>
+          <button id="layerFront" class="icon-btn secondary" title="Do popředí" ${disabled}><ha-icon icon="mdi:arrange-bring-forward"></ha-icon></button>
+          <button id="layerBack" class="icon-btn secondary" title="Do pozadí" ${disabled}><ha-icon icon="mdi:arrange-send-backward"></ha-icon></button>
+          <button id="alignLeft" class="icon-btn secondary" title="Zarovnat vlevo" ${disabled}><ha-icon icon="mdi:format-align-left"></ha-icon></button>
+          <button id="alignCenter" class="icon-btn secondary" title="Zarovnat na střed" ${disabled}><ha-icon icon="mdi:format-align-center"></ha-icon></button>
+          <button id="alignRight" class="icon-btn secondary" title="Zarovnat vpravo" ${disabled}><ha-icon icon="mdi:format-align-right"></ha-icon></button>
+          <button id="alignTop" class="icon-btn secondary" title="Zarovnat nahoru" ${disabled}><ha-icon icon="mdi:format-align-top"></ha-icon></button>
+          <button id="alignMiddle" class="icon-btn secondary" title="Svislý střed" ${disabled}><ha-icon icon="mdi:format-align-middle"></ha-icon></button>
+          <button id="alignBottom" class="icon-btn secondary" title="Zarovnat dolů" ${disabled}><ha-icon icon="mdi:format-align-bottom"></ha-icon></button>
+          <button id="distributeH" class="icon-btn secondary" title="Rozprostřít vodorovně" ${this._selectedIds.length > 2 ? "" : "disabled"}><ha-icon icon="mdi:distribute-horizontal-center"></ha-icon></button>
+          <button id="distributeV" class="icon-btn secondary" title="Rozprostřít svisle" ${this._selectedIds.length > 2 ? "" : "disabled"}><ha-icon icon="mdi:distribute-vertical-center"></ha-icon></button>
+          <button id="deleteSelected" class="wide-action danger" ${disabled}><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat vybrané</button>
+          <button id="clearDesign" class="wide-action secondary"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vyčistit plochu</button>
+        </div>
       </div>
+      <div class="designer-side-pane" style="${sideView === "layers" ? "" : "display:none"}">${this._renderLayersPanel()}</div>
     </div>`;
   }
 
@@ -3165,7 +3179,7 @@ class DratekEinkPanel extends HTMLElement {
 
   _renderLayersPanel() {
     const layers = this._objects.map((object, index) => ({ object, index })).reverse();
-    return `<div class="card layers-panel">
+    return `<div class="designer-layers-content">
       <div class="designer-panel-heading"><span><ha-icon icon="mdi:layers-triple-outline"></ha-icon></span><div><h2>Vrstvy návrhu</h2><small>${this._objects.length} ${this._objects.length === 1 ? "objekt" : "objektů"}</small></div></div>
       ${layers.length ? `<div class="layer-list">${layers.map(({ object, index }) => `
         <div class="layer-row ${this._selectedIds.includes(object.id) ? "selected" : ""} ${object.hidden ? "is-hidden" : ""} ${object.locked ? "is-locked" : ""}">
@@ -3173,14 +3187,12 @@ class DratekEinkPanel extends HTMLElement {
             <ha-icon icon="${this._objectIcon(object)}"></ha-icon>
             <span>${this._escape(object.name || this._objectLabel(object, index))}</span>
           </button>
-          <button class="layer-action ${object.hidden ? "active" : ""}" data-layer-toggle-hide="${object.id}" title="${object.hidden ? "Zobrazit prvek" : "Skrýt prvek"}">
-            <ha-icon icon="${object.hidden ? "mdi:eye-off" : "mdi:eye"}"></ha-icon>
-          </button>
-          <button class="layer-action ${object.locked ? "active" : ""}" data-layer-toggle-lock="${object.id}" title="${object.locked ? "Odemknout prvek" : "Zamknout prvek"}">
-            <ha-icon icon="${object.locked ? "mdi:lock" : "mdi:lock-open-variant"}"></ha-icon>
-          </button>
-          <button class="layer-step" data-layer-front="${object.id}" title="Posunout nahoru" ${index === this._objects.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-up"></ha-icon></button>
-          <button class="layer-step" data-layer-back="${object.id}" title="Posunout dolů" ${index === 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-down"></ha-icon></button>
+          <div class="layer-row-actions">
+            <button class="layer-action ${object.hidden ? "active" : ""}" data-layer-toggle-hide="${object.id}" title="${object.hidden ? "Zobrazit prvek" : "Skrýt prvek"}"><ha-icon icon="${object.hidden ? "mdi:eye-off" : "mdi:eye"}"></ha-icon></button>
+            <button class="layer-action ${object.locked ? "active" : ""}" data-layer-toggle-lock="${object.id}" title="${object.locked ? "Odemknout prvek" : "Zamknout prvek"}"><ha-icon icon="${object.locked ? "mdi:lock" : "mdi:lock-open-variant"}"></ha-icon></button>
+            <button class="layer-step" data-layer-front="${object.id}" title="Posunout nahoru" ${index === this._objects.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-up"></ha-icon></button>
+            <button class="layer-step" data-layer-back="${object.id}" title="Posunout dolů" ${index === 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-down"></ha-icon></button>
+          </div>
         </div>`).join("")}</div><p class="layer-hint">Nahoře je popředí. Tlačítka oka a zámku skryjí nebo zamknou prvek.</p>` : `<div class="inspector-empty"><ha-icon icon="mdi:layers-outline"></ha-icon><p>Návrh zatím neobsahuje žádné objekty.</p></div>`}
     </div>`;
   }
@@ -4358,7 +4370,7 @@ class DratekEinkPanel extends HTMLElement {
           <div class="connection-hub-copy"><small>${gateway ? "DRATEK gateway" : local ? "Home Assistant" : "Nedostupné"}</small><strong>${this._escape(name)}</strong><span>${this._escape(detail)}</span></div>
           <span class="connection-count">${group.devices.length}</span>
         </div>
-        <div class="connection-bus" aria-hidden="true"><span></span></div>
+        <div class="connection-bus" aria-hidden="true"></div>
         <div class="connection-devices">${group.devices.map(({ device, rssi, preferred }) => `<button class="connection-device" data-select-device="${this._escape(device.address)}" title="Otevřít ${this._escape(this._deviceTitle(device))} v designeru">
           <span class="connection-device-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></span>
           <span class="connection-device-copy"><strong>${this._escape(this._deviceTitle(device))}</strong><small>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</small></span>
@@ -4726,6 +4738,11 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#symbolSearch")?.addEventListener("input", (event) => { this._symbolSearch = event.target.value; this._render(); this._paint(); });
     this.shadowRoot.querySelectorAll("[data-symbol-category]").forEach((button) => button.addEventListener("click", () => { this._symbolCategory = button.dataset.symbolCategory; this._render(); this._paint(); }));
     this.shadowRoot.querySelectorAll("[data-symbol]").forEach((button) => button.addEventListener("click", () => this._addSymbol(button.dataset.symbol)));
+    this.shadowRoot.querySelectorAll("[data-designer-side]").forEach((button) => button.addEventListener("click", () => {
+      this._designerSideView = button.dataset.designerSide;
+      this._render();
+      this._paint();
+    }));
     this.shadowRoot.querySelectorAll("[data-tool-category]").forEach((button) => button.addEventListener("click", () => {
       this._toolCategory = button.dataset.toolCategory;
       this._render();
@@ -6350,7 +6367,7 @@ class DratekEinkPanel extends HTMLElement {
         </header>
         ${mode === "list" ? "" : `<div class="display-preview-slot">${this._renderDevicePreview(device, mode)}</div>`}
         <div class="display-health">
-          <div class="display-health-item display-battery-item" title="Odhad zbývající kapacity CR2450"><small>Baterie</small>${this._renderBatterySegments(battery.percent)}<strong>${Number.isFinite(battery.percent) ? `${battery.percent} % · ${this._formatBatteryVoltage(battery.voltage)}` : "-"}</strong></div>
+          <div class="display-health-item display-battery-item" title="Odhad zbývající kapacity CR2450${Number.isFinite(battery.voltage) ? ` · ${this._formatBatteryVoltage(battery.voltage)}` : ""}"><small>Baterie</small>${this._renderBatterySegments(battery.percent)}<strong>${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></div>
           <div class="display-health-item display-signal-item"><small>Signál</small>${this._renderSignalBars(rssi)}<strong class="signal-value ${this._signalClass(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>
           <div class="display-health-item display-health-route ${temporarilyUnseen ? "stale" : ""}"><ha-icon icon="${temporarilyUnseen ? "mdi:bluetooth-off" : preferredPath?.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon><span><small>Připojení</small><strong>${temporarilyUnseen ? "Čekám na další signál" : this._escape(preferredPath?.name || "Nedostupné")}</strong></span></div>
         </div>

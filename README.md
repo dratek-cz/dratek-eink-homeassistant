@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.100
+
+- baterie, signál a použitá gateway jsou v kartě displeje přehledně v jednom řádku
+- vrstvy Designeru jsou nově v přepínatelné záložce levého panelu a nezajíždějí pod nástroje
+- mapa připojení používá čisté souvislé čáry a je opravená také pro úzké obrazovky
+
 ## Novinky ve verzi 0.1.99
 
 - úprava uloženého prvku v Designeru HA prvků se automaticky propíše také do aktivních automatizací displejů

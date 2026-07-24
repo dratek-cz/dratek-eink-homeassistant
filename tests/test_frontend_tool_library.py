@@ -43,6 +43,29 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('this._activeTab === "custom"', self.source)
         self.assertIn('event.key === "Delete" || event.key === "Backspace"', self.source)
 
+    def test_layers_share_the_sticky_tool_sidebar(self):
+        self.assertIn('data-designer-side="tools"', self.source)
+        self.assertIn('data-designer-side="layers"', self.source)
+        self.assertIn('class="designer-layers-content"', self.source)
+        self.assertIn('class="layer-row-actions"', self.source)
+        self.assertNotIn('<div class="card layers-panel">', self.source)
+
+    def test_display_health_keeps_gateway_in_the_same_row(self):
+        self.assertIn(
+            ".display-health{grid-template-columns:minmax(70px,.72fr) "
+            "minmax(70px,.72fr) minmax(120px,1.56fr)",
+            self.source,
+        )
+        self.assertIn(".display-health-route{grid-column:auto", self.source)
+
+    def test_connection_map_uses_plain_lines(self):
+        self.assertIn(".connection-device:after{display:none}", self.source)
+        self.assertIn(
+            ".connection-device:before{content:\"\";position:absolute;",
+            self.source,
+        )
+        self.assertIn(".connection-device:hover{transform:none}", self.source)
+
 
 if __name__ == "__main__":
     unittest.main()
