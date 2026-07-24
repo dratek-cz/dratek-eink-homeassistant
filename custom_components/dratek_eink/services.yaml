@@ -1,0 +1,47 @@
+send_text:
+  name: Send text
+  description: Render centered text and send it to a DRATEK eInk label over BLE.
+  fields:
+    address:
+      name: BLE address
+      description: BLE MAC address of the label.
+      required: true
+      example: "FF:FF:94:20:10:78"
+      selector:
+        text:
+    sdk_type:
+      name: SDK type
+      description: Display SDK type, for example 75 for 400x300 BWR or 267 for 250x122 BWR.
+      required: true
+      example: 75
+      selector:
+        number:
+          min: 1
+          max: 5000
+          mode: box
+    text:
+      name: Text
+      description: Text to render.
+      required: true
+      example: "Hello from HA"
+      selector:
+        text:
+    font_size:
+      name: Font size
+      description: Optional font size in pixels.
+      required: false
+      selector:
+        number:
+          min: 8
+          max: 200
+          mode: box
+    color:
+      name: Color
+      description: Text color.
+      required: false
+      default: black
+      selector:
+        select:
+          options:
+            - black
+            - red
