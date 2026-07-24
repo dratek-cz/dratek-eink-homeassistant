@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.96";
+const DRATEK_EINK_VERSION = "0.1.97";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -48,6 +48,7 @@ class DratekEinkPanel extends HTMLElement {
     this._viewMenuOpen = false;
     this._toolsMenuOpen = false;
     this._layoutMenuOpen = false;
+    this._toolCategory = "basic";
     this._invertColors = false;
     this._variablesDialogOpen = false;
     this._templateDialogOpen = false;
@@ -1721,6 +1722,8 @@ class DratekEinkPanel extends HTMLElement {
   _addObject(type) {
     this._pushHistory();
     const size = this._displaySize();
+    const requestedType = type;
+    if (type === "status") type = "text";
     const object = {
       id: `obj-${this._nextId++}`,
       type,
@@ -1749,6 +1752,23 @@ class DratekEinkPanel extends HTMLElement {
       keepRatio: type === "image",
     };
     if (type === "rect") object.fill = "red";
+    if (requestedType === "status") {
+      object.text = "●";
+      object.w = this._snapValue(size.width * 0.28);
+      object.h = this._snapValue(size.height * 0.34);
+      object.fontSize = Math.max(22, Math.round(size.height * 0.24));
+      object.bold = true;
+      object.variable = true;
+      object.variableName = this._uniqueVariableName("stav_on_off", object.id);
+      object.textAlign = "center";
+      object.statusIcons = true;
+      object.statusOnSymbol = "●";
+      object.statusOffSymbol = "○";
+      object.statusOnValues = "on,true,1,open,home";
+      object.conditionRules = [];
+      object.defaultSymbol = "○";
+      object.autoUpdate = true;
+    }
     if (type === "line") {
       object.x2 = object.x + this._snapValue(size.width * 0.38);
       object.y2 = object.y + this._snapValue(size.height * 0.2);
@@ -1774,6 +1794,37 @@ class DratekEinkPanel extends HTMLElement {
       object.legendFontSize = 8;
       object.variable = true;
       object.variableName = this._uniqueVariableName("ceny_spot_24h", object.id);
+    }
+    if (requestedType === "bar_gauge") {
+      Object.assign(object, {
+        type: "bar_gauge", w: this._snapValue(size.width * 0.68), h: this._snapValue(size.height * 0.25),
+        label: "Ukazatel", min_value: 0, max_value: 100, sample_value: 65, unit: "%",
+        orientation: "horizontal", fill: "red", stroke: "black", stroke_width: 2,
+        show_value: true, entityId: "", entityAttribute: "", autoUpdate: true,
+      });
+    }
+    if (requestedType === "pie") {
+      const side = this._snapValue(Math.min(size.width * 0.38, size.height * 0.72));
+      Object.assign(object, {
+        type: "pie", w: side, h: side, label: "Koláč", min_value: 0, max_value: 100,
+        sample_value: 65, unit: "%", hole_percent: 45, color: "red",
+        show_value: true, entityId: "", entityAttribute: "", autoUpdate: true, keepRatio: true,
+      });
+    }
+    if (requestedType === "slider") {
+      Object.assign(object, {
+        type: "slider", w: this._snapValue(size.width * 0.64), h: this._snapValue(size.height * 0.34),
+        label: "Hodnota", min_value: 0, max_value: 100, sample_value: 50, unit: "%",
+        color: "red", show_value: true, entityId: "", entityAttribute: "", autoUpdate: true,
+      });
+    }
+    if (requestedType === "gauge" || requestedType === "potentiometer") {
+      Object.assign(object, {
+        type: "gauge", w: this._snapValue(size.width * 0.45), h: this._snapValue(size.height * 0.68),
+        label: "Budík", min_value: 0, max_value: 100, sample_value: 62, unit: "%",
+        color: "red", stroke_width: 6, arc_mode: "240", show_arc: true,
+        show_needle: true, show_value: true, entityId: "", entityAttribute: "", autoUpdate: true,
+      });
     }
     if (type === "qr") {
       object.w = Math.min(object.w, object.h);
@@ -2865,6 +2916,8 @@ class DratekEinkPanel extends HTMLElement {
         @media(max-width:760px){.designer-device-primary,.designer-device-fact,.designer-device-meter,.designer-route{border:1px solid var(--divider-color)}.designer-commandbar .ribbon-tab{flex:1}.designer-commandbar .ribbon-project{max-width:none}.tool-grid{grid-template-columns:1fr 1fr}.workspace{padding:14px}.properties-panel{max-height:none}}
         .designer-device-strip{display:grid;grid-template-columns:minmax(190px,1.35fr) minmax(135px,.9fr) auto auto auto minmax(140px,1fr) minmax(145px,.8fr) minmax(190px,auto);gap:0;padding:8px;background:var(--card-background-color);border:1px solid var(--divider-color);box-shadow:0 6px 18px rgba(15,23,42,.055)!important;overflow:hidden}.designer-device-primary,.designer-device-fact,.designer-device-meter,.designer-route,.designer-orientation{min-height:58px;padding:7px 11px;border:0;border-right:1px solid var(--divider-color);border-radius:0;background:transparent}.designer-device-primary{border-left:0}.designer-device-mark{width:34px;height:34px}.designer-refresh select{min-width:125px;padding:6px;border:1px solid var(--divider-color);border-radius:7px;background:var(--secondary-background-color);color:var(--primary-text-color);font-size:10px;font-weight:750}.designer-orientation{padding:6px 8px;border-right:0}.designer-orientation>div{gap:3px}.designer-orientation button{display:grid;grid-template-columns:auto 1fr;min-height:37px;padding:5px 7px;text-align:left}.designer-orientation button ha-icon{--mdc-icon-size:21px}.designer-orientation button span{font-size:9px}.designer-orientation button.active{background:var(--dratek-orange);color:#fff}
         .editor-shell{grid-template-columns:184px minmax(0,1fr) 292px}.tool-grid{grid-template-columns:repeat(4,1fr);gap:5px}.tool-icon{position:relative;display:grid;grid-template-columns:1fr;place-items:center;min-width:0;min-height:42px;padding:5px}.tool-icon .ico{width:30px;height:30px}.tool-icon .txt{display:none}.designer-tools-panel{padding:10px}.designer-tools-panel .designer-panel-heading{margin-bottom:7px}.designer-tools-panel .action-grid{grid-template-columns:repeat(4,1fr)}.designer-tools-panel .wide-action{grid-column:1/-1}.designer-tools-panel .action-grid .icon-btn{min-width:0;padding:5px}.properties-panel{font-size:11px}.properties-panel .inspector-section{padding:8px}.properties-panel .field{margin-bottom:7px}.properties-panel .inspector-section-title{margin-bottom:6px}.properties-panel input,.properties-panel select,.properties-panel textarea{padding:7px}.properties-panel .color-option{min-height:43px}.properties-panel .toggle-card{padding:6px}.properties-panel .inspector-help{margin-top:5px;font-size:9px}.layers-panel{padding:10px}
+        .tool-folder-tabs{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:9px}.tool-folder-tabs button{min-width:0;min-height:48px;display:grid;grid-template-columns:20px minmax(0,1fr);align-items:center;gap:4px;padding:6px;border:1px solid var(--divider-color);border-radius:9px;background:var(--secondary-background-color);color:var(--secondary-text-color);box-shadow:none}.tool-folder-tabs button ha-icon{--mdc-icon-size:19px}.tool-folder-tabs button span{overflow:hidden;font-size:9px;font-weight:800;text-overflow:ellipsis}.tool-folder-tabs button.active{border-color:var(--dratek-teal);background:rgba(0,153,153,.1);color:var(--dratek-teal-dark);box-shadow:inset 0 0 0 1px var(--dratek-teal)}.tool-folder-content{min-height:168px;padding:8px;border-radius:10px;background:var(--secondary-background-color)}.tool-folder-head{margin-bottom:7px}.tool-folder-head strong,.tool-folder-head small{display:block}.tool-folder-head strong{font-size:11px}.tool-folder-head small{margin-top:2px;color:var(--secondary-text-color);font-size:8px}.tool-folder-content .tool-grid{grid-template-columns:1fr 1fr;gap:5px}.tool-folder-content .tool-icon{min-height:54px;grid-template-columns:1fr;grid-template-rows:27px auto;gap:2px;padding:4px;background:var(--card-background-color)}.tool-folder-content .tool-icon .ico{width:27px;height:27px}.tool-folder-content .tool-icon .txt{display:block;width:100%;overflow:hidden;color:var(--secondary-text-color);font-size:8px;text-align:center;text-overflow:ellipsis;white-space:nowrap}.tool-folder-help{display:flex;align-items:flex-start;gap:5px;margin:8px 1px 0;color:var(--secondary-text-color);font-size:8px;line-height:1.35}.tool-folder-help ha-icon{--mdc-icon-size:15px;color:var(--dratek-teal);flex:0 0 auto}.tool-folder-content .designer-custom-empty{margin-top:7px}
+        details.inspector-section{display:block;padding:0;overflow:hidden}.inspector-section>summary{list-style:none;cursor:pointer;margin:0;padding:9px 10px;user-select:none}.inspector-section>summary::-webkit-details-marker{display:none}.inspector-section>summary .inspector-chevron{margin-left:auto;transition:transform .16s ease}.inspector-section[open]>summary .inspector-chevron{transform:rotate(180deg)}.inspector-section[open]>summary{margin-bottom:0;border-bottom:1px solid var(--divider-color);background:var(--card-background-color)}.inspector-section-body{padding:9px 10px}.inspector-section:not([open]) .inspector-section-title{margin-bottom:0}.properties-panel .inspector-section{padding:0}.properties-panel .inspector-section-title{margin-bottom:0}
         .designer-device-bezel{position:relative;display:block;flex:0 0 auto;width:var(--designer-frame-width);max-width:none;aspect-ratio:var(--designer-frame-ratio);padding:0;border:8px solid #eee8e8;border-radius:18px;background:#fff;box-shadow:0 12px 30px rgba(15,23,42,.15),inset 0 0 0 1px rgba(0,0,0,.04)}.designer-device-screen{position:absolute;inset:10% 12%;width:auto;height:auto}.designer-device-screen canvas{display:block;width:100%;height:100%}.designer-device-screen #editorSelection{position:absolute;z-index:3;inset:0;background:transparent;pointer-events:none}.designer-device-code{left:3.1%;font-size:clamp(8px,calc(var(--designer-frame-width) / 42),22px);transform:translateY(-50%) rotate(180deg)}.designer-device-pe29 .designer-device-identification{right:2.1%;top:10%;bottom:10%;width:8.4%;gap:3px}.designer-device-pe29 .designer-device-identification .designer-device-code{font-size:clamp(8px,calc(var(--designer-frame-width) / 52),18px)}.designer-device-portrait .designer-device-identification{left:10%;right:10%;top:auto;bottom:2.1%;width:auto;height:8.4%;display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:4px}.designer-device-portrait .designer-device-identification .designer-device-code{font-size:clamp(8px,calc(var(--designer-frame-width) / 23),16px);writing-mode:horizontal-tb;transform:none}.designer-device-portrait>.designer-device-code{left:50%;top:auto;bottom:3.1%;writing-mode:horizontal-tb;transform:translateX(-50%)}.designer-device-identification .device-preview-barcode.horizontal{width:100%;height:100%}
         .device-preview-pe29.device-preview-portrait .device-preview-identification{left:10%;right:10%;top:auto;bottom:2.1%;width:auto;height:8.4%;display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:2px}.device-preview-pe29.device-preview-portrait .device-preview-identification .device-preview-code{font-size:clamp(5px,1vw,9px);writing-mode:horizontal-tb;transform:none}.device-preview-portrait>.device-preview-code{left:50%;top:auto;bottom:3.1%;writing-mode:horizontal-tb;transform:translateX(-50%)}.device-preview-identification .device-preview-barcode.horizontal{width:100%;height:100%}
         .designer-device-portrait .designer-device-screen{inset:12% 10%}.device-preview-portrait .device-preview-screen{inset:12% 10%}
@@ -2944,26 +2997,54 @@ class DratekEinkPanel extends HTMLElement {
 
   _renderToolSidebar() {
     const disabled = this._selectedIds.length ? "" : "disabled";
+    const category = this._toolCategory || "basic";
     const customElementButtons = this._customElements.map((element) => {
       const previewLayer = this._customLayerForValue(element, this._customElementCurrentValue(element));
       return `<button class="designer-custom-item" data-custom-insert="${this._escape(element.id)}" title="Vložit ${this._escape(element.name)} do aktivního displeje"><canvas width="92" height="40" data-custom-element-id="${this._escape(element.id)}" data-custom-layer-preview="${this._escape(previewLayer?.id || "")}"></canvas><span><strong>${this._escape(element.name)}</strong><small>${(element.layers || []).length || 1} vrstev</small></span><ha-icon icon="mdi:plus-circle-outline"></ha-icon></button>`;
     }).join("");
+    const toolButton = (type, icon, label, id = "") => `<button ${id ? `id="${id}"` : `data-add="${type}"`} class="tool-icon" title="${label}"><span class="ico"><ha-icon icon="${icon}"></ha-icon></span><span class="txt">${label}</span></button>`;
+    const groups = {
+      basic: `
+        <div class="tool-folder-head"><strong>Základní prvky</strong><small>Text, tvary a obrázky</small></div>
+        <div class="tool-grid">
+          ${toolButton("text", "mdi:format-text", "Text")}
+          ${toolButton("", "mdi:shape-plus", "Symbol", "openSymbols")}
+          ${toolButton("rect", "mdi:rectangle-outline", "Tvar")}
+          ${toolButton("line", "mdi:vector-line", "Čára")}
+          ${toolButton("barcode", "mdi:barcode", "Čárový kód")}
+          ${toolButton("qr", "mdi:qrcode", "QR kód")}
+          ${toolButton("", "mdi:image-plus", "Obrázek", "addImage")}
+          <input id="imageFile" type="file" accept="image/*" hidden>
+        </div>`,
+      data: `
+        <div class="tool-folder-head"><strong>Data a grafy</strong><small>Napojení na entity Home Assistantu</small></div>
+        <div class="tool-grid">
+          ${toolButton("chart", "mdi:chart-line", "Graf")}
+          ${toolButton("bar_gauge", "mdi:chart-bar", "Ukazatel")}
+          ${toolButton("pie", "mdi:chart-donut", "Koláč")}
+          ${toolButton("slider", "mdi:tune-vertical", "Posuvník")}
+          ${toolButton("gauge", "mdi:gauge", "Budík")}
+        </div>
+        <p class="tool-folder-help"><ha-icon icon="mdi:home-assistant"></ha-icon>Po vložení vyberte v Inspectoru entitu. Změny se do displeje odešlou podle nastaveného intervalu.</p>`,
+      status: `
+        <div class="tool-folder-head"><strong>Stavy a signalizace</strong><small>ON/OFF nebo vlastní podmínky</small></div>
+        <div class="tool-grid">
+          ${toolButton("status", "mdi:toggle-switch-outline", "ON / OFF")}
+        </div>
+        <button id="openCustomElements" class="designer-custom-empty secondary"><ha-icon icon="mdi:layers-triple-outline"></ha-icon><span><strong>Pokročilá signalizace</strong><small>Více vrstev a podmínek</small></span></button>`,
+      custom: `
+        <div class="tool-folder-head"><strong>Moje HA prvky</strong><small>Uložené prvky připravené k vložení</small></div>
+        ${customElementButtons ? `<div class="designer-custom-list">${customElementButtons}</div>` : `<button id="openCustomElements" class="designer-custom-empty secondary"><ha-icon icon="mdi:plus"></ha-icon><span><strong>Vytvořit první prvek</strong><small>Otevře Designer HA prvků</small></span></button>`}`,
+    };
     return `<div class="card left designer-tools-panel">
-      <div class="designer-panel-heading"><span><ha-icon icon="mdi:shape-plus"></ha-icon></span><div><h2>Vložit prvek</h2><small>Obsah displeje</small></div></div>
-      <div class="tool-grid">
-        <button class="tool-icon" data-add="text" title="Text"><span class="ico"><ha-icon icon="mdi:format-text"></ha-icon></span><span class="txt">Text</span></button>
-        <button id="openSymbols" class="tool-icon" title="Symboly"><span class="ico"><ha-icon icon="mdi:shape-plus"></ha-icon></span><span class="txt">Symbol</span></button>
-        <button class="tool-icon" data-add="rect" title="Tvar"><span class="ico"><ha-icon icon="mdi:rectangle-outline"></ha-icon></span><span class="txt">Tvar</span></button>
-        <button class="tool-icon" data-add="line" title="Čára"><span class="ico"><ha-icon icon="mdi:vector-line"></ha-icon></span><span class="txt">Čára</span></button>
-        <button class="tool-icon" data-add="barcode" title="Čárový kód"><span class="ico"><ha-icon icon="mdi:barcode"></ha-icon></span><span class="txt">Čárový kód</span></button>
-        <button class="tool-icon" data-add="qr" title="QR kód"><span class="ico"><ha-icon icon="mdi:qrcode"></ha-icon></span><span class="txt">QR kód</span></button>
-        <button class="tool-icon" data-add="chart" title="Graf"><span class="ico"><ha-icon icon="mdi:chart-line"></ha-icon></span><span class="txt">Graf</span></button>
-        <button id="addImage" class="tool-icon secondary" title="Obrázek"><span class="ico"><ha-icon icon="mdi:image-plus"></ha-icon></span><span class="txt">Obrázek</span></button>
-        <input id="imageFile" type="file" accept="image/*" hidden>
+      <div class="designer-panel-heading"><span><ha-icon icon="mdi:view-grid-plus-outline"></ha-icon></span><div><h2>Knihovna prvků</h2><small>Vyberte složku</small></div></div>
+      <div class="tool-folder-tabs">
+        <button class="${category === "basic" ? "active" : ""}" data-tool-category="basic"><ha-icon icon="mdi:shape-outline"></ha-icon><span>Základní</span></button>
+        <button class="${category === "data" ? "active" : ""}" data-tool-category="data"><ha-icon icon="mdi:chart-box-outline"></ha-icon><span>Data</span></button>
+        <button class="${category === "status" ? "active" : ""}" data-tool-category="status"><ha-icon icon="mdi:toggle-switch-outline"></ha-icon><span>Stavy</span></button>
+        <button class="${category === "custom" ? "active" : ""}" data-tool-category="custom"><ha-icon icon="mdi:puzzle-outline"></ha-icon><span>Moje</span></button>
       </div>
-      <div class="panel-divider"></div>
-      <div class="designer-panel-heading compact"><span><ha-icon icon="mdi:puzzle-outline"></ha-icon></span><div><h2>Moje HA prvky</h2><small>Vložit přímo do displeje</small></div></div>
-      ${customElementButtons ? `<div class="designer-custom-list">${customElementButtons}</div>` : `<button id="openCustomElements" class="designer-custom-empty secondary"><ha-icon icon="mdi:plus"></ha-icon><span><strong>Vytvořit první prvek</strong><small>Otevře Designer HA prvků</small></span></button>`}
+      <div class="tool-folder-content">${groups[category] || groups.basic}</div>
       <div class="panel-divider"></div>
       <div class="designer-panel-heading compact"><span><ha-icon icon="mdi:selection-drag"></ha-icon></span><div><h2>Upravit výběr</h2><small>${this._selectedIds.length ? `${this._selectedIds.length} vybráno` : "Vyberte objekt"}</small></div></div>
       <div class="action-grid">
@@ -3044,19 +3125,24 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _objectLabel(object, index) {
-    if (object.type === "text") return String(object.text || "Text").slice(0, 28);
+    if (object.type === "text") return object.statusIcons ? "Signalizace ON / OFF" : String(object.text || "Text").slice(0, 28);
     if (object.type === "rect") return `Obdélník ${index + 1}`;
     if (object.type === "line") return `Čára ${index + 1}`;
     if (object.type === "barcode") return `EAN ${object.value || ""}`.trim();
     if (object.type === "qr") return `QR ${object.value || ""}`.trim().slice(0, 28);
     if (object.type === "chart") return String(object.chartTitle || "Graf").slice(0, 28);
+    if (object.type === "bar_gauge") return String(object.label || "Ukazatel").slice(0, 28);
+    if (object.type === "pie") return String(object.label || "Koláč").slice(0, 28);
+    if (object.type === "slider") return String(object.label || "Posuvník").slice(0, 28);
+    if (object.type === "gauge" || object.type === "potentiometer") return String(object.label || "Budík").slice(0, 28);
     if (object.type === "image") return `Obrázek ${index + 1}`;
     if (object.type === "layered") return String(this._customElements.find((element) => element.id === object.customElementId)?.name || "Vlastní HA prvek").slice(0, 28);
     return `Objekt ${index + 1}`;
   }
 
   _objectIcon(object) {
-    return ({ text: "mdi:format-text", rect: "mdi:rectangle-outline", line: "mdi:vector-line", barcode: "mdi:barcode", qr: "mdi:qrcode", chart: "mdi:chart-line", image: "mdi:image-outline", layered: "mdi:layers-triple-outline" })[object.type] || "mdi:shape-outline";
+    if (object.type === "text" && object.statusIcons) return "mdi:toggle-switch-outline";
+    return ({ text: "mdi:format-text", rect: "mdi:rectangle-outline", line: "mdi:vector-line", barcode: "mdi:barcode", qr: "mdi:qrcode", chart: "mdi:chart-line", bar_gauge: "mdi:chart-bar", pie: "mdi:chart-donut", slider: "mdi:tune-vertical", gauge: "mdi:gauge", potentiometer: "mdi:gauge", image: "mdi:image-outline", layered: "mdi:layers-triple-outline" })[object.type] || "mdi:shape-outline";
   }
 
   _renderLayersPanel() {
@@ -4611,9 +4697,14 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelector("#symbolSearch")?.addEventListener("input", (event) => { this._symbolSearch = event.target.value; this._render(); this._paint(); });
     this.shadowRoot.querySelectorAll("[data-symbol-category]").forEach((button) => button.addEventListener("click", () => { this._symbolCategory = button.dataset.symbolCategory; this._render(); this._paint(); }));
     this.shadowRoot.querySelectorAll("[data-symbol]").forEach((button) => button.addEventListener("click", () => this._addSymbol(button.dataset.symbol)));
-    this.shadowRoot.querySelector("#addImage").addEventListener("click", () => this.shadowRoot.querySelector("#imageFile").click());
+    this.shadowRoot.querySelectorAll("[data-tool-category]").forEach((button) => button.addEventListener("click", () => {
+      this._toolCategory = button.dataset.toolCategory;
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelector("#addImage")?.addEventListener("click", () => this.shadowRoot.querySelector("#imageFile")?.click());
     this.shadowRoot.querySelector("#openCustomElements")?.addEventListener("click", () => { this._activeTab = "custom"; this._render(); this._paint(); });
-    this.shadowRoot.querySelector("#imageFile").addEventListener("change", (event) => this._addImage(event.target.files[0]));
+    this.shadowRoot.querySelector("#imageFile")?.addEventListener("change", (event) => this._addImage(event.target.files[0]));
     this.shadowRoot.querySelectorAll("[data-add]").forEach((button) => button.addEventListener("click", () => this._addObject(button.dataset.add)));
     this.shadowRoot.querySelectorAll("[data-template]").forEach((button) => button.addEventListener("click", () => this._applyTemplate(button.dataset.template)));
     this.shadowRoot.querySelector("#undoAction").addEventListener("click", () => this._undo());
@@ -4699,7 +4790,7 @@ class DratekEinkPanel extends HTMLElement {
         this._pushHistory();
         object.entityId = entityId;
         if (!entityId) object.entityAttribute = "";
-        if (entityId && object.type === "text" && object.autoUpdate === undefined) object.autoUpdate = true;
+        if (entityId && ["text", "chart", "bar_gauge", "pie", "slider", "gauge", "potentiometer"].includes(object.type) && object.autoUpdate === undefined) object.autoUpdate = true;
         this._render();
         this._paint();
         this._scheduleDraftSave();
@@ -4973,11 +5064,11 @@ class DratekEinkPanel extends HTMLElement {
     const state = object.entityId ? this._hass?.states?.[object.entityId] : null;
     const friendlyName = state?.attributes?.friendly_name || object.entityId || "";
     const value = object.entityId ? this._entityValue(object) : "";
-    return `<div class="entity-source"><h2>Zdroj z Home Assistantu</h2><div class="field"><label>Entita nebo Pomocník</label><ha-entity-picker data-entity-picker="${this._escape(object.id)}"></ha-entity-picker><small>Vyberte například input_text, input_number nebo libovolný senzor. Bez výběru se používá ruční hodnota z menu Proměnné.</small></div>${object.entityId ? `<div class="field"><label>Atribut entity (volitelné)</label><input data-prop="entityAttribute" value="${this._escape(object.entityAttribute || "")}" placeholder="Například prices"><small>Nechte prázdné pro hlavní stav entity. Atribut je vhodný například pro pole spotových cen.</small></div>${object.type === "text" ? `<label><input data-prop="autoUpdate" type="checkbox" ${object.autoUpdate !== false ? "checked" : ""}> Automaticky odeslat při změně</label><small>Všechny změny tohoto displeje se sloučí a odešlou nejvýše jednou za nastavený interval (${this._refreshIntervalSeconds < 60 ? `${this._refreshIntervalSeconds} s` : `${Math.round(this._refreshIntervalSeconds / 60)} min`}).</small>` : ""}<div class="entity-current"><ha-icon icon="mdi:home-assistant"></ha-icon><div><strong>${this._escape(value || "Bez hodnoty")}</strong><small>${this._escape(friendlyName)} · ${this._escape(object.entityId)}</small></div></div>` : ""}</div>`;
+    return `<div class="entity-source"><h2>Zdroj z Home Assistantu</h2><div class="field"><label>Entita nebo Pomocník</label><ha-entity-picker data-entity-picker="${this._escape(object.id)}"></ha-entity-picker><small>Vyberte například input_text, input_number nebo libovolný senzor. Bez výběru se používá ruční hodnota z menu Proměnné.</small></div>${object.entityId ? `<div class="field"><label>Atribut entity (volitelné)</label><input data-prop="entityAttribute" value="${this._escape(object.entityAttribute || "")}" placeholder="Například prices"><small>Nechte prázdné pro hlavní stav entity. Atribut je vhodný například pro pole spotových cen.</small></div><label><input data-prop="autoUpdate" type="checkbox" ${object.autoUpdate !== false ? "checked" : ""}> Automaticky odeslat při změně</label><small>Všechny změny tohoto displeje se sloučí a odešlou nejvýše jednou za nastavený interval (${this._refreshIntervalSeconds < 60 ? `${this._refreshIntervalSeconds} s` : `${Math.round(this._refreshIntervalSeconds / 60)} min`}).</small><div class="entity-current"><ha-icon icon="mdi:home-assistant"></ha-icon><div><strong>${this._escape(value || "Bez hodnoty")}</strong><small>${this._escape(friendlyName)} · ${this._escape(object.entityId)}</small></div></div>` : ""}</div>`;
   }
 
-  _inspectorSection(icon, title, body) {
-    return `<section class="inspector-section"><div class="inspector-section-title"><ha-icon icon="${icon}"></ha-icon><span>${title}</span></div>${body}</section>`;
+  _inspectorSection(icon, title, body, open = false) {
+    return `<details class="inspector-section" ${open ? "open" : ""}><summary class="inspector-section-title"><ha-icon icon="${icon}"></ha-icon><span>${title}</span><ha-icon class="inspector-chevron" icon="mdi:chevron-down"></ha-icon></summary><div class="inspector-section-body">${body}</div></details>`;
   }
 
   _inspectorColor(prop, value, label, colors = ["black", "red", "white"]) {
@@ -5023,11 +5114,12 @@ class DratekEinkPanel extends HTMLElement {
     const geometry = this._renderInspectorGeometry(object);
 
     if (object.type === "text") {
-      const content = this._inspectorSection("mdi:format-text", "Text", `
+      const content = this._inspectorSection("mdi:format-text", object.statusIcons ? "Signalizace" : "Text", `
         <div class="field"><label><ha-icon icon="mdi:text-box-edit-outline"></ha-icon>Obsah</label><input data-prop="text" value="${this._escape(object.text)}"></div>
         <div class="row"><div class="field"><label><ha-icon icon="mdi:format-size"></ha-icon>Velikost</label><input data-prop="fontSize" type="number" min="${this._textMinFontSize(object)}" value="${object.fontSize}"></div><div class="field"><label><ha-icon icon="mdi:format-font"></ha-icon>Font</label><select data-prop="fontFamily"><option value="DRATEK eInk Sans" ${(object.fontFamily || "DRATEK eInk Sans") === "DRATEK eInk Sans" ? "selected" : ""}>DRATEK eInk Sans</option><option value="Arial" ${object.fontFamily === "Arial" ? "selected" : ""}>Arial</option><option value="Courier New" ${object.fontFamily === "Courier New" ? "selected" : ""}>Monospace</option><option value="Times New Roman" ${object.fontFamily === "Times New Roman" ? "selected" : ""}>Serif</option></select></div></div>
         ${this._inspectorSegments("textAlign", object.textAlign || "center", [{ value: "left", label: "Vlevo", icon: "mdi:format-align-left" }, { value: "center", label: "Na střed", icon: "mdi:format-align-center" }, { value: "right", label: "Vpravo", icon: "mdi:format-align-right" }], "Vodorovné zarovnání")}
-        ${this._inspectorSegments("verticalAlign", object.verticalAlign || "middle", [{ value: "top", label: "Nahoru", icon: "mdi:format-vertical-align-top" }, { value: "middle", label: "Na střed", icon: "mdi:format-vertical-align-center" }, { value: "bottom", label: "Dolů", icon: "mdi:format-vertical-align-bottom" }], "Svislé zarovnání")}`);
+        ${this._inspectorSegments("verticalAlign", object.verticalAlign || "middle", [{ value: "top", label: "Nahoru", icon: "mdi:format-vertical-align-top" }, { value: "middle", label: "Na střed", icon: "mdi:format-vertical-align-center" }, { value: "bottom", label: "Dolů", icon: "mdi:format-vertical-align-bottom" }], "Svislé zarovnání")}
+        ${object.statusIcons ? `<div class="row"><div class="field"><label>Symbol zapnuto</label><input data-prop="statusOnSymbol" value="${this._escape(object.statusOnSymbol || "●")}"></div><div class="field"><label>Symbol vypnuto</label><input data-prop="statusOffSymbol" value="${this._escape(object.statusOffSymbol || "○")}"></div></div><div class="field"><label>Hodnoty zapnutého stavu</label><input data-prop="statusOnValues" value="${this._escape(object.statusOnValues || "on,true,1,open,home")}"><small>Oddělte čárkou, například on, true, open.</small></div>` : ""}`, true);
       const appearance = this._inspectorSection("mdi:palette-outline", "Vzhled", `${this._inspectorColor("color", object.color, "Barva textu")}<div class="toggle-stack">${this._inspectorToggle("bold", !!object.bold, "mdi:format-bold", "Tučné písmo")}${this._inspectorToggle("autoFit", object.autoFit !== false, "mdi:fit-to-page-outline", "Přizpůsobit text boxu")}</div>`);
       const variable = this._inspectorSection("mdi:variable", "Proměnná", `<div class="toggle-stack">${this._inspectorToggle("variable", !!object.variable, "mdi:variable-box", "Proměnný text")}</div>${object.variable ? `<div class="field" style="margin-top:10px"><label><ha-icon icon="mdi:identifier"></ha-icon>Interní název</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="napr_teplota"><p class="inspector-help"><ha-icon icon="mdi:information-outline"></ha-icon><span>Název patří šabloně a není samostatnou entitou Home Assistantu.</span></p></div>${this._renderEntityBinding(object)}` : ""}`);
       return `${geometry}${content}${appearance}${variable}`;
@@ -5043,10 +5135,27 @@ class DratekEinkPanel extends HTMLElement {
         <div class="field"><label><ha-icon icon="mdi:label-multiple-outline"></ha-icon>Popisky bodů</label><input data-prop="chartLabels" value="${this._escape(object.chartLabels || "")}" placeholder="00, 03, 06, 09"></div>
         <div class="row"><div class="field"><label>Osa X</label><input data-prop="xLabel" value="${this._escape(object.xLabel || "")}"></div><div class="field"><label>Osa Y</label><input data-prop="yLabel" value="${this._escape(object.yLabel || "")}"></div></div>
         <div class="row"><div class="field"><label>Počet bodů</label><input data-prop="maxPoints" type="number" min="2" max="96" value="${Number(object.maxPoints || 24)}"></div><div class="field"><label>Velikost textu</label><input data-prop="legendFontSize" type="number" min="6" max="18" value="${Number(object.legendFontSize || 8)}"></div></div>
-        <div class="row"><div class="field"><label>Minimum</label><input data-prop="chartMin" type="number" step="any" value="${this._escape(object.chartMin ?? "")}" placeholder="Auto"></div><div class="field"><label>Maximum</label><input data-prop="chartMax" type="number" step="any" value="${this._escape(object.chartMax ?? "")}" placeholder="Auto"></div></div>`);
+        <div class="row"><div class="field"><label>Minimum</label><input data-prop="chartMin" type="number" step="any" value="${this._escape(object.chartMin ?? "")}" placeholder="Auto"></div><div class="field"><label>Maximum</label><input data-prop="chartMax" type="number" step="any" value="${this._escape(object.chartMax ?? "")}" placeholder="Auto"></div></div>`, true);
       const appearance = this._inspectorSection("mdi:palette-outline", "Barvy a zobrazení", `${this._inspectorColor("backgroundColor", object.backgroundColor || "white", "Pozadí")}${this._inspectorColor("color", object.color || "black", "Čára grafu")}${this._inspectorColor("graphColor", object.graphColor || "black", "Osy a popisky")}${object.chartType === "bar" ? this._inspectorColor("barColor", object.barColor || "red", "Sloupce") : ""}<div class="toggle-stack">${this._inspectorToggle("showAxes", object.showAxes !== false, "mdi:axis-arrow", "Zobrazit osy")}${this._inspectorToggle("showGrid", object.showGrid !== false, "mdi:grid", "Zobrazit mřížku")}${this._inspectorToggle("showValues", !!object.showValues, "mdi:numeric", "Zobrazit hodnoty")}</div>`);
       const source = this._inspectorSection("mdi:database-sync-outline", "Datový zdroj", `<div class="field"><label><ha-icon icon="mdi:identifier"></ha-icon>Název proměnné</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="ceny_spot_24h"></div>${this._renderEntityBinding(object)}`);
       return `${geometry}${chart}${appearance}${source}`;
+    }
+
+    if (["bar_gauge", "pie", "slider", "gauge", "potentiometer"].includes(object.type)) {
+      const isBar = object.type === "bar_gauge";
+      const isPie = object.type === "pie";
+      const isGauge = object.type === "gauge" || object.type === "potentiometer";
+      const settings = this._inspectorSection("mdi:gauge", "Ukazatel hodnoty", `
+        <div class="field"><label><ha-icon icon="mdi:label-outline"></ha-icon>Popisek</label><input data-prop="label" value="${this._escape(object.label || "")}"></div>
+        <div class="row"><div class="field"><label>Minimum</label><input data-prop="min_value" type="number" step="any" value="${Number(object.min_value ?? 0)}"></div><div class="field"><label>Maximum</label><input data-prop="max_value" type="number" step="any" value="${Number(object.max_value ?? 100)}"></div></div>
+        <div class="row"><div class="field"><label>Náhled hodnoty</label><input data-prop="sample_value" type="number" step="any" value="${Number(object.sample_value ?? 50)}"></div><div class="field"><label>Jednotka</label><input data-prop="unit" value="${this._escape(object.unit || "")}" placeholder="%"></div></div>
+        ${isBar ? this._inspectorSegments("orientation", object.orientation || "horizontal", [{ value: "horizontal", label: "Vodorovně", icon: "mdi:arrow-left-right" }, { value: "vertical", label: "Svisle", icon: "mdi:arrow-up-down" }], "Orientace") : ""}
+        ${isPie ? `<div class="field"><label>Velikost otvoru (%)</label><input data-prop="hole_percent" type="number" min="0" max="80" value="${Number(object.hole_percent ?? 45)}"></div>` : ""}
+        ${isGauge ? `${this._inspectorSegments("arc_mode", object.arc_mode || "240", [{ value: "180", label: "180°", icon: "mdi:gauge-low" }, { value: "240", label: "240°", icon: "mdi:gauge" }, { value: "360", label: "360°", icon: "mdi:circle-outline" }], "Rozsah budíku")}<div class="field"><label>Síla oblouku</label><input data-prop="stroke_width" type="number" min="1" max="20" value="${Number(object.stroke_width ?? 6)}"></div>` : ""}
+        <div class="toggle-stack">${this._inspectorToggle("show_value", object.show_value !== false, "mdi:numeric", "Zobrazit hodnotu")}${isGauge ? `${this._inspectorToggle("show_arc", object.show_arc !== false, "mdi:chart-arc", "Zobrazit oblouk")}${this._inspectorToggle("show_needle", object.show_needle !== false, "mdi:ray-start-arrow", "Zobrazit ručičku")}` : ""}</div>`, true);
+      const appearance = this._inspectorSection("mdi:palette-outline", "Vzhled", `${this._inspectorColor(isBar ? "fill" : "color", isBar ? (object.fill || "red") : (object.color || "red"), "Aktivní barva")}${isBar ? `${this._inspectorColor("stroke", object.stroke || "black", "Rámeček", ["none", "black", "red"])}<div class="field"><label>Síla rámečku</label><input data-prop="stroke_width" type="number" min="0" max="12" value="${Number(object.stroke_width ?? 2)}"></div>` : ""}`);
+      const source = this._inspectorSection("mdi:home-assistant", "Zdroj dat", this._renderEntityBinding(object));
+      return `${geometry}${settings}${appearance}${source}`;
     }
 
     if (object.type === "line") {
@@ -5082,7 +5191,7 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-prop]").forEach((input) => {
       const key = input.dataset.prop;
       if (input.type === "checkbox") object[key] = input.checked;
-      else if (["x", "y", "x2", "y2", "w", "h", "rotation", "fontSize", "minFontSize", "strokeWidth", "maxPoints", "legendFontSize"].includes(key)) object[key] = Number(input.value);
+      else if (["x", "y", "x2", "y2", "w", "h", "rotation", "fontSize", "minFontSize", "strokeWidth", "maxPoints", "legendFontSize", "min_value", "max_value", "sample_value", "hole_percent", "stroke_width"].includes(key)) object[key] = Number(input.value);
       else object[key] = input.value;
     });
     if (object.type === "text") {
@@ -5950,7 +6059,7 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _automaticTextBindings() {
-    return this._objects.filter((object) => ["text", "chart", "layered"].includes(object.type) && object.entityId && object.autoUpdate !== false);
+    return this._objects.filter((object) => ["text", "chart", "layered", "bar_gauge", "pie", "slider", "gauge", "potentiometer"].includes(object.type) && object.entityId && object.autoUpdate !== false);
   }
 
   _entityAutomationPayload() {
@@ -5970,6 +6079,28 @@ class DratekEinkPanel extends HTMLElement {
       base_image: canvas.toDataURL("image/png"),
       refresh_interval_seconds: this._refreshIntervalSeconds,
       bindings: objects.map((object) => {
+        if (["bar_gauge", "pie", "slider", "gauge", "potentiometer"].includes(object.type)) {
+          const layerId = `widget-${object.id}`;
+          const widget = structuredClone(object);
+          widget.x = 0;
+          widget.y = 0;
+          widget.w = Number(object.w || 1);
+          widget.h = Number(object.h || 1);
+          widget.rotation = 0;
+          widget.entity_id = object.entityId;
+          widget.entity_attribute = object.entityAttribute || "";
+          return {
+            id: object.id, type: "layered", entity_id: object.entityId,
+            entity_ids: [object.entityId], entity_attribute: object.entityAttribute || "",
+            include_unit: false, fallback: layerId,
+            x: Number(object.x || 0), y: Number(object.y || 0),
+            w: Number(object.w || 1), h: Number(object.h || 1),
+            rotation: Number(object.rotation || 0), flipH: !!object.flipH,
+            canvas_width: Number(object.w || 1), canvas_height: Number(object.h || 1),
+            layers: [{ id: layerId, name: object.label || "Ukazatel", objects: [widget] }],
+            condition_rules: [], default_symbol: layerId,
+          };
+        }
         if (object.type === "layered") {
           const master = object.customElementId ? (this._customElements || []).find((e) => e.id === object.customElementId) : null;
           const layers = this._storedRecordList(master?.layers || object.customLayers);

@@ -2,6 +2,19 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.97] - 2026-07-24
+
+### Přehlednější Designer a přímé HA ukazatele
+- Levá knihovna běžného Designeru je rozdělená do složek Základní, Data, Stavy a Moje.
+- Graf, sloupcový ukazatel, koláč, posuvník a budík lze vložit přímo do návrhu displeje.
+- Přibyla rychlá ON/OFF signalizace a uložené vícevrstvé HA prvky zůstávají dostupné ve složce Moje.
+- Každý datový prvek má přímo v Inspectoru výběr entity, rozsah, testovací hodnotu, jednotku a eInk barvy.
+- Inspector používá rozbalovací sekce, takže současně ukazuje jen právě potřebná nastavení.
+- Přímé ukazatele reagují na změny entit a automatické zápisy respektují minimální interval nastavený pro displej.
+- Přidány regresní testy knihovny, widgetů a automatického napojení na entity.
+
+---
+
 ## [0.1.96] - 2026-07-24
 
 ### Oprava karet displejů a automatického odesílání grafů

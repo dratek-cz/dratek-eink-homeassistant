@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.97
+
+- běžný Designer má přehlednou knihovnu rozdělenou na Základní, Data, Stavy a Moje
+- grafy, sloupcové ukazatele, koláče, posuvníky a budíky lze vložit přímo do displeje
+- ON/OFF signalizaci lze vytvořit jedním kliknutím a pokročilé vícevrstvé prvky jsou ve složce Moje
+- pravý Inspector je rozdělený do rozbalovacích sekcí a nezobrazuje všechna nastavení najednou
+- datové prvky lze přímo napojit na entity Home Assistantu a jejich změny respektují minimální interval displeje
+
 ## Novinky ve verzi 0.1.96
 
 - opraveno responzivní rozložení náhledů displejů na hlavní stránce
