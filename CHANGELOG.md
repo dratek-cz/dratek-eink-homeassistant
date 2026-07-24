@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.91] - 2026-07-24
+
+### 🚀 HA Entity Picker pro grafy v Editoru prvku & Přepracování Mapy připojení
+- **Výběr Home Assistant entity pro každý objekt (grafy, ukazatele, potenciometry, texty)**:
+  - Do inspektoru vlastností v Editoru prvku přidán výběr entit Home Assistantu (`<ha-entity-picker>`) pro každý grafický objekt (sloupcový ukazatel, koláčový graf, posuvník, potenciometr i text).
+  - Každý objekt ve vrstvě může cílit na konkrétní entitu Home Assistantu (`entity_id`) a libovolný její atribut (`entity_attribute`).
+- **Nové přepracování Mapy připojení**:
+  - Kompletně přebudovaný flex/grid systém spojovacích tras mezi Home Assistantem, Wi-Fi gatewayemi a BLE eInk displeji.
+  - Čisté vizuální propojovací větve s dynamickým přizpůsobením, které se nerozbíjejí při více připojených displejích ani na mobilních zařízeních.
+
 ---
 
 ## [0.1.90] - 2026-07-24

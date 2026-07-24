@@ -238,20 +238,34 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
                 output.alpha_composite(icon, (icon_x, icon_y))
             except (ValueError, TypeError, OSError):
                 continue
+def _extract_item_value(item: dict[str, Any], value: Any, min_val: float, max_val: float, default_pct: float) -> float:
+    target_attr = item.get("entity_attribute") or item.get("entityAttribute") or item.get("target_attribute")
+    item_entity_id = str(item.get("entity_id") or item.get("entityId") or "")
+    target_val = value
+    if isinstance(value, dict):
+        if item_entity_id and item_entity_id in value:
+            ent_data = value[item_entity_id]
+            if isinstance(ent_data, dict):
+                target_val = ent_data.get(target_attr) if target_attr else ent_data.get("state")
+            else:
+                target_val = ent_data
+        elif target_attr and target_attr in value:
+            target_val = value.get(target_attr)
+        elif "state" in value:
+            target_val = value.get("state")
+    if (target_val is None or str(target_val).strip() == "") and item.get("sample_value") is not None:
+        target_val = item.get("sample_value")
+    try:
+        return float(target_val)
+    except (ValueError, TypeError):
+        return (min_val + max_val) * default_pct
+
+
         elif item_type == "bar_gauge":
             min_val = float(item.get("min_value", 0))
             max_val = float(item.get("max_value", 100))
             unit = str(item.get("unit") or "%")
-            target_attr = item.get("entity_attribute") or item.get("entityAttribute") or item.get("target_attribute")
-            target_val = value
-            if isinstance(value, dict):
-                target_val = value.get(target_attr) if target_attr else value.get("state")
-            elif (value is None or str(value).strip() == "") and item.get("sample_value") is not None:
-                target_val = item.get("sample_value")
-            try:
-                numeric_val = float(target_val)
-            except (ValueError, TypeError):
-                numeric_val = (min_val + max_val) * 0.6
+            numeric_val = _extract_item_value(item, value, min_val, max_val, 0.6)
             pct = max(0.0, min(1.0, (numeric_val - min_val) / max(0.0001, max_val - min_val)))
             color = colors.get(item.get("fill") or item.get("color") or "black", colors["black"])
             stroke = colors.get(item.get("stroke") or "black", colors["black"])
@@ -278,16 +292,7 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
             min_val = float(item.get("min_value", 0))
             max_val = float(item.get("max_value", 100))
             unit = str(item.get("unit") or "%")
-            target_attr = item.get("entity_attribute") or item.get("entityAttribute") or item.get("target_attribute")
-            target_val = value
-            if isinstance(value, dict):
-                target_val = value.get(target_attr) if target_attr else value.get("state")
-            elif (value is None or str(value).strip() == "") and item.get("sample_value") is not None:
-                target_val = item.get("sample_value")
-            try:
-                numeric_val = float(target_val)
-            except (ValueError, TypeError):
-                numeric_val = (min_val + max_val) * 0.7
+            numeric_val = _extract_item_value(item, value, min_val, max_val, 0.7)
             pct = max(0.0, min(1.0, (numeric_val - min_val) / max(0.0001, max_val - min_val)))
             cx, cy = x + item_width // 2, y + item_height // 2
             r = max(4, min(item_width, item_height) // 2 - 2)
@@ -310,16 +315,7 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
             min_val = float(item.get("min_value", 0))
             max_val = float(item.get("max_value", 100))
             unit = str(item.get("unit") or "°C")
-            target_attr = item.get("entity_attribute") or item.get("entityAttribute") or item.get("target_attribute")
-            target_val = value
-            if isinstance(value, dict):
-                target_val = value.get(target_attr) if target_attr else value.get("state")
-            elif (value is None or str(value).strip() == "") and item.get("sample_value") is not None:
-                target_val = item.get("sample_value")
-            try:
-                numeric_val = float(target_val)
-            except (ValueError, TypeError):
-                numeric_val = (min_val + max_val) * 0.5
+            numeric_val = _extract_item_value(item, value, min_val, max_val, 0.5)
             pct = max(0.0, min(1.0, (numeric_val - min_val) / max(0.0001, max_val - min_val)))
             color = colors.get(item.get("color") or "black", colors["black"])
             margin = 10
@@ -342,16 +338,7 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
             min_val = float(item.get("min_value", 0))
             max_val = float(item.get("max_value", 100))
             unit = str(item.get("unit") or "°C")
-            target_attr = item.get("entity_attribute") or item.get("entityAttribute") or item.get("target_attribute")
-            target_val = value
-            if isinstance(value, dict):
-                target_val = value.get(target_attr) if target_attr else value.get("state")
-            elif (value is None or str(value).strip() == "") and item.get("sample_value") is not None:
-                target_val = item.get("sample_value")
-            try:
-                numeric_val = float(target_val)
-            except (ValueError, TypeError):
-                numeric_val = (min_val + max_val) * 0.72
+            numeric_val = _extract_item_value(item, value, min_val, max_val, 0.72)
             pct = max(0.0, min(1.0, (numeric_val - min_val) / max(0.0001, max_val - min_val)))
             color = colors.get(item.get("color") or "black", colors["black"])
             stroke_w = max(2, int(item.get("stroke_width", 6)))
