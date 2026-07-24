@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.103";
+const DRATEK_EINK_VERSION = "0.1.104";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -100,6 +100,8 @@ class DratekEinkPanel extends HTMLElement {
     this._designerFontLoading = null;
     this._backendPreviewTimer = null;
     this._backendPreviewRequestId = 0;
+    this._backendPreviewImage = null;
+    this._backendPreviewAddress = "";
     this._handleKeyDown = (event) => this._onKeyDown(event);
     this._handleLocationChanged = () => {
       if (String(window.location?.pathname || "").includes("dratek-eink")) this._scheduleAutomaticScan(0);
@@ -243,6 +245,8 @@ class DratekEinkPanel extends HTMLElement {
     window.clearTimeout(this._automaticScanTimer);
     window.clearTimeout(this._backendPreviewTimer);
     this._backendPreviewRequestId += 1;
+    this._backendPreviewImage = null;
+    this._backendPreviewAddress = "";
   }
 
   set hass(hass) {
@@ -2765,6 +2769,8 @@ class DratekEinkPanel extends HTMLElement {
         image.src = source;
         await image.decode();
         if (requestId !== this._backendPreviewRequestId) return;
+        this._backendPreviewImage = image;
+        this._backendPreviewAddress = device.address;
         const context = canvas.getContext("2d");
         context.clearRect(0, 0, canvas.width, canvas.height);
         context.imageSmoothingEnabled = false;
@@ -5339,7 +5345,15 @@ class DratekEinkPanel extends HTMLElement {
 
   _paint() {
     const canvas = this.shadowRoot.querySelector("#editor");
-    if (canvas) this._drawScene(canvas.getContext("2d"), canvas.width, canvas.height, false);
+    if (canvas) {
+      this._drawScene(canvas.getContext("2d"), canvas.width, canvas.height, false);
+      if (this._automaticTextBindings().length) {
+        this._paintCachedCanonicalPreview(canvas);
+      } else {
+        this._backendPreviewImage = null;
+        this._backendPreviewAddress = "";
+      }
+    }
     const selectionCanvas = this.shadowRoot.querySelector("#editorSelection");
     if (selectionCanvas) {
       const selectionContext = selectionCanvas.getContext("2d");
@@ -5349,6 +5363,16 @@ class DratekEinkPanel extends HTMLElement {
     this._paintDevicePreviews();
     this._paintCustomLayerCanvases();
     this._scheduleCanonicalDesignerPreview();
+  }
+
+  _paintCachedCanonicalPreview(canvas) {
+    const image = this._backendPreviewImage;
+    const address = this._device()?.address || "";
+    if (!image || this._backendPreviewAddress !== address || !image.complete) return;
+    const context = canvas.getContext("2d");
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.imageSmoothingEnabled = false;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
   }
 
   _paintDevicePreviews() {

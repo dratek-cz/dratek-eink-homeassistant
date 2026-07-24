@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.104] - 2026-07-24
+
+### Stabilní náhled bez problikávání fontů
+- Designer uchovává poslední hotový kanonický obraz vytvořený backendem.
+- Při změně entity nebo vlastnosti zůstává tento obraz na canvasu, dokud backend nedokončí jeho novou verzi.
+- Opakované lokální překreslení už nemůže mezi dvěma backendovými obrazy zobrazit odlišný prohlížečový font nebo jinou podobu grafu.
+- Cache je oddělená podle adresy displeje a při odpojení panelu se bezpečně zahodí.
+- Doplněn regresní test ochrany proti střídání rendererů.
+
+---
+
 ## [0.1.103] - 2026-07-24
 
 ### Jeden renderer pro náhled, ruční zápis a automatické aktualizace

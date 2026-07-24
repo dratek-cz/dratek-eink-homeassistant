@@ -112,6 +112,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("await this._renderCanonicalPreview(automation, device.address)", self.source)
         self.assertIn("image,", self.source)
 
+    def test_cached_backend_preview_prevents_renderer_flicker(self):
+        self.assertIn("this._backendPreviewImage = image;", self.source)
+        self.assertIn("this._paintCachedCanonicalPreview(canvas);", self.source)
+        self.assertIn("this._backendPreviewAddress !== address", self.source)
+        self.assertIn("context.imageSmoothingEnabled = false;", self.source)
+
 
 if __name__ == "__main__":
     unittest.main()

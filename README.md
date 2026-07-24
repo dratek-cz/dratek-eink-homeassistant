@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.104
+
+- odstraněno problikávání dvou fontů v náhledu Designeru při změnách entit
+- poslední potvrzený backendový obraz zůstává viditelný, dokud není připravený celý nový obraz
+- lokální canvas už nemůže na okamžik překrýt kanonický náhled odlišným fontem nebo grafem
+
 ## Novinky ve verzi 0.1.103
 
 - Designer zobrazuje dynamické texty a grafy přes stejný backendový renderer jako automatické aktualizace
