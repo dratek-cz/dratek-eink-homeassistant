@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.119] - 2026-07-26
+
+### Oprava editoru displeje
+- Opravena struktura obalovacích kontejnerů záložek v editoru.
+- Obnoveno přepínání záložek Designer, Fronta zápisu a Gatewaye.
+- Sjednocena verze panelu s integrací, aby Home Assistant načetl aktuální frontend.
+
 ## [0.1.118] - 2026-07-25
 
 ### Oprava obalů záložek a přepínání záložek

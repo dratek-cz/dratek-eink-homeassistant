@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.119
+
+- opravena struktura záložek v editoru displeje a jejich přepínání
+- sjednocena verze frontendu s integrací, aby se po aktualizaci načetl opravený panel
+
 ## Novinky ve verzi 0.1.118
 
 - opravena chybná HTML struktura obalovacích kontejnerů záložek v `_render()`

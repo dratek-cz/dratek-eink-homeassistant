@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.118";
+const DRATEK_EINK_VERSION = "0.1.119";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -1423,168 +1423,188 @@ class DratekEinkPanel extends HTMLElement {
 
   _templateDefinitions() {
     return [
-      { id: "weather", title: "Pocasi", icon: "mdi:weather-partly-cloudy", objects: [
-        this._tt(92, 22, 66, 28, "☁", "black", true),
-        this._tt(83, 50, 86, 16, "Patek", "black", true),
-        this._tt(72, 68, 110, 14, "23. kvetna"),
-        this._ln(45, 84, 205, 84),
-        this._tt(83, 92, 88, 18, "12:45", "red", true, "cas"),
-        this._ln(45, 112, 205, 112),
-        this._tt(69, 126, 112, 30, "23°C", "black", true, "teplota"),
-        this._tt(92, 157, 70, 12, "Polojasno"),
-        this._tt(95, 171, 60, 11, "24° / 13°"),
-        this._rr(0, 195, 250, 55, "red", "none"),
-        this._tt(18, 205, 28, 11, "SO", "white"),
-        this._tt(76, 205, 28, 11, "NE", "white"),
-        this._tt(134, 205, 28, 11, "PO", "white"),
-        this._tt(195, 205, 28, 11, "UT", "white"),
-        this._tt(13, 221, 38, 16, "22°", "white", true),
-        this._tt(73, 221, 38, 16, "25°", "white", true),
-        this._tt(132, 221, 38, 16, "18°", "white", true),
-        this._tt(190, 221, 38, 16, "20°", "white", true),
-      ] },
-      { id: "energy", title: "Cena energie", icon: "mdi:lightning-bolt", objects: [
-        this._tt(18, 17, 30, 32, "⚡", "red", true),
-        this._tt(57, 20, 150, 18, "Cena elektriny", "black", true),
-        this._tt(58, 41, 72, 11, "Kc / kWh"),
-        this._ln(15, 62, 235, 62),
-        this._tt(24, 82, 132, 34, "2,45 Kc", "red", true, "cena_elektriny"),
-        this._tt(27, 123, 110, 12, "12:00 - 13:00"),
-        this._tt(27, 141, 50, 12, "Dnes"),
-        this._ln(42, 192, 58, 192, "red", 2),
-        this._ln(58, 192, 58, 180, "red", 2),
-        this._ln(58, 180, 73, 180, "red", 2),
-        this._ln(73, 180, 73, 166, "red", 2),
-        this._ln(73, 166, 91, 166, "red", 2),
-        this._ln(91, 166, 91, 151, "red", 2),
-        this._ln(91, 151, 107, 151, "red", 2),
-        this._ln(107, 151, 107, 139, "red", 2),
-        this._ln(107, 139, 126, 139, "red", 2),
-        this._ln(126, 139, 126, 130, "red", 2),
-        this._ln(126, 130, 145, 130, "red", 2),
-        this._ln(145, 130, 145, 143, "red", 2),
-        this._ln(145, 143, 167, 143, "red", 2),
-        this._ln(167, 143, 167, 154, "red", 2),
-        this._ln(167, 154, 191, 154, "red", 2),
-        this._ln(191, 154, 191, 183, "red", 2),
-        this._ln(191, 183, 212, 183, "red", 2),
-        this._rr(0, 196, 250, 54, "red", "none"),
-        this._tt(58, 207, 116, 15, "Nejlevnejsi dnes", "white", true),
-        this._tt(83, 226, 74, 20, "2,45 Kc", "white", true, "nejlevnejsi_cena"),
-        this._tt(178, 230, 60, 11, "12:00 - 13:00", "white"),
-      ] },
-      { id: "home", title: "Dum", icon: "mdi:home", objects: [
-        this._tt(19, 18, 80, 20, "Dum", "black", true),
-        this._tt(82, 57, 92, 64, "⌂", "red", true),
-        this._tt(39, 147, 20, 15, "♨", "black"),
-        this._tt(75, 147, 82, 16, "21,5 °C", "black", false, "teplota_dum"),
-        this._tt(39, 174, 20, 15, "●", "black"),
-        this._tt(75, 174, 62, 16, "45 %", "black", false, "vlhkost"),
-        this._tt(39, 201, 20, 15, "◉", "black"),
-        this._tt(75, 201, 106, 16, "3 svetla ON", "black", false, "svetla"),
-        this._tt(39, 228, 20, 15, "▣", "black"),
-        this._tt(75, 228, 104, 16, "Vse zamceno", "black", false, "zamky"),
-        this._ln(20, 267, 230, 267),
-        this._rr(31, 276, 31, 31, "red", "none"),
-        this._tt(42, 285, 26, 20, "✓", "white", true),
-        this._tt(82, 286, 126, 14, "Vsechno v poradku", "red", true, "stav_domu"),
-      ] },
-      { id: "waste", title: "Odpady", icon: "mdi:trash-can-outline", objects: [
-        this._tt(20, 18, 92, 20, "Odpady", "black", true),
-        this._tt(49, 79, 72, 54, "♜", "black", true),
-        this._tt(140, 86, 68, 22, "ZITRA", "red", true, "odpad_1_kdy"),
-        this._tt(140, 117, 60, 18, "Plast", "black", false, "odpad_1_typ"),
-        this._ln(15, 158, 235, 158),
-        this._tt(51, 194, 68, 48, "♻", "black", true),
-        this._tt(138, 200, 70, 18, "za 7 dni", "red", true, "odpad_2_kdy"),
-        this._tt(140, 230, 62, 18, "Papir", "black", false, "odpad_2_typ"),
-      ] },
-      { id: "solar", title: "Fotovoltaika", icon: "mdi:solar-power", objects: [
-        this._tt(22, 18, 34, 28, "☼", "black", false),
-        this._tt(78, 20, 142, 19, "Fotovoltaika", "black", true),
-        this._tt(80, 42, 96, 11, "Aktualni vykon"),
-        this._tt(78, 75, 96, 58, "▦", "black", true),
-        this._tt(66, 136, 132, 31, "2,35 kW", "black", true, "vykon_fve"),
-        this._ln(15, 183, 235, 183),
-        this._tt(20, 197, 70, 13, "Dnes"),
-        this._tt(165, 197, 58, 13, "8,2 kWh", "black", true, "fve_dnes"),
-        this._ln(15, 214, 235, 214),
-        this._tt(20, 228, 82, 13, "Tento mesic"),
-        this._tt(158, 228, 65, 13, "152 kWh", "black", true, "fve_mesic"),
-        this._ln(15, 245, 235, 245),
-        this._tt(20, 259, 70, 13, "Celkem"),
-        this._tt(155, 259, 70, 13, "3,45 MWh", "black", true, "fve_celkem"),
-        this._rr(0, 290, 250, 40, "red", "none"),
-        this._tt(58, 305, 132, 15, "Uspora CO2: 125 kg", "white", true, "uspora_co2"),
-      ] },
-      { id: "washer", title: "Pracka", icon: "mdi:washing-machine", objects: [
-        this._tt(18, 18, 80, 20, "Pracka", "black", true),
-        this._tt(50, 62, 94, 76, "▣", "black", true),
-        this._tt(22, 154, 54, 14, "Program"),
-        this._tt(22, 174, 112, 18, "Bavlna 60°", "red", true, "program_pracky"),
-        this._ln(15, 203, 235, 203),
-        this._tt(22, 221, 18, 15, "◷"),
-        this._tt(59, 222, 48, 13, "Zbyva"),
-        this._tt(143, 217, 70, 22, "01:15", "red", true, "pracka_zbyva"),
-        this._ln(15, 250, 235, 250),
-        this._tt(59, 267, 116, 15, "Skonci v 14:30", "black", true, "pracka_konec"),
-      ] },
-      { id: "living", title: "Obyvak", icon: "mdi:sofa-outline", objects: [
-        this._tt(20, 18, 88, 20, "Obyvak", "black", true),
-        this._tt(38, 78, 36, 50, "♨", "red", true),
-        this._tt(96, 88, 118, 32, "23,5 °C", "black", true, "teplota_obyvak"),
-        this._ln(20, 154, 230, 154),
-        this._tt(48, 188, 30, 30, "●", "black", true),
-        this._tt(94, 193, 104, 18, "Vlhkost: 40 %", "black", true, "vlhkost_obyvak"),
-        this._ln(20, 230, 230, 230),
-        this._tt(66, 267, 124, 18, "CO2: 650 ppm", "black", true, "co2_obyvak"),
-      ] },
-      { id: "presence", title: "Kdo je doma", icon: "mdi:account-group", objects: [
-        this._tt(17, 18, 124, 20, "Kdo je doma", "black", true),
-        this._tt(25, 67, 18, 18, "●"),
-        this._tt(57, 68, 80, 16, "Petr", "black", false, "petr_stav"),
-        this._tt(205, 65, 28, 22, "⌂", "red", true),
-        this._ln(15, 100, 235, 100),
-        this._tt(25, 118, 18, 18, "●"),
-        this._tt(57, 119, 80, 16, "Jana", "black", false, "jana_stav"),
-        this._tt(205, 116, 28, 22, "⌂", "red", true),
-        this._ln(15, 151, 235, 151),
-        this._tt(25, 168, 18, 18, "●"),
-        this._tt(57, 169, 80, 16, "Eliska", "black", false, "eliska_jmeno"),
-        this._tt(165, 171, 70, 15, "Ve skole", "red", true, "eliska_stav"),
-        this._rr(0, 218, 250, 54, "red", "none"),
-        this._tt(35, 229, 24, 22, "◷", "white", true),
-        this._tt(76, 229, 128, 13, "Posledni aktualizace", "white", true),
-        this._tt(76, 246, 64, 20, "12:45", "white", true, "cas_update"),
-      ] },
-      { id: "wifi", title: "Wi-Fi", icon: "mdi:wifi", objects: [
-        this._tt(17, 18, 60, 20, "Wi-Fi", "black", true),
-        this._qr(72, 58, 106, "WIFI:T:WPA;S:Home_Network;P:MyPassword123;;"),
-        this._tt(20, 181, 34, 12, "Sit"),
-        this._tt(20, 198, 130, 14, "Home_Network", "red", true, "wifi_ssid"),
-        this._ln(15, 220, 235, 220),
-        this._tt(20, 234, 48, 12, "Heslo"),
-        this._tt(20, 251, 140, 14, "MyPassword123", "red", true, "wifi_heslo"),
-        this._ln(15, 277, 235, 277),
-        this._tt(37, 293, 28, 20, "≋", "black", true),
-        this._tt(82, 297, 120, 12, "Naskenuj pro pripojeni"),
-      ] },
-      { id: "calendar", title: "Kalendar", icon: "mdi:calendar-month", objects: [
-        this._tt(19, 18, 96, 20, "Kalendar", "black", true),
-        this._tt(26, 69, 52, 45, "23", "black", true),
-        this._tt(99, 64, 68, 16, "PATEK", "red", true, "udalost_1_den"),
-        this._tt(99, 85, 72, 15, "Schuzka", "black", false, "udalost_1_nazev"),
-        this._tt(99, 104, 58, 14, "15:00", "black", false, "udalost_1_cas"),
-        this._ln(15, 137, 235, 137),
-        this._tt(26, 166, 52, 45, "24", "black", true),
-        this._tt(99, 161, 82, 16, "SOBOTA", "red", true, "udalost_2_den"),
-        this._tt(99, 182, 96, 15, "Narozeniny", "black", false, "udalost_2_nazev"),
-        this._tt(99, 201, 70, 14, "Tomas", "black", false, "udalost_2_detail"),
-        this._rr(0, 240, 250, 58, "red", "none"),
-        this._tt(34, 254, 34, 23, "♛", "white", true),
-        this._tt(78, 253, 112, 13, "Zitra ma svatek", "white"),
-        this._tt(78, 271, 70, 18, "Jana", "white", true, "svatek"),
-      ] },
+      {
+        id: "weather", title: "Pocasi", icon: "mdi:weather-partly-cloudy", objects: [
+          this._tt(92, 22, 66, 28, "☁", "black", true),
+          this._tt(83, 50, 86, 16, "Patek", "black", true),
+          this._tt(72, 68, 110, 14, "23. kvetna"),
+          this._ln(45, 84, 205, 84),
+          this._tt(83, 92, 88, 18, "12:45", "red", true, "cas"),
+          this._ln(45, 112, 205, 112),
+          this._tt(69, 126, 112, 30, "23°C", "black", true, "teplota"),
+          this._tt(92, 157, 70, 12, "Polojasno"),
+          this._tt(95, 171, 60, 11, "24° / 13°"),
+          this._rr(0, 195, 250, 55, "red", "none"),
+          this._tt(18, 205, 28, 11, "SO", "white"),
+          this._tt(76, 205, 28, 11, "NE", "white"),
+          this._tt(134, 205, 28, 11, "PO", "white"),
+          this._tt(195, 205, 28, 11, "UT", "white"),
+          this._tt(13, 221, 38, 16, "22°", "white", true),
+          this._tt(73, 221, 38, 16, "25°", "white", true),
+          this._tt(132, 221, 38, 16, "18°", "white", true),
+          this._tt(190, 221, 38, 16, "20°", "white", true),
+        ]
+      },
+      {
+        id: "energy", title: "Cena energie", icon: "mdi:lightning-bolt", objects: [
+          this._tt(18, 17, 30, 32, "⚡", "red", true),
+          this._tt(57, 20, 150, 18, "Cena elektriny", "black", true),
+          this._tt(58, 41, 72, 11, "Kc / kWh"),
+          this._ln(15, 62, 235, 62),
+          this._tt(24, 82, 132, 34, "2,45 Kc", "red", true, "cena_elektriny"),
+          this._tt(27, 123, 110, 12, "12:00 - 13:00"),
+          this._tt(27, 141, 50, 12, "Dnes"),
+          this._ln(42, 192, 58, 192, "red", 2),
+          this._ln(58, 192, 58, 180, "red", 2),
+          this._ln(58, 180, 73, 180, "red", 2),
+          this._ln(73, 180, 73, 166, "red", 2),
+          this._ln(73, 166, 91, 166, "red", 2),
+          this._ln(91, 166, 91, 151, "red", 2),
+          this._ln(91, 151, 107, 151, "red", 2),
+          this._ln(107, 151, 107, 139, "red", 2),
+          this._ln(107, 139, 126, 139, "red", 2),
+          this._ln(126, 139, 126, 130, "red", 2),
+          this._ln(126, 130, 145, 130, "red", 2),
+          this._ln(145, 130, 145, 143, "red", 2),
+          this._ln(145, 143, 167, 143, "red", 2),
+          this._ln(167, 143, 167, 154, "red", 2),
+          this._ln(167, 154, 191, 154, "red", 2),
+          this._ln(191, 154, 191, 183, "red", 2),
+          this._ln(191, 183, 212, 183, "red", 2),
+          this._rr(0, 196, 250, 54, "red", "none"),
+          this._tt(58, 207, 116, 15, "Nejlevnejsi dnes", "white", true),
+          this._tt(83, 226, 74, 20, "2,45 Kc", "white", true, "nejlevnejsi_cena"),
+          this._tt(178, 230, 60, 11, "12:00 - 13:00", "white"),
+        ]
+      },
+      {
+        id: "home", title: "Dum", icon: "mdi:home", objects: [
+          this._tt(19, 18, 80, 20, "Dum", "black", true),
+          this._tt(82, 57, 92, 64, "⌂", "red", true),
+          this._tt(39, 147, 20, 15, "♨", "black"),
+          this._tt(75, 147, 82, 16, "21,5 °C", "black", false, "teplota_dum"),
+          this._tt(39, 174, 20, 15, "●", "black"),
+          this._tt(75, 174, 62, 16, "45 %", "black", false, "vlhkost"),
+          this._tt(39, 201, 20, 15, "◉", "black"),
+          this._tt(75, 201, 106, 16, "3 svetla ON", "black", false, "svetla"),
+          this._tt(39, 228, 20, 15, "▣", "black"),
+          this._tt(75, 228, 104, 16, "Vse zamceno", "black", false, "zamky"),
+          this._ln(20, 267, 230, 267),
+          this._rr(31, 276, 31, 31, "red", "none"),
+          this._tt(42, 285, 26, 20, "✓", "white", true),
+          this._tt(82, 286, 126, 14, "Vsechno v poradku", "red", true, "stav_domu"),
+        ]
+      },
+      {
+        id: "waste", title: "Odpady", icon: "mdi:trash-can-outline", objects: [
+          this._tt(20, 18, 92, 20, "Odpady", "black", true),
+          this._tt(49, 79, 72, 54, "♜", "black", true),
+          this._tt(140, 86, 68, 22, "ZITRA", "red", true, "odpad_1_kdy"),
+          this._tt(140, 117, 60, 18, "Plast", "black", false, "odpad_1_typ"),
+          this._ln(15, 158, 235, 158),
+          this._tt(51, 194, 68, 48, "♻", "black", true),
+          this._tt(138, 200, 70, 18, "za 7 dni", "red", true, "odpad_2_kdy"),
+          this._tt(140, 230, 62, 18, "Papir", "black", false, "odpad_2_typ"),
+        ]
+      },
+      {
+        id: "solar", title: "Fotovoltaika", icon: "mdi:solar-power", objects: [
+          this._tt(22, 18, 34, 28, "☼", "black", false),
+          this._tt(78, 20, 142, 19, "Fotovoltaika", "black", true),
+          this._tt(80, 42, 96, 11, "Aktualni vykon"),
+          this._tt(78, 75, 96, 58, "▦", "black", true),
+          this._tt(66, 136, 132, 31, "2,35 kW", "black", true, "vykon_fve"),
+          this._ln(15, 183, 235, 183),
+          this._tt(20, 197, 70, 13, "Dnes"),
+          this._tt(165, 197, 58, 13, "8,2 kWh", "black", true, "fve_dnes"),
+          this._ln(15, 214, 235, 214),
+          this._tt(20, 228, 82, 13, "Tento mesic"),
+          this._tt(158, 228, 65, 13, "152 kWh", "black", true, "fve_mesic"),
+          this._ln(15, 245, 235, 245),
+          this._tt(20, 259, 70, 13, "Celkem"),
+          this._tt(155, 259, 70, 13, "3,45 MWh", "black", true, "fve_celkem"),
+          this._rr(0, 290, 250, 40, "red", "none"),
+          this._tt(58, 305, 132, 15, "Uspora CO2: 125 kg", "white", true, "uspora_co2"),
+        ]
+      },
+      {
+        id: "washer", title: "Pracka", icon: "mdi:washing-machine", objects: [
+          this._tt(18, 18, 80, 20, "Pracka", "black", true),
+          this._tt(50, 62, 94, 76, "▣", "black", true),
+          this._tt(22, 154, 54, 14, "Program"),
+          this._tt(22, 174, 112, 18, "Bavlna 60°", "red", true, "program_pracky"),
+          this._ln(15, 203, 235, 203),
+          this._tt(22, 221, 18, 15, "◷"),
+          this._tt(59, 222, 48, 13, "Zbyva"),
+          this._tt(143, 217, 70, 22, "01:15", "red", true, "pracka_zbyva"),
+          this._ln(15, 250, 235, 250),
+          this._tt(59, 267, 116, 15, "Skonci v 14:30", "black", true, "pracka_konec"),
+        ]
+      },
+      {
+        id: "living", title: "Obyvak", icon: "mdi:sofa-outline", objects: [
+          this._tt(20, 18, 88, 20, "Obyvak", "black", true),
+          this._tt(38, 78, 36, 50, "♨", "red", true),
+          this._tt(96, 88, 118, 32, "23,5 °C", "black", true, "teplota_obyvak"),
+          this._ln(20, 154, 230, 154),
+          this._tt(48, 188, 30, 30, "●", "black", true),
+          this._tt(94, 193, 104, 18, "Vlhkost: 40 %", "black", true, "vlhkost_obyvak"),
+          this._ln(20, 230, 230, 230),
+          this._tt(66, 267, 124, 18, "CO2: 650 ppm", "black", true, "co2_obyvak"),
+        ]
+      },
+      {
+        id: "presence", title: "Kdo je doma", icon: "mdi:account-group", objects: [
+          this._tt(17, 18, 124, 20, "Kdo je doma", "black", true),
+          this._tt(25, 67, 18, 18, "●"),
+          this._tt(57, 68, 80, 16, "Petr", "black", false, "petr_stav"),
+          this._tt(205, 65, 28, 22, "⌂", "red", true),
+          this._ln(15, 100, 235, 100),
+          this._tt(25, 118, 18, 18, "●"),
+          this._tt(57, 119, 80, 16, "Jana", "black", false, "jana_stav"),
+          this._tt(205, 116, 28, 22, "⌂", "red", true),
+          this._ln(15, 151, 235, 151),
+          this._tt(25, 168, 18, 18, "●"),
+          this._tt(57, 169, 80, 16, "Eliska", "black", false, "eliska_jmeno"),
+          this._tt(165, 171, 70, 15, "Ve skole", "red", true, "eliska_stav"),
+          this._rr(0, 218, 250, 54, "red", "none"),
+          this._tt(35, 229, 24, 22, "◷", "white", true),
+          this._tt(76, 229, 128, 13, "Posledni aktualizace", "white", true),
+          this._tt(76, 246, 64, 20, "12:45", "white", true, "cas_update"),
+        ]
+      },
+      {
+        id: "wifi", title: "Wi-Fi", icon: "mdi:wifi", objects: [
+          this._tt(17, 18, 60, 20, "Wi-Fi", "black", true),
+          this._qr(72, 58, 106, "WIFI:T:WPA;S:Home_Network;P:MyPassword123;;"),
+          this._tt(20, 181, 34, 12, "Sit"),
+          this._tt(20, 198, 130, 14, "Home_Network", "red", true, "wifi_ssid"),
+          this._ln(15, 220, 235, 220),
+          this._tt(20, 234, 48, 12, "Heslo"),
+          this._tt(20, 251, 140, 14, "MyPassword123", "red", true, "wifi_heslo"),
+          this._ln(15, 277, 235, 277),
+          this._tt(37, 293, 28, 20, "≋", "black", true),
+          this._tt(82, 297, 120, 12, "Naskenuj pro pripojeni"),
+        ]
+      },
+      {
+        id: "calendar", title: "Kalendar", icon: "mdi:calendar-month", objects: [
+          this._tt(19, 18, 96, 20, "Kalendar", "black", true),
+          this._tt(26, 69, 52, 45, "23", "black", true),
+          this._tt(99, 64, 68, 16, "PATEK", "red", true, "udalost_1_den"),
+          this._tt(99, 85, 72, 15, "Schuzka", "black", false, "udalost_1_nazev"),
+          this._tt(99, 104, 58, 14, "15:00", "black", false, "udalost_1_cas"),
+          this._ln(15, 137, 235, 137),
+          this._tt(26, 166, 52, 45, "24", "black", true),
+          this._tt(99, 161, 82, 16, "SOBOTA", "red", true, "udalost_2_den"),
+          this._tt(99, 182, 96, 15, "Narozeniny", "black", false, "udalost_2_nazev"),
+          this._tt(99, 201, 70, 14, "Tomas", "black", false, "udalost_2_detail"),
+          this._rr(0, 240, 250, 58, "red", "none"),
+          this._tt(34, 254, 34, 23, "♛", "white", true),
+          this._tt(78, 253, 112, 13, "Zitra ma svatek", "white"),
+          this._tt(78, 271, 70, 18, "Jana", "white", true, "svatek"),
+        ]
+      },
     ];
   }
 
@@ -3441,12 +3461,12 @@ class DratekEinkPanel extends HTMLElement {
       ${displayedJobs.length ? `
         <div class="queue-list">
           ${displayedJobs.map((job) => {
-            const labels = { queued: "Ve frontě", writing: "Zapisuji", succeeded: "Dokončeno", failed: "Selhalo", skipped: "Přeskočeno" };
-            const classes = { queued: "muted", writing: "warn", succeeded: "good", failed: "bad", skipped: "warn" };
-            const icons = { queued: "mdi:tray-arrow-down", writing: "mdi:progress-upload", succeeded: "mdi:check", failed: "mdi:alert-circle-outline", skipped: "mdi:skip-next-circle-outline" };
-            const operation = { design: "Návrh", partial_design: "Částečný zápis", text: "Text", service_text: "HA služba", entity_update: "Změna entity" }[job.operation] || job.operation;
-            const logText = Array.isArray(job.log) && job.log.length ? job.log.slice(-3).join(" | ") : "";
-            return `
+      const labels = { queued: "Ve frontě", writing: "Zapisuji", succeeded: "Dokončeno", failed: "Selhalo", skipped: "Přeskočeno" };
+      const classes = { queued: "muted", writing: "warn", succeeded: "good", failed: "bad", skipped: "warn" };
+      const icons = { queued: "mdi:tray-arrow-down", writing: "mdi:progress-upload", succeeded: "mdi:check", failed: "mdi:alert-circle-outline", skipped: "mdi:skip-next-circle-outline" };
+      const operation = { design: "Návrh", partial_design: "Částečný zápis", text: "Text", service_text: "HA služba", entity_update: "Změna entity" }[job.operation] || job.operation;
+      const logText = Array.isArray(job.log) && job.log.length ? job.log.slice(-3).join(" | ") : "";
+      return `
             <div class="queue-row ${this._escape(job.status)}">
               <div class="queue-icon"><ha-icon icon="${icons[job.status] || "mdi:help"}"></ha-icon></div>
               <div class="queue-main">
@@ -3461,7 +3481,7 @@ class DratekEinkPanel extends HTMLElement {
               <div>${job.finished_at ? `<span class="pill muted">${this._formatDuration(job.started_at, job.finished_at)}</span>` : ""}</div>
               ${(job.error || logText) ? `<div class="queue-row-log">${this._escape(job.error || logText)}</div>` : ""}
             </div>`;
-          }).join("")}
+    }).join("")}
         </div>` : `
         <div class="inspector-empty">
           <ha-icon icon="mdi:tray"></ha-icon>
@@ -3661,26 +3681,26 @@ class DratekEinkPanel extends HTMLElement {
     if (key === "light") {
       ctx.beginPath(); ctx.arc(64, 51, 28, Math.PI * .82, Math.PI * 2.18); ctx.stroke();
       line(43, 72, 49, 83, 79, 83, 85, 72); line(49, 95, 79, 95); line(54, 107, 74, 107);
-      [[64,8,64,18],[24,25,33,34],[104,25,95,34],[18,61,30,61],[110,61,98,61]].forEach((item) => line(...item));
+      [[64, 8, 64, 18], [24, 25, 33, 34], [104, 25, 95, 34], [18, 61, 30, 61], [110, 61, 98, 61]].forEach((item) => line(...item));
     } else if (key === "socket") {
       ctx.strokeRect(29, 18, 70, 92); line(50, 41, 50, 57); line(78, 41, 78, 57);
       ctx.beginPath(); ctx.arc(64, 77, 15, 0, Math.PI); ctx.stroke(); line(64, 92, 64, 110);
     } else if (key === "temperature") {
       ctx.beginPath(); ctx.arc(64, 94, 22, 0, Math.PI * 2); ctx.stroke();
       ctx.beginPath(); ctx.arc(64, 94, 10, 0, Math.PI * 2); ctx.fill();
-      line(64, 84, 64, 30); ctx.beginPath(); ctx.arc(64, 29, 13, Math.PI, 0); ctx.stroke(); line(51,29,51,79); line(77,29,77,79);
+      line(64, 84, 64, 30); ctx.beginPath(); ctx.arc(64, 29, 13, Math.PI, 0); ctx.stroke(); line(51, 29, 51, 79); line(77, 29, 77, 79);
     } else if (key === "water") {
       ctx.beginPath(); ctx.moveTo(64, 12); ctx.bezierCurveTo(52, 34, 29, 61, 29, 82); ctx.bezierCurveTo(29, 105, 45, 118, 64, 118); ctx.bezierCurveTo(83, 118, 99, 105, 99, 82); ctx.bezierCurveTo(99, 61, 76, 34, 64, 12); ctx.closePath(); ctx.stroke();
       ctx.beginPath(); ctx.arc(54, 89, 15, .3, 1.65); ctx.stroke();
     } else if (key === "home") {
-      line(17,61,64,20,111,61); line(31,54,31,108,97,108,97,54); ctx.strokeRect(54, 75, 21, 33);
+      line(17, 61, 64, 20, 111, 61); line(31, 54, 31, 108, 97, 108, 97, 54); ctx.strokeRect(54, 75, 21, 33);
     } else if (key === "power") {
       ctx.beginPath(); ctx.arc(64, 68, 43, -.72, Math.PI * 1.72); ctx.stroke(); line(64, 12, 64, 65);
     } else if (key === "battery") {
       ctx.strokeRect(16, 37, 91, 55); ctx.fillRect(108, 51, 10, 27); ctx.fillRect(28, 49, 50, 31); line(68, 43, 50, 65, 64, 65, 51, 87);
     } else {
       ctx.beginPath(); ctx.arc(64, 101, 8, 0, Math.PI * 2); ctx.fill();
-      [[20,59],[34,74],[48,88]].forEach(([radius, y]) => { ctx.beginPath(); ctx.arc(64, 108, radius, Math.PI * 1.19, Math.PI * 1.81); ctx.stroke(); });
+      [[20, 59], [34, 74], [48, 88]].forEach(([radius, y]) => { ctx.beginPath(); ctx.arc(64, 108, radius, Math.PI * 1.19, Math.PI * 1.81); ctx.stroke(); });
     }
     const side = Math.max(44, Math.round(Math.min(this._customElementForm.canvas_width, this._customElementForm.canvas_height) * .55));
     const object = {
@@ -3702,26 +3722,24 @@ class DratekEinkPanel extends HTMLElement {
     const form = this._customElementForm;
     const inspector = selected ? `<div class="layer-inspector">
       <div class="layer-inspector-heading">
-        <span><ha-icon icon="${
-          selected.type === "text" ? "mdi:format-text" :
-          selected.type === "rect" ? "mdi:rectangle-outline" :
+        <span><ha-icon icon="${selected.type === "text" ? "mdi:format-text" :
+        selected.type === "rect" ? "mdi:rectangle-outline" :
           selected.type === "bar_gauge" ? "mdi:chart-bar" :
-          selected.type === "pie" ? "mdi:chart-pie" :
-          selected.type === "slider" ? "mdi:tune-horizontal" :
-          selected.type === "potentiometer" || selected.type === "gauge" ? "mdi:gauge" :
-          "mdi:image-outline"
-        }"></ha-icon></span>
+            selected.type === "pie" ? "mdi:chart-pie" :
+              selected.type === "slider" ? "mdi:tune-horizontal" :
+                selected.type === "potentiometer" || selected.type === "gauge" ? "mdi:gauge" :
+                  "mdi:image-outline"
+      }"></ha-icon></span>
         <div>
           <h3>Vybraný objekt</h3>
-          <small>${
-            selected.type === "text" ? "Text" :
-            selected.type === "rect" ? "Tvar / Obdélník" :
-            selected.type === "bar_gauge" ? "Sloupcový ukazatel" :
+          <small>${selected.type === "text" ? "Text" :
+        selected.type === "rect" ? "Tvar / Obdélník" :
+          selected.type === "bar_gauge" ? "Sloupcový ukazatel" :
             selected.type === "pie" ? "Koláčový / Donut graf" :
-            selected.type === "slider" ? "Posuvník / Slider" :
-            selected.type === "potentiometer" || selected.type === "gauge" ? "Potenciometr / Budík" :
-            "Obrázek"
-          }</small>
+              selected.type === "slider" ? "Posuvník / Slider" :
+                selected.type === "potentiometer" || selected.type === "gauge" ? "Potenciometr / Budík" :
+                  "Obrázek"
+      }</small>
         </div>
       </div>
 
@@ -3798,7 +3816,7 @@ class DratekEinkPanel extends HTMLElement {
       `}
 
       <div class="inspector-divider"><span>Poloha a velikost</span></div>
-      <div class="mini-grid">${["x","y","w","h"].map((key) => `<div class="field"><label>${key.toUpperCase()}</label><input data-layer-object="${key}" type="number" value="${Math.round(Number(selected[key] || 0))}"></div>`).join("")}</div>
+      <div class="mini-grid">${["x", "y", "w", "h"].map((key) => `<div class="field"><label>${key.toUpperCase()}</label><input data-layer-object="${key}" type="number" value="${Math.round(Number(selected[key] || 0))}"></div>`).join("")}</div>
       <button id="deleteLayerObject" class="danger"><ha-icon icon="mdi:trash-can-outline"></ha-icon>Odstranit objekt</button>
     </div>` : `<div class="layer-inspector-empty"><div><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon><p>Klikněte na objekt v náhledu a upravte jej zde.</p></div></div>`;
 
@@ -3847,10 +3865,10 @@ class DratekEinkPanel extends HTMLElement {
     const form = this._customElementForm;
     const currentValue = this._customElementCurrentValue(form);
     const currentLayer = this._customLayerForValue(form, currentValue);
-    const operators = [["is_on","je zapnuto"],["is_off","je vypnuto"],["equals","rovná se"],["not_equals","nerovná se"],["greater","je větší než"],["greater_equal","je větší nebo rovno"],["less","je menší než"],["less_equal","je menší nebo rovno"],["contains","obsahuje"]];
+    const operators = [["is_on", "je zapnuto"], ["is_off", "je vypnuto"], ["equals", "rovná se"], ["not_equals", "nerovná se"], ["greater", "je větší než"], ["greater_equal", "je větší nebo rovno"], ["less", "je menší než"], ["less_equal", "je menší nebo rovno"], ["contains", "obsahuje"]];
     const rules = form.condition_rules.map((rule, index) => {
       const needsValue = !["is_on", "is_off"].includes(rule.operator);
-      return `<div class="layer-rule"><b>${index + 1}</b><select data-layer-rule-operator="${index}">${operators.map(([value,label]) => `<option value="${value}" ${rule.operator === value ? "selected" : ""}>${label}</option>`).join("")}</select><input data-layer-rule-value="${index}" value="${this._escape(rule.value || "")}" placeholder="Hodnota" ${needsValue ? "" : "disabled"}><span>zobrazí</span><select data-layer-rule-target="${index}">${layers.map((layer) => `<option value="${this._escape(layer.id)}" ${rule.layer_id === layer.id ? "selected" : ""}>${this._escape(layer.name)}</option>`).join("")}</select><button class="secondary icon-btn" data-layer-rule-delete="${index}"><ha-icon icon="mdi:close"></ha-icon></button></div>`;
+      return `<div class="layer-rule"><b>${index + 1}</b><select data-layer-rule-operator="${index}">${operators.map(([value, label]) => `<option value="${value}" ${rule.operator === value ? "selected" : ""}>${label}</option>`).join("")}</select><input data-layer-rule-value="${index}" value="${this._escape(rule.value || "")}" placeholder="Hodnota" ${needsValue ? "" : "disabled"}><span>zobrazí</span><select data-layer-rule-target="${index}">${layers.map((layer) => `<option value="${this._escape(layer.id)}" ${rule.layer_id === layer.id ? "selected" : ""}>${this._escape(layer.name)}</option>`).join("")}</select><button class="secondary icon-btn" data-layer-rule-delete="${index}"><ha-icon icon="mdi:close"></ha-icon></button></div>`;
     }).join("");
     return `<div class="ha-rules-layout"><section class="card rules-source"><span class="step-number">1</span><div><h3>Vyberte zařízení nebo senzor</h3><p>Pravidla budou reagovat na stav této entity v Home Assistantu.</p><div class="field"><label>Entita Home Assistantu</label><ha-entity-picker id="customElementEntity"></ha-entity-picker></div><div class="field"><label>Atribut entity (volitelný)</label><input data-custom-element-field="entity_attribute" value="${this._escape(form.entity_attribute || "")}" placeholder="Například temperature"></div></div></section><section class="card rules-card"><div class="rules-title"><div><span class="step-number">2</span><div><h3>Nastavte, kdy se vrstva zobrazí</h3><p>Pravidla se vyhodnocují shora dolů. Použije se první splněné.</p></div></div><span class="pill muted">Aktuálně: ${this._escape(currentValue || "bez hodnoty")}</span></div><div class="layer-rules">${rules}</div><button id="addLayerRule" class="secondary" ${form.condition_rules.length >= 12 ? "disabled" : ""}><ha-icon icon="mdi:plus"></ha-icon>Přidat pravidlo</button><div class="default-layer"><div><strong>Výchozí vrstva</strong><small>Když žádné pravidlo neplatí.</small></div><select data-custom-element-field="default_layer_id">${layers.map((layer) => `<option value="${this._escape(layer.id)}" ${form.default_layer_id === layer.id ? "selected" : ""}>${this._escape(layer.name)}</option>`).join("")}</select></div></section><aside class="card rule-preview"><h3>Aktuální výsledek</h3><canvas width="${form.canvas_width}" height="${form.canvas_height}" data-custom-layer-preview="${this._escape(currentLayer?.id || "")}"></canvas><strong>${this._escape(currentLayer?.name || "Bez vrstvy")}</strong><small>Hodnota entity: ${this._escape(currentValue || "—")}</small></aside></div>`;
   }
@@ -4304,9 +4322,9 @@ class DratekEinkPanel extends HTMLElement {
       <details class="custom-advanced condition-details">
       <summary>Upravit jednotlivá pravidla (${rules.length})</summary>
       <div class="condition-rules">${rules.map((rule, index) => {
-        const needsValue = !["is_on", "is_off"].includes(rule.operator);
-        const matches = this._customConditionMatches(currentValue, rule.operator || "equals", rule.value || "");
-        return `<article class="condition-rule ${matches ? "matches" : ""}">
+      const needsValue = !["is_on", "is_off"].includes(rule.operator);
+      const matches = this._customConditionMatches(currentValue, rule.operator || "equals", rule.value || "");
+      return `<article class="condition-rule ${matches ? "matches" : ""}">
           <span class="condition-order">${index + 1}</span>
           <div class="field"><label>Podmínka</label><select data-condition-operator="${index}">${operators.map(([value, label]) => `<option value="${value}" ${value === rule.operator ? "selected" : ""}>${label}</option>`).join("")}</select></div>
           <div class="field ${needsValue ? "" : "condition-unused"}"><label>Porovnat s</label><input data-condition-value="${index}" value="${this._escape(rule.value || "")}" ${needsValue ? "" : "disabled"} placeholder="Například 25"></div>
@@ -4314,7 +4332,7 @@ class DratekEinkPanel extends HTMLElement {
           <button class="secondary icon-btn condition-remove" data-condition-remove="${index}" title="Odstranit pravidlo"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>
           ${matches ? `<span class="condition-match"><ha-icon icon="mdi:check-circle"></ha-icon>Právě platí</span>` : ""}
         </article>`;
-      }).join("")}</div>
+    }).join("")}</div>
       <div class="condition-footer"><button id="addConditionRule" class="secondary"><ha-icon icon="mdi:plus"></ha-icon>Přidat pravidlo</button><div class="field"><label>Ikona, když neplatí žádné pravidlo</label><select data-custom-element-field="default_symbol">${symbolOptions(form.default_symbol || "?")}<option value="?" ${form.default_symbol === "?" ? "selected" : ""}>? · Neznámý stav</option></select></div></div>
       </details>
     </div>`;
@@ -5195,11 +5213,11 @@ class DratekEinkPanel extends HTMLElement {
       <div class="row"><div class="field"><label><ha-icon icon="mdi:axis-x-arrow"></ha-icon>X</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label><ha-icon icon="mdi:axis-y-arrow"></ha-icon>Y</label><input data-prop="y" type="number" value="${object.y}"></div></div>
       <div class="row"><div class="field"><label><ha-icon icon="mdi:arrow-left-right"></ha-icon>Šířka</label><input data-prop="w" type="number" min="1" value="${object.w || 1}"></div><div class="field"><label><ha-icon icon="mdi:arrow-up-down"></ha-icon>Výška</label><input data-prop="h" type="number" min="1" value="${object.h || 1}"></div></div>
       ${this._inspectorSegments("rotation", Number(object.rotation || 0), [
-        { value: 0, label: "Bez otočení", icon: "mdi:format-rotate-90" },
-        { value: 90, label: "Otočit 90°", icon: "mdi:rotate-right" },
-        { value: 180, label: "Otočit 180°", icon: "mdi:rotate-3d-variant" },
-        { value: 270, label: "Otočit 270°", icon: "mdi:rotate-left" },
-      ], "Rotace")}`);
+      { value: 0, label: "Bez otočení", icon: "mdi:format-rotate-90" },
+      { value: 90, label: "Otočit 90°", icon: "mdi:rotate-right" },
+      { value: 180, label: "Otočit 180°", icon: "mdi:rotate-3d-variant" },
+      { value: 270, label: "Otočit 270°", icon: "mdi:rotate-left" },
+    ], "Rotace")}`);
   }
 
   _renderProperties(object) {
@@ -5746,12 +5764,12 @@ class DratekEinkPanel extends HTMLElement {
     const value = Array.isArray(object.conditionRules) && object.conditionRules.length
       ? (object.conditionRules.find((rule) => this._customConditionMatches(rawBoundValue, rule.operator || "equals", rule.value || ""))?.symbol || object.defaultSymbol || "?")
       : object.statusIcons
-      ? (activeStatusValues.has(String(rawBoundValue ?? "").trim().toLowerCase()) ? object.statusOnSymbol || "●" : object.statusOffSymbol || "○")
-      : object.entityId
-        ? `${object.valuePrefix || ""}${(object.valuePrefix || object.valueSuffix ? rawEntityValue : this._entityValue(object)) ?? object.text ?? ""}${object.valueSuffix || ""}`
-      : object.variable && object.variableName
-        ? (this._variables[object.variableName] ?? object.text ?? "")
-      : (object.text || "");
+        ? (activeStatusValues.has(String(rawBoundValue ?? "").trim().toLowerCase()) ? object.statusOnSymbol || "●" : object.statusOffSymbol || "○")
+        : object.entityId
+          ? `${object.valuePrefix || ""}${(object.valuePrefix || object.valueSuffix ? rawEntityValue : this._entityValue(object)) ?? object.text ?? ""}${object.valueSuffix || ""}`
+          : object.variable && object.variableName
+            ? (this._variables[object.variableName] ?? object.text ?? "")
+            : (object.text || "");
     const lines = String(value).split("\n");
     const family = '"DRATEK eInk Sans"';
     const weight = object.bold ? "700 " : "600 ";
@@ -5928,7 +5946,7 @@ class DratekEinkPanel extends HTMLElement {
       ? (this._entityValue(object) || object.data || "")
       : object.variable && object.variableName
         ? (this._variables[object.variableName] ?? object.data ?? "")
-      : (object.data || "")).trim();
+        : (object.data || "")).trim();
     let values = [];
     if (raw.startsWith("[")) {
       try {
