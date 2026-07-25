@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.114
+
+- přidány bezpečnostní kontroly nulových rozměrů v `_drawScene`, `_applyEinkPreview` a `_applyColorInversion`
+- zamezeno možným výjimkám `IndexSizeError` / `DOMException` při inicializaci plátna
+
 ## Novinky ve verzi 0.1.113
 
 - optimalizováno pro 3-barevné eInk displeje dratek.cz (Červená / Bílá / Černá - BWR)

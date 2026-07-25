@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.114] - 2026-07-25
+
+### Bezpečnostní ošetření kreslicího plátna
+- Přidána variabilní kontrola `width` a `height` před voláním `getImageData`.
+- Odstraněn riziko chyby `IndexSizeError` v případě, že se plátno pokusí vykreslit před dokončením výpočtu rozměrů v DOM.
+
+---
+
 ## [0.1.113] - 2026-07-25
 
 ### Podpora 3-barevných (BWR) eInk displejů dratek.cz

@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.113";
+const DRATEK_EINK_VERSION = "0.1.114";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -5436,6 +5436,7 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _drawScene(ctx, width, height, withSelection, excludedIds = null) {
+    if (!ctx || !width || !height || width <= 0 || height <= 0) return;
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = this._color(this._backgroundColor);
     ctx.fillRect(0, 0, width, height);
@@ -6175,6 +6176,7 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _applyEinkPreview(ctx, width, height) {
+    if (!ctx || !width || !height || width <= 0 || height <= 0) return;
     const image = ctx.getImageData(0, 0, width, height);
     const data = image.data;
     for (let i = 0; i < data.length; i += 4) {
@@ -6193,6 +6195,7 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   _applyColorInversion(ctx, width, height) {
+    if (!ctx || !width || !height || width <= 0 || height <= 0) return;
     const image = ctx.getImageData(0, 0, width, height);
     const data = image.data;
     for (let i = 0; i < data.length; i += 4) {
