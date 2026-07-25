@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.104";
+const DRATEK_EINK_VERSION = "0.1.105";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -3018,7 +3018,10 @@ class DratekEinkPanel extends HTMLElement {
         @media(max-width:1050px){.editor-shell{grid-template-areas:"tools canvas" "inspector inspector"}.designer-tools-panel{max-height:none;overflow:visible}.designer-layers-content .layer-list{max-height:420px}}
         @media(max-width:760px){.editor-shell{grid-template-areas:"canvas" "tools" "inspector"}.display-health,.display-grid.density-large .display-health,.display-grid.density-compact .display-health,.display-grid.density-list .display-health{grid-template-columns:minmax(58px,.65fr) minmax(58px,.65fr) minmax(90px,1.7fr)}.display-health-route{grid-column:auto}.connection-group,.connection-group.is-gateway,.connection-group.is-local,.connection-group.is-unavailable{grid-template-columns:1fr;padding:12px}.connection-bus{width:2px;height:22px;justify-self:start;margin-left:20px}.connection-bus:before{inset:0;width:2px;height:auto;transform:none}.connection-devices{padding-left:40px}.connection-devices:before{left:20px;top:0}.connection-device:before{left:-20px;width:20px}}
         @media(max-width:390px){.display-health,.display-grid.density-large .display-health,.display-grid.density-compact .display-health,.display-grid.density-list .display-health{grid-template-columns:56px 56px minmax(0,1fr);gap:4px}.display-health-item{padding:6px 3px}.display-health-route{padding-inline:5px}.display-health-route>ha-icon{display:none}.display-health-route>span{grid-column:1/-1}.display-health-route strong{font-size:9px}}
-        .designer-device-screen,.designer-device-portrait .designer-device-screen{box-sizing:content-box;inset:auto;left:50%;top:50%;width:var(--designer-screen-width);height:var(--designer-screen-height);transform:translate(-50%,-50%)}.designer-device-screen canvas,.device-preview-screen canvas,.ha-elements-page canvas{image-rendering:pixelated}
+        .designer-device-screen,.designer-device-portrait .designer-device-screen{box-sizing:content-box;inset:auto;left:50%;top:50%;width:var(--designer-screen-width);height:var(--designer-screen-height);transform:translate(-50%,-50%)}
+        canvas,#editor,#editorSelection,.designer-device-screen canvas,.device-preview-screen canvas,.compact-device-preview canvas,.ha-elements-page canvas{image-rendering:pixelated!important;image-rendering:crisp-edges!important;image-rendering:-moz-crisp-edges!important;image-rendering:-webkit-optimize-contrast!important}
+        .workspace{min-height:600px;overflow:auto;display:grid;place-items:center;background-color:var(--secondary-background-color,#1e293b);background-image:radial-gradient(circle,rgba(148,163,184,.25) 1.2px,transparent 1.2px);background-size:16px 16px;border-radius:12px;padding:36px;box-shadow:inset 0 2px 10px rgba(0,0,0,.12)}
+        .zoom-controls{display:flex;gap:4px;align-items:center}.zoom-chip{padding:3px 8px;font-size:11px;font-weight:700;border-radius:5px;border:1px solid var(--divider-color);background:var(--secondary-background-color);color:var(--primary-text-color);cursor:pointer;box-shadow:none;min-height:28px}.zoom-chip.active,.zoom-chip:hover{background:var(--primary-color,#0f766e);color:#fff;border-color:var(--primary-color,#0f766e)}.pixel-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:6px;background:rgba(15,118,110,.12);color:#0f766e;border:1px solid rgba(15,118,110,.3);font-size:11px;font-weight:850}
         .display-tile.is-stale{border-style:dashed}.display-online-dot.stale{background:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.16)}.display-health-route.stale ha-icon{color:#f59e0b}
       </style>
       <div class="page">
@@ -3046,12 +3049,9 @@ class DratekEinkPanel extends HTMLElement {
         ${this._renderSendResult()}
         <div class="editor-shell">
           ${this._renderToolSidebar()}
-          <div class="card workspace-card"><div class="canvas-head"><div class="canvas-title"><span><ha-icon icon="mdi:monitor-edit"></ha-icon></span><div><strong>Pracovní plocha</strong><small>${size.width} × ${size.height} px · ${this._orientation === "portrait" ? "na výšku" : "na šířku"}</small></div></div><div class="canvas-meta"><span><ha-icon icon="mdi:magnify"></ha-icon>${Math.round(this._zoom * 100)} %</span><span><ha-icon icon="mdi:palette-swatch-outline"></ha-icon>eInk barvy</span></div></div><div class="workspace"><div class="designer-device-bezel ${this._isPe29Device(device) ? "designer-device-pe29" : ""} designer-device-${this._orientation}" style="--designer-frame-ratio:${designerFrameRatio.toFixed(4)};--designer-frame-width:${designerFrameWidth}px;--designer-screen-width:${designerScreenWidth}px;--designer-screen-height:${designerScreenHeight}px">${this._isPe29Device(device) ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>${this._renderDeviceBarcode(device?.physical_code || "00.00.00.00", this._orientation === "portrait")}</span>` : `<span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>`}<div class="designer-device-screen"><canvas id="editor" width="${size.width}" height="${size.height}"></canvas><canvas id="editorSelection" width="${size.width}" height="${size.height}" aria-hidden="true"></canvas></div></div></div></div>
+          <div class="card workspace-card"><div class="canvas-head"><div class="canvas-title"><span><ha-icon icon="mdi:monitor-edit"></ha-icon></span><div><strong>Pracovní plocha (eInk 1:1)</strong><small>${size.width} × ${size.height} px · ${this._orientation === "portrait" ? "na výšku" : "na šířku"}</small></div></div><div class="canvas-meta"><div class="zoom-controls"><button class="zoom-chip ${this._zoom === 1 ? "active" : ""}" id="btnZoom100" title="Zobrazit 1:1 v přesném rozlišení displeje (100 %)">1:1 (100 %)</button><button class="zoom-chip ${this._zoom === 1.5 ? "active" : ""}" id="btnZoom150" title="Zvětšení 150 %">150 %</button><button class="zoom-chip ${this._zoom === 2 ? "active" : ""}" id="btnZoom200" title="Zvětšení 200 %">200 %</button><button class="zoom-chip" id="btnZoomFit" title="Přizpůsobit oknu">Fit</button></div><span class="pixel-badge" title="Ostrý pixelový rozklad 1:1 bez antialiasingu"><ha-icon icon="mdi:grid"></ha-icon> 1:1 Pixely</span><span><ha-icon icon="mdi:palette-swatch-outline"></ha-icon>eInk barvy</span></div></div><div class="workspace"><div class="designer-device-bezel ${this._isPe29Device(device) ? "designer-device-pe29" : ""} designer-device-${this._orientation}" style="--designer-frame-ratio:${designerFrameRatio.toFixed(4)};--designer-frame-width:${designerFrameWidth}px;--designer-screen-width:${designerScreenWidth}px;--designer-screen-height:${designerScreenHeight}px">${this._isPe29Device(device) ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>${this._renderDeviceBarcode(device?.physical_code || "00.00.00.00", this._orientation === "portrait")}</span>` : `<span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>`}<div class="designer-device-screen"><canvas id="editor" width="${size.width}" height="${size.height}"></canvas><canvas id="editorSelection" width="${size.width}" height="${size.height}" aria-hidden="true"></canvas></div></div></div></div>
           <div class="card right properties-panel"><div class="section-title inspector-title"><div class="inspector-title-main"><span class="inspector-object-icon"><ha-icon icon="${object ? this._objectIcon(object) : "mdi:tune-variant"}"></ha-icon></span><div><h2>Inspector</h2><small>${object ? this._escape(this._objectLabel(object, this._objects.indexOf(object))) : "Vlastnosti objektu"}</small></div></div><span class="pill muted">${object ? this._escape(object.type) : "bez výběru"}</span></div>${this._renderProperties(object)}</div>
         </div>
-        </div>
-        <div style="${this._activeTab === "queue" ? "" : "display:none"}">${this._renderQueue()}</div>
-        <div style="${this._activeTab === "gateways" ? "" : "display:none"}">
           <div class="status-grid">
             <div class="card status-tile"><div><div class="metric">DRATEK eInk gatewaye</div><div class="value">${this._gateways.length}</div></div><div class="status-icon"><ha-icon icon="mdi:router-wireless"></ha-icon></div></div>
             <div class="card status-tile"><div><div class="metric">Online</div><div class="value">${this._gateways.filter((gateway) => gateway.status && gateway.status.ok).length}</div></div><div class="status-icon"><ha-icon icon="mdi:lan-connect"></ha-icon></div></div>
@@ -4711,25 +4711,6 @@ class DratekEinkPanel extends HTMLElement {
         await this._loadQueue(true);
         return;
       }
-      this._render();
-      this._paint();
-    }));
-    const openDeviceDesigner = async (address) => {
-      await this._selectDevice(address);
-      this._activeTab = "designer";
-      this._render();
-      this._paint();
-    };
-    this.shadowRoot.querySelectorAll("[data-select-device]").forEach((button) => button.addEventListener("click", () => openDeviceDesigner(button.dataset.selectDevice)));
-    this.shadowRoot.querySelectorAll("[data-device-card-open]").forEach((card) => {
-      card.addEventListener("click", (event) => {
-        if (event.target.closest("button,input,select,textarea,a")) return;
-        openDeviceDesigner(card.dataset.deviceCardOpen);
-      });
-      card.addEventListener("keydown", (event) => {
-        if (event.target !== card || !["Enter", " "].includes(event.key)) return;
-        event.preventDefault();
-        openDeviceDesigner(card.dataset.deviceCardOpen);
       });
     });
     this.shadowRoot.querySelectorAll("[data-device-rename]").forEach((button) => button.addEventListener("click", () => {
@@ -6053,6 +6034,54 @@ class DratekEinkPanel extends HTMLElement {
       values.forEach((value, index) => index ? ctx.lineTo(xFor(index), yFor(value)) : ctx.moveTo(xFor(index), yFor(value)));
       ctx.stroke();
       ctx.fillStyle = color;
+      if (object.xLabel) ctx.fillText(String(object.xLabel), left + plotW / 2, box.h - legendFontSize - 2, plotW);
+      if (object.yLabel) {
+        ctx.save();
+        ctx.translate(7, top + plotH / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.textBaseline = "top";
+        ctx.fillText(String(object.yLabel), 0, 0, plotH);
+        ctx.restore();
+      }
+    }
+
+    if (object.chartType === "bar") {
+      const slot = plotW / Math.max(1, values.length);
+      const barW = Math.max(1, slot * 0.62);
+      const baselineValue = min <= 0 && max >= 0 ? 0 : min;
+      const baselineY = yFor(baselineValue);
+      const barColor = object.barColor || "red";
+      ctx.fillStyle = this._color(barColor);
+      values.forEach((value, index) => {
+        const x = left + index * slot + (slot - barW) / 2;
+        const y = yFor(value);
+        const barY = Math.min(y, baselineY);
+        const barH = Math.max(1, Math.abs(baselineY - y));
+        ctx.fillRect(x, barY, barW, barH);
+        if (barColor === "white") {
+          ctx.strokeStyle = "#000";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x + 0.5, barY + 0.5, Math.max(0, barW - 1), Math.max(0, barH - 1));
+        }
+      });
+    } else {
+      if (object.chartType === "area") {
+        const baselineValue = min <= 0 && max >= 0 ? 0 : min;
+        const baselineY = yFor(baselineValue);
+        ctx.beginPath();
+        ctx.moveTo(xFor(0), baselineY);
+        values.forEach((value, index) => ctx.lineTo(xFor(index), yFor(value)));
+        ctx.lineTo(xFor(values.length - 1), baselineY);
+        ctx.closePath();
+        ctx.fillStyle = object.color === "red" ? "rgba(212,20,20,.35)" : "rgba(0,0,0,.28)";
+        ctx.fill();
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1.2, Number(object.strokeWidth || 2));
+      ctx.beginPath();
+      values.forEach((value, index) => index ? ctx.lineTo(xFor(index), yFor(value)) : ctx.moveTo(xFor(index), yFor(value)));
+      ctx.stroke();
+      ctx.fillStyle = color;
       values.forEach((value, index) => { ctx.beginPath(); ctx.arc(xFor(index), yFor(value), 1.7, 0, Math.PI * 2); ctx.fill(); });
     }
 
@@ -6072,8 +6101,6 @@ class DratekEinkPanel extends HTMLElement {
         ctx.fillStyle = graphColor;
         ctx.fillText(text, xFor(index), textY);
       });
-    }
-    ctx.restore();
   }
 
   _formatChartNumber(value) {

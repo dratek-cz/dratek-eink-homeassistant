@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.105
+
+- kompletní redesign editoru s novým studiovým pozadím a vylepšenými ovládacími prvky
+- přidané tlačítko 1:1 pro zobrazení náhledu v přesném fyzickém rozlišení displeje (100 %)
+- striktní pixelový eInk rozklad s ostrou paletou barev (černá, bílá, červená, žlutá) bez antialiased šedých přechodů
+- doplněna CSS pravidla pro zachování ostrých pixelových hran při jakémkoliv zvětšení
+
 ## Novinky ve verzi 0.1.104
 
 - odstraněno problikávání dvou fontů v náhledu Designeru při změnách entit

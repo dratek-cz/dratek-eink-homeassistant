@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.105] - 2026-07-25
+
+### Redesign editoru a 1:1 pixelový eInk náhled
+- Přidána podpora 1:1 pixelového renderingu displejů bez vyhlazování hran (`image-rendering: pixelated`).
+- Přidané tlačítko `1:1 (100 %)` pro zobrazení v přesném fyzickém rozlišení displeje.
+- Striktní barevné kvantování eInk barev (černá, bílá, červená, žlutá) bez jakýchkoliv šedých či antialiased přechodů.
+- Vylepšený vizuální design editoru se studiovým bodovým pozadím plátna.
+
+---
+
 ## [0.1.104] - 2026-07-24
 
 ### Stabilní náhled bez problikávání fontů
