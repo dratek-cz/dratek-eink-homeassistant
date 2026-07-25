@@ -28,11 +28,13 @@ $credentials = [Convert]::ToBase64String(
     [Text.Encoding]::ASCII.GetBytes("x-access-token:$token")
 )
 
+# 1. Push branch
 & $git.Source -C $repoRoot -c "http.extraHeader=AUTHORIZATION: basic $credentials" push $Remote $Branch
 if ($LASTEXITCODE -ne 0) {
     throw "Push větve $Branch selhal."
 }
 
+# 2. Push tags
 if ($PushTags) {
     & $git.Source -C $repoRoot -c "http.extraHeader=AUTHORIZATION: basic $credentials" push $Remote --tags
     if ($LASTEXITCODE -ne 0) {
@@ -40,4 +42,70 @@ if ($PushTags) {
     }
 }
 
-Write-Output "Push do $Remote dokončen bez uložení tokenu do Git remote URL."
+# 3. Create zip package for HACS
+$manifestPath = Join-Path $repoRoot "custom_components\dratek_eink\manifest.json"
+$manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+$version = $manifest.version
+$tagName = "v$version"
+
+$tempDir = Join-Path $env:TEMP "dratek_eink_zip_build"
+if (Test-Path $tempDir) { Remove-Item -Recurse -Force $tempDir }
+$targetFolder = Join-Path $tempDir "dratek_eink"
+New-Item -ItemType Directory -Path $targetFolder | Out-Null
+Copy-Item -Recurse -Path (Join-Path $repoRoot "custom_components\dratek_eink\*") -Destination $targetFolder
+
+$zipPath = Join-Path $repoRoot "dratek_eink.zip"
+if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory($tempDir, $zipPath)
+Write-Output "Vytvořen zip balíček pro HACS: dratek_eink.zip ($(Get-Item $zipPath | Select-Object -ExpandProperty Length) bajtů)."
+
+# 4. Create or update GitHub Release & upload asset
+$headers = @{
+    "Authorization" = "token $token"
+    "User-Agent"    = "PowerShell-DRATEK"
+}
+
+$releasesUrl = "https://api.github.com/repos/dratek-cz/dratek-eink-homeassistant/releases"
+$existingReleases = Invoke-RestMethod -Uri $releasesUrl -Headers $headers
+$release = $existingReleases | Where-Object { $_.tag_name -eq $tagName }
+
+if (-not $release) {
+    Write-Output "Vytvářím oficiální GitHub Release pro $tagName..."
+    $releaseBody = @"
+## DRATEK eInk $tagName
+
+Oficiální vydání integrace DRATEK eInk pro Home Assistant.
+Automaticky vytvořený HACS balíček.
+"@
+    $payload = @{
+        tag_name   = $tagName
+        name       = "DRATEK eInk $tagName"
+        body       = $releaseBody
+        draft      = $false
+        prerelease = $false
+    } | ConvertTo-Json
+
+    $release = Invoke-RestMethod -Uri $releasesUrl -Method Post -Headers $headers -Body $payload -ContentType "application/json; charset=utf-8"
+    Write-Output "GitHub Release $tagName byl úspěšně vytvořen! (ID: $($release.id))"
+}
+
+# 5. Upload asset dratek_eink.zip
+$existingAsset = $release.assets | Where-Object { $_.name -eq "dratek_eink.zip" }
+if ($existingAsset) {
+    $deleteUrl = "https://api.github.com/repos/dratek-cz/dratek-eink-homeassistant/releases/assets/$($existingAsset.id)"
+    Invoke-RestMethod -Uri $deleteUrl -Method Delete -Headers $headers
+}
+
+$uploadUrl = $release.upload_url -replace '\{\?name,label\}', '?name=dratek_eink.zip'
+$zipBytes = [System.IO.File]::ReadAllBytes($zipPath)
+$uploadHeaders = @{
+    "Authorization" = "token $token"
+    "User-Agent"    = "PowerShell-DRATEK"
+    "Content-Type"  = "application/zip"
+}
+$uploadedAsset = Invoke-RestMethod -Uri $uploadUrl -Method Post -Headers $uploadHeaders -Body $zipBytes
+Write-Output "Asset dratek_eink.zip byl nahrán k GitHub Release $tagName! (Velikost: $($uploadedAsset.size) bajtů)"
+
+Write-Output "Vydání $tagName pro HACS i Git remote bylo kompletně dokončeno."
