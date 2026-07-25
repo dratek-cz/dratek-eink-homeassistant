@@ -65,6 +65,7 @@ Write-Output "Vytvořen zip balíček pro HACS: dratek_eink.zip ($(Get-Item $zip
 $headers = @{
     "Authorization" = "token $token"
     "User-Agent"    = "PowerShell-DRATEK"
+    "Accept"        = "application/vnd.github+json"
 }
 
 $releasesUrl = "https://api.github.com/repos/dratek-cz/dratek-eink-homeassistant/releases"
@@ -72,14 +73,16 @@ $existingReleases = Invoke-RestMethod -Uri $releasesUrl -Headers $headers
 $release = $existingReleases | Where-Object { $_.tag_name -eq $tagName }
 
 if (-not $release) {
-    Write-Output "Vytvářím oficiální GitHub Release pro $tagName..."
+    Write-Output "Vytvářím oficiální GitHub Release pro $tagName v UTF-8..."
     $releaseBody = @"
-## DRATEK eInk $tagName
-
-Oficiální vydání integrace DRATEK eInk pro Home Assistant.
-Automaticky vytvořený HACS balíček.
+- Přidán režim Floyd-Steinberg Dithering pro fotky a obrázky
+- Nový Weather Forecast Widget pro weather.* entity
+- Výběr časového okna u grafů (1h / 6h / 24h / 7 dní)
+- Automatický Úsporný režim baterie při kapacitě < 15 %
+- Knihovna hotových šablon (Meteo, FVE, Cenovka, Dům)
+- Import a Export projektů do .json souborů
 "@
-    $payload = @{
+    $payloadJson = @{
         tag_name   = $tagName
         name       = "DRATEK eInk $tagName"
         body       = $releaseBody
@@ -87,7 +90,20 @@ Automaticky vytvořený HACS balíček.
         prerelease = $false
     } | ConvertTo-Json
 
-    $release = Invoke-RestMethod -Uri $releasesUrl -Method Post -Headers $headers -Body $payload -ContentType "application/json; charset=utf-8"
+    $utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($payloadJson)
+    $req = [System.Net.HttpWebRequest]::Create($releasesUrl)
+    $req.Method = "POST"
+    $req.Headers.Add("Authorization", "token $token")
+    $req.UserAgent = "PowerShell-DRATEK"
+    $req.ContentType = "application/json; charset=utf-8"
+    $stream = $req.GetRequestStream()
+    $stream.Write($utf8Bytes, 0, $utf8Bytes.Length)
+    $stream.Close()
+    $resp = $req.GetResponse()
+    $reader = New-Object System.IO.StreamReader($resp.GetResponseStream())
+    $responseJson = $reader.ReadToEnd()
+    $resp.Close()
+    $release = $responseJson | ConvertFrom-Json
     Write-Output "GitHub Release $tagName byl úspěšně vytvořen! (ID: $($release.id))"
 }
 
