@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.111";
+const DRATEK_EINK_VERSION = "0.1.112";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -5296,90 +5296,6 @@ class DratekEinkPanel extends HTMLElement {
     this._render();
     this._paint();
     this._scheduleDraftSave();
-  }
-
-  _renderInspectorGeometry(object) {
-    return this._inspectorSection("mdi:move-resize", "Pozice a rozměry", `
-      <div class="row"><div class="field"><label><ha-icon icon="mdi:axis-x-arrow"></ha-icon>X</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label><ha-icon icon="mdi:axis-y-arrow"></ha-icon>Y</label><input data-prop="y" type="number" value="${object.y}"></div></div>
-      <div class="row"><div class="field"><label><ha-icon icon="mdi:arrow-left-right"></ha-icon>Šířka</label><input data-prop="w" type="number" min="1" value="${object.w || 1}"></div><div class="field"><label><ha-icon icon="mdi:arrow-up-down"></ha-icon>Výška</label><input data-prop="h" type="number" min="1" value="${object.h || 1}"></div></div>
-      ${this._inspectorSegments("rotation", Number(object.rotation || 0), [
-        { value: 0, label: "Bez otočení", icon: "mdi:format-rotate-90" },
-        { value: 90, label: "Otočit 90°", icon: "mdi:rotate-right" },
-        { value: 180, label: "Otočit 180°", icon: "mdi:rotate-3d-variant" },
-        { value: 270, label: "Otočit 270°", icon: "mdi:rotate-left" },
-      ], "Rotace")}`);
-  }
-
-  _renderProperties(object) {
-    if (!object) return `<div class="inspector-empty"><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon><p>${this._selectedIds.length > 1 ? `Vybráno ${this._selectedIds.length} objektů.` : "Vyberte objekt v návrhu."}</p></div>`;
-    const geometry = this._renderInspectorGeometry(object);
-
-    if (object.type === "text") {
-      const content = this._inspectorSection("mdi:format-text", object.statusIcons ? "Signalizace" : "Text", `
-        <div class="field"><label><ha-icon icon="mdi:text-box-edit-outline"></ha-icon>Obsah</label><input data-prop="text" value="${this._escape(object.text)}"></div>
-        <div class="row"><div class="field"><label><ha-icon icon="mdi:format-size"></ha-icon>Velikost</label><input data-prop="fontSize" type="number" min="${this._textMinFontSize(object)}" value="${object.fontSize}"></div><div class="field"><label><ha-icon icon="mdi:format-font"></ha-icon>Font displeje</label><input value="DRATEK eInk Sans" disabled title="Stejný vestavěný font používá náhled i backend při automatické aktualizaci."></div></div>
-        ${this._inspectorSegments("textAlign", object.textAlign || "center", [{ value: "left", label: "Vlevo", icon: "mdi:format-align-left" }, { value: "center", label: "Na střed", icon: "mdi:format-align-center" }, { value: "right", label: "Vpravo", icon: "mdi:format-align-right" }], "Vodorovné zarovnání")}
-        ${this._inspectorSegments("verticalAlign", object.verticalAlign || "middle", [{ value: "top", label: "Nahoru", icon: "mdi:format-vertical-align-top" }, { value: "middle", label: "Na střed", icon: "mdi:format-vertical-align-center" }, { value: "bottom", label: "Dolů", icon: "mdi:format-vertical-align-bottom" }], "Svislé zarovnání")}
-        ${object.statusIcons ? `<div class="row"><div class="field"><label>Symbol zapnuto</label><input data-prop="statusOnSymbol" value="${this._escape(object.statusOnSymbol || "●")}"></div><div class="field"><label>Symbol vypnuto</label><input data-prop="statusOffSymbol" value="${this._escape(object.statusOffSymbol || "○")}"></div></div><div class="field"><label>Hodnoty zapnutého stavu</label><input data-prop="statusOnValues" value="${this._escape(object.statusOnValues || "on,true,1,open,home")}"><small>Oddělte čárkou, například on, true, open.</small></div>` : ""}`, true);
-      const appearance = this._inspectorSection("mdi:palette-outline", "Vzhled", `${this._inspectorColor("color", object.color, "Barva textu")}<div class="toggle-stack">${this._inspectorToggle("bold", !!object.bold, "mdi:format-bold", "Tučné písmo")}${this._inspectorToggle("autoFit", object.autoFit !== false, "mdi:fit-to-page-outline", "Přizpůsobit text boxu")}</div>`);
-      const variable = this._inspectorSection("mdi:variable", "Proměnná", `<div class="toggle-stack">${this._inspectorToggle("variable", !!object.variable, "mdi:variable-box", "Proměnný text")}</div>${object.variable ? `<div class="field" style="margin-top:10px"><label><ha-icon icon="mdi:identifier"></ha-icon>Interní název</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="napr_teplota"><p class="inspector-help"><ha-icon icon="mdi:information-outline"></ha-icon><span>Název patří šabloně a není samostatnou entitou Home Assistantu.</span></p></div>${this._renderEntityBinding(object)}` : ""}`);
-      return `${geometry}${content}${appearance}${variable}`;
-    }
-
-    if (object.type === "rect") return `${geometry}${this._inspectorSection("mdi:palette-outline", "Výplň a rámeček", `${this._inspectorColor("fill", object.fill, "Výplň", ["none", "black", "red", "white"])}${this._inspectorColor("stroke", object.stroke, "Rámeček", ["none", "black", "red"])}<div class="field"><label><ha-icon icon="mdi:border-width"></ha-icon>Síla rámečku</label><input data-prop="strokeWidth" type="number" min="0" value="${object.strokeWidth || 0}"></div>`)}`;
-
-    if (object.type === "chart") {
-      const chart = this._inspectorSection("mdi:chart-box-outline", "Graf", `
-        ${this._inspectorSegments("chartType", object.chartType || "bar", [{ value: "line", label: "Spojnicový", icon: "mdi:chart-line" }, { value: "bar", label: "Sloupcový", icon: "mdi:chart-bar" }, { value: "area", label: "Plošný", icon: "mdi:chart-areaspline" }], "Typ grafu")}
-        <div class="field"><label><ha-icon icon="mdi:format-title"></ha-icon>Název</label><input data-prop="chartTitle" value="${this._escape(object.chartTitle || "")}"></div>
-        <div class="field"><label><ha-icon icon="mdi:code-array"></ha-icon>Data</label><textarea data-prop="data" rows="3" placeholder="2.10, 2.35, 2.18">${this._escape(object.data || "")}</textarea></div>
-        <div class="field"><label><ha-icon icon="mdi:label-multiple-outline"></ha-icon>Popisky bodů</label><input data-prop="chartLabels" value="${this._escape(object.chartLabels || "")}" placeholder="00, 03, 06, 09"></div>
-        <div class="row"><div class="field"><label>Osa X</label><input data-prop="xLabel" value="${this._escape(object.xLabel || "")}"></div><div class="field"><label>Osa Y</label><input data-prop="yLabel" value="${this._escape(object.yLabel || "")}"></div></div>
-        <div class="row"><div class="field"><label>Časové okno (historie)</label><select data-prop="time_range_hours"><option value="1" ${Number(object.time_range_hours) === 1 ? "selected" : ""}>1 hodina</option><option value="6" ${Number(object.time_range_hours) === 6 ? "selected" : ""}>6 hodin</option><option value="24" ${Number(object.time_range_hours || 24) === 24 ? "selected" : ""}>24 hodin (1 den)</option><option value="168" ${Number(object.time_range_hours) === 168 ? "selected" : ""}>7 dní</option></select></div><div class="field"><label>Velikost textu</label><input data-prop="legendFontSize" type="number" min="6" max="18" value="${Number(object.legendFontSize || 8)}"></div></div>
-        <div class="row"><div class="field"><label>Minimum</label><input data-prop="chartMin" type="number" step="any" value="${this._escape(object.chartMin ?? "")}" placeholder="Auto"></div><div class="field"><label>Maximum</label><input data-prop="chartMax" type="number" step="any" value="${this._escape(object.chartMax ?? "")}" placeholder="Auto"></div></div>`, true);
-      const appearance = this._inspectorSection("mdi:palette-outline", "Barvy a zobrazení", `${this._inspectorColor("backgroundColor", object.backgroundColor || "white", "Pozadí")}${this._inspectorColor("color", object.color || "black", "Čára grafu")}${this._inspectorColor("graphColor", object.graphColor || "black", "Osy a popisky")}${object.chartType === "bar" ? this._inspectorColor("barColor", object.barColor || "red", "Sloupce") : ""}<div class="toggle-stack">${this._inspectorToggle("showAxes", object.showAxes !== false, "mdi:axis-arrow", "Zobrazit osy")}${this._inspectorToggle("showGrid", object.showGrid !== false, "mdi:grid", "Zobrazit mřížku")}${this._inspectorToggle("showValues", !!object.showValues, "mdi:numeric", "Zobrazit hodnoty")}</div>`);
-      const source = this._inspectorSection("mdi:database-sync-outline", "Datový zdroj", `<div class="field"><label><ha-icon icon="mdi:identifier"></ha-icon>Název proměnné</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="ceny_spot_24h"></div>${this._renderEntityBinding(object)}`);
-      return `${geometry}${chart}${appearance}${source}`;
-    }
-
-    if (object.type === "weather") {
-      const settings = this._inspectorSection("mdi:weather-partly-cloudy", "Předpověď počasí", `
-        <div class="field"><label>Náhled teploty</label><input data-prop="sample_temp" value="${this._escape(object.sample_temp || "21.5")}"></div>
-        <div class="field"><label>Náhled stavu</label><input data-prop="sample_value" value="${this._escape(object.sample_value || "sunny")}" placeholder="sunny, rainy, cloudy, snowy"></div>`, true);
-      const appearance = this._inspectorSection("mdi:palette-outline", "Vzhled", this._inspectorColor("color", object.color || "black", "Barva ikon a textu"));
-      const source = this._inspectorSection("mdi:home-assistant", "Zdroj dat počasí", this._renderEntityBinding(object));
-      return `${geometry}${settings}${appearance}${source}`;
-    }
-
-    if (["bar_gauge", "pie", "slider", "gauge", "potentiometer"].includes(object.type)) {
-      const isBar = object.type === "bar_gauge";
-      const isPie = object.type === "pie";
-      const isGauge = object.type === "gauge" || object.type === "potentiometer";
-      const settings = this._inspectorSection("mdi:gauge", "Ukazatel hodnoty", `
-        <div class="field"><label><ha-icon icon="mdi:label-outline"></ha-icon>Popisek</label><input data-prop="label" value="${this._escape(object.label || "")}"></div>
-        <div class="row"><div class="field"><label>Minimum</label><input data-prop="min_value" type="number" step="any" value="${Number(object.min_value ?? 0)}"></div><div class="field"><label>Maximum</label><input data-prop="max_value" type="number" step="any" value="${Number(object.max_value ?? 100)}"></div></div>
-        <div class="row"><div class="field"><label>Náhled hodnoty</label><input data-prop="sample_value" type="number" step="any" value="${Number(object.sample_value ?? 50)}"></div><div class="field"><label>Jednotka</label><input data-prop="unit" value="${this._escape(object.unit || "")}" placeholder="%"></div></div>
-        ${isBar ? this._inspectorSegments("orientation", object.orientation || "horizontal", [{ value: "horizontal", label: "Vodorovně", icon: "mdi:arrow-left-right" }, { value: "vertical", label: "Svisle", icon: "mdi:arrow-up-down" }], "Orientace") : ""}
-        ${isPie ? `<div class="field"><label>Velikost otvoru (%)</label><input data-prop="hole_percent" type="number" min="0" max="80" value="${Number(object.hole_percent ?? 45)}"></div>` : ""}
-        ${isGauge ? `${this._inspectorSegments("arc_mode", object.arc_mode || "240", [{ value: "180", label: "180°", icon: "mdi:gauge-low" }, { value: "240", label: "240°", icon: "mdi:gauge" }, { value: "360", label: "360°", icon: "mdi:circle-outline" }], "Rozsah budíku")}<div class="field"><label>Síla oblouku</label><input data-prop="stroke_width" type="number" min="1" max="20" value="${Number(object.stroke_width ?? 6)}"></div>` : ""}
-        <div class="toggle-stack">${this._inspectorToggle("show_value", object.show_value !== false, "mdi:numeric", "Zobrazit hodnotu")}${isGauge ? `${this._inspectorToggle("show_arc", object.show_arc !== false, "mdi:chart-arc", "Zobrazit oblouk")}${this._inspectorToggle("show_needle", object.show_needle !== false, "mdi:ray-start-arrow", "Zobrazit ručičku")}` : ""}</div>`, true);
-      const appearance = this._inspectorSection("mdi:palette-outline", "Vzhled", `${this._inspectorColor(isBar ? "fill" : "color", isBar ? (object.fill || "red") : (object.color || "red"), "Aktivní barva")}${isBar ? `${this._inspectorColor("stroke", object.stroke || "black", "Rámeček", ["none", "black", "red"])}<div class="field"><label>Síla rámečku</label><input data-prop="stroke_width" type="number" min="0" max="12" value="${Number(object.stroke_width ?? 2)}"></div>` : ""}`);
-      const source = this._inspectorSection("mdi:home-assistant", "Zdroj dat", this._renderEntityBinding(object));
-      return `${geometry}${settings}${appearance}${source}`;
-    }
-
-    if (object.type === "line") {
-      const points = this._inspectorSection("mdi:vector-line", "Koncové body", `<div class="row"><div class="field"><label>X1</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label>Y1</label><input data-prop="y" type="number" value="${object.y}"></div></div><div class="row"><div class="field"><label>X2</label><input data-prop="x2" type="number" value="${object.x2}"></div><div class="field"><label>Y2</label><input data-prop="y2" type="number" value="${object.y2}"></div></div>`);
-      return `${points}${this._inspectorSection("mdi:palette-outline", "Vzhled", `${this._inspectorColor("color", object.color, "Barva čáry", ["black", "red"])}<div class="field"><label><ha-icon icon="mdi:format-line-weight"></ha-icon>Síla čáry</label><input data-prop="strokeWidth" type="number" min="1" value="${object.strokeWidth || 2}"></div>`)}`;
-    }
-
-    if (object.type === "barcode" || object.type === "qr") {
-      const title = object.type === "qr" ? "QR kód" : "EAN kód";
-      const data = this._inspectorSection(object.type === "qr" ? "mdi:qrcode" : "mdi:barcode", title, `<div class="field"><label><ha-icon icon="mdi:text-box-outline"></ha-icon>Data</label><input data-prop="text" value="${this._escape(object.text)}"></div>${this._inspectorColor("color", object.color || "black", "Barva kódu")}${this._inspectorColor("backgroundColor", object.backgroundColor || "white", "Pozadí kódu")}<div class="toggle-stack">${this._inspectorToggle("keepRatio", object.keepRatio !== false, "mdi:aspect-ratio", "Zachovat poměr stran")}</div>`);
-      return `${geometry}${data}`;
-    }
-
-    return `${geometry}${this._inspectorSection("mdi:image-outline", "Obrázek", `${object.type === "image" ? `${this._inspectorColor("tint", object.tint || "original", "Přebarvení obrázku", ["original", "black", "red", "white"])}<div class="field"><label>Režim stínování (Dither)</label><select data-prop="dither_mode"><option value="none" ${object.dither_mode === "none" || !object.dither_mode ? "selected" : ""}>Přímý práh (Threshold)</option><option value="floyd_steinberg" ${object.dither_mode === "floyd_steinberg" ? "selected" : ""}>Floyd-Steinberg Tečkování (Pro fotky)</option></select></div>` : ""}<div class="toggle-stack">${this._inspectorToggle("keepRatio", !!object.keepRatio, "mdi:aspect-ratio", "Zachovat poměr stran")}</div><p class="inspector-help"><ha-icon icon="mdi:information-outline"></ha-icon><span>Režim Floyd-Steinberg zachovává jemné detaily a polotóny fotografií.</span></p>`)}`;
   }
 
   _readProperties(event = null) {

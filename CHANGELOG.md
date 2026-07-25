@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.112] - 2026-07-25
+
+### Oprava duplicitních metod v panelu
+- Odstraněn opakovaný duplicitní blok metod `_renderInspectorGeometry` a `_renderProperties`.
+- Soubor `dratek-eink-panel.js` je plně validní a neobsahuje žádné chybné zvýraznění ani syntaktické chyby.
+
+---
+
 ## [0.1.111] - 2026-07-25
 
 ### Oprava metody _renderProperties

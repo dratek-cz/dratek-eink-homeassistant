@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.112
+
+- odstraněn duplicitní blok metod `_renderInspectorGeometry` a `_renderProperties` v `dratek-eink-panel.js`
+- kompletně opraveny všechny syntaktické chyby a zvýrazňování editoru v celém souboru
+
 ## Novinky ve verzi 0.1.111
 
 - kompletně opravena a obnovena struktura metody `_renderProperties` na řádcích 5203–5210 v `dratek-eink-panel.js`
