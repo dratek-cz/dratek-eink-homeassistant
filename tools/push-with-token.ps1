@@ -61,7 +61,15 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory($tempDir, $zipPath)
 Write-Output "Vytvořen zip balíček pro HACS: dratek_eink.zip ($(Get-Item $zipPath | Select-Object -ExpandProperty Length) bajtů)."
 
-# 4. Create or update GitHub Release & upload asset
+# 4. Extract release notes from README.md in explicit UTF-8
+$readmePath = Join-Path $repoRoot "README.md"
+$readmeText = Get-Content -Raw -Encoding UTF8 $readmePath
+$releaseBody = "DRATEK eInk $tagName"
+if ($readmeText -match "(?s)## Novinky ve verzi $version\s*\r?\n\r?\n(.*?)(?=\r?\n## |\z)") {
+    $releaseBody = $matches[1].Trim()
+}
+
+# 5. Create or update GitHub Release & upload asset
 $headers = @{
     "Authorization" = "token $token"
     "User-Agent"    = "PowerShell-DRATEK"
@@ -73,15 +81,7 @@ $existingReleases = Invoke-RestMethod -Uri $releasesUrl -Headers $headers
 $release = $existingReleases | Where-Object { $_.tag_name -eq $tagName }
 
 if (-not $release) {
-    Write-Output "Vytvářím oficiální GitHub Release pro $tagName v UTF-8..."
-    $releaseBody = @"
-- Přidán režim Floyd-Steinberg Dithering pro fotky a obrázky
-- Nový Weather Forecast Widget pro weather.* entity
-- Výběr časového okna u grafů (1h / 6h / 24h / 7 dní)
-- Automatický Úsporný režim baterie při kapacitě < 15 %
-- Knihovna hotových šablon (Meteo, FVE, Cenovka, Dům)
-- Import a Export projektů do .json souborů
-"@
+    Write-Output "Vytvářím oficiální GitHub Release pro $tagName z README.md v UTF-8..."
     $payloadJson = @{
         tag_name   = $tagName
         name       = "DRATEK eInk $tagName"
@@ -107,7 +107,7 @@ if (-not $release) {
     Write-Output "GitHub Release $tagName byl úspěšně vytvořen! (ID: $($release.id))"
 }
 
-# 5. Upload asset dratek_eink.zip
+# 6. Upload asset dratek_eink.zip
 $existingAsset = $release.assets | Where-Object { $_.name -eq "dratek_eink.zip" }
 if ($existingAsset) {
     $deleteUrl = "https://api.github.com/repos/dratek-cz/dratek-eink-homeassistant/releases/assets/$($existingAsset.id)"
