@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.113] - 2026-07-25
+
+### Podpora 3-barevných (BWR) eInk displejů dratek.cz
+- Ověřena 100% kompatibilita všech funkcí (Floyd-Steinberg Dithering, Weather Forecast Widget, Časová okna u grafů, Bateriový Úsporný Režim, Šablony a Import/Export JSON).
+
+---
+
 ## [0.1.112] - 2026-07-25
 
 ### Oprava duplicitních metod v panelu

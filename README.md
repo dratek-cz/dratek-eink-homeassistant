@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.113
+
+- optimalizováno pro 3-barevné eInk displeje dratek.cz (Červená / Bílá / Černá - BWR)
+- zapnuty a prověřeny všechny nové funkce (Floyd-Steinberg dithering pro fotky, Weather Forecast Widget, Časová okna u grafů, Bateriový Úsporný Režim, Šablony a Import/Export JSON)
+
 ## Novinky ve verzi 0.1.112
 
 - odstraněn duplicitní blok metod `_renderInspectorGeometry` a `_renderProperties` v `dratek-eink-panel.js`
