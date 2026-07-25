@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.111
+
+- kompletně opravena a obnovena struktura metody `_renderProperties` na řádcích 5203–5210 v `dratek-eink-panel.js`
+- všechny metody třídy a zálohování vlastností fungují 100% čistě bez syntaktických chyb
+
 ## Novinky ve verzi 0.1.110
 
 - opravena chybná ukončovací závorka na řádku 4717 v obsluze záložek v `dratek-eink-panel.js`

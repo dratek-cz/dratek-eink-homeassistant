@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.111] - 2026-07-25
+
+### Oprava metody _renderProperties
+- Obnoveny chybějící větve pro `text`, `rect`, `chart`, `weather`, `gauge`, `line`, `barcode`, `qr` v `_renderProperties`.
+- Obnoveno správné uzavření těla metody na řádcích 5203–5210.
+
+---
+
 ## [0.1.110] - 2026-07-25
 
 ### Oprava SyntaxError na řádku 4717
