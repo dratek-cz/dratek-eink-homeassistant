@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.109";
+const DRATEK_EINK_VERSION = "0.1.110";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -4714,8 +4714,9 @@ class DratekEinkPanel extends HTMLElement {
         await this._loadQueue(true);
         return;
       }
-      });
-    });
+      this._render();
+      this._paint();
+    }));
     this.shadowRoot.querySelectorAll("[data-device-rename]").forEach((button) => button.addEventListener("click", () => {
       const device = (this._result?.devices || []).find((item) => item.address === button.dataset.deviceRename);
       if (!device) return;

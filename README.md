@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.110
+
+- opravena chybná ukončovací závorka na řádku 4717 v obsluze záložek v `dratek-eink-panel.js`
+- odstraněn `SyntaxError: missing ) after argument list` z konzolových chyb prohlížeče
+
 ## Novinky ve verzi 0.1.109
 
 - opravena kritická chyba vykreslování plátna v metodě `_drawSelection` v `dratek-eink-panel.js`

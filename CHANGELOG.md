@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.110] - 2026-07-25
+
+### Oprava SyntaxError na řádku 4717
+- Odstraněna nadbytečná ukončovací závorka v obsluze událostí záložek v `dratek-eink-panel.js`.
+- Kód panelu se nyní parsuje a spouští bez jakýchkoliv syntaktických chyb.
+
+---
+
 ## [0.1.109] - 2026-07-25
 
 ### Oprava vykreslování plátna a zobrazení editoru
