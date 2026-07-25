@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.107
+
+- opravena chyba syntaxe v rozhraní Inspector v souboru frontendového panelu `dratek-eink-panel.js`
+- panel se v prostředí Home Assistantu po aktualizaci načte bez chybové bílé obrazovky
+
 ## Novinky ve verzi 0.1.106
 
 - přidán režim **Floyd-Steinberg Dithering** pro jemné tečkované zobrazení fotografií na eInku

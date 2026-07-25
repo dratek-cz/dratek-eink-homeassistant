@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.106";
+const DRATEK_EINK_VERSION = "0.1.107";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -5300,11 +5300,18 @@ class DratekEinkPanel extends HTMLElement {
       return `${geometry}${settings}${appearance}${source}`;
     }
 
+    if (object.type === "line") {
+      const points = this._inspectorSection("mdi:vector-line", "Koncové body", `<div class="row"><div class="field"><label>X1</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label>Y1</label><input data-prop="y" type="number" value="${object.y}"></div></div><div class="row"><div class="field"><label>X2</label><input data-prop="x2" type="number" value="${object.x2}"></div><div class="field"><label>Y2</label><input data-prop="y2" type="number" value="${object.y2}"></div></div>`);
+      return `${points}${this._inspectorSection("mdi:palette-outline", "Vzhled", `${this._inspectorColor("color", object.color, "Barva čáry", ["black", "red"])}<div class="field"><label><ha-icon icon="mdi:format-line-weight"></ha-icon>Síla čáry</label><input data-prop="strokeWidth" type="number" min="1" value="${object.strokeWidth || 2}"></div>`)}`;
+    }
+
+    if (object.type === "barcode" || object.type === "qr") {
+      const title = object.type === "qr" ? "QR kód" : "EAN kód";
       const data = this._inspectorSection(object.type === "qr" ? "mdi:qrcode" : "mdi:barcode", title, `<div class="field"><label><ha-icon icon="mdi:text-box-outline"></ha-icon>Data</label><input data-prop="text" value="${this._escape(object.text)}"></div>${this._inspectorColor("color", object.color || "black", "Barva kódu")}${this._inspectorColor("backgroundColor", object.backgroundColor || "white", "Pozadí kódu")}<div class="toggle-stack">${this._inspectorToggle("keepRatio", object.keepRatio !== false, "mdi:aspect-ratio", "Zachovat poměr stran")}</div>`);
       return `${geometry}${data}`;
     }
 
-    return `${geometry}${this._inspectorSection("mdi:image-outline", "Obrázek", `${object.type === "image" ? this._inspectorColor("tint", object.tint || "original", "Přebarvení obrázku", ["original", "black", "red", "white"]) : ""}<div class="toggle-stack">${this._inspectorToggle("keepRatio", !!object.keepRatio, "mdi:aspect-ratio", "Zachovat poměr stran")}</div><p class="inspector-help"><ha-icon icon="mdi:information-outline"></ha-icon><span>Velikost můžete změnit tažením za rohy nebo přesnými hodnotami.</span></p>`)}`;
+    return `${geometry}${this._inspectorSection("mdi:image-outline", "Obrázek", `${object.type === "image" ? `${this._inspectorColor("tint", object.tint || "original", "Přebarvení obrázku", ["original", "black", "red", "white"])}<div class="field"><label>Režim stínování (Dither)</label><select data-prop="dither_mode"><option value="none" ${object.dither_mode === "none" || !object.dither_mode ? "selected" : ""}>Přímý práh (Threshold)</option><option value="floyd_steinberg" ${object.dither_mode === "floyd_steinberg" ? "selected" : ""}>Floyd-Steinberg Tečkování (Pro fotky)</option></select></div>` : ""}<div class="toggle-stack">${this._inspectorToggle("keepRatio", !!object.keepRatio, "mdi:aspect-ratio", "Zachovat poměr stran")}</div><p class="inspector-help"><ha-icon icon="mdi:information-outline"></ha-icon><span>Režim Floyd-Steinberg zachovává jemné detaily a polotóny fotografií.</span></p>`)}`;
   }
 
   _readProperties(event = null) {

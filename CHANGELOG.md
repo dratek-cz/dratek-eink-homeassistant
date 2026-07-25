@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.107] - 2026-07-25
+
+### Oprava načítání panelu v Home Assistantu
+- Opravena chybějící podmínka v rozhraní Inspector v `dratek-eink-panel.js`.
+- Panel v Home Assistantu se načte čistě bez chyb.
+
+---
+
 ## [0.1.106] - 2026-07-25
 
 ### Floyd-Steinberg Dithering, Weather Widget, Časový rozsah grafů a Battery Saver
