@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.108
+
+- opraveno prvotní vykreslení rozhraní v `connectedCallback()`
+- přidány záložní CSS proměnné na `:host` pro kompletní podporu světlého i tmavého režimu Home Assistantu
+
 ## Novinky ve verzi 0.1.107
 
 - opravena chyba syntaxe v rozhraní Inspector v souboru frontendového panelu `dratek-eink-panel.js`

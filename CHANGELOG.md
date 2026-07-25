@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.108] - 2026-07-25
+
+### Oprava vykreslení v panelu a CSS tematu
+- Přidáno okamžité vykreslení v `connectedCallback()` webové komponenty.
+- Přidány výchozí CSS proměnné pro světlé i tmavé téma Home Assistantu.
+
+---
+
 ## [0.1.107] - 2026-07-25
 
 ### Oprava načítání panelu v Home Assistantu
