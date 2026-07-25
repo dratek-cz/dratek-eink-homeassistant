@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.115
+
+- opravena chybějící ukončovací závorka na řádku 6144 u metody `_drawChart` v `dratek-eink-panel.js`
+- vyřešeno chybné červené podtržení v editoru a obnovena správná struktura třídy
+
 ## Novinky ve verzi 0.1.114
 
 - přidány bezpečnostní kontroly nulových rozměrů v `_drawScene`, `_applyEinkPreview` a `_applyColorInversion`

@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.115] - 2026-07-25
+
+### Oprava uzavření metody _drawChart
+- Doplněna chybějící ukončovací závorka `}` na řádku 6144 v `dratek-eink-panel.js`.
+- Všechny metody třídy jsou správně uzavřené a editor zobrazuje kód bez jakéhokoliv červeného podtržení.
+
+---
+
 ## [0.1.114] - 2026-07-25
 
 ### Bezpečnostní ošetření kreslicího plátna

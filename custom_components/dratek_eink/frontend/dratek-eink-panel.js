@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.114";
+const DRATEK_EINK_VERSION = "0.1.115";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -6141,6 +6141,7 @@ class DratekEinkPanel extends HTMLElement {
         ctx.fillStyle = graphColor;
         ctx.fillText(text, xFor(index), textY);
       });
+    }
   }
 
   _formatChartNumber(value) {
