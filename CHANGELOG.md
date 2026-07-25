@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.117] - 2026-07-25
+
+### Optimalizace plátna Canvas2D (willReadFrequently)
+- Přidána volba `{ willReadFrequently: true }` při získávání 2D kontextu plátna u všech vykreslovacích metod.
+- Odstraněna konzolová varování Chrome při čtení obrazových dat (`getImageData`) a zrychleno generování eInk náhledů a ditheringu.
+
+---
+
 ## [0.1.116] - 2026-07-25
 
 ### Podpora Dark Modu a oprava událostí tlačítek

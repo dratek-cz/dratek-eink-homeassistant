@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.117
+
+- přidán parametr `{ willReadFrequently: true }` do všech volání `getContext("2d")` v `dratek-eink-panel.js`
+- odstraněna varování Chrome Canvas2D a zrychlen čtení pixelů při ditheringu i náhledech
+
 ## Novinky ve verzi 0.1.116
 
 - opravena výjimka při registraci posluchačů událostí (přidáno `?.` k tlačíku `#sendDesign`)

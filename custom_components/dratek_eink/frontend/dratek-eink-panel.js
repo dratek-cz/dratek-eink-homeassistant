@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.116";
+const DRATEK_EINK_VERSION = "0.1.117";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -2041,7 +2041,7 @@ class DratekEinkPanel extends HTMLElement {
         const canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(image.width * scale));
         canvas.height = Math.max(1, Math.round(image.height * scale));
-        canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+        canvas.getContext("2d", { willReadFrequently: true }).drawImage(image, 0, 0, canvas.width, canvas.height);
         this._customElementForm.icon_image = canvas.toDataURL("image/png");
         this._customElementResult = { ok: true, message: "Ikona je připravená. Po vložení ji můžete v designeru přesouvat a měnit její velikost." };
         this._stableCustomRender();
@@ -2712,7 +2712,7 @@ class DratekEinkPanel extends HTMLElement {
       const size = this._displaySize(device);
       canvas.width = size.width;
       canvas.height = size.height;
-      this._drawScene(canvas.getContext("2d"), canvas.width, canvas.height, false);
+      this._drawScene(canvas.getContext("2d", { willReadFrequently: true }), canvas.width, canvas.height, false);
       const automation = this._entityAutomationPayload();
       const image = automation.enabled
         ? await this._renderCanonicalPreview(automation, device.address)
@@ -2773,7 +2773,7 @@ class DratekEinkPanel extends HTMLElement {
         if (requestId !== this._backendPreviewRequestId) return;
         this._backendPreviewImage = image;
         this._backendPreviewAddress = device.address;
-        const context = canvas.getContext("2d");
+        const context = canvas.getContext("2d", { willReadFrequently: true });
         context.clearRect(0, 0, canvas.width, canvas.height);
         context.imageSmoothingEnabled = false;
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
@@ -3640,7 +3640,7 @@ class DratekEinkPanel extends HTMLElement {
     const canvas = document.createElement("canvas");
     canvas.width = 128;
     canvas.height = 128;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     ctx.clearRect(0, 0, 128, 128);
     ctx.strokeStyle = "#000";
     ctx.fillStyle = "#000";
@@ -4080,10 +4080,10 @@ class DratekEinkPanel extends HTMLElement {
         ? this._customElements.find((element) => element.id === canvas.dataset.customElementId)
         : form;
       const layer = (owner?.layers || []).find((item) => item.id === canvas.dataset.customLayerPreview);
-      this._drawCustomLayer(canvas.getContext("2d"), layer, canvas.width, canvas.height, owner?.canvas_width || 296, owner?.canvas_height || 128);
+      this._drawCustomLayer(canvas.getContext("2d", { willReadFrequently: true }), layer, canvas.width, canvas.height, owner?.canvas_width || 296, owner?.canvas_height || 128);
     });
     const canvas = this.shadowRoot.querySelector("#customLayerCanvas");
-    if (canvas) this._drawCustomLayer(canvas.getContext("2d"), this._customActiveLayer(), canvas.width, canvas.height, form.canvas_width, form.canvas_height, this._customSelectedObjectId);
+    if (canvas) this._drawCustomLayer(canvas.getContext("2d", { willReadFrequently: true }), this._customActiveLayer(), canvas.width, canvas.height, form.canvas_width, form.canvas_height, this._customSelectedObjectId);
   }
 
   _addCustomLayer() {
@@ -5366,7 +5366,7 @@ class DratekEinkPanel extends HTMLElement {
   _paint() {
     const canvas = this.shadowRoot.querySelector("#editor");
     if (canvas) {
-      this._drawScene(canvas.getContext("2d"), canvas.width, canvas.height, false);
+      this._drawScene(canvas.getContext("2d", { willReadFrequently: true }), canvas.width, canvas.height, false);
       if (this._automaticTextBindings().length) {
         this._paintCachedCanonicalPreview(canvas);
       } else {
@@ -5376,7 +5376,7 @@ class DratekEinkPanel extends HTMLElement {
     }
     const selectionCanvas = this.shadowRoot.querySelector("#editorSelection");
     if (selectionCanvas) {
-      const selectionContext = selectionCanvas.getContext("2d");
+      const selectionContext = selectionCanvas.getContext("2d", { willReadFrequently: true });
       selectionContext.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
       this._drawSelection(selectionContext);
     }
@@ -5389,7 +5389,7 @@ class DratekEinkPanel extends HTMLElement {
     const image = this._backendPreviewImage;
     const address = this._device()?.address || "";
     if (!image || this._backendPreviewAddress !== address || !image.complete) return;
-    const context = canvas.getContext("2d");
+    const context = canvas.getContext("2d", { willReadFrequently: true });
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.imageSmoothingEnabled = false;
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
@@ -5407,7 +5407,7 @@ class DratekEinkPanel extends HTMLElement {
     try {
       canvases.forEach((canvas) => {
         const draft = this._deviceDrafts[String(canvas.dataset.devicePreview || "").toUpperCase()];
-        const ctx = canvas.getContext("2d");
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.imageSmoothingEnabled = false;
         if (!draft) {
@@ -5424,7 +5424,7 @@ class DratekEinkPanel extends HTMLElement {
         const nativeCanvas = document.createElement("canvas");
         nativeCanvas.width = sourceWidth;
         nativeCanvas.height = sourceHeight;
-        this._drawScene(nativeCanvas.getContext("2d"), sourceWidth, sourceHeight, false);
+        this._drawScene(nativeCanvas.getContext("2d", { willReadFrequently: true }), sourceWidth, sourceHeight, false);
         ctx.drawImage(nativeCanvas, 0, 0, canvas.width, canvas.height);
       });
     } finally {
@@ -6168,7 +6168,7 @@ class DratekEinkPanel extends HTMLElement {
     const buffer = document.createElement("canvas");
     buffer.width = Math.max(1, Math.round(width));
     buffer.height = Math.max(1, Math.round(height));
-    const bufferCtx = buffer.getContext("2d");
+    const bufferCtx = buffer.getContext("2d", { willReadFrequently: true });
     bufferCtx.drawImage(image, 0, 0, buffer.width, buffer.height);
     bufferCtx.globalCompositeOperation = "source-in";
     bufferCtx.fillStyle = this._color(tint);
@@ -6298,7 +6298,7 @@ class DratekEinkPanel extends HTMLElement {
     const canvas = document.createElement("canvas");
     canvas.width = size.width;
     canvas.height = size.height;
-    this._drawScene(canvas.getContext("2d"), size.width, size.height, false, new Set(objects.map((object) => object.id)));
+    this._drawScene(canvas.getContext("2d", { willReadFrequently: true }), size.width, size.height, false, new Set(objects.map((object) => object.id)));
     const effectiveColor = (color) => {
       if (!this._invertColors || color === "red") return color || "black";
       return color === "white" ? "black" : "white";
@@ -6404,7 +6404,7 @@ class DratekEinkPanel extends HTMLElement {
     const canvas = document.createElement("canvas");
     canvas.width = size.width;
     canvas.height = size.height;
-    this._drawScene(canvas.getContext("2d"), size.width, size.height, false);
+    this._drawScene(canvas.getContext("2d", { willReadFrequently: true }), size.width, size.height, false);
     return canvas;
   }
 
