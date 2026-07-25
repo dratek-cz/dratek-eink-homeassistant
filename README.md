@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.109
+
+- opravena kritická chyba vykreslování plátna v metodě `_drawSelection` v `dratek-eink-panel.js`
+- rozhraní editoru v Home Assistantu se načte okamžitě bez jakékoliv chybové nebo černé obrazovky
+
 ## Novinky ve verzi 0.1.108
 
 - opraveno prvotní vykreslení rozhraní v `connectedCallback()`

@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.108";
+const DRATEK_EINK_VERSION = "0.1.109";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -6249,6 +6249,44 @@ class DratekEinkPanel extends HTMLElement {
         if (object.locked && handle.name === "rotate") continue;
         const isRotate = handle.name === "rotate";
         const size = isRotate ? Math.max(10, 14 / this._zoom) : Math.max(7, 10 / this._zoom);
+        const half = size / 2;
+        ctx.beginPath();
+        if (isRotate) {
+          ctx.arc(handle.x, handle.y, half, 0, Math.PI * 2);
+          ctx.fillStyle = "#ff6600";
+          ctx.strokeStyle = "#fff";
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = object.locked ? "#f59e0b" : "#fff";
+          ctx.strokeStyle = "#009999";
+          ctx.fillRect(handle.x - half, handle.y - half, size, size);
+          ctx.strokeRect(handle.x - half, handle.y - half, size, size);
+        }
+      }
+    }
+    if (this._drag?.mode === "marquee") {
+      const x = Math.min(this._drag.start.x, this._drag.current.x);
+      const y = Math.min(this._drag.start.y, this._drag.current.y);
+      const w = Math.abs(this._drag.current.x - this._drag.start.x);
+      const h = Math.abs(this._drag.current.y - this._drag.start.y);
+      ctx.setLineDash([5, 3]);
+      ctx.strokeStyle = "#009999";
+      ctx.fillStyle = "rgba(0, 153, 153, 0.12)";
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h);
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+  }
+
+  _box(object) {
+    if (object.type === "line") return { x: Math.min(object.x, object.x2), y: Math.min(object.y, object.y2), w: Math.abs(object.x2 - object.x), h: Math.abs(object.y2 - object.y) };
+    return { x: Number(object.x || 0), y: Number(object.y || 0), w: Math.max(1, Number(object.w || 1)), h: Math.max(1, Number(object.h || 1)) };
+  }
+
+  _handles(box) {
+    const cx = box.x + box.w / 2;
     const cy = box.y + box.h / 2;
     return [
       { name: "top-left", x: box.x, y: box.y, cursor: "nwse-resize" },

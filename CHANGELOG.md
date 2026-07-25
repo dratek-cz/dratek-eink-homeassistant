@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.109] - 2026-07-25
+
+### Oprava vykreslování plátna a zobrazení editoru
+- Obnoveny metody `_drawSelection`, `_box` a `_handles` v `dratek-eink-panel.js`.
+- Panel v prostředí Home Assistantu se načte okamžitě v plném rozvržení bez černé obrazovky.
+
+---
+
 ## [0.1.108] - 2026-07-25
 
 ### Oprava vykreslení v panelu a CSS tematu
