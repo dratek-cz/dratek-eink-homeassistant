@@ -2,6 +2,15 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.118] - 2026-07-25
+
+### Oprava obalů záložek a přepínání záložek
+- Vyřešena chybná strukturace kontejnerů v `_render()`, kde se sekce Fronta zápisu a Gatewaye nenacházely ve správných obalových stavech.
+- Odstraněno automatické přesměrování při kliknutí na Designer bez vybraného zařízení (zobrazuje se instruktážní obrazovka).
+- Zaručeno okamžité přykreslení UI při kliku na jakoukoliv záložku v liště.
+
+---
+
 ## [0.1.117] - 2026-07-25
 
 ### Optimalizace plátna Canvas2D (willReadFrequently)

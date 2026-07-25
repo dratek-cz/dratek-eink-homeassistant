@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.117";
+const DRATEK_EINK_VERSION = "0.1.118";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -3054,7 +3054,12 @@ class DratekEinkPanel extends HTMLElement {
           <div class="card workspace-card"><div class="canvas-head"><div class="canvas-title"><span><ha-icon icon="mdi:monitor-edit"></ha-icon></span><div><strong>Pracovní plocha (eInk 1:1)</strong><small>${size.width} × ${size.height} px · ${this._orientation === "portrait" ? "na výšku" : "na šířku"}</small></div></div><div class="canvas-meta"><div class="zoom-controls"><button class="zoom-chip ${this._zoom === 1 ? "active" : ""}" id="btnZoom100" title="Zobrazit 1:1 v přesném rozlišení displeje (100 %)">1:1 (100 %)</button><button class="zoom-chip ${this._zoom === 1.5 ? "active" : ""}" id="btnZoom150" title="Zvětšení 150 %">150 %</button><button class="zoom-chip ${this._zoom === 2 ? "active" : ""}" id="btnZoom200" title="Zvětšení 200 %">200 %</button><button class="zoom-chip" id="btnZoomFit" title="Přizpůsobit oknu">Fit</button></div><span class="pixel-badge" title="Ostrý pixelový rozklad 1:1 bez antialiasingu"><ha-icon icon="mdi:grid"></ha-icon> 1:1 Pixely</span><span><ha-icon icon="mdi:palette-swatch-outline"></ha-icon>eInk barvy</span></div></div><div class="workspace"><div class="designer-device-bezel ${this._isPe29Device(device) ? "designer-device-pe29" : ""} designer-device-${this._orientation}" style="--designer-frame-ratio:${designerFrameRatio.toFixed(4)};--designer-frame-width:${designerFrameWidth}px;--designer-screen-width:${designerScreenWidth}px;--designer-screen-height:${designerScreenHeight}px">${this._isPe29Device(device) ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>${this._renderDeviceBarcode(device?.physical_code || "00.00.00.00", this._orientation === "portrait")}</span>` : `<span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>`}<div class="designer-device-screen"><canvas id="editor" width="${size.width}" height="${size.height}"></canvas><canvas id="editorSelection" width="${size.width}" height="${size.height}" aria-hidden="true"></canvas></div></div></div></div>
           <div class="card right properties-panel"><div class="section-title inspector-title"><div class="inspector-title-main"><span class="inspector-object-icon"><ha-icon icon="${object ? this._objectIcon(object) : "mdi:tune-variant"}"></ha-icon></span><div><h2>Inspector</h2><small>${object ? this._escape(this._objectLabel(object, this._objects.indexOf(object))) : "Vlastnosti objektu"}</small></div></div><span class="pill muted">${object ? this._escape(object.type) : "bez výběru"}</span></div>${this._renderProperties(object)}</div>
         </div>
-          <div class="status-grid">
+        </div>
+        <div style="${this._activeTab === "queue" ? "" : "display:none"}">
+          ${this._renderQueue()}
+        </div>
+        <div style="${this._activeTab === "gateways" ? "" : "display:none"}">
+          <div class="status-grid" style="margin-bottom:12px">
             <div class="card status-tile"><div><div class="metric">DRATEK eInk gatewaye</div><div class="value">${this._gateways.length}</div></div><div class="status-icon"><ha-icon icon="mdi:router-wireless"></ha-icon></div></div>
             <div class="card status-tile"><div><div class="metric">Online</div><div class="value">${this._gateways.filter((gateway) => gateway.status && gateway.status.ok).length}</div></div><div class="status-icon"><ha-icon icon="mdi:lan-connect"></ha-icon></div></div>
             <div class="card status-tile"><div><div class="metric">Firmware</div><span class="pill muted">vlastni DRATEK gateway API</span></div><div class="status-icon"><ha-icon icon="mdi:chip"></ha-icon></div></div>
@@ -4702,20 +4707,17 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-gateway-name-save]").forEach((button) => button.addEventListener("click", () => this._renameGateway(button.dataset.gatewayNameSave)));
     this.shadowRoot.querySelectorAll("[data-gateway-name-cancel]").forEach((button) => button.addEventListener("click", () => { this._editingGatewayId = ""; this._render(); this._paint(); }));
     this.shadowRoot.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", async () => {
-      if (button.dataset.tab === "designer" && !this._device()) {
-        this._activeTab = "devices";
-        this._render();
-        return;
-      }
       this._activeTab = button.dataset.tab;
       window.clearTimeout(this._queuePollTimer);
+      this._render();
+      this._paint();
       if (this._activeTab === "devices") this._scheduleAutomaticScan(60);
       if (this._activeTab === "queue") {
         await this._loadQueue(true);
-        return;
       }
-      this._render();
-      this._paint();
+      if (this._activeTab === "gateways") {
+        await this._loadGateways(true);
+      }
     }));
     this.shadowRoot.querySelectorAll("[data-device-rename]").forEach((button) => button.addEventListener("click", () => {
       const device = (this._result?.devices || []).find((item) => item.address === button.dataset.deviceRename);

@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.118
+
+- opravena chybná HTML struktura obalovacích kontejnerů záložek v `_render()`
+- opraveno přepínání záložek Fronta zápisu, Gatewaye a Designer
+- zrušeno nucené přesměrování při přepnutí na záložku Designer (zobrazí se prázdný naváděcí stav)
+
 ## Novinky ve verzi 0.1.117
 
 - přidán parametr `{ willReadFrequently: true }` do všech volání `getContext("2d")` v `dratek-eink-panel.js`
