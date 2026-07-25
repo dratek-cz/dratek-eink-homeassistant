@@ -742,6 +742,25 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
     return output
 
 
+def _render_bound_weather(binding: dict[str, Any], value: str) -> Image.Image:
+    w = max(1, round(float(binding.get("w", 100))))
+    h = max(1, round(float(binding.get("h", 60))))
+    output = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(output)
+    colors = {"black": (0, 0, 0, 255), "red": (220, 20, 12, 255), "white": (255, 255, 255, 255)}
+    draw.rectangle((0, 0, w - 1, h - 1), fill=colors["white"], outline=colors["black"])
+    condition = str(value or binding.get("sample_value") or "sunny").lower()
+    icon_symbol = "SUN"
+    if "rain" in condition: icon_symbol = "RAIN"
+    elif "cloud" in condition: icon_symbol = "CLOUD"
+    elif "snow" in condition: icon_symbol = "SNOW"
+    elif "thunder" in condition: icon_symbol = "STORM"
+    temp_text = f"{binding.get('sample_temp', '21.5')} C"
+    font = load_font(max(10, min(18, round(h * 0.3))), bold=True)
+    _draw_centered_text(draw, f"[{icon_symbol}] {temp_text}", w // 2, h // 2, w - 4, h - 4, max(10, round(h * 0.25)))
+    return output
+
+
 def render_entity_bound_image(
     base_image: str,
     bindings: list[dict[str, Any]],
@@ -755,6 +774,8 @@ def render_entity_bound_image(
             layer = _render_bound_chart(binding, value)
         elif binding.get("type") == "layered":
             layer = _render_bound_layer(binding, value)
+        elif binding.get("type") == "weather":
+            layer = _render_bound_weather(binding, value)
         else:
             layer = _render_bound_text(binding, value)
         x = round(float(binding.get("x", 0)))

@@ -4,6 +4,15 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.106
+
+- přidán režim **Floyd-Steinberg Dithering** pro jemné tečkované zobrazení fotografií na eInku
+- nový **Weather Forecast Widget** (Předpověď počasí) napojený na `weather.*` entity s ikonami a teplotami
+- přidán **výběr časového okna u grafů** (1h / 6h / 24h / 7 dní)
+- rozšířena knihovna hotových šablon (Meteo, FVE, Cenovka, Status Domu)
+- automatický **Úsporný režim baterie (Battery Saver Mode)** zastropuje obměnu na 1 hodinu při baterii < 15 %
+- podpora **Importu a Exportu** komplet návrhů do `.json` souborů v nabídce Soubor
+
 ## Novinky ve verzi 0.1.105
 
 - kompletní redesign editoru s novým studiovým pozadím a vylepšenými ovládacími prvky

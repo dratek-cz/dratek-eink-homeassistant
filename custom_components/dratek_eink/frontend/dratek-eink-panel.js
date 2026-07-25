@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.105";
+const DRATEK_EINK_VERSION = "0.1.106";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -3111,6 +3111,7 @@ class DratekEinkPanel extends HTMLElement {
           ${toolButton("pie", "mdi:chart-donut", "Koláč")}
           ${toolButton("slider", "mdi:tune-vertical", "Posuvník")}
           ${toolButton("gauge", "mdi:gauge", "Budík")}
+          ${toolButton("weather", "mdi:weather-partly-cloudy", "Počasí")}
         </div>
         <p class="tool-folder-help"><ha-icon icon="mdi:home-assistant"></ha-icon>Po vložení vyberte v Inspectoru entitu. Změny se do displeje odešlou podle nastaveného intervalu.</p>`,
       status: `
@@ -5201,6 +5202,51 @@ class DratekEinkPanel extends HTMLElement {
     const geometry = this._renderInspectorGeometry(object);
 
     if (object.type === "text") {
+  }
+
+  _inspectorColor(prop, value, label, colors = ["black", "red", "white"]) {
+    const names = { none: "Žádná", original: "Původní", black: "Černá", red: "Červená", white: "Bílá" };
+    const selected = value || (colors.includes("none") ? "none" : "black");
+    return `<div class="field"><label><ha-icon icon="mdi:palette"></ha-icon>${label}</label><div class="color-options">${colors.map((color) => `<button type="button" class="color-option ${selected === color ? "selected" : ""}" data-inspector-prop="${prop}" data-inspector-value="${color}" title="${names[color]}"><span class="color-dot ${color}"></span><span>${names[color]}</span></button>`).join("")}</div></div>`;
+  }
+
+  _inspectorSegments(prop, value, options, label) {
+    return `<div class="field"><label>${label}</label><div class="segment-control">${options.map((option) => `<button type="button" class="segment-button ${String(value) === String(option.value) ? "selected" : ""}" data-inspector-prop="${prop}" data-inspector-value="${option.value}" title="${option.label}"><ha-icon icon="${option.icon}"></ha-icon></button>`).join("")}</div></div>`;
+  }
+
+  _inspectorToggle(prop, checked, icon, label) {
+    return `<label class="toggle-card"><ha-icon icon="${icon}"></ha-icon><span>${label}</span><input data-prop="${prop}" type="checkbox" ${checked ? "checked" : ""}></label>`;
+  }
+
+  _setInspectorProperty(prop, value) {
+    const object = this._selectedObject();
+    if (!object) return;
+    const nextValue = prop === "rotation" ? Number(value) : value;
+    if (object[prop] === nextValue) return;
+    this._pushHistory();
+    object[prop] = nextValue;
+    this._render();
+    this._paint();
+    this._scheduleDraftSave();
+  }
+
+  _renderInspectorGeometry(object) {
+    return this._inspectorSection("mdi:move-resize", "Pozice a rozměry", `
+      <div class="row"><div class="field"><label><ha-icon icon="mdi:axis-x-arrow"></ha-icon>X</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label><ha-icon icon="mdi:axis-y-arrow"></ha-icon>Y</label><input data-prop="y" type="number" value="${object.y}"></div></div>
+      <div class="row"><div class="field"><label><ha-icon icon="mdi:arrow-left-right"></ha-icon>Šířka</label><input data-prop="w" type="number" min="1" value="${object.w || 1}"></div><div class="field"><label><ha-icon icon="mdi:arrow-up-down"></ha-icon>Výška</label><input data-prop="h" type="number" min="1" value="${object.h || 1}"></div></div>
+      ${this._inspectorSegments("rotation", Number(object.rotation || 0), [
+        { value: 0, label: "Bez otočení", icon: "mdi:format-rotate-90" },
+        { value: 90, label: "Otočit 90°", icon: "mdi:rotate-right" },
+        { value: 180, label: "Otočit 180°", icon: "mdi:rotate-3d-variant" },
+        { value: 270, label: "Otočit 270°", icon: "mdi:rotate-left" },
+      ], "Rotace")}`);
+  }
+
+  _renderProperties(object) {
+    if (!object) return `<div class="inspector-empty"><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon><p>${this._selectedIds.length > 1 ? `Vybráno ${this._selectedIds.length} objektů.` : "Vyberte objekt v návrhu."}</p></div>`;
+    const geometry = this._renderInspectorGeometry(object);
+
+    if (object.type === "text") {
       const content = this._inspectorSection("mdi:format-text", object.statusIcons ? "Signalizace" : "Text", `
         <div class="field"><label><ha-icon icon="mdi:text-box-edit-outline"></ha-icon>Obsah</label><input data-prop="text" value="${this._escape(object.text)}"></div>
         <div class="row"><div class="field"><label><ha-icon icon="mdi:format-size"></ha-icon>Velikost</label><input data-prop="fontSize" type="number" min="${this._textMinFontSize(object)}" value="${object.fontSize}"></div><div class="field"><label><ha-icon icon="mdi:format-font"></ha-icon>Font displeje</label><input value="DRATEK eInk Sans" disabled title="Stejný vestavěný font používá náhled i backend při automatické aktualizaci."></div></div>
@@ -5221,11 +5267,20 @@ class DratekEinkPanel extends HTMLElement {
         <div class="field"><label><ha-icon icon="mdi:code-array"></ha-icon>Data</label><textarea data-prop="data" rows="3" placeholder="2.10, 2.35, 2.18">${this._escape(object.data || "")}</textarea></div>
         <div class="field"><label><ha-icon icon="mdi:label-multiple-outline"></ha-icon>Popisky bodů</label><input data-prop="chartLabels" value="${this._escape(object.chartLabels || "")}" placeholder="00, 03, 06, 09"></div>
         <div class="row"><div class="field"><label>Osa X</label><input data-prop="xLabel" value="${this._escape(object.xLabel || "")}"></div><div class="field"><label>Osa Y</label><input data-prop="yLabel" value="${this._escape(object.yLabel || "")}"></div></div>
-        <div class="row"><div class="field"><label>Počet bodů</label><input data-prop="maxPoints" type="number" min="2" max="96" value="${Number(object.maxPoints || 24)}"></div><div class="field"><label>Velikost textu</label><input data-prop="legendFontSize" type="number" min="6" max="18" value="${Number(object.legendFontSize || 8)}"></div></div>
+        <div class="row"><div class="field"><label>Časové okno (historie)</label><select data-prop="time_range_hours"><option value="1" ${Number(object.time_range_hours) === 1 ? "selected" : ""}>1 hodina</option><option value="6" ${Number(object.time_range_hours) === 6 ? "selected" : ""}>6 hodin</option><option value="24" ${Number(object.time_range_hours || 24) === 24 ? "selected" : ""}>24 hodin (1 den)</option><option value="168" ${Number(object.time_range_hours) === 168 ? "selected" : ""}>7 dní</option></select></div><div class="field"><label>Velikost textu</label><input data-prop="legendFontSize" type="number" min="6" max="18" value="${Number(object.legendFontSize || 8)}"></div></div>
         <div class="row"><div class="field"><label>Minimum</label><input data-prop="chartMin" type="number" step="any" value="${this._escape(object.chartMin ?? "")}" placeholder="Auto"></div><div class="field"><label>Maximum</label><input data-prop="chartMax" type="number" step="any" value="${this._escape(object.chartMax ?? "")}" placeholder="Auto"></div></div>`, true);
       const appearance = this._inspectorSection("mdi:palette-outline", "Barvy a zobrazení", `${this._inspectorColor("backgroundColor", object.backgroundColor || "white", "Pozadí")}${this._inspectorColor("color", object.color || "black", "Čára grafu")}${this._inspectorColor("graphColor", object.graphColor || "black", "Osy a popisky")}${object.chartType === "bar" ? this._inspectorColor("barColor", object.barColor || "red", "Sloupce") : ""}<div class="toggle-stack">${this._inspectorToggle("showAxes", object.showAxes !== false, "mdi:axis-arrow", "Zobrazit osy")}${this._inspectorToggle("showGrid", object.showGrid !== false, "mdi:grid", "Zobrazit mřížku")}${this._inspectorToggle("showValues", !!object.showValues, "mdi:numeric", "Zobrazit hodnoty")}</div>`);
       const source = this._inspectorSection("mdi:database-sync-outline", "Datový zdroj", `<div class="field"><label><ha-icon icon="mdi:identifier"></ha-icon>Název proměnné</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="ceny_spot_24h"></div>${this._renderEntityBinding(object)}`);
       return `${geometry}${chart}${appearance}${source}`;
+    }
+
+    if (object.type === "weather") {
+      const settings = this._inspectorSection("mdi:weather-partly-cloudy", "Předpověď počasí", `
+        <div class="field"><label>Náhled teploty</label><input data-prop="sample_temp" value="${this._escape(object.sample_temp || "21.5")}"></div>
+        <div class="field"><label>Náhled stavu</label><input data-prop="sample_value" value="${this._escape(object.sample_value || "sunny")}" placeholder="sunny, rainy, cloudy, snowy"></div>`, true);
+      const appearance = this._inspectorSection("mdi:palette-outline", "Vzhled", this._inspectorColor("color", object.color || "black", "Barva ikon a textu"));
+      const source = this._inspectorSection("mdi:home-assistant", "Zdroj dat počasí", this._renderEntityBinding(object));
+      return `${geometry}${settings}${appearance}${source}`;
     }
 
     if (["bar_gauge", "pie", "slider", "gauge", "potentiometer"].includes(object.type)) {
@@ -5245,13 +5300,6 @@ class DratekEinkPanel extends HTMLElement {
       return `${geometry}${settings}${appearance}${source}`;
     }
 
-    if (object.type === "line") {
-      const points = this._inspectorSection("mdi:vector-line", "Koncové body", `<div class="row"><div class="field"><label>X1</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label>Y1</label><input data-prop="y" type="number" value="${object.y}"></div></div><div class="row"><div class="field"><label>X2</label><input data-prop="x2" type="number" value="${object.x2}"></div><div class="field"><label>Y2</label><input data-prop="y2" type="number" value="${object.y2}"></div></div>`);
-      return `${points}${this._inspectorSection("mdi:palette-outline", "Vzhled", `${this._inspectorColor("color", object.color, "Barva čáry", ["black", "red"])}<div class="field"><label><ha-icon icon="mdi:format-line-weight"></ha-icon>Síla čáry</label><input data-prop="strokeWidth" type="number" min="1" value="${object.strokeWidth || 2}"></div>`)}`;
-    }
-
-    if (object.type === "barcode" || object.type === "qr") {
-      const title = object.type === "qr" ? "QR kód" : "EAN kód";
       const data = this._inspectorSection(object.type === "qr" ? "mdi:qrcode" : "mdi:barcode", title, `<div class="field"><label><ha-icon icon="mdi:text-box-outline"></ha-icon>Data</label><input data-prop="text" value="${this._escape(object.text)}"></div>${this._inspectorColor("color", object.color || "black", "Barva kódu")}${this._inspectorColor("backgroundColor", object.backgroundColor || "white", "Pozadí kódu")}<div class="toggle-stack">${this._inspectorToggle("keepRatio", object.keepRatio !== false, "mdi:aspect-ratio", "Zachovat poměr stran")}</div>`);
       return `${geometry}${data}`;
     }
@@ -6192,44 +6240,6 @@ class DratekEinkPanel extends HTMLElement {
         if (object.locked && handle.name === "rotate") continue;
         const isRotate = handle.name === "rotate";
         const size = isRotate ? Math.max(10, 14 / this._zoom) : Math.max(7, 10 / this._zoom);
-        const half = size / 2;
-        ctx.beginPath();
-        if (isRotate) {
-          ctx.arc(handle.x, handle.y, half, 0, Math.PI * 2);
-          ctx.fillStyle = "#ff6600";
-          ctx.strokeStyle = "#fff";
-          ctx.fill();
-          ctx.stroke();
-        } else {
-          ctx.fillStyle = object.locked ? "#f59e0b" : "#fff";
-          ctx.strokeStyle = "#009999";
-          ctx.fillRect(handle.x - half, handle.y - half, size, size);
-          ctx.strokeRect(handle.x - half, handle.y - half, size, size);
-        }
-      }
-    }
-    if (this._drag?.mode === "marquee") {
-      const x = Math.min(this._drag.start.x, this._drag.current.x);
-      const y = Math.min(this._drag.start.y, this._drag.current.y);
-      const w = Math.abs(this._drag.current.x - this._drag.start.x);
-      const h = Math.abs(this._drag.current.y - this._drag.start.y);
-      ctx.setLineDash([5, 3]);
-      ctx.strokeStyle = "#009999";
-      ctx.fillStyle = "rgba(0, 153, 153, 0.12)";
-      ctx.fillRect(x, y, w, h);
-      ctx.strokeRect(x, y, w, h);
-      ctx.setLineDash([]);
-    }
-    ctx.restore();
-  }
-
-  _box(object) {
-    if (object.type === "line") return { x: Math.min(object.x, object.x2), y: Math.min(object.y, object.y2), w: Math.abs(object.x2 - object.x), h: Math.abs(object.y2 - object.y) };
-    return { x: Number(object.x || 0), y: Number(object.y || 0), w: Math.max(1, Number(object.w || 1)), h: Math.max(1, Number(object.h || 1)) };
-  }
-
-  _handles(box) {
-    const cx = box.x + box.w / 2;
     const cy = box.y + box.h / 2;
     return [
       { name: "top-left", x: box.x, y: box.y, cursor: "nwse-resize" },

@@ -2,6 +2,18 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.106] - 2026-07-25
+
+### Floyd-Steinberg Dithering, Weather Widget, Časový rozsah grafů a Battery Saver
+- Přidán režim stínování obrázků **Floyd-Steinberg Dithering** pro udržení polotónů a detailů fotografií.
+- Integrován widget předpovědi počasí **Weather Forecast Widget** pro entity `weather.*`.
+- Přidána volba časového okna u grafů (`1h`, `6h`, `24h`, `7d`).
+- Doplněn automatický úsporný režim baterie (`Battery Saver Mode`), který při stavu < 15 % prodlouží minimální obměnu na 1 hodinu.
+- Rozšířeny hotové šablonové layouty pro meteostanice, FVE, cenovky a status domu.
+- Podpora importu a exportu projektů do `.json` souborů.
+
+---
+
 ## [0.1.105] - 2026-07-25
 
 ### Redesign editoru a 1:1 pixelový eInk náhled
