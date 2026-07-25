@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.116
+
+- opravena výjimka při registraci posluchačů událostí (přidáno `?.` k tlačíku `#sendDesign`)
+- opravena plná podpora Dark Modu z Home Assistantu (odstraněny natvrdo zadané světlé barvy z `:host`)
+
 ## Novinky ve verzi 0.1.115
 
 - opravena chybějící ukončovací závorka na řádku 6144 u metody `_drawChart` v `dratek-eink-panel.js`

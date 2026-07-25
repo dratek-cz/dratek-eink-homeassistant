@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.115";
+const DRATEK_EINK_VERSION = "0.1.116";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -2912,7 +2912,7 @@ class DratekEinkPanel extends HTMLElement {
       <style>
         .device-card-details{display:grid;gap:13px}
         @font-face{font-family:"DRATEK eInk Sans";src:url("/dratek_eink_panel/fonts/Arimo-wght.ttf?v=${DRATEK_EINK_VERSION}") format("truetype");font-style:normal;font-weight:400 700;font-display:block}
-        :host{--primary-text-color:#1e293b;--secondary-text-color:#64748b;--primary-background-color:#f8fafc;--secondary-background-color:#f1f5f9;--card-background-color:#ffffff;--divider-color:#e2e8f0;--primary-color:#0f766e;--text-primary-color:#ffffff;display:block;min-height:100vh;color:var(--primary-text-color);background:linear-gradient(180deg,var(--primary-background-color),var(--secondary-background-color));font-family:Roboto,Arial,sans-serif}
+        :host{display:block;min-height:100vh;color:var(--primary-text-color,#1e293b);background:var(--primary-background-color,#f8fafc);font-family:Roboto,Arial,sans-serif}
         *{box-sizing:border-box} .page{max-width:1680px;margin:0 auto;padding:18px;display:grid;gap:14px}
         h1{margin:0;font-size:24px;font-weight:850;letter-spacing:0}h2{margin:0;font-size:13px;text-transform:uppercase;color:var(--secondary-text-color);letter-spacing:.08em}.subtitle{color:var(--secondary-text-color);font-size:13px;margin-top:3px}
         button,select,input{font:inherit}button{border:0;border-radius:8px;background:var(--primary-color);color:var(--text-primary-color,#fff);padding:9px 12px;font-weight:760;cursor:pointer;box-shadow:0 1px 0 rgba(0,0,0,.08);display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px}button:hover:not(:disabled){filter:brightness(1.03);transform:translateY(-1px)}button:disabled{opacity:.45;cursor:not-allowed;transform:none}
@@ -4728,7 +4728,7 @@ class DratekEinkPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-device-name-input]").forEach((input) => input.addEventListener("input", (event) => { this._deviceNameDraft = event.target.value; }));
     this.shadowRoot.querySelectorAll("[data-device-name-save]").forEach((button) => button.addEventListener("click", () => this._saveDeviceName(button.dataset.deviceNameSave)));
     this.shadowRoot.querySelectorAll("[data-device-name-cancel]").forEach((button) => button.addEventListener("click", () => { this._editingDeviceAddress = ""; this._deviceNameDraft = ""; this._render(); this._paint(); }));
-    this.shadowRoot.querySelector("#sendDesign").addEventListener("click", () => this._sendDesign());
+    this.shadowRoot.querySelector("#sendDesign")?.addEventListener("click", () => this._sendDesign());
     this.shadowRoot.querySelector("#sendGatewayDesign")?.addEventListener("click", () => this._sendDesignViaGateway());
     this.shadowRoot.querySelector("#refreshInterval")?.addEventListener("change", (event) => {
       this._refreshIntervalSeconds = Math.max(30, Math.min(86400, Number(event.target.value) || 60));

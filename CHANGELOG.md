@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.116] - 2026-07-25
+
+### Podpora Dark Modu a oprava událostí tlačítek
+- Doplněno optional chaining `?.` u tlačítka `#sendDesign`, čímž je zamezeno selhání registrace posluchačů událostí na záložkách Displeje, Fronta zápisu a Gatewaye.
+- Odstraněny natvrdo zadané světlé barvy v pravidle `:host`, panely se nyní plně přizpůsobují Dark Modu v rozhraní Home Assistant.
+
+---
+
 ## [0.1.115] - 2026-07-25
 
 ### Oprava uzavření metody _drawChart
