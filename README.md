@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.120
+
+- opraveno tlačítko **Otevřít v designeru** i kliknutí na náhled displeje v hlavním přehledu
+- vybraný displej se nyní načte a editor se automaticky otevře na záložce Designer
+
 ## Novinky ve verzi 0.1.119
 
 - opravena struktura záložek v editoru displeje a jejich přepínání

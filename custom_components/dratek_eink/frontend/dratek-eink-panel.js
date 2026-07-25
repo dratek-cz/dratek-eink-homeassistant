@@ -1,6 +1,6 @@
 import qrcode from "./qrcode-generator.js";
 
-const DRATEK_EINK_VERSION = "0.1.119";
+const DRATEK_EINK_VERSION = "0.1.120";
 const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.40-gateway", "0.1.41-gateway"]);
 
 class DratekEinkPanel extends HTMLElement {
@@ -4737,6 +4737,29 @@ class DratekEinkPanel extends HTMLElement {
         await this._loadGateways(true);
       }
     }));
+    const openDeviceInDesigner = async (address) => {
+      if (!address) return;
+      await this._selectDevice(address, { render: false });
+      this._activeTab = "designer";
+      this._render();
+      this._paint();
+    };
+    this.shadowRoot.querySelectorAll("[data-select-device]").forEach((button) => button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      await openDeviceInDesigner(button.dataset.selectDevice);
+    }));
+    this.shadowRoot.querySelectorAll("[data-device-card-open]").forEach((card) => {
+      card.addEventListener("click", async (event) => {
+        if (event.target.closest("button,input,select,textarea,a,details,summary")) return;
+        await openDeviceInDesigner(card.dataset.deviceCardOpen);
+      });
+      card.addEventListener("keydown", async (event) => {
+        if (event.target !== card || !["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        await openDeviceInDesigner(card.dataset.deviceCardOpen);
+      });
+    });
     this.shadowRoot.querySelectorAll("[data-device-rename]").forEach((button) => button.addEventListener("click", () => {
       const device = (this._result?.devices || []).find((item) => item.address === button.dataset.deviceRename);
       if (!device) return;

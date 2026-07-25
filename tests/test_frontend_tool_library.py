@@ -43,6 +43,13 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('this._activeTab === "custom"', self.source)
         self.assertIn('event.key === "Delete" || event.key === "Backspace"', self.source)
 
+    def test_device_preview_opens_the_selected_device_in_designer(self):
+        self.assertIn('const openDeviceInDesigner = async (address)', self.source)
+        self.assertIn('await this._selectDevice(address, { render: false });', self.source)
+        self.assertIn('this._activeTab = "designer";', self.source)
+        self.assertIn('querySelectorAll("[data-select-device]")', self.source)
+        self.assertIn('querySelectorAll("[data-device-card-open]")', self.source)
+
     def test_layers_share_the_sticky_tool_sidebar(self):
         self.assertIn('data-designer-side="tools"', self.source)
         self.assertIn('data-designer-side="layers"', self.source)
