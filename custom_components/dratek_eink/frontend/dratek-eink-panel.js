@@ -149,6 +149,13 @@ class DratekEinkPanel extends HTMLElement {
     window.clearTimeout(this._queuePollTimer);
     window.clearTimeout(this._automaticScanTimer);
     window.clearTimeout(this._backendPreviewTimer);
+    // A draft save is debounced by 700 ms. Leaving the panel inside that window
+    // used to drop the edit silently, so flush it instead of clearing it.
+    if (this._draftSaveTimer) {
+      window.clearTimeout(this._draftSaveTimer);
+      this._draftSaveTimer = null;
+      this._saveCurrentDeviceDraft();
+    }
     this._backendPreviewRequestId += 1;
     this._backendPreviewImage = null;
     this._backendPreviewAddress = "";

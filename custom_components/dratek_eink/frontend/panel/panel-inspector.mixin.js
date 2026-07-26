@@ -136,28 +136,20 @@ export const inspectorMixin = {
       this._render();
       this._paint();
     };
-    const selectDeviceForPreview = (address) => {
-      if (!address) return;
-      this._selectedDeviceAddress = address;
-      this._selectPreferredRoute((this._result?.devices || []).find((item) => item.address === address));
-      this._editingDeviceAddress = "";
-      this._render();
-      this._paint();
-    };
     this.shadowRoot.querySelectorAll("[data-select-device]").forEach((button) => button.addEventListener("click", async (event) => {
       event.preventDefault();
       event.stopPropagation();
       await openDeviceInDesigner(button.dataset.selectDevice);
     }));
     this.shadowRoot.querySelectorAll("[data-device-card-open]").forEach((card) => {
-      card.addEventListener("click", (event) => {
+      card.addEventListener("click", async (event) => {
         if (event.target.closest("button,input,select,textarea,a,details,summary")) return;
-        selectDeviceForPreview(card.dataset.deviceCardOpen);
+        await openDeviceInDesigner(card.dataset.deviceCardOpen);
       });
-      card.addEventListener("keydown", (event) => {
+      card.addEventListener("keydown", async (event) => {
         if (event.target !== card || !["Enter", " "].includes(event.key)) return;
         event.preventDefault();
-        selectDeviceForPreview(card.dataset.deviceCardOpen);
+        await openDeviceInDesigner(card.dataset.deviceCardOpen);
       });
     });
     this.shadowRoot.querySelectorAll("[data-device-rename]").forEach((button) => button.addEventListener("click", () => {

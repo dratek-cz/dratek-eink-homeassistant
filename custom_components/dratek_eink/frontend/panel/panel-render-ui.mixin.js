@@ -189,6 +189,27 @@ export const renderUiMixin = {
         .display-grid .display-tile-header,.display-grid.density-large .display-tile-header,.display-grid.density-compact .display-tile-header{grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:auto}
         .display-grid .display-tile-actions,.display-grid.density-large .display-tile-actions,.display-grid.density-compact .display-tile-actions{grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto}
         .display-grid .tile-icon-btn{min-height:28px}
+        .display-grid .display-health-item,.display-grid.density-large .display-health-item,.display-grid.density-compact .display-health-item{display:flex!important;align-items:center;gap:6px;min-width:0;padding:0;text-align:left;grid-template-rows:none}
+        .display-grid .display-health-item>.battery-segments,.display-grid .display-health-item>.signal-bars{flex:0 0 auto;margin:0}
+        .display-grid .health-route-text{display:flex;flex-direction:column;gap:0;min-width:0;flex:1 1 auto;text-align:left}
+        .display-grid .health-route-text small{display:block!important;color:var(--secondary-text-color);font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;line-height:1.3}
+        .display-grid .health-route-text strong{display:block;font-size:10px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0}
+        .display-grid .display-health-item{gap:8px}
+        .display-grid .battery-segments{height:13px;padding:2px 3px;border-width:1.5px;border-radius:4px;grid-template-columns:repeat(4,3px);gap:1.5px}
+        .display-grid .battery-segments span{width:3px;height:7px}
+        .display-grid .battery-segments:after{right:-4px;width:2px;height:6px}
+        .display-grid .signal-bars{height:13px;gap:2px}
+        .display-grid .signal-bars span{width:3px}
+        .display-grid .signal-bars span:nth-child(1){height:5px}.display-grid .signal-bars span:nth-child(2){height:7px}.display-grid .signal-bars span:nth-child(3){height:10px}.display-grid .signal-bars span:nth-child(4){height:13px}
+        .display-grid .display-health-route .health-icon{--mdc-icon-size:15px}
+        .display-grid .display-health-route .health-icon-sub{--mdc-icon-size:11px;margin-left:-5px}
+        .display-grid .health-value{font-size:11px;font-weight:850;white-space:nowrap;margin:0}
+        .display-grid .health-value.level-4{color:#16a34a}
+        .display-grid .health-value.level-3{color:#eab308}
+        .display-grid .health-value.level-2{color:var(--dratek-orange,#d97706)}
+        .display-grid .health-value.level-1{color:#dc2626}
+        .display-grid .health-value.level-0{color:var(--secondary-text-color)}
+        .display-grid .display-battery-item,.display-grid .display-signal-item{justify-content:flex-start}
         .tabbar{width:100%;border-radius:14px;padding:6px;overflow-x:auto}
         .tabbar .tab{flex:1 1 0;justify-content:center;white-space:nowrap;border-radius:10px}
         .display-tile{gap:6px}
@@ -209,7 +230,7 @@ export const renderUiMixin = {
         .battery-segments span{height:8px}
         .signal-bars{height:15px}
         .signal-bars span:nth-child(1){height:5px}.signal-bars span:nth-child(2){height:8px}.signal-bars span:nth-child(3){height:11px}.signal-bars span:nth-child(4){height:14px}
-        .display-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
+        .display-grid{grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
         .display-tile{grid-template-rows:auto minmax(0,1fr) auto auto;aspect-ratio:1/1;padding:14px 14px 0;cursor:pointer}
         .display-tile-header{gap:8px}
         .display-tile-identity strong{font-size:13px}
@@ -236,7 +257,7 @@ export const renderUiMixin = {
         .display-grid.density-compact .display-health{margin:0 -11px;padding:6px 8px 5px;gap:4px}
         .display-grid.density-list .health-route-text{flex-direction:row;align-items:baseline;gap:6px}
         .display-grid.density-large .display-health-route,.display-grid.density-compact .display-health-route,.display-grid.density-list .display-health-route{grid-column:auto}
-        .display-health{grid-template-columns:1fr 1fr 1.3fr}
+        .display-health{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.25fr);gap:8px}
         .display-grid.density-large .display-health,.display-grid.density-compact .display-health,.display-grid.density-list .display-health{grid-template-columns:1fr 1fr 1.3fr}
         .device-preview-fit{width:100%;height:100%;display:grid;place-items:center;min-width:0;min-height:0}
         .devices-toolbar-card{padding:10px 14px}
@@ -258,7 +279,8 @@ export const renderUiMixin = {
         @media(max-width:640px){.devices-toolbar-spacer{flex-basis:100%;min-width:0;height:0}}
         .designer-device-strip{gap:12px;background:transparent;box-shadow:none}
         .designer-device-primary,.designer-device-fact,.designer-device-meter,.designer-route,.designer-orientation{padding:14px 16px;border-radius:14px;min-height:78px}
-        .designer-device-mark{width:42px;height:42px;border-radius:12px}
+        .designer-device-primary .designer-device-mark{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;overflow:visible}
+        .designer-device-primary .designer-device-mark ha-icon{--mdc-icon-size:22px;display:grid;place-items:center}
         .designer-device-primary strong{font-size:15px}
         .designer-device-fact strong,.designer-route strong{font-size:13px}
         .designer-device-primary small,.designer-device-fact small,.designer-device-meter>small,.designer-orientation>small{font-size:10px}

@@ -57,9 +57,17 @@ export const projectsMixin = {
       this._applyDraft(result.draft || null);
       this._loadedDraftAddress = String(address).toUpperCase();
     } catch (err) {
+      // Do NOT clear the canvas here. _applyDraft(null) would blank it, and the
+      // next edit would then autosave that blank over the stored design - one
+      // dropped websocket call (HA restarting, connection blip) used to destroy
+      // the saved layout permanently. Leaving _loadedDraftAddress empty also
+      // blocks autosave for this device until a load actually succeeds.
       this._loadedDraftAddress = "";
-      this._applyDraft(null);
-      this._sendResult = { ok: false, error: `Nepodarilo se nacist navrh displeje: ${this._message(err)}`, log: [] };
+      this._sendResult = {
+        ok: false,
+        error: `Nepodarilo se nacist navrh displeje: ${this._message(err)}. Ulozeny navrh zustava zachovan, zkuste displej otevrit znovu.`,
+        log: [],
+      };
     } finally {
       this._loadingDraft = false;
     }
@@ -89,8 +97,21 @@ export const projectsMixin = {
     }
   },
 
+  /**
+   * True once this device's stored draft has actually been read back.
+   *
+   * Autosave must never run before that: the canvas still holds whatever was
+   * there previously (or nothing at all), and writing it out would overwrite
+   * the design saved for this display.
+   */
+  _draftIsLoadedForSelectedDevice() {
+    const selected = String(this._selectedDeviceAddress || "").toUpperCase();
+    return !!selected && this._loadedDraftAddress === selected;
+  },
+
   _scheduleDraftSave() {
     if (this._restoringDraft || !this._hass || !this._selectedDeviceAddress) return;
+    if (!this._draftIsLoadedForSelectedDevice()) return;
     const device = this._device();
     if (device) this._deviceDrafts[String(device.address).toUpperCase()] = structuredClone(this._projectPayload(device));
     window.clearTimeout(this._draftSaveTimer);
@@ -99,6 +120,7 @@ export const projectsMixin = {
 
   async _saveCurrentDeviceDraft() {
     if (this._restoringDraft || !this._hass || !this._selectedDeviceAddress) return;
+    if (!this._draftIsLoadedForSelectedDevice()) return;
     window.clearTimeout(this._draftSaveTimer);
     this._draftSaveTimer = null;
     const device = this._device();
