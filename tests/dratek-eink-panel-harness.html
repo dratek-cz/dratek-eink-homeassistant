@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DRATEK eInk panel test</title>
+  <style>
+    :root {
+      --primary-text-color:#172127;
+      --secondary-text-color:#64727b;
+      --primary-background-color:#edf2f2;
+      --secondary-background-color:#f3f6f6;
+      --card-background-color:#fff;
+      --divider-color:#d8dfdf;
+      --ha-card-border-radius:14px;
+    }
+    body { margin:0; padding:0; background:var(--primary-background-color); font-family:Arial,sans-serif; }
+  </style>
+</head>
+<body>
+  <dratek-eink-panel id="panel"></dratek-eink-panel>
+  <script type="module">
+    await import("../custom_components/dratek_eink/frontend/dratek-eink-panel.js");
+
+    const devices = [
+      { address:"FF:FF:92:81:46:32", physical_code:"92.81.46.32", display_name:"Ceník dílna", model:"EPA LCD 296x128 1 BWR", sdk_type:46, battery_percent:82, battery_voltage:3.05, rssi:-48, preferred_path:{type:"gateway",name:"Gateway dílna"}, paths:[{type:"gateway",name:"Gateway dílna"}] },
+      { address:"FF:FF:94:20:10:78", physical_code:"94.20.10.78", display_name:"Teplota kancelář", model:"EPA LCD 400x300 BWR", sdk_type:75, battery_percent:54, battery_voltage:2.9, rssi:-63, preferred_path:{type:"local",name:"Home Assistant Bluetooth"}, paths:[{type:"local",name:"Home Assistant Bluetooth"}] },
+      { address:"FF:FF:91:31:18:11", physical_code:"91.31.18.11", model:"EPA LCD 250x128 1 BWR", sdk_type:264, battery_percent:28, battery_voltage:2.75, rssi:-72, preferred_path:{type:"gateway",name:"Gateway sklad"}, paths:[{type:"gateway",name:"Gateway sklad"}] },
+      { address:"FF:FF:96:41:12:54", physical_code:"96.41.12.54", model:"EPA LCD 296x128 1 BWR", sdk_type:46, battery_percent:9, battery_voltage:2.5, rssi:-83, temporarily_unseen:true, preferred_path:{type:"gateway",name:"Gateway sklad"}, paths:[{type:"gateway",name:"Gateway sklad"}] },
+      { address:"FF:FF:93:10:22:41", physical_code:"93.10.22.41", display_name:"Vstup", model:"EPA LCD 296x128 1 BWR", sdk_type:46, battery_percent:64, battery_voltage:2.95, rssi:-55, preferred_path:{type:"local",name:"Home Assistant Bluetooth"}, paths:[{type:"local",name:"Home Assistant Bluetooth"}] },
+    ];
+    const drafts = {
+      "FF:FF:92:81:46:32": {
+        width:296, height:128, background_color:"white", invert_colors:false,
+        objects:[
+          { id:"o1", type:"text", x:20, y:20, width:256, height:40, text:"Vrtačka", color:"black", bold:true, fontSize:26 },
+          { id:"o2", type:"rect", x:20, y:80, width:256, height:2, fill:"black" },
+        ],
+      },
+      "FF:FF:93:10:22:41": {
+        width:296, height:128, background_color:"white", invert_colors:false,
+        objects:[
+          { id:"o1", type:"text", x:16, y:16, width:264, height:40, text:"Vstup", color:"black", bold:true, fontSize:24 },
+          { id:"o2", type:"text", x:16, y:70, width:264, height:30, text:"Otevřeno 8-16", color:"red", fontSize:16 },
+        ],
+      },
+    };
+
+    const panel = document.querySelector("#panel");
+    panel.hass = {
+      states: {},
+      callWS: async ({ type }) => {
+        if (type === "dratek_eink/scan") return { ok:true, devices };
+        if (type === "dratek_eink/device_drafts/list") return { drafts };
+        if (type === "dratek_eink/projects/list") return { projects: [] };
+        if (type === "dratek_eink/custom_elements/list") return { elements: [] };
+        if (type === "dratek_eink/gateways/list") return { gateways: [] };
+        if (type === "dratek_eink/gateways/serial_ports") return { ports: [] };
+        if (type === "dratek_eink/queue/list") return { jobs:[], queued:0, writing:0, succeeded:0, failed:0 };
+        return {};
+      },
+    };
+  </script>
+</body>
+</html>
