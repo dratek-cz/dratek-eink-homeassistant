@@ -20,6 +20,7 @@ _LOGGER = logging.getLogger(__name__)
 FINAL_CONFIRMATION_TIMEOUT_SECONDS = 15
 WRITE_ACK_SDK_TYPES = {51}
 RGB_LED_COMMAND = 0x30
+FLASH_IDENTIFY_COMMAND = 0x22
 
 
 class TransferCompletionTimeout(TimeoutError):
@@ -156,6 +157,52 @@ class DratekTransfer:
                 RGB_LED_COMMAND,
                 ok_values={0},
                 label="RGB LED setting",
+                timeout=5,
+            )
+            await client.stop_notify(control_char)
+
+    async def flash_identify(self, address: str) -> None:
+        """Blink the display's indicator once so it can be located ("find me")."""
+        packet = bytes([FLASH_IDENTIFY_COMMAND])
+        last_error: Exception | None = None
+        for attempt in range(1, 4):
+            self.log(f"Find me attempt {attempt}/3.")
+            try:
+                await self._flash_identify_once(address, packet)
+                self.log("Find me command accepted by the display.")
+                return
+            except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
+                last_error = exc
+                self.log(f"Find me attempt {attempt}/3 failed: {exc}")
+                if attempt < 3:
+                    await asyncio.sleep(attempt)
+        raise last_error or RuntimeError("Find me command failed.")
+
+    async def _flash_identify_once(self, address: str, packet: bytes) -> None:
+        responses: queue.Queue[bytes] = queue.Queue()
+
+        def notify_handler(_sender, data) -> None:
+            response = bytes(data)
+            self.log(f"Notification: {response.hex(' ').upper()}")
+            responses.put(response)
+
+        connection_target = self._connection_target(address)
+        self.log(f"Connecting to {address} for find-me flash...")
+        async with BleakClient(connection_target, timeout=20.0) as client:
+            if not client.is_connected:
+                raise RuntimeError("Could not connect to the display.")
+            service_uuid, control_char, _write_char = self._find_transfer_chars(client)
+            if not control_char:
+                raise RuntimeError("DRATEK eInk control characteristic was not found.")
+            self.log(f"Using service {service_uuid}")
+            await client.start_notify(control_char, notify_handler)
+            await asyncio.sleep(0.25)
+            await self._write_char(client, control_char, packet, "find me")
+            await self._wait_for_response(
+                responses,
+                FLASH_IDENTIFY_COMMAND,
+                ok_values={0},
+                label="find me",
                 timeout=5,
             )
             await client.stop_notify(control_char)

@@ -96,6 +96,7 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_send_design)
     websocket_api.async_register_command(hass, websocket_send_partial_design)
     websocket_api.async_register_command(hass, websocket_set_rgb_led)
+    websocket_api.async_register_command(hass, websocket_flash_identify)
     websocket_api.async_register_command(hass, websocket_list_projects)
     websocket_api.async_register_command(hass, websocket_save_project)
     websocket_api.async_register_command(hass, websocket_load_project)
@@ -166,6 +167,44 @@ async def websocket_set_rgb_led(
             transport_name="Home Assistant Bluetooth",
             address=address,
             operation="rgb_led",
+            runner=run_transfer,
+        )
+    except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
+        connection.send_result(
+            msg["id"],
+            {"ok": False, "address": address, "error": str(exc), "log": []},
+        )
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/flash_identify",
+        "address": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_flash_identify(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Blink the display's indicator once so it can be located ("find me")."""
+    address = msg["address"]
+
+    async def run_transfer(add_log) -> dict[str, Any]:
+        transfer = DratekTransfer(log=add_log, hass=hass)
+        await transfer.flash_identify(address)
+        return {"ok": True, "address": address, "log": []}
+
+    try:
+        result = await get_transfer_queue(hass).async_submit(
+            resource="local",
+            transport_type="local",
+            transport_name="Home Assistant Bluetooth",
+            address=address,
+            operation="flash_identify",
             runner=run_transfer,
         )
     except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions

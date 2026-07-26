@@ -3,7 +3,15 @@ export const inspectorMixin = {
 
   _bind() {
     this.shadowRoot.querySelector("#scan")?.addEventListener("click", () => this._scan());
-    this.shadowRoot.querySelector("#scanDevicesTab")?.addEventListener("click", () => this._scan());
+    this.shadowRoot.querySelector("#resetDevicesView")?.addEventListener("click", () => {
+      this._deviceSearchQuery = "";
+      this._scan();
+    });
+    this.shadowRoot.querySelector("#deviceSearch")?.addEventListener("input", (event) => {
+      this._deviceSearchQuery = event.target.value;
+      this._render();
+      this._paint();
+    });
     this.shadowRoot.querySelector("#refreshQueue")?.addEventListener("click", () => this._loadQueue(true));
     this.shadowRoot.querySelector("#queueSearch")?.addEventListener("input", (event) => {
       this._queueSearch = event.target.value;
@@ -156,7 +164,7 @@ export const inspectorMixin = {
       this._refreshIntervalSeconds = Math.max(30, Math.min(86400, Number(event.target.value) || 60));
       this._scheduleDraftSave();
     });
-    this.shadowRoot.querySelector("#applyRgbLed")?.addEventListener("click", () => this._applyRgbLed());
+    this.shadowRoot.querySelectorAll("#applyRgbLed").forEach((button) => button.addEventListener("click", () => this._applyRgbLed()));
     this.shadowRoot.querySelectorAll("[data-led-mode]").forEach((button) => button.addEventListener("click", () => {
       this._rgbLed.mode = button.dataset.ledMode;
       this._ledResult = null;
@@ -171,20 +179,21 @@ export const inspectorMixin = {
       this._render();
       this._paint();
     }));
-    this.shadowRoot.querySelector("#rgbLedColor")?.addEventListener("input", (event) => {
+    this.shadowRoot.querySelectorAll("#rgbLedColor").forEach((input) => input.addEventListener("input", (event) => {
       this._rgbLed.color = event.target.value;
       this._ledResult = null;
       this._scheduleDraftSave();
-      const icon = this.shadowRoot.querySelector(".rgb-led-icon");
+      const icon = event.target.closest(".rgb-led-card, .rgb-led-compact")?.querySelector(".rgb-led-icon");
       if (icon) icon.style.setProperty("--led-color", this._rgbLed.color);
-    });
-    this.shadowRoot.querySelector("#rgbLedFlashTime")?.addEventListener("input", (event) => {
+    }));
+    this.shadowRoot.querySelectorAll("#rgbLedFlashTime").forEach((input) => input.addEventListener("input", (event) => {
       this._rgbLed.flashTime = Math.max(1, Math.min(255, Number(event.target.value) || 10));
       this._ledResult = null;
       this._scheduleDraftSave();
       const value = event.target.closest(".field")?.querySelector("label strong");
       if (value) value.textContent = String(this._rgbLed.flashTime);
-    });
+    }));
+    this.shadowRoot.querySelectorAll("[data-flash-identify]").forEach((button) => button.addEventListener("click", () => this._flashIdentify(button.dataset.flashIdentify)));
     this.shadowRoot.querySelector("#fileMenuToggle")?.addEventListener("click", () => { this._fileMenuOpen = !this._fileMenuOpen; this._viewMenuOpen = false; this._toolsMenuOpen = false; this._layoutMenuOpen = false; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#fileMenuClose")?.addEventListener("click", () => { this._fileMenuOpen = false; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#viewMenuToggle")?.addEventListener("click", () => { this._viewMenuOpen = !this._viewMenuOpen; this._fileMenuOpen = false; this._toolsMenuOpen = false; this._layoutMenuOpen = false; this._render(); this._paint(); });

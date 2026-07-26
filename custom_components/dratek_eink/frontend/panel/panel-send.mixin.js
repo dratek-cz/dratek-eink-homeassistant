@@ -142,6 +142,24 @@ export const sendMixin = {
     }
   },
 
+  async _flashIdentify(address) {
+    const target = address || this._device()?.address;
+    if (!target || this._identifySending) return;
+    this._identifySending = true;
+    this._identifyResult = null;
+    this._render();
+    try {
+      this._identifyResult = await this._hass.callWS({ type: "dratek_eink/flash_identify", address: target });
+    } catch (err) {
+      this._identifyResult = { ok: false, error: this._message(err) };
+    } finally {
+      this._identifySending = false;
+      await this._loadQueue(false);
+      this._render();
+      this._paint();
+    }
+  },
+
   _renderRgbLedControl(device, compact = false) {
     const colors = [
       ["#ff2d2d", "Červená"], ["#ff7a00", "Oranžová"], ["#ffd400", "Žlutá"],

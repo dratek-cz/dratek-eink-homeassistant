@@ -17,7 +17,7 @@ export const canvasInteractionMixin = {
       this._rotateDesignLayout(before, clockwise);
     }
     this._selectedIds = [];
-    this._fitZoom();
+    this._zoom = 1;
     this._render();
     this._paint();
     this._scheduleDraftSave();

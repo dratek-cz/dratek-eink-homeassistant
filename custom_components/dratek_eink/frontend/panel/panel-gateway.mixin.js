@@ -341,18 +341,18 @@ export const gatewayMixin = {
   },
 
   _effectiveViewMode(mode, count) {
-    return mode === "auto" ? (count > 8 ? "compact" : "full") : mode;
+    if (mode === "auto") return count > 8 ? "compact" : "large";
+    return mode === "full" ? "large" : mode;
   },
 
   _renderDensityControl(scope, mode, count) {
     const options = [
-      ["full", "mdi:view-dashboard", "Plné"],
       ["large", "mdi:view-grid-outline", "Velké"],
       ["compact", "mdi:view-grid-compact", "Malé"],
       ["list", "mdi:view-list", "Seznam"],
     ];
     const effective = this._effectiveViewMode(mode, count);
-    return `<div class="density-toolbar"><span>Zobrazení</span><div class="density-switch">${options.map(([value, icon, label]) => `<button class="${effective === value ? "active" : ""}" data-view-scope="${scope}" data-view-mode="${value}" title="${label}"><ha-icon icon="${icon}"></ha-icon><span>${label}</span></button>`).join("")}</div></div>`;
+    return `<div class="density-toolbar">${options.map(([value, icon, label]) => `<button class="secondary density-btn ${effective === value ? "active" : ""}" data-view-scope="${scope}" data-view-mode="${value}" title="${label}" aria-label="${label}"><ha-icon icon="${icon}"></ha-icon></button>`).join("")}</div>`;
   },
 
   _topologyGroups(devices) {

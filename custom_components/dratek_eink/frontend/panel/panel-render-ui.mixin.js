@@ -167,7 +167,7 @@ export const renderUiMixin = {
         @media(max-width:760px){.editor-shell{grid-template-areas:"canvas" "tools" "inspector"}.display-health,.display-grid.density-large .display-health,.display-grid.density-compact .display-health,.display-grid.density-list .display-health{grid-template-columns:minmax(58px,.65fr) minmax(58px,.65fr) minmax(90px,1.7fr)}.display-health-route{grid-column:auto}.connection-group,.connection-group.is-gateway,.connection-group.is-local,.connection-group.is-unavailable{grid-template-columns:1fr;padding:12px}.connection-bus{width:2px;height:22px;justify-self:start;margin-left:20px}.connection-bus:before{inset:0;width:2px;height:auto;transform:none}.connection-devices{padding-left:40px}.connection-devices:before{left:20px;top:0}.connection-device:before{left:-20px;width:20px}}
         @media(max-width:390px){.display-health,.display-grid.density-large .display-health,.display-grid.density-compact .display-health,.display-grid.density-list .display-health{grid-template-columns:56px 56px minmax(0,1fr);gap:4px}.display-health-item{padding:6px 3px}.display-health-route{padding-inline:5px}.display-health-route>ha-icon{display:none}.display-health-route>span{grid-column:1/-1}.display-health-route strong{font-size:9px}}
         .designer-device-screen,.designer-device-portrait .designer-device-screen{box-sizing:content-box;inset:auto;left:50%;top:50%;width:var(--designer-screen-width);height:var(--designer-screen-height);transform:translate(-50%,-50%)}
-        canvas,#editor,#editorSelection,.designer-device-screen canvas,.device-preview-screen canvas,.compact-device-preview canvas,.ha-elements-page canvas{image-rendering:pixelated!important;image-rendering:crisp-edges!important;image-rendering:-moz-crisp-edges!important;image-rendering:-webkit-optimize-contrast!important}
+        canvas,#editor,#editorSelection,.designer-device-screen canvas,.device-preview-screen canvas,.compact-device-preview canvas,.ha-elements-page canvas{image-rendering:-moz-crisp-edges!important;image-rendering:pixelated!important}
         .workspace{min-height:600px;overflow:auto;display:grid;place-items:center;background-color:var(--secondary-background-color,#1e293b);background-image:radial-gradient(circle,rgba(148,163,184,.25) 1.2px,transparent 1.2px);background-size:16px 16px;border-radius:12px;padding:36px;box-shadow:inset 0 2px 10px rgba(0,0,0,.12)}
         .zoom-controls{display:flex;gap:4px;align-items:center}.zoom-chip{padding:3px 8px;font-size:11px;font-weight:700;border-radius:5px;border:1px solid var(--divider-color);background:var(--secondary-background-color);color:var(--primary-text-color);cursor:pointer;box-shadow:none;min-height:28px}.zoom-chip.active,.zoom-chip:hover{background:var(--primary-color,#0f766e);color:#fff;border-color:var(--primary-color,#0f766e)}.pixel-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:6px;background:rgba(15,118,110,.12);color:#0f766e;border:1px solid rgba(15,118,110,.3);font-size:11px;font-weight:850}
         .display-tile.is-stale{border-style:dashed}.display-online-dot.stale{background:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.16)}.display-health-route.stale ha-icon{color:#f59e0b}
@@ -176,7 +176,10 @@ export const renderUiMixin = {
         @media(max-width:900px){.devices-layout{grid-template-columns:1fr}}
         .device-detail-panel{display:flex;flex-direction:column;gap:14px;position:sticky;top:14px}
         .device-detail-empty{display:grid;place-items:center;text-align:center;gap:8px;padding:44px 16px;color:var(--secondary-text-color)}
-        .device-detail-preview{display:grid;place-items:center;padding:8px 4px}
+        .device-detail-preview{display:grid;place-items:center;padding:8px 4px;min-height:200px}
+        .device-detail-preview .device-preview-wrap{width:100%;height:100%;min-height:0;min-width:0}
+        .device-detail-preview .device-preview-fit{width:100%;height:100%;min-width:0;min-height:0;display:grid;place-items:center;container-type:size}
+        .device-detail-preview .device-preview-bezel{width:min(100%,calc(100cqh * var(--frame-ratio,2.15)));height:min(100%,calc(100cqw / var(--frame-ratio,2.15)))}
         .device-detail-title{display:flex;align-items:center;gap:8px;padding:0 2px}
         .device-detail-title strong{font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         .device-detail-info{display:grid;gap:6px;padding:2px}
@@ -191,34 +194,79 @@ export const renderUiMixin = {
         .display-tile-identity span{font-size:10px}
         .display-resolution{padding:4px 7px;font-size:9px}
         .display-resolution ha-icon{--mdc-icon-size:12px}
-        .display-preview-slot{padding:6px}
+        .display-preview-slot{padding:6px;min-height:0;overflow:hidden}
+        .display-preview-slot .device-preview-wrap{width:100%;height:100%;min-height:0;min-width:0}
+        .display-preview-slot .device-preview-fit{width:100%;height:100%;min-width:0;min-height:0;display:grid;place-items:center;container-type:size}
+        .display-preview-slot .device-preview-bezel{width:min(100%,calc(100cqh * var(--frame-ratio,2.15)));height:min(100%,calc(100cqw / var(--frame-ratio,2.15)))}
         .display-grid.density-large .display-tile{grid-template-rows:auto minmax(100px,1fr) auto;aspect-ratio:1/1;padding:15px 15px 0}
         .display-grid.density-compact .display-tile{grid-template-rows:auto minmax(60px,1fr) auto;aspect-ratio:1/1;padding:11px 11px 0}
         .display-grid.density-list .display-tile{aspect-ratio:auto;padding:12px 14px}
-        .display-health{margin:0 -14px;padding:6px 10px 8px;background:var(--secondary-background-color)}
-        .display-grid:not(.density-list) .display-battery-item,.display-grid:not(.density-list) .display-signal-item{grid-template-rows:14px auto;gap:2px;padding-inline:4px}
-        .display-grid:not(.density-list) .display-health-item small{display:none!important}
-        .display-grid:not(.density-list) .display-health-route{padding-inline:6px}
-        .display-grid:not(.density-list) .display-health-route small{display:none!important}
-        .display-grid:not(.density-list) .display-health-route strong{font-size:9px}
-        .display-grid.density-large .display-health{margin:0 -15px;padding:9px 11px 11px}
-        .display-grid.density-compact .display-health{margin:0 -11px;padding:7px 8px 9px}
-        .display-grid.density-list .display-health{margin:0;padding:0;background:none}
-        .display-health-item{border-top:0}
+        .display-health{margin:0 -14px;padding:8px 10px 6px;background:none;gap:6px}
+        .display-health-item{border-top:0;align-items:center}
+        .health-icon{--mdc-icon-size:16px;flex:0 0 auto;color:var(--dratek-teal)}
+        .display-health-route{display:flex!important;align-items:center;gap:6px}
+        .display-health-route .health-route-text{display:flex;flex-direction:column;min-width:0;flex:1 1 auto;gap:1px}
+        .display-health-route .health-route-text small{display:block;color:var(--secondary-text-color);font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+        .display-health-route .health-route-text strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;font-weight:700}
+        .display-health-route .health-icon-sub{--mdc-icon-size:12px;margin-left:-4px;flex:0 0 auto;color:var(--secondary-text-color)}
+        .display-preview-slot .device-preview-bezel,.device-detail-preview .device-preview-bezel{box-shadow:none}
+        .display-grid.density-large .display-health{margin:0 -15px;padding:9px 11px 7px}
+        .display-grid.density-compact .display-health{margin:0 -11px;padding:6px 8px 5px;gap:4px}
+        .display-grid.density-list .health-route-text{flex-direction:row;align-items:baseline;gap:6px}
+        .display-grid.density-large .display-health-route,.display-grid.density-compact .display-health-route,.display-grid.density-list .display-health-route{grid-column:auto}
+        .display-health{grid-template-columns:1fr 1fr 1.3fr}
+        .display-grid.density-large .display-health,.display-grid.density-compact .display-health,.display-grid.density-list .display-health{grid-template-columns:1fr 1fr 1.3fr}
+        .device-preview-fit{width:100%;height:100%;display:grid;place-items:center;min-width:0;min-height:0}
+        .devices-toolbar-card{padding:10px 14px}
+        .devices-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+        .device-search{display:flex;align-items:center;gap:8px;flex:1 1 220px;min-width:180px;padding:8px 14px;border:1.5px solid rgba(0,162,165,.35);border-radius:14px;background:rgba(0,162,165,.08);transition:border-color .15s ease,box-shadow .15s ease,background .15s ease}
+        .device-search:focus-within{border-color:var(--dratek-teal);box-shadow:0 0 0 3px rgba(0,162,165,.16);background:rgba(0,162,165,.12)}
+        .device-search>ha-icon{--mdc-icon-size:18px;flex:0 0 auto;color:var(--dratek-teal-dark)}
+        .device-search>input{flex:1;min-width:0;border:0;background:transparent;outline:0;font:inherit;font-size:13px;color:var(--primary-text-color)}
+        .device-search>input::placeholder{color:var(--dratek-teal-dark);opacity:.65}
+        .reset-icon-btn{flex:0 0 auto;display:grid;place-items:center;width:38px;height:38px;padding:0;border-radius:14px;background:var(--dratek-orange,#ff6b00);color:#fff;box-shadow:0 4px 12px rgba(255,107,0,.28)}
+        .reset-icon-btn:hover:not(:disabled){background:var(--dratek-orange-dark,#d95700)}
+        .reset-icon-btn ha-icon{--mdc-icon-size:19px}
+        .reset-icon-btn.spinning ha-icon{animation:dratek-spin 1s linear infinite}
+        @keyframes dratek-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+        .devices-toolbar-spacer{flex:1 1 auto;min-width:8px}
+        .density-toolbar{display:flex;align-items:center;gap:6px;margin-left:0}
+        .density-btn{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;padding:0;border-radius:14px}
+        .density-btn.active{background:var(--dratek-teal,#00a2a5);border-color:var(--dratek-teal,#00a2a5);color:#fff}
+        @media(max-width:640px){.devices-toolbar-spacer{flex-basis:100%;min-width:0;height:0}}
+        .designer-device-strip{gap:12px;background:transparent;box-shadow:none}
+        .designer-device-primary,.designer-device-fact,.designer-device-meter,.designer-route,.designer-orientation{padding:14px 16px;border-radius:14px;min-height:78px}
+        .designer-device-mark{width:42px;height:42px;border-radius:12px}
+        .designer-device-primary strong{font-size:15px}
+        .designer-device-fact strong,.designer-route strong{font-size:13px}
+        .designer-device-primary small,.designer-device-fact small,.designer-device-meter>small,.designer-orientation>small{font-size:10px}
+        .designer-orientation button{border-radius:10px;min-height:40px;font-size:11px;gap:6px}
+        .designer-commandbar{padding:9px 11px;border-radius:14px;gap:8px;min-height:60px}
+        .designer-commandbar .ribbon-tab{border-radius:10px;padding:9px 14px;font-size:12px;gap:7px;min-height:40px}
+        .designer-commandbar .ribbon-send{border-radius:11px;padding:10px 18px;min-height:42px}
+        .designer-commandbar .ribbon-project{border-radius:9px;padding:8px 11px}
       </style>
       <div class="page">
         <div class="topbar">
           <div class="brand"><img class="extension-logo" src="/dratek_eink_panel/dratek-eink-logo.png?v=${DRATEK_EINK_VERSION}" alt="DRATEK.CZ eInk"><div><h1>DRATEK eInk</h1><div class="subtitle">Editor šablon, BLE diagnostika a správa displejů</div></div></div>
           <span class="version-badge">v${DRATEK_EINK_VERSION}</span>
         </div>
-        <div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezené displeje</button><button class="tab ${this._activeTab === "designer" ? "active" : ""}" data-tab="designer" ${device ? "" : "disabled"} title="${device ? "Otevřít designer" : "Nejprve vyberte displej"}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Designer</button><button class="tab ${this._activeTab === "queue" ? "active" : ""}" data-tab="queue"><ha-icon icon="mdi:tray-full"></ha-icon>Fronta zápisu${this._queue.queued || this._queue.writing ? `<span class="pill warn">${this._queue.queued + this._queue.writing}</span>` : ""}</button><button class="tab ${this._activeTab === "gateways" ? "active" : ""}" data-tab="gateways"><ha-icon icon="mdi:router-wireless"></ha-icon>Gatewaye</button><button class="tab ${this._activeTab === "custom" ? "active" : ""}" data-tab="custom"><ha-icon icon="mdi:puzzle-plus-outline"></ha-icon>Designer HA prvků</button></div>
+        <div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezené displeje</button><button class="tab ${this._activeTab === "topology" ? "active" : ""}" data-tab="topology"><ha-icon icon="mdi:lan"></ha-icon>Mapa připojení</button><button class="tab ${this._activeTab === "queue" ? "active" : ""}" data-tab="queue"><ha-icon icon="mdi:tray-full"></ha-icon>Fronta zápisu${this._queue.queued || this._queue.writing ? `<span class="pill warn">${this._queue.queued + this._queue.writing}</span>` : ""}</button><button class="tab ${this._activeTab === "gateways" ? "active" : ""}" data-tab="gateways"><ha-icon icon="mdi:router-wireless"></ha-icon>Gatewaye</button><button class="tab ${this._activeTab === "custom" ? "active" : ""}" data-tab="custom"><ha-icon icon="mdi:puzzle-plus-outline"></ha-icon>Designer HA prvků</button></div>
         <div style="${this._activeTab === "devices" ? "" : "display:none"}">
           <div class="devices-layout">
             <div class="devices-main">
-              <div class="card"><div class="toolbar" style="margin-bottom:12px"><button id="scanDevicesTab" class="secondary" ${this._loading ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>${this._loading ? "Hledám displeje..." : "Obnovit"}</button>${this._renderDensityControl("devices", this._deviceViewMode, result.devices.length)}</div>${this._renderDeviceCards(result.devices, device && device.address)}</div>
+              <div class="card devices-toolbar-card"><div class="devices-toolbar">
+                <div class="device-search"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" id="deviceSearch" placeholder="Hledat podle názvu, adresy, velikosti..." value="${this._escape(this._deviceSearchQuery || "")}"></div>
+                <button id="resetDevicesView" class="reset-icon-btn ${this._loading ? "spinning" : ""}" ${this._loading ? "disabled" : ""} title="Resetovat hledání a obnovit"><ha-icon icon="mdi:refresh"></ha-icon></button>
+                <div class="devices-toolbar-spacer"></div>
+                ${this._renderDensityControl("devices", this._deviceViewMode, result.devices.length)}
+              </div></div>
+              <div class="card">${this._renderDeviceCards(result.devices, device && device.address)}</div>
             </div>
             <aside class="device-detail-panel card">${this._renderDeviceDetailPanel()}</aside>
           </div>
+        </div>
+        <div style="${this._activeTab === "topology" ? "" : "display:none"}">
           <div class="card connection-map-card"><div class="section-title"><div><h2>Mapa připojení</h2><small>Každá gateway je zobrazena pouze jednou se všemi připojenými displeji.</small></div><span class="pill muted">${topologyGatewayCount} ${topologyGatewayCount === 1 ? "gateway" : "gatewayů"} · ${result.devices.length} ${result.devices.length === 1 ? "displej" : "displejů"}</span></div>${this._renderTopology(result.devices, topologyGroups)}</div>
         </div>
         <div class="designer-section ${device ? "" : "locked"}" style="${this._activeTab === "designer" ? "" : "display:none"}">

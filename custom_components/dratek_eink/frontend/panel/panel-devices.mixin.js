@@ -178,7 +178,7 @@ export const devicesMixin = {
     this._selectedDeviceAddress = address;
     this._selectPreferredRoute((this._result?.devices || []).find((device) => device.address === address));
     await this._loadDeviceDraft(address);
-    this._fitZoom();
+    this._zoom = 1;
     if (render) {
       this._render();
       this._paint();
@@ -262,22 +262,42 @@ export const devicesMixin = {
     const pe29Layout = this._isPe29Device(device);
     const physicalCode = device.physical_code || "00.00.00.00";
     return `<div class="device-preview-wrap preview-${previewMode}">
-      <div class="device-preview-bezel ${pe29Layout ? "device-preview-pe29" : ""} ${portraitLayout ? "device-preview-portrait" : "device-preview-landscape"}" style="--frame-ratio:${frameRatio.toFixed(4)};--preview-width:${previewWidth}px" title="Náhled ${this._escape(sourceWidth)} × ${this._escape(sourceHeight)}">
-        ${pe29Layout ? `<span class="device-preview-identification"><span class="device-preview-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, portraitLayout)}</span>` : `<span class="device-preview-code">${this._escape(physicalCode)}</span>`}
-        <div class="device-preview-screen">
-          <canvas data-device-preview="${this._escape(address)}" data-source-width="${sourceWidth}" data-source-height="${sourceHeight}" width="${canvasWidth}" height="${canvasHeight}"></canvas>
-          ${draft ? "" : `<div class="device-preview-empty"><span><ha-icon icon="mdi:image-outline"></ha-icon>Prázdný návrh</span></div>`}
+      <div class="device-preview-fit" style="--frame-ratio:${frameRatio.toFixed(4)};--preview-width:${previewWidth}px">
+        <div class="device-preview-bezel ${pe29Layout ? "device-preview-pe29" : ""} ${portraitLayout ? "device-preview-portrait" : "device-preview-landscape"}" title="Náhled ${this._escape(sourceWidth)} × ${this._escape(sourceHeight)}">
+          ${pe29Layout ? `<span class="device-preview-identification"><span class="device-preview-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, portraitLayout)}</span>` : `<span class="device-preview-code">${this._escape(physicalCode)}</span>`}
+          <div class="device-preview-screen">
+            <canvas data-device-preview="${this._escape(address)}" data-source-width="${sourceWidth}" data-source-height="${sourceHeight}" width="${canvasWidth}" height="${canvasHeight}"></canvas>
+            ${draft ? "" : `<div class="device-preview-empty"><span><ha-icon icon="mdi:image-outline"></ha-icon>Prázdný návrh</span></div>`}
+          </div>
         </div>
       </div>
     </div>`;
+  },
+
+  _deviceMatchesSearch(device, query) {
+    const size = this._devicePreviewSize(device);
+    const haystack = [
+      device.display_name,
+      device.model,
+      device.address,
+      device.physical_code,
+      `${size.width}x${size.height}`,
+      `${size.width}×${size.height}`,
+    ].filter(Boolean).join(" ").toLowerCase();
+    return haystack.includes(query);
   },
 
   _renderDeviceCards(devices, selectedAddress) {
     if (!devices.length) {
       return `<div class="empty-state"><img class="empty-logo" src="/dratek_eink_panel/dratek-eink-logo.png?v=${DRATEK_EINK_VERSION}" alt="DRATEK.CZ eInk"><h2>${this._loading ? "Hledám displeje v okolí" : "V okolí zatím není žádný displej"}</h2><p>${this._loading ? "Scan se spustil automaticky po otevření panelu." : "Hledání můžeš kdykoliv zopakovat tlačítkem Obnovit."}</p></div>`;
     }
-    const mode = this._effectiveViewMode(this._deviceViewMode, devices.length);
-    return `<div class="display-grid density-${mode}">${devices.map((device) => {
+    const query = String(this._deviceSearchQuery || "").trim().toLowerCase();
+    const filtered = query ? devices.filter((device) => this._deviceMatchesSearch(device, query)) : devices;
+    if (!filtered.length) {
+      return `<div class="empty-state"><ha-icon icon="mdi:magnify-close"></ha-icon><h2>Žádný displej neodpovídá hledání</h2><p>Zkus jiný název, adresu nebo velikost, případně vyhledávání resetuj.</p></div>`;
+    }
+    const mode = this._effectiveViewMode(this._deviceViewMode, filtered.length);
+    return `<div class="display-grid density-${mode}">${filtered.map((device) => {
       const selected = device.address === selectedAddress;
       const battery = this._batteryInfo(device);
       const rssi = Number(device.rssi);
@@ -289,13 +309,13 @@ export const devicesMixin = {
         <header class="display-tile-header">
           <span class="display-online-dot ${temporarilyUnseen ? "stale" : ""}" title="${temporarilyUnseen ? "Displej nebyl zachycen v posledním krátkém skenu" : "Displej je dostupný"}"></span>
           <div class="display-tile-identity"><strong>${this._escape(this._deviceTitle(device))}</strong><span>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</span></div>
-          <span class="display-resolution"><ha-icon icon="mdi:aspect-ratio"></ha-icon>${previewSize.width} × ${previewSize.height}</span>
+          ${mode === "list" ? `<span class="display-resolution"><ha-icon icon="mdi:aspect-ratio"></ha-icon>${previewSize.width} × ${previewSize.height}</span>` : ""}
         </header>
         ${mode === "list" ? "" : `<div class="display-preview-slot">${this._renderDevicePreview(device, mode)}</div>`}
         <div class="display-health">
-          <div class="display-health-item display-battery-item" title="Odhad zbývající kapacity CR2450${Number.isFinite(battery.voltage) ? ` · ${this._formatBatteryVoltage(battery.voltage)}` : ""}"><small>Baterie</small>${this._renderBatterySegments(battery.percent)}<strong>${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></div>
-          <div class="display-health-item display-signal-item"><small>Signál</small>${this._renderSignalBars(rssi)}<strong class="signal-value ${this._signalClass(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>
-          <div class="display-health-item display-health-route ${temporarilyUnseen ? "stale" : ""}"><ha-icon icon="${temporarilyUnseen ? "mdi:bluetooth-off" : preferredPath?.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon><span><small>Připojení</small><strong>${temporarilyUnseen ? "Čekám na další signál" : this._escape(preferredPath?.name || "Nedostupné")}</strong></span></div>
+          <div class="display-health-item display-battery-item" title="Odhad zbývající kapacity CR2450${Number.isFinite(battery.voltage) ? ` · ${this._formatBatteryVoltage(battery.voltage)}` : ""}"><small>Baterie</small>${this._renderBatterySegments(battery.percent)}<strong>${Number.isFinite(battery.percent) ? `${battery.percent}%` : "-"}</strong></div>
+          <div class="display-health-item display-signal-item" title="Síla signálu"><small>Signál</small>${this._renderSignalBars(rssi)}<strong class="signal-value ${this._signalClass(rssi)}">${Number.isFinite(rssi) ? `${rssi}dBm` : "-"}</strong></div>
+          <div class="display-health-item display-health-route ${temporarilyUnseen ? "stale" : ""}"><ha-icon class="health-icon" icon="${temporarilyUnseen ? "mdi:bluetooth-off" : preferredPath?.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon>${!temporarilyUnseen && preferredPath?.type !== "local" ? `<ha-icon class="health-icon health-icon-sub" icon="mdi:bluetooth" title="Displej je za gatewayí připojen přes BLE"></ha-icon>` : ""}<span class="health-route-text"><small>Připojeno</small><strong>${temporarilyUnseen ? "Čekám na signál" : this._escape(preferredPath?.name || "Nedostupné")}</strong></span></div>
         </div>
       </article>`;
     }).join("")}</div>`;
@@ -327,8 +347,11 @@ export const devicesMixin = {
       ${editing ? `<div class="device-name-edit"><input data-device-name-input="${this._escape(address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Například Kuchyň"><button data-device-name-save="${this._escape(address)}" title="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button><button class="secondary" data-device-name-cancel title="Zrušit"><ha-icon icon="mdi:close"></ha-icon></button></div>` : `
       <div class="device-detail-actions">
         <button class="secondary" data-device-rename="${this._escape(address)}"><ha-icon icon="mdi:pencil-outline"></ha-icon>${device.display_name ? "Přejmenovat" : "Pojmenovat"}</button>
+        <button class="secondary" data-flash-identify="${this._escape(address)}" ${this._identifySending ? "disabled" : ""}><ha-icon icon="mdi:flare"></ha-icon>${this._identifySending ? "Blikám..." : "Najdi mě"}</button>
         <button data-select-device="${this._escape(address)}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Otevřít v designeru</button>
-      </div>`}
+      </div>
+      ${this._identifyResult ? `<span class="led-result ${this._identifyResult.ok ? "good" : "bad"}"><ha-icon icon="${this._identifyResult.ok ? "mdi:check-circle-outline" : "mdi:alert-circle-outline"}"></ha-icon>${this._identifyResult.ok ? "Displej by měl bliknout." : this._escape(this._identifyResult.error || "Nepodařilo se displej rozblikat.")}</span>` : ""}
+      <details class="designer-advanced-device device-detail-led"><summary><ha-icon icon="mdi:led-on"></ha-icon><span><strong>RGB dioda</strong><small>Barva a režim indikační diody</small></span><ha-icon icon="mdi:chevron-down"></ha-icon></summary>${this._renderRgbLedControl(device, true)}</details>`}
     `;
   },
 
@@ -381,6 +404,13 @@ export const devicesMixin = {
     if (value >= 50) return "high";
     if (value >= 25) return "medium";
     return "low";
+  },
+
+  _batteryIconName(value) {
+    if (!Number.isFinite(value)) return "mdi:battery-unknown";
+    if (value <= 5) return "mdi:battery-alert-variant-outline";
+    const step = Math.max(10, Math.min(90, Math.round(value / 10) * 10));
+    return step >= 90 ? "mdi:battery" : `mdi:battery-${step}`;
   },
 
   _batteryLevel(value) {

@@ -32,6 +32,8 @@ class DratekEinkPanel extends HTMLElement {
     this._sendResult = null;
     this._ledSending = false;
     this._ledResult = null;
+    this._identifySending = false;
+    this._identifyResult = null;
     this._rgbLed = { mode: "off", color: "#00a2a5", flashTime: 10 };
     this._selectedDeviceAddress = "";
     this._editingDeviceAddress = "";
@@ -76,6 +78,7 @@ class DratekEinkPanel extends HTMLElement {
     this._refreshIntervalSeconds = 60;
     this._activeTab = "devices";
     this._deviceViewMode = this._loadUiPreference("device-view-mode", "auto");
+    this._deviceSearchQuery = "";
     this._topologyViewMode = this._loadUiPreference("topology-view-mode", "auto");
     this._queue = { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0 };
     this._queuePollTimer = null;
