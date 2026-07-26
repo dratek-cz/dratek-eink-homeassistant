@@ -5,19 +5,30 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PANEL = (
-    ROOT
-    / "custom_components"
-    / "dratek_eink"
-    / "frontend"
-    / "dratek-eink-panel.js"
-)
+FRONTEND = ROOT / "custom_components" / "dratek_eink" / "frontend"
+PANEL = FRONTEND / "dratek-eink-panel.js"
+PANEL_MODULES = FRONTEND / "panel"
+
+
+def _panel_source() -> str:
+    """Concatenate the panel entry point with its feature modules.
+
+    The panel used to be a single file; it now delegates to the mixin modules
+    under frontend/panel/, so these markup and CSS assertions have to look at
+    the whole set to stay meaningful.
+    """
+    parts = [PANEL.read_text(encoding="utf-8")]
+    parts.extend(
+        path.read_text(encoding="utf-8")
+        for path in sorted(PANEL_MODULES.glob("*.js"))
+    )
+    return "\n".join(parts)
 
 
 class FrontendToolLibraryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.source = PANEL.read_text(encoding="utf-8")
+        cls.source = _panel_source()
 
     def test_library_exposes_all_categories_and_direct_widgets(self):
         for category in ("basic", "data", "status", "custom"):

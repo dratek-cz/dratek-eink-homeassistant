@@ -4,6 +4,20 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.121
+
+- hlavní stránka **Nalezené displeje** má nový přehledný panel s vyhledáváním displejů podle názvu, adresy i rozlišení
+- vedle vyhledávání je tlačítko pro reset hledání a nové obnovení seznamu, vpravo pak přepínač zobrazení Velké / Malé / Seznam
+- displeje jsou nově ve čtvercových kartách a kliknutí na kartu displej pouze **vybere**; vpravo se zobrazí jeho náhled, údaje a nastavení
+- editor se otevírá až tlačítkem **Otevřít v designeru**, takže prohlížení displejů už needituje omylem návrh
+- v pravém panelu je nové tlačítko **Najdi mě**, které nechá displej bliknout pro snadné dohledání na regálu
+- v pravém panelu lze také rozbalit ovládání **RGB diody** displeje bez otevírání designeru
+- náhledy displejů se vždy vejdou do karty na jakémkoliv rozlišení monitoru a už nepřetékají
+- **opraven rozmazaný náhled**: náhledy nyní ukazují čisté eInk barvy (černá, bílá, červená) bez šedých mezistupňů
+- záložka Designer v horní liště byla nahrazena záložkou **Mapa připojení**, kam se mapa přesunula ze spodní části stránky displejů
+- designer se otevírá v přesném rozlišení displeje 1:1 místo automatického přizpůsobení oknu
+- přehlednější horní část designeru s informacemi o displeji a příkazovou lištou
+
 ## Novinky ve verzi 0.1.120
 
 - opraveno tlačítko **Otevřít v designeru** i kliknutí na náhled displeje v hlavním přehledu
