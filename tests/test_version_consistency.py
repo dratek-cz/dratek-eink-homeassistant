@@ -28,7 +28,7 @@ class VersionConsistencyTests(unittest.TestCase):
                 COMPONENT / "const.py", r'PANEL_VERSION\s*=\s*"([^"]+)"'
             ),
             "panel": _match_version(
-                COMPONENT / "frontend" / "dratek-eink-panel.js",
+                COMPONENT / "frontend" / "panel" / "panel-constants.js",
                 r'DRATEK_EINK_VERSION\s*=\s*"([^"]+)"',
             ),
             "overview": _match_version(

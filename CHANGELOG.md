@@ -2,6 +2,31 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.121] - 2026-07-26
+
+### Redesign hlavní stránky displejů
+- Nový panel nad seznamem displejů: vyhledávání podle názvu, BLE adresy i rozlišení, tlačítko resetu hledání a přepínač zobrazení (Velké / Malé / Seznam) pouze s ikonami.
+- Displeje jsou ve čtvercových kartách se zaoblenými rohy; ve spodním pruhu karty je baterie, signál a použitá cesta připojení.
+- Kliknutí na kartu displej pouze vybere a zobrazí jej v novém pravém panelu s náhledem, údaji a akcemi. Designer se otevírá výhradně tlačítkem **Otevřít v designeru**.
+- Záložka **Designer** v horní liště nahrazena záložkou **Mapa připojení**; mapa se přesunula ze spodní části stránky displejů.
+
+### Rychlé akce displeje
+- Nové tlačítko **Najdi mě** rozblikáním indikátoru pomůže fyzicky dohledat konkrétní displej (BLE příkaz `0x22`, nový websocket příkaz `dratek_eink/flash_identify`).
+- Ovládání **RGB diody** je nově dostupné i v pravém panelu displeje jako rozbalovací sekce, bez nutnosti otevírat designer.
+
+### Opravy náhledů displejů
+- Opraveno rozmazané vykreslování náhledů: pravidlo `image-rendering` obsahovalo čtyři hodnoty za sebou jako fallback pro různé prohlížeče, ale Chrome zná i poslední z nich (`-webkit-optimize-contrast`), takže vždy vyhrála a náhledy vyhlazovala do šedých mezistupňů místo čistých eInk barev.
+- Náhled displeje je vložen do neviditelného poměrového kontejneru a používá CSS `container query` jednotky, takže se vždy vejde do karty na jakémkoliv rozlišení monitoru a nepřetéká.
+- Odstraněn stín za rámečkem náhledu a sjednoceno pozadí stavových ikon s pozadím karty.
+
+### Designer
+- Zoom se při výběru displeje, načtení šablony nebo projektu, změně orientace i po undo/redo nastaví na skutečné **1:1** rozlišení displeje místo automatického přizpůsobení oknu. Tlačítko **Fit** zůstává dostupné.
+- Přehlednější horní část designeru: informační pruh o displeji a příkazová lišta mají větší odsazení a zaoblení.
+
+### Vývojářské
+- Přidán testovací harness `tests/dratek-eink-panel-harness.html`, který načte skutečný panel proti mockovanému `hass.callWS` pro rychlou vizuální kontrolu bez běžícího Home Assistantu.
+- Test konzistence verzí nyní čte verzi panelu z `frontend/panel/panel-constants.js`, kam se přesunula po rozdělení panelu do ES modulů.
+
 ## [0.1.119] - 2026-07-26
 
 ### Oprava editoru displeje
