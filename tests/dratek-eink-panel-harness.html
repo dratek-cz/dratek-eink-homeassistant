@@ -87,6 +87,7 @@
         if (type === "dratek_eink/queue/list") return { jobs:[], queued:0, writing:0, succeeded:0, failed:0 };
         if (type === "dratek_eink/set_rgb_led") return { ok:true, address: msg.address, log: [] };
         if (type === "dratek_eink/flash_identify") return { ok:true, address: msg.address, log: [] };
+        if (type === "dratek_eink/send_partial_design") { window.__lastPartial = msg; return { ok:true, address: msg.address, log: [] }; }
         return {};
       },
     };

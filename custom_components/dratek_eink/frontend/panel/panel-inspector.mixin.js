@@ -172,6 +172,7 @@ export const inspectorMixin = {
     this.shadowRoot.querySelectorAll("[data-device-name-save]").forEach((button) => button.addEventListener("click", () => this._saveDeviceName(button.dataset.deviceNameSave)));
     this.shadowRoot.querySelectorAll("[data-device-name-cancel]").forEach((button) => button.addEventListener("click", () => { this._editingDeviceAddress = ""; this._deviceNameDraft = ""; this._render(); this._paint(); }));
     this.shadowRoot.querySelector("#sendDesign")?.addEventListener("click", () => this._sendDesign());
+    this.shadowRoot.querySelector("#sendPartialDesign")?.addEventListener("click", () => this._sendPartialDesign());
     this.shadowRoot.querySelector("#sendGatewayDesign")?.addEventListener("click", () => this._sendDesignViaGateway());
     this.shadowRoot.querySelector("#refreshInterval")?.addEventListener("change", (event) => {
       this._refreshIntervalSeconds = Math.max(30, Math.min(86400, Number(event.target.value) || 60));

@@ -56,6 +56,82 @@ export const sendMixin = {
     }
   },
 
+  /**
+   * Area of the current selection, snapped outwards to the protocol's grid.
+   *
+   * The vendor protocol requires y and height to be multiples of 8 (it
+   * addresses the panel in 8-row bands), so the selection is grown to the
+   * nearest band rather than rejected, and clamped to the display.
+   */
+  _partialRegion() {
+    const size = this._displaySize();
+    const selected = this._objects.filter((object) => this._selectedIds.includes(object.id));
+    if (!selected.length) return null;
+    let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+    for (const object of selected) {
+      const box = this._box(object);
+      left = Math.min(left, box.x);
+      top = Math.min(top, box.y);
+      right = Math.max(right, box.x + box.w);
+      bottom = Math.max(bottom, box.y + box.h);
+    }
+    const x = Math.max(0, Math.floor(left));
+    const y = Math.max(0, Math.floor(top / 8) * 8);
+    const maxRight = Math.min(size.width, Math.ceil(right));
+    const maxBottom = Math.min(size.height, Math.ceil(bottom / 8) * 8);
+    const width = Math.max(8, maxRight - x);
+    const height = Math.max(8, Math.ceil((maxBottom - y) / 8) * 8);
+    return {
+      x,
+      y,
+      width: Math.min(width, size.width - x),
+      height: Math.min(height, Math.floor((size.height - y) / 8) * 8 || 8),
+    };
+  },
+
+  async _sendPartialDesign() {
+    const device = this._device();
+    if (!device || this._sending) return;
+    const region = this._partialRegion();
+    if (!region) {
+      this._sendResult = { ok: false, error: "Nejprve v návrhu označ objekty, jejichž oblast se má přepsat.", log: [] };
+      this._render();
+      this._paint();
+      return;
+    }
+    const full = this._renderExportCanvas();
+    const crop = document.createElement("canvas");
+    crop.width = region.width;
+    crop.height = region.height;
+    const ctx = crop.getContext("2d", { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(full, region.x, region.y, region.width, region.height, 0, 0, region.width, region.height);
+    this._sending = true;
+    this._sendResult = null;
+    this._render();
+    try {
+      this._sendResult = await this._hass.callWS({
+        type: "dratek_eink/send_partial_design",
+        address: device.address,
+        sdk_type: Number(device.sdk_type),
+        transform: this._displayTransform,
+        image: crop.toDataURL("image/png"),
+        x: region.x,
+        y: region.y,
+        width: region.width,
+        height: region.height,
+        clear_screen: 0,
+      });
+    } catch (err) {
+      this._sendResult = { ok: false, address: device.address, error: this._message(err), log: [] };
+    } finally {
+      this._sending = false;
+      await this._loadQueue(false);
+      this._render();
+      this._paint();
+    }
+  },
+
   async _sendDesignViaGateway() {
     const device = this._device();
     if (!device || this._sending || !this._selectedGatewayId) return;

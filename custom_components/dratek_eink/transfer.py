@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from bleak import BleakClient
 from PIL import Image
 
-from .const import CONTROL_CHARS, PARTIAL_UPDATE_SDK_TYPES, WRITE_CHARS
+from .const import CONTROL_CHARS, PARTIAL_UPDATE_CONFIRMED_SDK_TYPES, WRITE_CHARS
 from .render import pack_bwr_image
 
 if TYPE_CHECKING:
@@ -75,9 +75,14 @@ class DratekTransfer:
         clear_screen: int = 0,
         transform: str | None = None,
     ) -> None:
-        if int(sdk_type) not in PARTIAL_UPDATE_SDK_TYPES:
-            supported = ", ".join(str(item) for item in sorted(PARTIAL_UPDATE_SDK_TYPES))
-            raise RuntimeError(f"Partial update is supported by the SDK only for type(s): {supported}.")
+        if int(sdk_type) not in PARTIAL_UPDATE_CONFIRMED_SDK_TYPES:
+            self.log(
+                f"Partial update on SDK type {sdk_type} is untested - the vendor SDK does not "
+                "restrict it by model, but only type(s) "
+                f"{', '.join(str(item) for item in sorted(PARTIAL_UPDATE_CONFIRMED_SDK_TYPES))} "
+                "have been confirmed on hardware. If the display ignores it or refreshes "
+                "incorrectly, send the whole design instead."
+            )
         if y % 8 != 0 or height % 8 != 0:
             raise ValueError("Partial update requires y and height to be divisible by 8.")
         if image.size != (width, height):

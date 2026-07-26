@@ -133,4 +133,9 @@ SDK_MODELS = {
     4716: "EPA LCD 1600x1200 BWR",
 }
 
-PARTIAL_UPDATE_SDK_TYPES = {2635}
+# Models whose partial refresh has actually been confirmed on hardware.
+# The vendor SDK does not gate startPartScreen on the device type at all - it
+# only requires y and height to be multiples of 8 - so the command is offered
+# for every model. This set marks the one that is known-good, so the UI can say
+# "confirmed" versus "untested" instead of blocking the attempt outright.
+PARTIAL_UPDATE_CONFIRMED_SDK_TYPES = {2635}

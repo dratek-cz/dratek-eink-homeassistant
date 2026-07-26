@@ -17,7 +17,7 @@ from PIL import Image
 import voluptuous as vol
 
 from .automation import get_entity_auto_update_manager
-from .const import GATEWAY_FIRMWARE_VERSION, PARTIAL_UPDATE_SDK_TYPES
+from .const import GATEWAY_FIRMWARE_VERSION, PARTIAL_UPDATE_CONFIRMED_SDK_TYPES
 from .discovery import parse_dratek_advertisement, parse_dratek_manufacturer_data
 from .gateway import (
     async_add_gateway,
@@ -311,7 +311,8 @@ async def websocket_scan(
                 "sw": device.sw,
                 "hw": device.hw,
                 "model": device.model,
-                "partial_update": device.sdk_type in PARTIAL_UPDATE_SDK_TYPES,
+                "partial_update": True,
+                "partial_update_confirmed": device.sdk_type in PARTIAL_UPDATE_CONFIRMED_SDK_TYPES,
                 "paths": [{
                     "type": "local",
                     "id": "local",
@@ -378,7 +379,8 @@ async def websocket_scan(
                 "sw": parsed.sw,
                 "hw": parsed.hw,
                 "model": parsed.model,
-                "partial_update": parsed.sdk_type in PARTIAL_UPDATE_SDK_TYPES,
+                "partial_update": True,
+                "partial_update_confirmed": parsed.sdk_type in PARTIAL_UPDATE_CONFIRMED_SDK_TYPES,
                 "paths": [path],
             }
 
