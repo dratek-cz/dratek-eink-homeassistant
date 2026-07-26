@@ -9,8 +9,21 @@ export const inspectorMixin = {
     });
     this.shadowRoot.querySelector("#deviceSearch")?.addEventListener("input", (event) => {
       this._deviceSearchQuery = event.target.value;
+      // _render() replaces the whole shadow tree, which destroys the input the
+      // user is typing into and drops focus after every keystroke. Re-render,
+      // then put the caret back where it was.
+      const caret = event.target.selectionStart;
       this._render();
       this._paint();
+      const next = this.shadowRoot.querySelector("#deviceSearch");
+      if (next) {
+        next.focus();
+        try {
+          next.setSelectionRange(caret, caret);
+        } catch (_err) {
+          // Some input types don't support selection ranges; focus alone is enough.
+        }
+      }
     });
     this.shadowRoot.querySelector("#refreshQueue")?.addEventListener("click", () => this._loadQueue(true));
     this.shadowRoot.querySelector("#queueSearch")?.addEventListener("input", (event) => {
@@ -252,9 +265,8 @@ export const inspectorMixin = {
     this.shadowRoot.querySelector("#distributeV")?.addEventListener("click", () => this._alignSelected("distributeV"));
     this.shadowRoot.querySelector("#layerFront")?.addEventListener("click", () => this._moveLayer("front"));
     this.shadowRoot.querySelector("#layerBack")?.addEventListener("click", () => this._moveLayer("back"));
-    this.shadowRoot.querySelector("#zoomIn")?.addEventListener("click", () => { this._zoom = Math.min(4, this._zoom + 0.15); this._render(); });
-    this.shadowRoot.querySelector("#zoomOut")?.addEventListener("click", () => { this._zoom = Math.max(0.35, this._zoom - 0.15); this._render(); });
-    this.shadowRoot.querySelector("#zoomFit")?.addEventListener("click", () => { this._fitZoom(); this._render(); });
+    this.shadowRoot.querySelectorAll("[data-zoom-step]").forEach((button) => button.addEventListener("click", () => this._setZoom(button.dataset.zoomStep)));
+    this.shadowRoot.querySelector("#btnZoomFit")?.addEventListener("click", () => { this._fitZoom(); this._render(); this._paint(); });
     this.shadowRoot.querySelector("#snap")?.addEventListener("change", (event) => { this._snap = event.target.checked; });
     this.shadowRoot.querySelector("#snapStep")?.addEventListener("change", (event) => { this._snapStep = Number(event.target.value); });
     this.shadowRoot.querySelectorAll("[data-background]").forEach((button) => button.addEventListener("click", () => this._setBackgroundColor(button.dataset.background)));

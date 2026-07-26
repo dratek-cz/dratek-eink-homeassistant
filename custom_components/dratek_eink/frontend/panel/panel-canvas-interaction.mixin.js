@@ -1,9 +1,47 @@
 export const canvasInteractionMixin = {
 
 
+  _maxZoomSteps() {
+    return [1, 2, 3, 4, 6, 8];
+  },
+
+  /**
+   * Pick the largest whole-number magnification that still fits the workspace.
+   *
+   * Only integer steps are offered: the eInk preview is rendered with
+   * image-rendering:pixelated, so a fractional zoom would map one source pixel
+   * onto a non-whole number of screen pixels and the "pixels" would come out
+   * visibly uneven. Whole multiples keep every display pixel identical, which
+   * also means small panels (250x122) get usably large instead of staying at a
+   * postage-stamp 1:1.
+   */
   _fitZoom() {
     const size = this._displaySize();
-    this._zoom = Math.min(2.4, Math.max(0.55, Math.min(820 / size.width, 460 / size.height)));
+    const available = this._workspaceBudget();
+    const steps = this._maxZoomSteps();
+    let best = steps[0];
+    for (const step of steps) {
+      if (size.width * step <= available.width && size.height * step <= available.height) best = step;
+    }
+    this._zoom = best;
+  },
+
+  _workspaceBudget() {
+    const workspace = this.shadowRoot?.querySelector(".workspace");
+    const rect = workspace?.getBoundingClientRect();
+    // The bezel around the screen eats roughly a fifth of the box, and the
+    // workspace has its own padding; leave room so "fit" never overflows.
+    const width = rect?.width ? rect.width - 90 : 820;
+    const height = rect?.height ? rect.height - 90 : 460;
+    return { width: Math.max(160, width), height: Math.max(120, height) };
+  },
+
+  _setZoom(zoom) {
+    const steps = this._maxZoomSteps();
+    const value = Number(zoom);
+    this._zoom = steps.includes(value) ? value : 1;
+    this._render();
+    this._paint();
   },
 
   _setOrientation(orientation) {
@@ -17,7 +55,7 @@ export const canvasInteractionMixin = {
       this._rotateDesignLayout(before, clockwise);
     }
     this._selectedIds = [];
-    this._zoom = 1;
+    this._fitZoom();
     this._render();
     this._paint();
     this._scheduleDraftSave();

@@ -178,7 +178,7 @@ export const devicesMixin = {
     this._selectedDeviceAddress = address;
     this._selectPreferredRoute((this._result?.devices || []).find((device) => device.address === address));
     await this._loadDeviceDraft(address);
-    this._zoom = 1;
+    this._fitZoom();
     if (render) {
       this._render();
       this._paint();
@@ -305,54 +305,27 @@ export const devicesMixin = {
       const preferredPath = paths[0];
       const previewSize = this._devicePreviewSize(device);
       const temporarilyUnseen = !!device.temporarily_unseen;
+      const editing = this._editingDeviceAddress === device.address;
       return `<article class="display-tile ${selected ? "selected" : ""} ${temporarilyUnseen ? "is-stale" : ""}" data-device-card-open="${this._escape(device.address)}" role="button" tabindex="0" aria-label="Vybrat ${this._escape(this._deviceTitle(device))}">
         <header class="display-tile-header">
           <span class="display-online-dot ${temporarilyUnseen ? "stale" : ""}" title="${temporarilyUnseen ? "Displej nebyl zachycen v posledním krátkém skenu" : "Displej je dostupný"}"></span>
           <div class="display-tile-identity"><strong>${this._escape(this._deviceTitle(device))}</strong><span>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</span></div>
+          <button class="tile-icon-btn" data-device-rename="${this._escape(device.address)}" title="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}" aria-label="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>
           ${mode === "list" ? `<span class="display-resolution"><ha-icon icon="mdi:aspect-ratio"></ha-icon>${previewSize.width} × ${previewSize.height}</span>` : ""}
         </header>
+        ${editing ? `<div class="device-name-edit display-name-edit"><input data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Například Kuchyň"><button data-device-name-save="${this._escape(device.address)}" title="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button><button class="secondary" data-device-name-cancel title="Zrušit"><ha-icon icon="mdi:close"></ha-icon></button></div>` : ""}
         ${mode === "list" ? "" : `<div class="display-preview-slot">${this._renderDevicePreview(device, mode)}</div>`}
         <div class="display-health">
           <div class="display-health-item display-battery-item" title="Odhad zbývající kapacity CR2450${Number.isFinite(battery.voltage) ? ` · ${this._formatBatteryVoltage(battery.voltage)}` : ""}"><small>Baterie</small>${this._renderBatterySegments(battery.percent)}<strong>${Number.isFinite(battery.percent) ? `${battery.percent}%` : "-"}</strong></div>
           <div class="display-health-item display-signal-item" title="Síla signálu"><small>Signál</small>${this._renderSignalBars(rssi)}<strong class="signal-value ${this._signalClass(rssi)}">${Number.isFinite(rssi) ? `${rssi}dBm` : "-"}</strong></div>
           <div class="display-health-item display-health-route ${temporarilyUnseen ? "stale" : ""}"><ha-icon class="health-icon" icon="${temporarilyUnseen ? "mdi:bluetooth-off" : preferredPath?.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon>${!temporarilyUnseen && preferredPath?.type !== "local" ? `<ha-icon class="health-icon health-icon-sub" icon="mdi:bluetooth" title="Displej je za gatewayí připojen přes BLE"></ha-icon>` : ""}<span class="health-route-text"><small>Připojeno</small><strong>${temporarilyUnseen ? "Čekám na signál" : this._escape(preferredPath?.name || "Nedostupné")}</strong></span></div>
         </div>
+        <footer class="display-tile-actions">
+          <button class="secondary tile-find-btn" data-flash-identify="${this._escape(device.address)}" ${this._identifySending ? "disabled" : ""} title="Displej blikne, aby šel dohledat"><ha-icon icon="mdi:flare"></ha-icon></button>
+          <button data-select-device="${this._escape(device.address)}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Otevřít v designeru</button>
+        </footer>
       </article>`;
     }).join("")}</div>`;
-  },
-
-  _renderDeviceDetailPanel() {
-    const device = this._device();
-    if (!device) {
-      return `<div class="device-detail-empty"><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon><h2>Vyber displej</h2><p>Klikni na některou z karet vlevo a zobrazí se tu jeho náhled a nastavení.</p></div>`;
-    }
-    const address = device.address;
-    const editing = this._editingDeviceAddress === address;
-    const battery = this._batteryInfo(device);
-    const rssi = Number(device.rssi);
-    const preferredPath = (device.paths || [])[0];
-    const previewSize = this._devicePreviewSize(device);
-    const temporarilyUnseen = !!device.temporarily_unseen;
-    return `
-      <div class="device-detail-title"><span class="display-online-dot ${temporarilyUnseen ? "stale" : ""}"></span><strong>${this._escape(this._deviceTitle(device))}</strong></div>
-      <div class="device-detail-preview">${this._renderDevicePreview(device, "large")}</div>
-      <div class="device-detail-info">
-        <div class="device-detail-info-row"><small>Model</small><strong>${this._escape(device.model || "eInk displej")}</strong></div>
-        <div class="device-detail-info-row"><small>Adresa</small><strong>${this._escape(address)}</strong></div>
-        <div class="device-detail-info-row"><small>Rozlišení</small><strong>${previewSize.width} × ${previewSize.height}</strong></div>
-        <div class="device-detail-info-row"><small>Baterie</small><strong>${Number.isFinite(battery.percent) ? `${battery.percent} %${Number.isFinite(battery.voltage) ? ` · ${this._formatBatteryVoltage(battery.voltage)}` : ""}` : "-"}</strong></div>
-        <div class="device-detail-info-row"><small>Signál</small><strong>${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>
-        <div class="device-detail-info-row"><small>Připojení</small><strong>${temporarilyUnseen ? "Čekám na signál" : this._escape(preferredPath?.name || "Nedostupné")}</strong></div>
-      </div>
-      ${editing ? `<div class="device-name-edit"><input data-device-name-input="${this._escape(address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Například Kuchyň"><button data-device-name-save="${this._escape(address)}" title="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button><button class="secondary" data-device-name-cancel title="Zrušit"><ha-icon icon="mdi:close"></ha-icon></button></div>` : `
-      <div class="device-detail-actions">
-        <button class="secondary" data-device-rename="${this._escape(address)}"><ha-icon icon="mdi:pencil-outline"></ha-icon>${device.display_name ? "Přejmenovat" : "Pojmenovat"}</button>
-        <button class="secondary" data-flash-identify="${this._escape(address)}" ${this._identifySending ? "disabled" : ""}><ha-icon icon="mdi:flare"></ha-icon>${this._identifySending ? "Blikám..." : "Najdi mě"}</button>
-        <button data-select-device="${this._escape(address)}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Otevřít v designeru</button>
-      </div>
-      ${this._identifyResult ? `<span class="led-result ${this._identifyResult.ok ? "good" : "bad"}"><ha-icon icon="${this._identifyResult.ok ? "mdi:check-circle-outline" : "mdi:alert-circle-outline"}"></ha-icon>${this._identifyResult.ok ? "Displej by měl bliknout." : this._escape(this._identifyResult.error || "Nepodařilo se displej rozblikat.")}</span>` : ""}
-      <details class="designer-advanced-device device-detail-led"><summary><ha-icon icon="mdi:led-on"></ha-icon><span><strong>RGB dioda</strong><small>Barva a režim indikační diody</small></span><ha-icon icon="mdi:chevron-down"></ha-icon></summary>${this._renderRgbLedControl(device, true)}</details>`}
-    `;
   },
 
   _batteryInfo(device) {

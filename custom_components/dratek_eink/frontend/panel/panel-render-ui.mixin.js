@@ -172,23 +172,45 @@ export const renderUiMixin = {
         .zoom-controls{display:flex;gap:4px;align-items:center}.zoom-chip{padding:3px 8px;font-size:11px;font-weight:700;border-radius:5px;border:1px solid var(--divider-color);background:var(--secondary-background-color);color:var(--primary-text-color);cursor:pointer;box-shadow:none;min-height:28px}.zoom-chip.active,.zoom-chip:hover{background:var(--primary-color,#0f766e);color:#fff;border-color:var(--primary-color,#0f766e)}.pixel-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:6px;background:rgba(15,118,110,.12);color:#0f766e;border:1px solid rgba(15,118,110,.3);font-size:11px;font-weight:850}
         .display-tile.is-stale{border-style:dashed}.display-online-dot.stale{background:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.16)}.display-health-route.stale ha-icon{color:#f59e0b}
         .topbar{padding:8px 18px}.extension-logo{width:42px;height:42px}.version-badge{margin-left:0;flex:0 0 auto}
-        .devices-layout{display:grid;grid-template-columns:2fr 1fr;gap:14px;align-items:start}
-        @media(max-width:900px){.devices-layout{grid-template-columns:1fr}}
-        .device-detail-panel{display:flex;flex-direction:column;gap:14px;position:sticky;top:14px}
-        .device-detail-empty{display:grid;place-items:center;text-align:center;gap:8px;padding:44px 16px;color:var(--secondary-text-color)}
-        .device-detail-preview{display:grid;place-items:center;padding:8px 4px;min-height:200px}
-        .device-detail-preview .device-preview-wrap{width:100%;height:100%;min-height:0;min-width:0}
-        .device-detail-preview .device-preview-fit{width:100%;height:100%;min-width:0;min-height:0;display:grid;place-items:center;container-type:size}
-        .device-detail-preview .device-preview-bezel{width:min(100%,calc(100cqh * var(--frame-ratio,2.15)));height:min(100%,calc(100cqw / var(--frame-ratio,2.15)))}
-        .device-detail-title{display:flex;align-items:center;gap:8px;padding:0 2px}
-        .device-detail-title strong{font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .device-detail-info{display:grid;gap:6px;padding:2px}
-        .device-detail-info-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:10px;background:var(--secondary-background-color)}
-        .device-detail-info-row small{color:var(--secondary-text-color);text-transform:uppercase;letter-spacing:.05em;font-size:9px;font-weight:800}
-        .device-detail-info-row strong{font-size:12px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:12px}
-        .device-detail-actions{display:grid;gap:8px}
+        .display-tile-header{grid-template-columns:auto minmax(0,1fr) auto}
+        .tile-icon-btn{display:grid;place-items:center;width:28px;height:28px;padding:0;border-radius:9px;background:var(--secondary-background-color);color:var(--secondary-text-color);box-shadow:none;flex:0 0 auto}
+        .tile-icon-btn:hover{background:rgba(0,162,165,.12);color:var(--dratek-teal-dark)}
+        .tile-icon-btn ha-icon{--mdc-icon-size:16px}
+        .display-tile-actions{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;margin:0 -14px;padding:0 14px 14px}
+        .display-tile-actions button{min-height:36px;border-radius:11px;font-size:11px;gap:6px}
+        .tile-find-btn{width:36px;padding:0;display:grid;place-items:center}
+        .display-grid.density-large .display-tile-actions{margin:0 -15px;padding:0 15px 15px}
+        .display-grid.density-compact .display-tile-actions{margin:0 -11px;padding:0 11px 11px}
+        .display-grid.density-compact .display-tile-actions button{min-height:32px;font-size:10px}
+        .display-grid.density-list .display-tile-actions{margin:0;padding:0}
+        .display-name-edit{margin:0 0 4px;grid-template-columns:minmax(0,1fr) auto auto;gap:6px}
+        .display-name-edit input{min-width:0;font-size:12px;padding:6px 8px}
+        .display-name-edit button{min-height:32px;padding:6px 9px}
+        .display-grid .display-tile-header,.display-grid.density-large .display-tile-header,.display-grid.density-compact .display-tile-header{grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:auto}
+        .display-grid .display-tile-actions,.display-grid.density-large .display-tile-actions,.display-grid.density-compact .display-tile-actions{grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto}
+        .display-grid .tile-icon-btn{min-height:28px}
+        .tabbar{width:100%;border-radius:14px;padding:6px;overflow-x:auto}
+        .tabbar .tab{flex:1 1 0;justify-content:center;white-space:nowrap;border-radius:10px}
+        .display-tile{gap:6px}
+        .display-tile-header{gap:6px;align-items:start}
+        .display-tile-identity strong{font-size:12px;line-height:1.25}
+        .display-tile-identity span{font-size:9px;line-height:1.2;margin-top:1px}
+        .display-tile-actions button{min-height:32px;font-size:10px;white-space:nowrap;padding:6px 8px}
+        .display-tile-actions button ha-icon{--mdc-icon-size:15px}
+        .tile-find-btn{width:32px}
+        .display-health{padding:6px 10px 4px;gap:4px}
+        .display-grid.density-large .display-health{padding:6px 11px 4px}
+        .display-grid.density-compact .display-health{padding:5px 8px 3px}
+        .display-grid:not(.density-list) .display-battery-item,.display-grid:not(.density-list) .display-signal-item{grid-template-rows:auto 15px auto;gap:1px}
+        .display-health-item small{font-size:8px}
+        .display-grid:not(.density-list) .display-health-item strong{font-size:9px}
+        .display-health-route .health-route-text strong{font-size:9px}
+        .battery-segments{height:15px}
+        .battery-segments span{height:8px}
+        .signal-bars{height:15px}
+        .signal-bars span:nth-child(1){height:5px}.signal-bars span:nth-child(2){height:8px}.signal-bars span:nth-child(3){height:11px}.signal-bars span:nth-child(4){height:14px}
         .display-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
-        .display-tile{grid-template-rows:auto minmax(80px,1fr) auto;aspect-ratio:1/1;padding:14px 14px 0;cursor:pointer}
+        .display-tile{grid-template-rows:auto minmax(0,1fr) auto auto;aspect-ratio:1/1;padding:14px 14px 0;cursor:pointer}
         .display-tile-header{gap:8px}
         .display-tile-identity strong{font-size:13px}
         .display-tile-identity span{font-size:10px}
@@ -198,8 +220,8 @@ export const renderUiMixin = {
         .display-preview-slot .device-preview-wrap{width:100%;height:100%;min-height:0;min-width:0}
         .display-preview-slot .device-preview-fit{width:100%;height:100%;min-width:0;min-height:0;display:grid;place-items:center;container-type:size}
         .display-preview-slot .device-preview-bezel{width:min(100%,calc(100cqh * var(--frame-ratio,2.15)));height:min(100%,calc(100cqw / var(--frame-ratio,2.15)))}
-        .display-grid.density-large .display-tile{grid-template-rows:auto minmax(100px,1fr) auto;aspect-ratio:1/1;padding:15px 15px 0}
-        .display-grid.density-compact .display-tile{grid-template-rows:auto minmax(60px,1fr) auto;aspect-ratio:1/1;padding:11px 11px 0}
+        .display-grid.density-large .display-tile{grid-template-rows:auto minmax(0,1fr) auto auto;aspect-ratio:1/1;padding:15px 15px 0}
+        .display-grid.density-compact .display-tile{grid-template-rows:auto minmax(0,1fr) auto auto;aspect-ratio:1/1;padding:11px 11px 0}
         .display-grid.density-list .display-tile{aspect-ratio:auto;padding:12px 14px}
         .display-health{margin:0 -14px;padding:8px 10px 6px;background:none;gap:6px}
         .display-health-item{border-top:0;align-items:center}
@@ -253,18 +275,14 @@ export const renderUiMixin = {
         </div>
         <div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezené displeje</button><button class="tab ${this._activeTab === "topology" ? "active" : ""}" data-tab="topology"><ha-icon icon="mdi:lan"></ha-icon>Mapa připojení</button><button class="tab ${this._activeTab === "queue" ? "active" : ""}" data-tab="queue"><ha-icon icon="mdi:tray-full"></ha-icon>Fronta zápisu${this._queue.queued || this._queue.writing ? `<span class="pill warn">${this._queue.queued + this._queue.writing}</span>` : ""}</button><button class="tab ${this._activeTab === "gateways" ? "active" : ""}" data-tab="gateways"><ha-icon icon="mdi:router-wireless"></ha-icon>Gatewaye</button><button class="tab ${this._activeTab === "custom" ? "active" : ""}" data-tab="custom"><ha-icon icon="mdi:puzzle-plus-outline"></ha-icon>Designer HA prvků</button></div>
         <div style="${this._activeTab === "devices" ? "" : "display:none"}">
-          <div class="devices-layout">
-            <div class="devices-main">
-              <div class="card devices-toolbar-card"><div class="devices-toolbar">
-                <div class="device-search"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" id="deviceSearch" placeholder="Hledat podle názvu, adresy, velikosti..." value="${this._escape(this._deviceSearchQuery || "")}"></div>
-                <button id="resetDevicesView" class="reset-icon-btn ${this._loading ? "spinning" : ""}" ${this._loading ? "disabled" : ""} title="Resetovat hledání a obnovit"><ha-icon icon="mdi:refresh"></ha-icon></button>
-                <div class="devices-toolbar-spacer"></div>
-                ${this._renderDensityControl("devices", this._deviceViewMode, result.devices.length)}
-              </div></div>
-              <div class="card">${this._renderDeviceCards(result.devices, device && device.address)}</div>
-            </div>
-            <aside class="device-detail-panel card">${this._renderDeviceDetailPanel()}</aside>
-          </div>
+          <div class="card devices-toolbar-card"><div class="devices-toolbar">
+            <div class="device-search"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" id="deviceSearch" placeholder="Hledat podle názvu, adresy, velikosti..." value="${this._escape(this._deviceSearchQuery || "")}"></div>
+            <button id="resetDevicesView" class="reset-icon-btn ${this._loading ? "spinning" : ""}" ${this._loading ? "disabled" : ""} title="Resetovat hledání a obnovit"><ha-icon icon="mdi:refresh"></ha-icon></button>
+            <div class="devices-toolbar-spacer"></div>
+            ${this._renderDensityControl("devices", this._deviceViewMode, result.devices.length)}
+          </div></div>
+          ${this._identifyResult ? `<div class="card"><span class="led-result ${this._identifyResult.ok ? "good" : "bad"}"><ha-icon icon="${this._identifyResult.ok ? "mdi:check-circle-outline" : "mdi:alert-circle-outline"}"></ha-icon>${this._identifyResult.ok ? "Displej by měl bliknout." : this._escape(this._identifyResult.error || "Nepodařilo se displej rozblikat.")}</span></div>` : ""}
+          <div class="card">${this._renderDeviceCards(result.devices, device && device.address)}</div>
         </div>
         <div style="${this._activeTab === "topology" ? "" : "display:none"}">
           <div class="card connection-map-card"><div class="section-title"><div><h2>Mapa připojení</h2><small>Každá gateway je zobrazena pouze jednou se všemi připojenými displeji.</small></div><span class="pill muted">${topologyGatewayCount} ${topologyGatewayCount === 1 ? "gateway" : "gatewayů"} · ${result.devices.length} ${result.devices.length === 1 ? "displej" : "displejů"}</span></div>${this._renderTopology(result.devices, topologyGroups)}</div>
@@ -285,7 +303,7 @@ export const renderUiMixin = {
         ${this._renderSendResult()}
         <div class="editor-shell">
           ${this._renderToolSidebar()}
-          <div class="card workspace-card"><div class="canvas-head"><div class="canvas-title"><span><ha-icon icon="mdi:monitor-edit"></ha-icon></span><div><strong>Pracovní plocha (eInk 1:1)</strong><small>${size.width} × ${size.height} px · ${this._orientation === "portrait" ? "na výšku" : "na šířku"}</small></div></div><div class="canvas-meta"><div class="zoom-controls"><button class="zoom-chip ${this._zoom === 1 ? "active" : ""}" id="btnZoom100" title="Zobrazit 1:1 v přesném rozlišení displeje (100 %)">1:1 (100 %)</button><button class="zoom-chip ${this._zoom === 1.5 ? "active" : ""}" id="btnZoom150" title="Zvětšení 150 %">150 %</button><button class="zoom-chip ${this._zoom === 2 ? "active" : ""}" id="btnZoom200" title="Zvětšení 200 %">200 %</button><button class="zoom-chip" id="btnZoomFit" title="Přizpůsobit oknu">Fit</button></div><span class="pixel-badge" title="Ostrý pixelový rozklad 1:1 bez antialiasingu"><ha-icon icon="mdi:grid"></ha-icon> 1:1 Pixely</span><span><ha-icon icon="mdi:palette-swatch-outline"></ha-icon>eInk barvy</span></div></div><div class="workspace"><div class="designer-device-bezel ${this._isPe29Device(device) ? "designer-device-pe29" : ""} designer-device-${this._orientation}" style="--designer-frame-ratio:${designerFrameRatio.toFixed(4)};--designer-frame-width:${designerFrameWidth}px;--designer-screen-width:${designerScreenWidth}px;--designer-screen-height:${designerScreenHeight}px">${this._isPe29Device(device) ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>${this._renderDeviceBarcode(device?.physical_code || "00.00.00.00", this._orientation === "portrait")}</span>` : `<span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>`}<div class="designer-device-screen"><canvas id="editor" width="${size.width}" height="${size.height}"></canvas><canvas id="editorSelection" width="${size.width}" height="${size.height}" aria-hidden="true"></canvas></div></div></div></div>
+          <div class="card workspace-card"><div class="canvas-head"><div class="canvas-title"><span><ha-icon icon="mdi:monitor-edit"></ha-icon></span><div><strong>Pracovní plocha (eInk 1:1)</strong><small>${size.width} × ${size.height} px · ${this._orientation === "portrait" ? "na výšku" : "na šířku"}</small></div></div><div class="canvas-meta"><div class="zoom-controls">${[1, 2, 3, 4].map((step) => `<button class="zoom-chip ${this._zoom === step ? "active" : ""}" data-zoom-step="${step}" title="${step === 1 ? "Zobrazit 1:1 v přesném rozlišení displeje" : `Zvětšení ${step}× (každý pixel displeje = ${step}×${step} pixelů na obrazovce)`}">${step === 1 ? "1:1" : `${step}×`}</button>`).join("")}<button class="zoom-chip" id="btnZoomFit" title="Co největší celočíselné zvětšení, které se vejde do okna">Fit</button></div><span class="pixel-badge" title="Ostrý pixelový rozklad 1:1 bez antialiasingu"><ha-icon icon="mdi:grid"></ha-icon> 1:1 Pixely</span><span><ha-icon icon="mdi:palette-swatch-outline"></ha-icon>eInk barvy</span></div></div><div class="workspace"><div class="designer-device-bezel ${this._isPe29Device(device) ? "designer-device-pe29" : ""} designer-device-${this._orientation}" style="--designer-frame-ratio:${designerFrameRatio.toFixed(4)};--designer-frame-width:${designerFrameWidth}px;--designer-screen-width:${designerScreenWidth}px;--designer-screen-height:${designerScreenHeight}px">${this._isPe29Device(device) ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>${this._renderDeviceBarcode(device?.physical_code || "00.00.00.00", this._orientation === "portrait")}</span>` : `<span class="designer-device-code">${this._escape(device?.physical_code || "00.00.00.00")}</span>`}<div class="designer-device-screen"><canvas id="editor" width="${size.width}" height="${size.height}"></canvas><canvas id="editorSelection" width="${size.width}" height="${size.height}" aria-hidden="true"></canvas></div></div></div></div>
           <div class="card right properties-panel"><div class="section-title inspector-title"><div class="inspector-title-main"><span class="inspector-object-icon"><ha-icon icon="${object ? this._objectIcon(object) : "mdi:tune-variant"}"></ha-icon></span><div><h2>Inspector</h2><small>${object ? this._escape(this._objectLabel(object, this._objects.indexOf(object))) : "Vlastnosti objektu"}</small></div></div><span class="pill muted">${object ? this._escape(object.type) : "bez výběru"}</span></div>${this._renderProperties(object)}</div>
         </div>
         </div>
@@ -456,7 +474,6 @@ export const renderUiMixin = {
     if (!this._toolsMenuOpen) return "";
     return `<div class="ribbon-menu tools-menu designer-device-settings">
       <div class="designer-menu-section"><h2>Pozadí návrhu</h2><p>Vyberte základní barvu eInk obrazovky.</p><div class="background-picker"><button data-background="white" class="${this._backgroundColor === "white" ? "selected" : ""}" title="Bílé pozadí návrhu"><span class="color-swatch white"></span>Bílé</button><button data-background="black" class="${this._backgroundColor === "black" ? "selected" : ""}" title="Černé pozadí návrhu"><span class="color-swatch black"></span>Černé</button><button data-background="red" class="${this._backgroundColor === "red" ? "selected" : ""}" title="Červené pozadí návrhu"><span class="color-swatch red"></span>Červené</button></div></div>
-      <details class="designer-advanced-device"><summary><ha-icon icon="mdi:led-on"></ha-icon><span><strong>RGB dioda zařízení</strong><small>Doplňkové nastavení displeje</small></span><ha-icon icon="mdi:chevron-down"></ha-icon></summary>${this._renderRgbLedControl(device, true)}</details>
     </div>`;
   },
 

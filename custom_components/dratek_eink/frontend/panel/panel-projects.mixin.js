@@ -236,7 +236,7 @@ export const projectsMixin = {
       this._selectedIds = [];
       this._nextId = this._nextObjectId();
       this._fileMenuOpen = false;
-      this._zoom = 1;
+      this._fitZoom();
       this._render();
       this._paint();
       this._scheduleDraftSave();

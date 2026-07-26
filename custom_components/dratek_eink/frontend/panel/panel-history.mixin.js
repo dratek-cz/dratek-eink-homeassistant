@@ -44,7 +44,7 @@ export const historyMixin = {
     this._projectName = snapshot.projectName || "Novy navrh";
     this._selectedProjectId = snapshot.selectedProjectId || "";
     this._nextId = snapshot.nextId || this._nextObjectId();
-    this._zoom = 1;
+    this._fitZoom();
     this._render();
     this._paint();
     this._scheduleDraftSave();
