@@ -4,6 +4,17 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.122
+
+- přidáno tlačítko **Odeslat výběr**, které odešle do displeje jen oblast se zvolenými objekty; oblast se automaticky zarovná na osm řádků podle protokolu
+- částečný refresh lze nyní vyzkoušet na všech modelech displejů; celý návrh lze dál odeslat původním způsobem
+- opraveno riziko ztráty uloženého návrhu při výpadku spojení s Home Assistantem během načítání
+- rozpracované změny se při opuštění panelu uloží okamžitě, i když ještě nevypršel čas automatického ukládání
+- opraveny ovladače zoomu a přidány celočíselné úrovně **1× až 4×** a **Fit**
+- vyhledávání displejů už při psaní neztrácí fokus ani pozici kurzoru
+- zjednodušeny karty displejů, upraveno zobrazení baterie, signálu a cesty připojení a obnoveno otevření designeru kliknutím na kartu
+- opraveno zarovnání ikony aktivního displeje v designeru
+
 ## Novinky ve verzi 0.1.121
 
 - hlavní stránka **Nalezené displeje** má nový přehledný panel s vyhledáváním displejů podle názvu, adresy i rozlišení

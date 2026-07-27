@@ -2,6 +2,23 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.122] - 2026-07-27
+
+### Částečný refresh displeje
+- Přidáno tlačítko **Odeslat výběr**, které z vybraných objektů vypočítá ohraničující oblast, zarovná ji na osm řádků vyžadovaných protokolem a odešle pouze tento výřez.
+- Částečný refresh lze nyní vyzkoušet na všech modelech displejů; model 2635 zůstává označený jako hardwarově potvrzený. Odeslání celého návrhu se nemění.
+
+### Spolehlivější ukládání návrhů
+- Chyba při načítání uloženého návrhu už nevymaže plátno ani nepřepíše uložený obsah prázdným návrhem.
+- Nevyřízené automatické uložení se při opuštění panelu okamžitě dokončí.
+
+### Opravy designeru a přehledu displejů
+- Opraveny nefunkční ovladače zoomu; dostupné jsou celočíselné úrovně **1× až 4×** a režim **Fit**, který zvolí největší celočíselné zvětšení vhodné pro pracovní plochu.
+- Vyhledávací pole v přehledu displejů po překreslení panelu zachová fokus i pozici kurzoru.
+- Zjednodušeno rozložení karet displejů, upraveno zobrazení baterie, signálu a cesty připojení a obnoveno otevření designeru kliknutím na kartu.
+- Odstraněno nefunkční ovládání RGB LED z uživatelského rozhraní; backendová služba zůstává zachována.
+- Opraveno zarovnání ikony aktivního displeje v designeru.
+
 ## [0.1.121] - 2026-07-26
 
 ### Redesign hlavní stránky displejů
