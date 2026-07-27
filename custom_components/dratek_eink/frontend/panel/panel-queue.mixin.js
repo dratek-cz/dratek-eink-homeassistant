@@ -13,7 +13,7 @@ export const queueMixin = {
       this._paint();
     }
     window.clearTimeout(this._queuePollTimer);
-    if (this._activeTab === "queue") {
+    if (this._activeTab === "queue" || this._activeTab === "devices") {
       this._queuePollTimer = window.setTimeout(() => this._loadQueue(true), 1500);
     }
   },

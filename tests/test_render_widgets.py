@@ -45,6 +45,23 @@ class RenderWidgetTests(unittest.TestCase):
         }
         return render._render_bound_layer(binding, "layer")
 
+    def test_auto_fit_text_grows_with_its_area(self):
+        common = {
+            "fontSize": 12,
+            "minFontSize": 10,
+            "autoFit": True,
+            "textAlign": "center",
+            "verticalAlign": "middle",
+            "color": "black",
+        }
+        small = render._render_bound_text({**common, "w": 80, "h": 30}, "Text")
+        large = render._render_bound_text({**common, "w": 180, "h": 70}, "Text")
+        small_bbox = small.getbbox()
+        large_bbox = large.getbbox()
+        self.assertIsNotNone(small_bbox)
+        self.assertIsNotNone(large_bbox)
+        self.assertGreater(large_bbox[3] - large_bbox[1], small_bbox[3] - small_bbox[1])
+
     def test_all_dynamic_widget_types_render(self):
         objects = []
         for index, widget_type in enumerate(

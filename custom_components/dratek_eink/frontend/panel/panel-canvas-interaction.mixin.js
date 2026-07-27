@@ -305,15 +305,17 @@ export const canvasInteractionMixin = {
     for (let i = this._objects.length - 1; i >= 0; i--) {
       const object = this._objects[i];
       const box = this._box(object);
-      if (point.x >= box.x && point.x <= box.x + box.w && point.y >= box.y && point.y <= box.y + box.h) return object;
+      const localPoint = this._unrotatePoint(point, box, Number(object.rotation || 0));
+      if (localPoint.x >= box.x && localPoint.x <= box.x + box.w && localPoint.y >= box.y && localPoint.y <= box.y + box.h) return object;
     }
     return null;
   },
 
   _handleAt(point, object) {
     const box = this._box(object);
-    const radius = Math.max(8, 16 / this._zoom);
-    return this._handles(box).find((handle) => Math.abs(point.x - handle.x) <= radius && Math.abs(point.y - handle.y) <= radius);
+    const uiUnit = this._selectionUiUnit();
+    const radius = 9 * uiUnit;
+    return this._handles(box, Number(object.rotation || 0), uiUnit).find((handle) => Math.hypot(point.x - handle.x, point.y - handle.y) <= radius);
   },
 
   _handleHitTest(point) {
@@ -420,7 +422,7 @@ export const canvasInteractionMixin = {
       canvas.style.cursor = this._hitTest(this._canvasPoint(event)) ? "move" : "default";
       return;
     }
-    canvas.style.cursor = hit.handle.name === "top-left" || hit.handle.name === "bottom-right" ? "nwse-resize" : "nesw-resize";
+    canvas.style.cursor = hit.handle.cursor;
   },
 
   _resizeObject(object, snapshot, dx, dy, handle) {
@@ -445,6 +447,11 @@ export const canvasInteractionMixin = {
       }
       return;
     }
+    const rotation = Number(snapshot.rotation || 0) * Math.PI / 180;
+    const globalDx = dx;
+    const globalDy = dy;
+    dx = globalDx * Math.cos(rotation) + globalDy * Math.sin(rotation);
+    dy = -globalDx * Math.sin(rotation) + globalDy * Math.cos(rotation);
     let x = snapshot.x;
     let y = snapshot.y;
     let w = snapshot.w;
@@ -472,27 +479,43 @@ export const canvasInteractionMixin = {
       x = handle.includes("left") ? anchorX - w : anchorX;
       y = handle.includes("top") ? anchorY - h : anchorY;
     }
-    object.x = this._snapValue(x);
-    object.y = this._snapValue(y);
+    const originalCenterX = snapshot.x + snapshot.w / 2;
+    const originalCenterY = snapshot.y + snapshot.h / 2;
+    const localCenterShiftX = x + w / 2 - originalCenterX;
+    const localCenterShiftY = y + h / 2 - originalCenterY;
+    const centerShiftX = localCenterShiftX * Math.cos(rotation) - localCenterShiftY * Math.sin(rotation);
+    const centerShiftY = localCenterShiftX * Math.sin(rotation) + localCenterShiftY * Math.cos(rotation);
+    object.x = this._snapValue(originalCenterX + centerShiftX - w / 2);
+    object.y = this._snapValue(originalCenterY + centerShiftY - h / 2);
     object.w = this._snapValue(w);
     object.h = this._snapValue(h);
   },
 
   _drawSelection(ctx) {
+    const uiUnit = this._selectionUiUnit();
     ctx.save();
     ctx.strokeStyle = "#009999";
     ctx.fillStyle = "#fff";
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.5 * uiUnit;
     for (const object of this._objects.filter((item) => this._selectedIds.includes(item.id) && !item.hidden)) {
       const box = this._box(object);
-      ctx.setLineDash([4, 2]);
-      ctx.strokeRect(box.x, box.y, box.w, box.h);
+      const rotation = Number(object.rotation || 0);
+      const radians = rotation * Math.PI / 180;
+      const centerX = box.x + box.w / 2;
+      const centerY = box.y + box.h / 2;
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate(radians);
+      ctx.setLineDash([4 * uiUnit, 2 * uiUnit]);
+      ctx.strokeRect(-box.w / 2, -box.h / 2, box.w, box.h);
       ctx.setLineDash([]);
-      const handles = this._handles(box);
+      ctx.restore();
+      const handles = this._handles(box, rotation, uiUnit);
       const rotHandle = handles.find((h) => h.name === "rotate");
+      const topHandle = handles.find((h) => h.name === "top-middle");
       if (rotHandle && !object.locked) {
         ctx.beginPath();
-        ctx.moveTo(box.x + box.w / 2, box.y);
+        ctx.moveTo(topHandle.x, topHandle.y);
         ctx.lineTo(rotHandle.x, rotHandle.y);
         ctx.strokeStyle = "rgba(0, 153, 153, 0.6)";
         ctx.stroke();
@@ -500,7 +523,7 @@ export const canvasInteractionMixin = {
       for (const handle of handles) {
         if (object.locked && handle.name === "rotate") continue;
         const isRotate = handle.name === "rotate";
-        const size = isRotate ? Math.max(10, 14 / this._zoom) : Math.max(7, 10 / this._zoom);
+        const size = (isRotate ? 12 : 9) * uiUnit;
         const half = size / 2;
         ctx.beginPath();
         if (isRotate) {
@@ -522,7 +545,7 @@ export const canvasInteractionMixin = {
       const y = Math.min(this._drag.start.y, this._drag.current.y);
       const w = Math.abs(this._drag.current.x - this._drag.start.x);
       const h = Math.abs(this._drag.current.y - this._drag.start.y);
-      ctx.setLineDash([5, 3]);
+      ctx.setLineDash([5 * uiUnit, 3 * uiUnit]);
       ctx.strokeStyle = "#009999";
       ctx.fillStyle = "rgba(0, 153, 153, 0.12)";
       ctx.fillRect(x, y, w, h);
@@ -537,9 +560,34 @@ export const canvasInteractionMixin = {
     return { x: Number(object.x || 0), y: Number(object.y || 0), w: Math.max(1, Number(object.w || 1)), h: Math.max(1, Number(object.h || 1)) };
   },
 
-  _handles(box) {
+  _selectionUiUnit() {
+    const canvas = this.shadowRoot?.querySelector("#editorSelection") || this.shadowRoot?.querySelector("#editor");
+    const rect = canvas?.getBoundingClientRect();
+    if (!canvas || !rect || rect.width <= 0 || rect.height <= 0) return 1;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return Math.max(0.1, (scaleX + scaleY) / 2);
+  },
+
+  _rotatePointAround(point, center, rotation = 0) {
+    if (!rotation) return { ...point };
+    const radians = Number(rotation) * Math.PI / 180;
+    const dx = point.x - center.x;
+    const dy = point.y - center.y;
+    return {
+      x: center.x + dx * Math.cos(radians) - dy * Math.sin(radians),
+      y: center.y + dx * Math.sin(radians) + dy * Math.cos(radians),
+    };
+  },
+
+  _unrotatePoint(point, box, rotation = 0) {
+    return this._rotatePointAround(point, { x: box.x + box.w / 2, y: box.y + box.h / 2 }, -rotation);
+  },
+
+  _handles(box, rotation = 0, uiUnit = 1) {
     const cx = box.x + box.w / 2;
     const cy = box.y + box.h / 2;
+    const center = { x: cx, y: cy };
     return [
       { name: "top-left", x: box.x, y: box.y, cursor: "nwse-resize" },
       { name: "top-middle", x: cx, y: box.y, cursor: "ns-resize" },
@@ -549,7 +597,7 @@ export const canvasInteractionMixin = {
       { name: "bottom-middle", x: cx, y: box.y + box.h, cursor: "ns-resize" },
       { name: "bottom-left", x: box.x, y: box.y + box.h, cursor: "nesw-resize" },
       { name: "middle-left", x: box.x, y: cy, cursor: "ew-resize" },
-      { name: "rotate", x: cx, y: box.y - 18, cursor: "grab" },
-    ];
+      { name: "rotate", x: cx, y: box.y - 18 * uiUnit, cursor: "grab" },
+    ].map((handle) => ({ ...handle, ...this._rotatePointAround(handle, center, rotation) }));
   },
 };

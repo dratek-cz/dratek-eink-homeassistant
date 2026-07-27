@@ -68,13 +68,85 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('class="layer-row-actions"', self.source)
         self.assertNotIn('<div class="card layers-panel">', self.source)
 
-    def test_display_health_keeps_gateway_in_the_same_row(self):
+    def test_display_health_uses_aligned_original_indicators_in_one_row(self):
         self.assertIn(
-            ".display-health{grid-template-columns:minmax(70px,.72fr) "
-            "minmax(70px,.72fr) minmax(120px,1.56fr)",
+            ".display-health{grid-template-columns:minmax(0,1fr) "
+            "minmax(0,1fr) minmax(0,1.25fr)",
             self.source,
         )
-        self.assertIn(".display-health-route{grid-column:auto", self.source)
+        self.assertIn("${this._renderBatterySegments(battery.percent)}", self.source)
+        self.assertIn("${this._renderSignalBars(rssi)}", self.source)
+        self.assertIn('class="health-route-icons"', self.source)
+        self.assertIn(
+            ".display-health-route>.health-route-icons{grid-column:1;grid-row:auto}",
+            self.source,
+        )
+        self.assertIn("width:95%;max-width:370px", self.source)
+        self.assertIn("grid-template-rows:1fr!important", self.source)
+        self.assertIn("gap:6px", self.source)
+        self.assertIn("overflow:visible;text-overflow:clip", self.source)
+        self.assertIn("white-space:normal;overflow-wrap:anywhere", self.source)
+        self.assertIn('class="health-icon health-icon-sub"', self.source)
+        self.assertIn(".display-grid:not(.density-list) .display-health{padding:3px 0 2px}", self.source)
+        self.assertIn(".display-grid:not(.density-list) .display-health-item{min-height:32px", self.source)
+
+    def test_brand_and_primary_navigation_stay_visible_while_scrolling(self):
+        self.assertIn('<div class="app-header">', self.source)
+        self.assertIn(".app-header{position:sticky", self.source)
+        self.assertIn("z-index:40;top:0", self.source)
+        self.assertIn(
+            ".tabbar .tab[data-tab=custom]{margin-left:0;border-left:0;"
+            "box-shadow:none;filter:none;transform:none}",
+            self.source,
+        )
+
+    def test_device_rename_is_inline_and_flash_button_is_removed(self):
+        self.assertIn('class="display-name-inline"', self.source)
+        self.assertIn('input?.select();', self.source)
+        self.assertIn('event.key === "Enter"', self.source)
+        self.assertIn('event.key === "Escape"', self.source)
+        self.assertIn('class="tile-icon-btn tile-save-name-btn"', self.source)
+        self.assertIn('data-device-name-save=', self.source)
+        self.assertIn('this._saveDeviceName(address, input?.value', self.source)
+        self.assertNotIn('data-flash-identify=', self.source)
+        self.assertNotIn('class="device-name-edit display-name-edit"', self.source)
+
+    def test_designer_device_summary_is_one_compact_row(self):
+        self.assertIn(".designer-device-strip{display:flex!important", self.source)
+        self.assertIn("min-height:44px", self.source)
+        self.assertIn("overflow-x:auto;overflow-y:hidden", self.source)
+        self.assertIn(
+            ".designer-device-strip>.designer-device-primary{flex:1 0 210px",
+            self.source,
+        )
+        self.assertIn("--designer-summary-icon-size:18px", self.source)
+        self.assertIn(".designer-device-strip ha-icon .mdi{display:block", self.source)
+        self.assertIn("width:27px;height:16px;min-width:27px;min-height:16px", self.source)
+        self.assertIn("width:22px;height:16px;min-width:22px;min-height:16px", self.source)
+        self.assertIn(".designer-device-strip .designer-device-meter .signal-bars span:nth-child(4){height:14px}", self.source)
+
+    def test_designer_command_cards_match_the_page_visual_system(self):
+        for label in ("Soubor", "Proměnné", "Mapování", "Pozadí a zařízení", "Zobrazení"):
+            self.assertIn(f"<strong>{label}</strong>", self.source)
+        self.assertIn('class="designer-command-card', self.source)
+        self.assertIn('class="designer-command-icon"', self.source)
+        self.assertIn('class="designer-command-copy"', self.source)
+        self.assertIn('class="designer-command-actions"', self.source)
+        self.assertIn('class="designer-menu-head"', self.source)
+        self.assertIn(".designer-commandbar .designer-command-group{display:grid", self.source)
+        self.assertIn(".designer-command-card.active", self.source)
+
+    def test_400x300_display_uses_the_supplied_physical_frame(self):
+        self.assertIn("_isLarge400Device", self.source)
+        self.assertIn('class="device-preview-bezel ${pe29Layout ? "device-preview-pe29" : ""} ${large400Layout ? "device-preview-large400" : ""}', self.source)
+        self.assertIn('"designer-device-large400"', self.source)
+        self.assertIn(".device-preview-large400 .device-preview-empty{background:repeating-linear-gradient", self.source)
+        self.assertIn("background:#fff;mix-blend-mode:normal", self.source)
+        self.assertIn("1039 / 898", self.source)
+        self.assertIn('class="device-large400-bottom-band"', self.source)
+        self.assertIn('class="device-large400-mac"', self.source)
+        self.assertIn("_renderDeviceBarcode(address, true)", self.source)
+        self.assertIn(".device-large400-label .device-preview-barcode.horizontal", self.source)
 
     def test_connection_map_uses_plain_lines(self):
         self.assertIn(".connection-device:after{display:none}", self.source)
@@ -94,6 +166,29 @@ class FrontendToolLibraryTests(unittest.TestCase):
             self.source,
         )
 
+    def test_designer_selection_is_screen_scaled_and_rotates_with_objects(self):
+        self.assertIn("_selectionUiUnit()", self.source)
+        self.assertIn("canvas.width / rect.width", self.source)
+        self.assertIn("ctx.lineWidth = 1.5 * uiUnit", self.source)
+        self.assertIn("ctx.setLineDash([4 * uiUnit, 2 * uiUnit])", self.source)
+        self.assertIn("_handles(box, Number(object.rotation || 0), uiUnit)", self.source)
+        self.assertIn("_unrotatePoint(point, box, Number(object.rotation || 0))", self.source)
+        self.assertIn("dx = globalDx * Math.cos(rotation)", self.source)
+        self.assertIn("ctx.rotate(radians)", self.source)
+
+    def test_text_auto_fit_uses_the_complete_object_area(self):
+        self.assertIn("const measurementSize = 100", self.source)
+        self.assertIn("const widthFit = availableW * measurementSize / measuredWidth", self.source)
+        self.assertIn("const heightFit = availableH / Math.max(1, lines.length * 1.08)", self.source)
+        self.assertIn("Math.floor(Math.min(widthFit, heightFit))", self.source)
+        self.assertIn("object._renderedFontSize = fontSize", self.source)
+        self.assertIn("key === \"fontSize\" && object.autoFit !== false", self.source)
+        self.assertIn("object.autoFit !== false && Number.isFinite(Number(object._renderedFontSize))", self.source)
+        self.assertIn('class="row text-font-row"', self.source)
+        self.assertIn('if (changedProp === "fontSize")', self.source)
+        self.assertIn("object.autoFit = false", self.source)
+        self.assertIn(".properties-panel .text-font-row", self.source)
+
     def test_device_cards_scale_an_already_quantized_native_canvas(self):
         self.assertIn('const nativeCanvas = document.createElement("canvas");', self.source)
         self.assertIn("ctx.imageSmoothingEnabled = false;", self.source)
@@ -101,6 +196,9 @@ class FrontendToolLibraryTests(unittest.TestCase):
             "ctx.drawImage(nativeCanvas, 0, 0, canvas.width, canvas.height);",
             self.source,
         )
+        self.assertIn("Math.min(previewWidth, previewWidth / frameRatio) * 0.06", self.source)
+        self.assertIn("Math.min(designerFrameWidth, designerFrameWidth / designerFrameRatio) * 0.06", self.source)
+        self.assertIn("border-radius:var(--device-frame-radius", self.source)
 
     def test_designer_and_backend_share_the_bundled_display_font(self):
         self.assertIn('value="DRATEK eInk Sans" disabled', self.source)
@@ -135,6 +233,15 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("this._paintCachedCanonicalPreview(canvas);", self.source)
         self.assertIn("this._backendPreviewAddress !== address", self.source)
         self.assertIn("context.imageSmoothingEnabled = false;", self.source)
+
+    def test_writing_device_card_has_live_orange_status(self):
+        self.assertIn('job.status === "writing"', self.source)
+        self.assertIn('"is-writing"', self.source)
+        self.assertIn("Právě se nahrává", self.source)
+        self.assertIn('role="status" aria-live="polite"', self.source)
+        self.assertIn(".display-tile.is-writing", self.source)
+        self.assertIn(".display-writing-state", self.source)
+        self.assertIn('this._activeTab === "queue" || this._activeTab === "devices"', self.source)
 
 
 if __name__ == "__main__":

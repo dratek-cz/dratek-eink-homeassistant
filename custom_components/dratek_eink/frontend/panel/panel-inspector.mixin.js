@@ -121,7 +121,10 @@ export const inspectorMixin = {
       window.clearTimeout(this._queuePollTimer);
       this._render();
       this._paint();
-      if (this._activeTab === "devices") this._scheduleAutomaticScan(60);
+      if (this._activeTab === "devices") {
+        this._scheduleAutomaticScan(60);
+        await this._loadQueue(true);
+      }
       if (this._activeTab === "queue") {
         await this._loadQueue(true);
       }
@@ -158,11 +161,36 @@ export const inspectorMixin = {
       this._editingDeviceAddress = device.address;
       this._deviceNameDraft = device.display_name || "";
       this._render();
-      window.requestAnimationFrame(() => this.shadowRoot.querySelector(`[data-device-name-input="${device.address}"]`)?.focus());
+      window.requestAnimationFrame(() => {
+        const input = this.shadowRoot.querySelector(`[data-device-name-input="${device.address}"]`);
+        input?.focus();
+        input?.select();
+      });
     }));
-    this.shadowRoot.querySelectorAll("[data-device-name-input]").forEach((input) => input.addEventListener("input", (event) => { this._deviceNameDraft = event.target.value; }));
-    this.shadowRoot.querySelectorAll("[data-device-name-save]").forEach((button) => button.addEventListener("click", () => this._saveDeviceName(button.dataset.deviceNameSave)));
-    this.shadowRoot.querySelectorAll("[data-device-name-cancel]").forEach((button) => button.addEventListener("click", () => { this._editingDeviceAddress = ""; this._deviceNameDraft = ""; this._render(); this._paint(); }));
+    this.shadowRoot.querySelectorAll("[data-device-name-input]").forEach((input) => {
+      input.addEventListener("click", (event) => event.stopPropagation());
+      input.addEventListener("input", (event) => { this._deviceNameDraft = event.target.value; });
+      input.addEventListener("keydown", (event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+          event.preventDefault();
+          this._saveDeviceName(input.dataset.deviceNameInput, input.value);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          this._editingDeviceAddress = "";
+          this._deviceNameDraft = "";
+          this._render();
+          this._paint();
+        }
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-device-name-save]").forEach((button) => button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const address = button.dataset.deviceNameSave;
+      const input = this.shadowRoot.querySelector(`[data-device-name-input="${address}"]`);
+      this._saveDeviceName(address, input?.value ?? this._deviceNameDraft);
+    }));
     this.shadowRoot.querySelector("#sendDesign")?.addEventListener("click", () => this._sendDesign());
     this.shadowRoot.querySelector("#sendPartialDesign")?.addEventListener("click", () => this._sendPartialDesign());
     this.shadowRoot.querySelector("#sendGatewayDesign")?.addEventListener("click", () => this._sendDesignViaGateway());
@@ -199,7 +227,6 @@ export const inspectorMixin = {
       const value = event.target.closest(".field")?.querySelector("label strong");
       if (value) value.textContent = String(this._rgbLed.flashTime);
     }));
-    this.shadowRoot.querySelectorAll("[data-flash-identify]").forEach((button) => button.addEventListener("click", () => this._flashIdentify(button.dataset.flashIdentify)));
     this.shadowRoot.querySelector("#fileMenuToggle")?.addEventListener("click", () => { this._fileMenuOpen = !this._fileMenuOpen; this._viewMenuOpen = false; this._toolsMenuOpen = false; this._layoutMenuOpen = false; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#fileMenuClose")?.addEventListener("click", () => { this._fileMenuOpen = false; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#viewMenuToggle")?.addEventListener("click", () => { this._viewMenuOpen = !this._viewMenuOpen; this._fileMenuOpen = false; this._toolsMenuOpen = false; this._layoutMenuOpen = false; this._render(); this._paint(); });
@@ -636,7 +663,7 @@ export const inspectorMixin = {
     if (object.type === "text") {
       const content = this._inspectorSection("mdi:format-text", object.statusIcons ? "Signalizace" : "Text", `
         <div class="field"><label><ha-icon icon="mdi:text-box-edit-outline"></ha-icon>Obsah</label><input data-prop="text" value="${this._escape(object.text)}"></div>
-        <div class="row"><div class="field"><label><ha-icon icon="mdi:format-size"></ha-icon>Velikost</label><input data-prop="fontSize" type="number" min="${this._textMinFontSize(object)}" value="${object.fontSize}"></div><div class="field"><label><ha-icon icon="mdi:format-font"></ha-icon>Font displeje</label><input value="DRATEK eInk Sans" disabled title="Stejný vestavěný font používá náhled i backend při automatické aktualizaci."></div></div>
+        <div class="row text-font-row"><div class="field"><label><ha-icon icon="mdi:format-size"></ha-icon>Velikost</label><input data-prop="fontSize" type="number" min="${this._textMinFontSize(object)}" value="${object.autoFit !== false && Number.isFinite(Number(object._renderedFontSize)) ? object._renderedFontSize : object.fontSize}"></div><div class="field"><label><ha-icon icon="mdi:format-font"></ha-icon>Font displeje</label><input value="DRATEK eInk Sans" disabled title="Stejný vestavěný font používá náhled i backend při automatické aktualizaci."></div></div>
         ${this._inspectorSegments("textAlign", object.textAlign || "center", [{ value: "left", label: "Vlevo", icon: "mdi:format-align-left" }, { value: "center", label: "Na střed", icon: "mdi:format-align-center" }, { value: "right", label: "Vpravo", icon: "mdi:format-align-right" }], "Vodorovné zarovnání")}
         ${this._inspectorSegments("verticalAlign", object.verticalAlign || "middle", [{ value: "top", label: "Nahoru", icon: "mdi:format-vertical-align-top" }, { value: "middle", label: "Na střed", icon: "mdi:format-vertical-align-center" }, { value: "bottom", label: "Dolů", icon: "mdi:format-vertical-align-bottom" }], "Svislé zarovnání")}
         ${object.statusIcons ? `<div class="row"><div class="field"><label>Symbol zapnuto</label><input data-prop="statusOnSymbol" value="${this._escape(object.statusOnSymbol || "●")}"></div><div class="field"><label>Symbol vypnuto</label><input data-prop="statusOffSymbol" value="${this._escape(object.statusOffSymbol || "○")}"></div></div><div class="field"><label>Hodnoty zapnutého stavu</label><input data-prop="statusOnValues" value="${this._escape(object.statusOnValues || "on,true,1,open,home")}"><small>Oddělte čárkou, například on, true, open.</small></div>` : ""}`, true);
@@ -750,6 +777,12 @@ export const inspectorMixin = {
       else object[key] = input.value;
     });
     if (object.type === "text") {
+      if (changedProp === "fontSize") {
+        object.autoFit = false;
+        delete object._renderedFontSize;
+        const autoFitInput = this.shadowRoot.querySelector('[data-prop="autoFit"]');
+        if (autoFitInput) autoFitInput.checked = false;
+      }
       object.minFontSize = this._textMinFontSize(object);
       object.fontSize = Math.max(object.minFontSize, Number(object.fontSize || object.minFontSize));
       if (object.fontSize !== oldFontSize) {
@@ -786,7 +819,10 @@ export const inspectorMixin = {
     const object = this._selectedObject();
     if (!object) return;
     this.shadowRoot.querySelectorAll("[data-prop]").forEach((input) => {
-      const value = object[input.dataset.prop];
+      const key = input.dataset.prop;
+      const value = key === "fontSize" && object.autoFit !== false && Number.isFinite(Number(object._renderedFontSize))
+        ? object._renderedFontSize
+        : object[key];
       if (input.type === "checkbox") input.checked = !!value;
       else input.value = value ?? "";
     });

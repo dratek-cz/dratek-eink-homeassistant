@@ -171,6 +171,7 @@ class DratekEinkPanel extends HTMLElement {
       this._loadProjects();
       this._loadCustomElements();
       this._loadGateways();
+      this._loadQueue();
       this._loadSerialPorts();
       if (this._result?.devices?.length) {
         this._loadDevicePreviewDrafts(this._result.devices).then(() => {

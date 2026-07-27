@@ -89,16 +89,18 @@ export const drawBasicMixin = {
     const minFontSize = Math.max(10, Number(object.minFontSize || this._readableMinFontSize()));
     let fontSize = Math.max(minFontSize, Number(object.fontSize || 24));
     if (object.autoFit !== false) {
-      for (let attempt = 0; attempt < 40; attempt++) {
-        ctx.font = `${weight}${fontSize}px ${family}, Arial, sans-serif`;
-        const lineHeight = fontSize * 1.08;
-        const maxWidth = Math.max(...lines.map((line) => ctx.measureText(line || " ").width));
-        if (maxWidth <= availableW && lineHeight * lines.length <= availableH) break;
-        fontSize -= 1;
-        if (fontSize <= minFontSize) {
-          fontSize = minFontSize;
-          break;
-        }
+      const measurementSize = 100;
+      ctx.font = `${weight}${measurementSize}px ${family}, Arial, sans-serif`;
+      const measuredWidth = Math.max(...lines.map((line) => ctx.measureText(line || " ").width), 1);
+      const widthFit = availableW * measurementSize / measuredWidth;
+      const heightFit = availableH / Math.max(1, lines.length * 1.08);
+      fontSize = Math.max(minFontSize, Math.floor(Math.min(widthFit, heightFit)));
+    }
+    if (this._selectedIds?.includes(object.id)) {
+      object._renderedFontSize = fontSize;
+      const fontSizeInput = this.shadowRoot?.querySelector('[data-prop="fontSize"]');
+      if (fontSizeInput && fontSizeInput !== fontSizeInput.getRootNode()?.activeElement) {
+        fontSizeInput.value = String(fontSize);
       }
     }
     ctx.font = `${weight}${fontSize}px ${family}, Arial, sans-serif`;

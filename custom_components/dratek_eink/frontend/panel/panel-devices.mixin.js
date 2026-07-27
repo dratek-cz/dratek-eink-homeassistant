@@ -81,9 +81,10 @@ export const devicesMixin = {
     return device.display_name || device.physical_code || device.address;
   },
 
-  async _saveDeviceName(address) {
+  async _saveDeviceName(address, name = this._deviceNameDraft) {
     const device = (this._result?.devices || []).find((item) => item.address === address);
     if (!device || !this._hass) return;
+    this._deviceNameDraft = String(name ?? "");
     try {
       const result = await this._hass.callWS({
         type: "dratek_eink/devices/set_name",
@@ -136,6 +137,12 @@ export const devicesMixin = {
 
   _isPe29Device(device = this._device()) {
     return !!device && [40, 43, 46, 48, 51].includes(Number(device.sdk_type));
+  },
+
+  _isLarge400Device(device = this._device()) {
+    if (!device) return false;
+    const size = this._baseDisplaySize(device);
+    return Math.max(size.width, size.height) === 400 && Math.min(size.width, size.height) === 300;
   },
 
   _transformOptions() {
@@ -257,14 +264,18 @@ export const devicesMixin = {
     const canvasWidth = Math.max(40, Math.round(sourceWidth * scale));
     const canvasHeight = Math.max(28, Math.round(sourceHeight * scale));
     const portraitLayout = sourceHeight > sourceWidth;
-    const frameRatio = Math.max(0.48, Math.min(3.7, (sourceWidth / sourceHeight) * (portraitLayout ? 0.95 : 1 / 0.95)));
+    const large400Layout = this._isLarge400Device(device);
+    const frameRatio = large400Layout
+      ? (portraitLayout ? 898 / 1039 : 1039 / 898)
+      : Math.max(0.48, Math.min(3.7, (sourceWidth / sourceHeight) * (portraitLayout ? 0.95 : 1 / 0.95)));
     const previewWidth = Math.max(sizing.minWidth, Math.min(sizing.maxWidth, Math.round(sizing.targetHeight * frameRatio)));
+    const previewFrameRadius = Math.max(4, Math.min(18, Math.round(Math.min(previewWidth, previewWidth / frameRatio) * 0.06)));
     const pe29Layout = this._isPe29Device(device);
     const physicalCode = device.physical_code || "00.00.00.00";
     return `<div class="device-preview-wrap preview-${previewMode}">
-      <div class="device-preview-fit" style="--frame-ratio:${frameRatio.toFixed(4)};--preview-width:${previewWidth}px">
-        <div class="device-preview-bezel ${pe29Layout ? "device-preview-pe29" : ""} ${portraitLayout ? "device-preview-portrait" : "device-preview-landscape"}" title="Náhled ${this._escape(sourceWidth)} × ${this._escape(sourceHeight)}">
-          ${pe29Layout ? `<span class="device-preview-identification"><span class="device-preview-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, portraitLayout)}</span>` : `<span class="device-preview-code">${this._escape(physicalCode)}</span>`}
+      <div class="device-preview-fit" style="--frame-ratio:${frameRatio.toFixed(4)};--preview-width:${previewWidth}px;--device-frame-radius:${previewFrameRadius}px">
+        <div class="device-preview-bezel ${pe29Layout ? "device-preview-pe29" : ""} ${large400Layout ? "device-preview-large400" : ""} ${portraitLayout ? "device-preview-portrait" : "device-preview-landscape"}" title="Náhled ${this._escape(sourceWidth)} × ${this._escape(sourceHeight)}">
+          ${large400Layout ? `<span class="device-large400-top-band"></span><span class="device-large400-bottom-band"><span class="device-large400-label">${this._renderDeviceBarcode(address, true)}<span class="device-large400-mac">${this._escape(address)}</span></span></span>` : pe29Layout ? `<span class="device-preview-identification"><span class="device-preview-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, portraitLayout)}</span>` : `<span class="device-preview-code">${this._escape(physicalCode)}</span>`}
           <div class="device-preview-screen">
             <canvas data-device-preview="${this._escape(address)}" data-source-width="${sourceWidth}" data-source-height="${sourceHeight}" width="${canvasWidth}" height="${canvasHeight}"></canvas>
             ${draft ? "" : `<div class="device-preview-empty"><span><ha-icon icon="mdi:image-outline"></ha-icon>Prázdný návrh</span></div>`}
@@ -306,22 +317,28 @@ export const devicesMixin = {
       const previewSize = this._devicePreviewSize(device);
       const temporarilyUnseen = !!device.temporarily_unseen;
       const editing = this._editingDeviceAddress === device.address;
-      return `<article class="display-tile ${selected ? "selected" : ""} ${temporarilyUnseen ? "is-stale" : ""}" data-device-card-open="${this._escape(device.address)}" role="button" tabindex="0" aria-label="Vybrat ${this._escape(this._deviceTitle(device))}">
+      const writingJob = (this._queue?.jobs || []).find((job) =>
+        job.status === "writing"
+        && String(job.address || "").toUpperCase() === String(device.address || "").toUpperCase()
+      );
+      return `<article class="display-tile ${selected ? "selected" : ""} ${temporarilyUnseen ? "is-stale" : ""} ${writingJob ? "is-writing" : ""}" data-device-card-open="${this._escape(device.address)}" role="button" tabindex="0" aria-label="Vybrat ${this._escape(this._deviceTitle(device))}">
         <header class="display-tile-header">
           <span class="display-online-dot ${temporarilyUnseen ? "stale" : ""}" title="${temporarilyUnseen ? "Displej nebyl zachycen v posledním krátkém skenu" : "Displej je dostupný"}"></span>
-          <div class="display-tile-identity"><strong>${this._escape(this._deviceTitle(device))}</strong><span>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</span></div>
-          <button class="tile-icon-btn" data-device-rename="${this._escape(device.address)}" title="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}" aria-label="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>
+          <div class="display-tile-identity ${editing ? "is-editing" : ""}">${editing ? `<input class="display-name-inline" data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Například Kuchyň" aria-label="Název displeje">` : `<strong>${this._escape(this._deviceTitle(device))}</strong>`}<span>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</span></div>
+          ${editing ? `<button class="tile-icon-btn tile-save-name-btn" data-device-name-save="${this._escape(device.address)}" title="Uložit název" aria-label="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button>` : `<button class="tile-icon-btn" data-device-rename="${this._escape(device.address)}" title="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}" aria-label="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>`}
           ${mode === "list" ? `<span class="display-resolution"><ha-icon icon="mdi:aspect-ratio"></ha-icon>${previewSize.width} × ${previewSize.height}</span>` : ""}
+          ${writingJob ? `<div class="display-writing-state" role="status" aria-live="polite"><ha-icon icon="mdi:progress-upload"></ha-icon><strong>Právě se nahrává</strong><span>${this._escape(writingJob.transport_name || writingJob.operation || "Zápis do displeje")}</span></div>` : ""}
         </header>
-        ${editing ? `<div class="device-name-edit display-name-edit"><input data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Například Kuchyň"><button data-device-name-save="${this._escape(device.address)}" title="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button><button class="secondary" data-device-name-cancel title="Zrušit"><ha-icon icon="mdi:close"></ha-icon></button></div>` : ""}
         ${mode === "list" ? "" : `<div class="display-preview-slot">${this._renderDevicePreview(device, mode)}</div>`}
         <div class="display-health">
           <div class="display-health-item display-battery-item" title="Baterie${Number.isFinite(battery.percent) ? ` ${battery.percent} %` : ""}${Number.isFinite(battery.voltage) ? ` · ${this._formatBatteryVoltage(battery.voltage)}` : ""}">${this._renderBatterySegments(battery.percent)}<strong class="health-value battery-value level-${this._batteryLevel(battery.percent)}">${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></div>
           <div class="display-health-item display-signal-item" title="Síla signálu${Number.isFinite(rssi) ? ` ${rssi} dBm` : ""}">${this._renderSignalBars(rssi)}<strong class="health-value signal-value level-${this._signalLevel(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>
-          <div class="display-health-item display-health-route ${temporarilyUnseen ? "stale" : ""}"><ha-icon class="health-icon" icon="${temporarilyUnseen ? "mdi:bluetooth-off" : preferredPath?.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon>${!temporarilyUnseen && preferredPath?.type !== "local" ? `<ha-icon class="health-icon health-icon-sub" icon="mdi:bluetooth" title="Displej je za gatewayí připojen přes BLE"></ha-icon>` : ""}<span class="health-route-text"><small>Připojeno</small><strong>${temporarilyUnseen ? "Čekám na signál" : this._escape(preferredPath?.name || "Nedostupné")}</strong></span></div>
+          <div class="display-health-item display-health-route ${temporarilyUnseen ? "stale" : ""}">
+            <span class="health-route-icons"><ha-icon class="health-icon" icon="${temporarilyUnseen ? "mdi:bluetooth-off" : preferredPath?.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon>${!temporarilyUnseen && preferredPath?.type !== "local" ? `<ha-icon class="health-icon health-icon-sub" icon="mdi:bluetooth" title="Displej je za gatewayí připojen přes BLE"></ha-icon>` : ""}</span>
+            <span class="health-route-text"><small>Připojeno</small><strong>${temporarilyUnseen ? "Čekám na signál" : this._escape(preferredPath?.name || "Nedostupné")}</strong></span>
+          </div>
         </div>
         <footer class="display-tile-actions">
-          <button class="secondary tile-find-btn" data-flash-identify="${this._escape(device.address)}" ${this._identifySending ? "disabled" : ""} title="Displej blikne, aby šel dohledat"><ha-icon icon="mdi:flare"></ha-icon></button>
           <button data-select-device="${this._escape(device.address)}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Otevřít v designeru</button>
         </footer>
       </article>`;

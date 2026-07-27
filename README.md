@@ -4,6 +4,17 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.123
+
+- přepracované karty displejů s větším náhledem a přesně zarovnanými indikátory baterie, signálu a připojení
+- karta právě zapisovaného displeje se světle oranžově zvýrazní a zobrazí stav **Právě se nahrává**
+- přímé přejmenování displeje v názvu karty s potvrzením pomocí fajfky
+- nový fyzický náhled displeje 400 × 300 se štítkem, čárovým kódem a MAC adresou
+- konzistentní radiusy rámečků mezi malým náhledem a editorem
+- vylepšený výběr, změna velikosti a rotace objektů v designeru
+- automatické přizpůsobení velikosti textu oblasti s možností ručního přepsání
+- sjednocené ovládací panely designeru a kompaktní informační řádek aktivního displeje
+
 ## Novinky ve verzi 0.1.122
 
 - přidáno tlačítko **Odeslat výběr**, které odešle do displeje jen oblast se zvolenými objekty; oblast se automaticky zarovná na osm řádků podle protokolu

@@ -89,15 +89,28 @@ def _fit_text_font(
     bold: bool,
     auto_fit: bool,
 ) -> tuple[ImageFont.FreeTypeFont | ImageFont.ImageFont, int, int]:
-    font_size = max(minimum_size, requested_size)
-    while True:
+    if not auto_fit:
+        font_size = max(minimum_size, requested_size)
+        font = load_font(font_size, bold)
+        return font, font_size, max(1, round(font_size * 1.08))
+
+    lower = max(1, minimum_size)
+    upper = max(lower, min(1024, max(width, height) * 2))
+    best_size = lower
+    while lower <= upper:
+        font_size = (lower + upper) // 2
         font = load_font(font_size, bold)
         boxes = [draw.textbbox((0, 0), line or " ", font=font) for line in lines]
         max_width = max((box[2] - box[0] for box in boxes), default=0)
         line_height = max(1, round(font_size * 1.08))
-        if not auto_fit or (max_width <= width and line_height * len(lines) <= height) or font_size <= minimum_size:
-            return font, font_size, line_height
-        font_size -= 1
+        if max_width <= width and line_height * len(lines) <= height:
+            best_size = font_size
+            lower = font_size + 1
+        else:
+            upper = font_size - 1
+    best_size = max(minimum_size, best_size)
+    font = load_font(best_size, bold)
+    return font, best_size, max(1, round(best_size * 1.08))
 
 
 def _draw_centered_text(

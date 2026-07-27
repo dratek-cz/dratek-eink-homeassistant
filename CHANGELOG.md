@@ -2,6 +2,23 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.123] - 2026-07-27
+
+### Nové karty displejů a stav nahrávání
+- Karty na hlavní obrazovce mají kompaktnější a přesně zarovnané indikátory baterie, signálu a připojení, větší prostor pro náhled a přímé přejmenování v názvu karty.
+- Probíhající zápis se zobrazuje přímo na příslušné kartě světle oranžovým zvýrazněním a stavem **Právě se nahrává**.
+- Náhledy používají radius úměrný své velikosti, takže rámečky vypadají stejně v kartě i v editoru.
+- Doplněn fyzický náhled displeje 400 × 300 se spodním štítkem, čárovým kódem a MAC adresou.
+
+### Designer
+- Přepracován výběr objektů, škálování a rotace tak, aby ovládací prvky měly konzistentní velikost při každém rozlišení displeje.
+- Text se automaticky přizpůsobuje velikosti oblasti; ručně zadaná velikost písma automatické přizpůsobení vypne a správně se propíše do panelu vlastností.
+- Zjednodušen horní informační pruh aktivního displeje a sjednoceny panely Soubor, Proměnné, Mapování, Pozadí a zařízení a Zobrazení.
+
+### Vývojářské
+- Rozšířen lokální testovací harness a regresní testy frontendu a vykreslování.
+- Přidán lokální preview server a GitHub Actions validace.
+
 ## [0.1.122] - 2026-07-27
 
 ### Částečný refresh displeje
