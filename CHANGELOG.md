@@ -2,6 +2,21 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.125] - 2026-07-27
+
+### Mapa připojení a gatewaye
+- Ruční volba gateway se přesunula z hlavních karet displejů do Mapy připojení.
+- Displej lze v mapě přetáhnout na konkrétní gateway; ruční přiřazení je oranžově zvýrazněné a uzamčené, přičemž kliknutím na zámek se obnoví automatický výběr nejsilnější gateway.
+- Mapa zobrazuje také prázdné nakonfigurované gatewaye a živé stavy nahrávání i následného vykreslování displeje.
+
+### Přenos a stav displeje
+- Po odeslání posledního bloku se BLE spojení uvolní bez čekání na volitelné potvrzení vykreslení, takže fronta může okamžitě pokračovat dalším displejem.
+- Po úspěšném přenosu se karta displeje na několik sekund zeleně zvýrazní stavem, že se displej vykresluje.
+- Firmware gateway byl aktualizován na `0.1.42-gateway` pro ESP32 i ESP32-S3.
+
+### Vzhled panelu
+- Hlavička používá nové společné logo DRÁTEK.CZ eInk, zarovnané zcela vlevo bez přidaného stínu, pozadí nebo zaoblení.
+
 ## [0.1.124] - 2026-07-27
 
 ### Konzistentní náhledy a designer

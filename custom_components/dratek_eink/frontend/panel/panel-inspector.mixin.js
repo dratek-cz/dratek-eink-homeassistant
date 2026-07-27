@@ -128,6 +128,9 @@ export const inspectorMixin = {
       if (this._activeTab === "queue") {
         await this._loadQueue(true);
       }
+      if (this._activeTab === "topology") {
+        await this._loadQueue(true);
+      }
       if (this._activeTab === "gateways") {
         await this._loadGateways(true);
       }
@@ -191,11 +194,48 @@ export const inspectorMixin = {
       const input = this.shadowRoot.querySelector(`[data-device-name-input="${address}"]`);
       this._saveDeviceName(address, input?.value ?? this._deviceNameDraft);
     }));
-    this.shadowRoot.querySelectorAll("[data-device-gateway]").forEach((select) => {
-      select.addEventListener("click", (event) => event.stopPropagation());
-      select.addEventListener("change", (event) => {
+    this.shadowRoot.querySelectorAll("[data-topology-device]").forEach((card) => {
+      card.addEventListener("dragstart", (event) => {
+        const address = card.dataset.topologyDevice;
+        this._topologyDraggingAddress = address;
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", address);
+        card.classList.add("is-dragging");
+      });
+      card.addEventListener("dragend", () => {
+        this._topologyDraggingAddress = "";
+        card.classList.remove("is-dragging");
+        this.shadowRoot.querySelectorAll(".connection-group.is-drag-over").forEach((group) => group.classList.remove("is-drag-over"));
+      });
+      card.addEventListener("keydown", (event) => {
+        if (event.target !== card || !["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        openDeviceInDesigner(card.dataset.topologyDevice);
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-topology-gateway]").forEach((group) => {
+      group.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        group.classList.add("is-drag-over");
+      });
+      group.addEventListener("dragleave", (event) => {
+        if (!group.contains(event.relatedTarget)) group.classList.remove("is-drag-over");
+      });
+      group.addEventListener("drop", async (event) => {
+        event.preventDefault();
         event.stopPropagation();
-        this._saveDeviceGateway(select.dataset.deviceGateway, event.target.value);
+        const address = this._topologyDraggingAddress || event.dataTransfer.getData("text/plain");
+        this._topologyDraggingAddress = "";
+        group.classList.remove("is-drag-over");
+        if (address) await this._saveDeviceGateway(address, group.dataset.topologyGateway);
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-topology-unlock]").forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        await this._saveDeviceGateway(button.dataset.topologyUnlock, "");
       });
     });
     this.shadowRoot.querySelector("#sendDesign")?.addEventListener("click", () => this._sendDesign());

@@ -342,7 +342,7 @@ export const devicesMixin = {
 
   _renderDeviceCards(devices, selectedAddress) {
     if (!devices.length) {
-      return `<div class="empty-state"><img class="empty-logo" src="/dratek_eink_panel/dratek-eink-logo.png?v=${DRATEK_EINK_VERSION}" alt="DRATEK.CZ eInk"><h2>${this._loading ? "Hledám displeje v okolí" : "V okolí zatím není žádný displej"}</h2><p>${this._loading ? "Scan se spustil automaticky po otevření panelu." : "Hledání můžeš kdykoliv zopakovat tlačítkem Obnovit."}</p></div>`;
+      return `<div class="empty-state"><img class="empty-logo" src="${this._frontendAssetUrl("dratek-eink-logo.png")}" alt="DRATEK.CZ eInk"><h2>${this._loading ? "Hledám displeje v okolí" : "V okolí zatím není žádný displej"}</h2><p>${this._loading ? "Scan se spustil automaticky po otevření panelu." : "Hledání můžeš kdykoliv zopakovat tlačítkem Obnovit."}</p></div>`;
     }
     const query = String(this._deviceSearchQuery || "").trim().toLowerCase();
     const filtered = query ? devices.filter((device) => this._deviceMatchesSearch(device, query)) : devices;
@@ -363,20 +363,19 @@ export const devicesMixin = {
         job.status === "writing"
         && String(job.address || "").toUpperCase() === String(device.address || "").toUpperCase()
       );
-      const configuredGateways = (this._gateways || []).length
-        ? this._gateways
-        : paths.filter((path) => path.type === "gateway").map((path) => ({ id: path.id, name: path.name, host: path.host }));
-      const selectedGatewayId = device.gateway_selection === "manual" ? String(device.selected_gateway_id || "") : "";
-      const gatewayOptions = configuredGateways.map((gateway) =>
-        `<option value="${this._escape(gateway.id)}" ${String(gateway.id) === selectedGatewayId ? "selected" : ""}>${this._escape(gateway.name || gateway.host || "DRATEK eInk gateway")}</option>`
-      ).join("");
-      return `<article class="display-tile ${selected ? "selected" : ""} ${temporarilyUnseen ? "is-stale" : ""} ${writingJob ? "is-writing" : ""}" data-device-card-open="${this._escape(device.address)}" role="button" tabindex="0" aria-label="Vybrat ${this._escape(this._deviceTitle(device))}">
+      const recentlySucceededJob = writingJob ? null : (this._queue?.jobs || []).find((job) =>
+        job.status === "succeeded"
+        && String(job.address || "").toUpperCase() === String(device.address || "").toUpperCase()
+        && Number(job.finished_at || 0) * 1000 >= Date.now() - 7000
+      );
+      return `<article class="display-tile ${selected ? "selected" : ""} ${temporarilyUnseen ? "is-stale" : ""} ${writingJob ? "is-writing" : ""} ${recentlySucceededJob ? "is-uploaded" : ""}" data-device-card-open="${this._escape(device.address)}" role="button" tabindex="0" aria-label="Vybrat ${this._escape(this._deviceTitle(device))}">
         <header class="display-tile-header">
           <span class="display-online-dot ${temporarilyUnseen ? "stale" : ""}" title="${temporarilyUnseen ? "Displej nebyl zachycen v posledním krátkém skenu" : "Displej je dostupný"}"></span>
           <div class="display-tile-identity ${editing ? "is-editing" : ""}">${editing ? `<input class="display-name-inline" data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Například Kuchyň" aria-label="Název displeje">` : `<strong>${this._escape(this._deviceTitle(device))}</strong>`}<span>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</span></div>
           ${editing ? `<button class="tile-icon-btn tile-save-name-btn" data-device-name-save="${this._escape(device.address)}" title="Uložit název" aria-label="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button>` : `<button class="tile-icon-btn" data-device-rename="${this._escape(device.address)}" title="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}" aria-label="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>`}
           ${mode === "list" ? `<span class="display-resolution"><ha-icon icon="mdi:aspect-ratio"></ha-icon>${previewSize.width} × ${previewSize.height}</span>` : ""}
           ${writingJob ? `<div class="display-writing-state" role="status" aria-live="polite"><ha-icon icon="mdi:progress-upload"></ha-icon><strong>Právě se nahrává</strong><span>${this._escape(writingJob.transport_name || writingJob.operation || "Zápis do displeje")}</span></div>` : ""}
+          ${recentlySucceededJob ? `<div class="display-uploaded-state" role="status" aria-live="polite"><ha-icon icon="mdi:check-circle"></ha-icon><strong>Úspěšně nahráno</strong><span>Displej se vykresluje</span></div>` : ""}
         </header>
         ${mode === "list" ? "" : `<div class="display-preview-slot">${this._renderDevicePreview(device, mode)}</div>`}
         <div class="display-health">
@@ -387,7 +386,6 @@ export const devicesMixin = {
             <span class="health-route-text"><small>Připojeno</small><strong>${temporarilyUnseen ? "Čekám na signál" : this._escape(preferredPath?.name || "Nedostupné")}</strong></span>
           </div>
         </div>
-        <label class="display-gateway-selector"><ha-icon icon="mdi:router-wireless-settings"></ha-icon><span>Gateway</span><select data-device-gateway="${this._escape(device.address)}" aria-label="Gateway pro ${this._escape(this._deviceTitle(device))}"><option value="" ${selectedGatewayId ? "" : "selected"}>Automaticky (nejsilnější signál)</option>${gatewayOptions}</select></label>
         <footer class="display-tile-actions">
           <button data-select-device="${this._escape(device.address)}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Otevřít v designeru</button>
         </footer>

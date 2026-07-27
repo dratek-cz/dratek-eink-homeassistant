@@ -359,13 +359,45 @@ export const gatewayMixin = {
 
   _topologyGroups(devices) {
     const groups = new Map();
+    (this._gateways || []).forEach((gateway) => {
+      const identity = gateway.id || gateway.host || gateway.name;
+      if (!identity) return;
+      const key = `gateway:${String(identity).trim().toLowerCase()}`;
+      groups.set(key, {
+        key,
+        path: {
+          type: "gateway",
+          id: gateway.id,
+          gateway_id: gateway.id,
+          name: gateway.name || gateway.host || "DRATEK eInk gateway",
+          host: gateway.host || "",
+        },
+        devices: [],
+      });
+    });
     (devices || []).forEach((device) => {
       const paths = device.paths || [];
       const preferred = device.preferred_path || null;
       const matchingPath = preferred
         ? paths.find((path) => path.type === preferred.type && String(path.id ?? "") === String(preferred.id ?? ""))
         : null;
-      const path = matchingPath ? { ...preferred, ...matchingPath } : (preferred || paths[0] || null);
+      let path = matchingPath ? { ...preferred, ...matchingPath } : (preferred || paths[0] || null);
+      if (device.gateway_selection === "manual" && device.selected_gateway_id) {
+        const gatewayId = String(device.selected_gateway_id);
+        const configuredGateway = (this._gateways || []).find((gateway) => String(gateway.id) === gatewayId);
+        const measuredPath = paths.find((candidate) =>
+          candidate.type === "gateway"
+          && String(candidate.id || candidate.gateway_id || "") === gatewayId
+        );
+        path = {
+          type: "gateway",
+          id: gatewayId,
+          gateway_id: gatewayId,
+          name: configuredGateway?.name || measuredPath?.name || configuredGateway?.host || "DRATEK eInk gateway",
+          host: configuredGateway?.host || measuredPath?.host || "",
+          ...measuredPath,
+        };
+      }
       const identity = path
         ? (path.id || path.gateway_id || path.host || path.name || "default")
         : "unavailable";
@@ -392,20 +424,33 @@ export const gatewayMixin = {
       const path = group.path;
       const local = path?.type === "local";
       const gateway = path?.type === "gateway";
+      const gatewayId = gateway ? String(path.id || path.gateway_id || "") : "";
       const name = path?.name || (local ? "Home Assistant Bluetooth" : "Bez dostupné trasy");
       const detail = local ? "Integrované Bluetooth / proxy" : gateway ? (path.host || "Wi-Fi gateway") : "Displej momentálně nemá známou cestu";
-      return `<section class="connection-group ${gateway ? "is-gateway" : local ? "is-local" : "is-unavailable"}">
+      return `<section class="connection-group ${gateway ? "is-gateway" : local ? "is-local" : "is-unavailable"}" ${gatewayId ? `data-topology-gateway="${this._escape(gatewayId)}"` : ""}>
         <div class="connection-hub">
           <span class="connection-hub-icon"><ha-icon icon="${gateway ? "mdi:router-wireless" : local ? "mdi:home-assistant" : "mdi:lan-disconnect"}"></ha-icon></span>
-          <div class="connection-hub-copy"><small>${gateway ? "DRATEK gateway" : local ? "Home Assistant" : "Nedostupné"}</small><strong>${this._escape(name)}</strong><span>${this._escape(detail)}</span></div>
+          <div class="connection-hub-copy"><small>${gateway ? "DRATEK gateway" : local ? "Home Assistant" : "Nedostupné"}</small><strong>${this._escape(name)}</strong><span>${gateway ? "Přetáhněte sem displej" : this._escape(detail)}</span></div>
           <span class="connection-count">${group.devices.length}</span>
         </div>
         <div class="connection-bus" aria-hidden="true"></div>
-        <div class="connection-devices">${group.devices.map(({ device, rssi, preferred }) => `<button class="connection-device" data-select-device="${this._escape(device.address)}" title="Otevřít ${this._escape(this._deviceTitle(device))} v designeru">
-          <span class="connection-device-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></span>
-          <span class="connection-device-copy"><strong>${this._escape(this._deviceTitle(device))}</strong><small>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</small></span>
-          <span class="connection-device-signal">${this._renderSignalBars(rssi)}<small class="signal-value ${this._signalClass(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</small>${preferred ? `<span class="connection-active" title="Aktivní cesta"><ha-icon icon="mdi:check-circle"></ha-icon></span>` : ""}</span>
-        </button>`).join("")}</div>
+        <div class="connection-devices">${group.devices.length ? group.devices.map(({ device, rssi, preferred }) => {
+          const address = String(device.address || "").toUpperCase();
+          const manual = device.gateway_selection === "manual" && Boolean(device.selected_gateway_id);
+          const writingJob = (this._queue?.jobs || []).find((job) =>
+            job.status === "writing" && String(job.address || "").toUpperCase() === address
+          );
+          const recentlySucceededJob = writingJob ? null : (this._queue?.jobs || []).find((job) =>
+            job.status === "succeeded"
+            && String(job.address || "").toUpperCase() === address
+            && Number(job.finished_at || 0) * 1000 >= Date.now() - 7000
+          );
+          return `<article class="connection-device ${manual ? "is-locked" : ""} ${writingJob ? "is-writing" : ""} ${recentlySucceededJob ? "is-uploaded" : ""}" draggable="true" data-topology-device="${this._escape(device.address)}" data-select-device="${this._escape(device.address)}" role="button" tabindex="0" title="Přetáhnout na gateway nebo otevřít v designeru">
+            <span class="connection-device-icon"><ha-icon icon="${manual ? "mdi:tablet-lock" : "mdi:tablet-dashboard"}"></ha-icon></span>
+            <span class="connection-device-copy"><strong>${this._escape(this._deviceTitle(device))}</strong><small>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</small>${writingJob ? `<span class="connection-transfer-state writing"><ha-icon icon="mdi:progress-upload"></ha-icon>Právě se nahrává</span>` : recentlySucceededJob ? `<span class="connection-transfer-state uploaded"><ha-icon icon="mdi:check-circle"></ha-icon>Úspěšně nahráno · displej se vykresluje</span>` : ""}</span>
+            <span class="connection-device-signal">${this._renderSignalBars(rssi)}<small class="signal-value ${this._signalClass(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</small>${manual ? `<button class="connection-route-lock" data-topology-unlock="${this._escape(device.address)}" title="Ručně přiřazeno – kliknutím vrátit automatický výběr"><ha-icon icon="mdi:lock"></ha-icon><span>Ručně</span></button>` : preferred ? `<span class="connection-active" title="Automaticky vybraná cesta"><ha-icon icon="mdi:check-circle"></ha-icon></span>` : ""}</span>
+          </article>`;
+        }).join("") : gateway ? `<div class="connection-drop-empty"><ha-icon icon="mdi:drag-variant"></ha-icon><span>Přetáhněte sem displej</span></div>` : ""}</div>
       </section>`;
     }).join("")}</div>`;
   },

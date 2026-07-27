@@ -100,6 +100,16 @@ class FrontendToolLibraryTests(unittest.TestCase):
             self.source,
         )
 
+    def test_header_uses_the_combined_brand_image_without_duplicate_heading(self):
+        self.assertIn("dratek-eink-header.png", self.source)
+        self.assertIn('_frontendAssetUrl(path)', self.source)
+        self.assertIn("border-radius:0;background:transparent;box-shadow:none;filter:none", self.source)
+        self.assertIn(".topbar{padding:8px 18px 8px 0}", self.source)
+        self.assertIn('class="brand-description"', self.source)
+        self.assertIn("<strong>Editor šablon</strong>", self.source)
+        self.assertIn("BLE diagnostika · správa displejů", self.source)
+        self.assertNotIn("<h1>DRATEK eInk</h1>", self.source)
+
     def test_device_rename_is_inline_and_flash_button_is_removed(self):
         self.assertIn('class="display-name-inline"', self.source)
         self.assertIn('input?.select();', self.source)
@@ -111,11 +121,25 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn('data-flash-identify=', self.source)
         self.assertNotIn('class="device-name-edit display-name-edit"', self.source)
 
-    def test_each_display_can_choose_automatic_or_manual_gateway(self):
-        self.assertIn('data-device-gateway=', self.source)
-        self.assertIn('Automaticky (nejsilnější signál)', self.source)
+    def test_each_display_can_be_dragged_to_a_manual_gateway_in_the_map(self):
+        self.assertNotIn('data-device-gateway=', self.source)
+        self.assertIn('data-topology-device=', self.source)
+        self.assertIn('data-topology-gateway=', self.source)
+        self.assertIn('data-topology-unlock=', self.source)
+        self.assertIn('event.dataTransfer.setData("text/plain", address)', self.source)
+        self.assertIn('await this._saveDeviceGateway(address, group.dataset.topologyGateway)', self.source)
         self.assertIn('type: "dratek_eink/devices/set_gateway"', self.source)
         self.assertIn('device.gateway_selection === "manual"', self.source)
+        self.assertIn(".connection-device.is-locked", self.source)
+        self.assertIn("Ručně přiřazeno", self.source)
+
+    def test_connection_map_shows_live_upload_and_rendering_status(self):
+        self.assertIn('class="connection-transfer-state writing"', self.source)
+        self.assertIn('class="connection-transfer-state uploaded"', self.source)
+        self.assertIn("Úspěšně nahráno · displej se vykresluje", self.source)
+        self.assertIn(".connection-device.is-writing", self.source)
+        self.assertIn(".connection-device.is-uploaded", self.source)
+        self.assertIn('["queue", "devices", "topology"].includes(this._activeTab)', self.source)
 
     def test_designer_device_summary_is_one_compact_row(self):
         self.assertIn(".designer-device-strip{display:flex!important", self.source)
@@ -256,7 +280,16 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('role="status" aria-live="polite"', self.source)
         self.assertIn(".display-tile.is-writing", self.source)
         self.assertIn(".display-writing-state", self.source)
-        self.assertIn('this._activeTab === "queue" || this._activeTab === "devices"', self.source)
+        self.assertIn('["queue", "devices", "topology"].includes(this._activeTab)', self.source)
+
+    def test_recently_uploaded_device_card_has_non_blocking_green_status(self):
+        self.assertIn('job.status === "succeeded"', self.source)
+        self.assertIn("Date.now() - 7000", self.source)
+        self.assertIn('"is-uploaded"', self.source)
+        self.assertIn("Úspěšně nahráno", self.source)
+        self.assertIn("Displej se vykresluje", self.source)
+        self.assertIn(".display-tile.is-uploaded", self.source)
+        self.assertIn(".display-uploaded-state", self.source)
 
 
 if __name__ == "__main__":

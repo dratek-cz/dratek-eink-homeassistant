@@ -46,6 +46,7 @@
       { address:"FF:FF:93:10:22:41", physical_code:"93.10.22.41", display_name:"Vstup", model:"EPA LCD 296x128 1 BWR", sdk_type:46, battery_percent:64, battery_voltage:2.95, rssi:-55, preferred_path:{type:"local",name:"Home Assistant Bluetooth"}, paths:[{type:"local",name:"Home Assistant Bluetooth"}] },
     ];
     const writingAddress = new URLSearchParams(window.location.search).get("writing") || "";
+    const uploadedAddress = new URLSearchParams(window.location.search).get("uploaded") || "";
     const drafts = {
       "FF:FF:92:81:46:32": {
         width:296, height:128, background_color:"white", invert_colors:false,
@@ -89,9 +90,13 @@
         if (type === "dratek_eink/custom_elements/list") return { elements: [] };
         if (type === "dratek_eink/gateways/list") return { gateways };
         if (type === "dratek_eink/gateways/serial_ports") return { ports: [] };
-          if (type === "dratek_eink/queue/list") return writingAddress
-            ? { jobs:[{ id:"local-writing-job", address:writingAddress, status:"writing", operation:"Nahrání návrhu", transport_name:"Gateway dílna" }], queued:0, writing:1, succeeded:0, failed:0 }
-            : { jobs:[], queued:0, writing:0, succeeded:0, failed:0 };
+        if (type === "dratek_eink/queue/list") {
+          const jobs = [
+            ...(writingAddress ? [{ id:"local-writing-job", address:writingAddress, status:"writing", operation:"Nahrání návrhu", transport_name:"Gateway dílna" }] : []),
+            ...(uploadedAddress ? [{ id:"local-uploaded-job", address:uploadedAddress, status:"succeeded", operation:"Nahrání návrhu", transport_name:"Gateway dílna", finished_at:Math.floor(Date.now() / 1000) }] : []),
+          ];
+          return { jobs, queued:0, writing:writingAddress ? 1 : 0, succeeded:uploadedAddress ? 1 : 0, failed:0 };
+        }
         if (type === "dratek_eink/devices/set_name") {
           const device = devices.find((item) => item.address === msg.address);
           if (device) device.display_name = msg.name;

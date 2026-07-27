@@ -17,14 +17,9 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
-FINAL_CONFIRMATION_TIMEOUT_SECONDS = 15
 WRITE_ACK_SDK_TYPES = {51}
 RGB_LED_COMMAND = 0x30
 FLASH_IDENTIFY_COMMAND = 0x22
-
-
-class TransferCompletionTimeout(TimeoutError):
-    """The payload was sent but the display did not confirm its final refresh."""
 
 
 def _next_block(data: bytes, block_size: int, block_number: int) -> bytes:
@@ -231,12 +226,6 @@ class DratekTransfer:
                 return
             except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
                 last_error = exc
-                if isinstance(exc, TransferCompletionTimeout):
-                    self.log(
-                        "The complete payload was accepted; this display does not send the optional "
-                        "final refresh confirmation. Treating the transfer as completed."
-                    )
-                    return
                 self.log(f"Transfer attempt {attempt}/{max_attempts} failed: {exc}")
                 transient = self._is_transient_connection_error(exc)
                 if attempt >= max_attempts or (attempt >= 3 and not transient):
@@ -323,26 +312,10 @@ class DratekTransfer:
                     verb = "Acknowledged" if require_block_ack else "Sent"
                     self.log(f"{verb} block {block_number + 1}/{total_blocks} ({percent}%).")
 
-            while True:
-                try:
-                    response = await self._wait_for_next_transfer_response(
-                        responses,
-                        total_blocks,
-                        total_blocks,
-                        timeout=FINAL_CONFIRMATION_TIMEOUT_SECONDS,
-                    )
-                except TimeoutError as exc:
-                    raise TransferCompletionTimeout(
-                        f"Timed out after {FINAL_CONFIRMATION_TIMEOUT_SECONDS}s waiting for the display "
-                        "to confirm the completed refresh."
-                    ) from exc
-                if not response or response[0] != 5:
-                    continue
-                if len(response) > 1 and response[1] == 8:
-                    break
-                if len(response) >= 6 and response[1] == 0:
-                    continue
-                raise RuntimeError(f"Display rejected image transfer: {response.hex(' ').upper()}")
+            self.log(
+                "All image blocks were handed to the display. Releasing Bluetooth while "
+                "the eInk panel renders the image."
+            )
 
             if write_notify_enabled:
                 await client.stop_notify(write_char)

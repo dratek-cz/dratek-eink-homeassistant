@@ -4,6 +4,15 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.125
+
+- ruční volba gateway se přesunula do **Mapy připojení**, kde lze displej přetáhnout na požadovanou gateway
+- ručně přiřazený displej je v mapě oranžově zvýrazněný a uzamčený; zámkem lze obnovit automatický výběr nejsilnější gateway
+- mapa ukazuje oranžový stav probíhajícího nahrávání a krátký zelený stav úspěšného přenosu a vykreslování
+- po odeslání posledního bloku se BLE spojení uvolní bez čekání na volitelné potvrzení vykreslení, takže fronta může pokračovat dalším displejem
+- firmware gateway byl aktualizován na `0.1.42-gateway`
+- hlavička používá nové společné logo DRÁTEK.CZ eInk bez přidaných efektů a zarovnané zcela vlevo
+
 ## Novinky ve verzi 0.1.124
 
 - náhled displeje na hlavní stránce nyní používá stejný fyzický rámeček a obsah jako designer a celý se zmenšuje přesně 1:1

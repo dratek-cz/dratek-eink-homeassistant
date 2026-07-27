@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.41-gateway";
+static const char* FIRMWARE_VERSION = "0.1.42-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -464,27 +464,9 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
   }
 
   addLog(log, "All image blocks were acknowledged by BLE.");
-  if (waitForPacket(0x05, packet, 30000)) {
-    addLog(log, "Notification: " + hexPacket(packet));
-    if (packet.size() > 1 && packet[1] == 0x08) {
-      client->disconnect();
-      NimBLEDevice::deleteClient(client);
-      addLog(log, "Display confirmed transfer complete.");
-      return true;
-    }
-    if (packet.size() > 1 && packet[1] != 0) {
-      client->disconnect();
-      NimBLEDevice::deleteClient(client);
-      addLog(log, "Display rejected image transfer: " + hexPacket(packet));
-      return false;
-    }
-  }
-
-  // The original SDK reports success after the last acknowledged GATT write;
-  // some display firmware versions do not send a separate final notification.
   client->disconnect();
   NimBLEDevice::deleteClient(client);
-  addLog(log, "Transfer completed; no separate final notification was required.");
+  addLog(log, "Bluetooth released; the eInk panel is rendering the uploaded image.");
   return true;
 }
 
