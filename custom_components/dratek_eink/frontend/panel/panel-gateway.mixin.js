@@ -78,7 +78,9 @@ export const gatewayMixin = {
       const result = await this._hass.callWS({ type: "dratek_eink/gateways/serial_ports" });
       this._serialPorts = result.ports || [];
       this._serialPortsLoaded = true;
-      if (!this._flashForm.port && this._serialPorts.length) this._flashForm.port = this._serialPorts[0].device;
+      if (!this._serialPorts.some((port) => port.device === this._flashForm.port)) {
+        this._flashForm.port = this._serialPorts[0]?.device || "";
+      }
     } catch (err) {
       this._serialPortsLoaded = true;
       this._flashResult = { ok: false, error: this._message(err), log: [] };

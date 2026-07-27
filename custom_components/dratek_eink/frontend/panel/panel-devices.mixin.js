@@ -101,6 +101,44 @@ export const devicesMixin = {
     this._paint();
   },
 
+  async _saveDeviceGateway(address, gatewayId) {
+    const device = (this._result?.devices || []).find((item) => item.address === address);
+    if (!device || !this._hass) return;
+    try {
+      const result = await this._hass.callWS({
+        type: "dratek_eink/devices/set_gateway",
+        address,
+        gateway_id: gatewayId || "",
+      });
+      device.gateway_selection = result.gateway_selection;
+      device.selected_gateway_id = result.gateway_id || "";
+      const gatewayPaths = (device.paths || [])
+        .filter((path) => path.type === "gateway")
+        .sort((left, right) => Number(right.rssi ?? -999) - Number(left.rssi ?? -999));
+      if (result.gateway_id) {
+        const gateway = (this._gateways || []).find((item) => String(item.id) === String(result.gateway_id));
+        device.preferred_path = gatewayPaths.find((path) => String(path.id) === String(result.gateway_id)) || {
+          type: "gateway",
+          id: result.gateway_id,
+          name: result.transport_name || gateway?.name || gateway?.host || "DRATEK eInk gateway",
+          rssi: null,
+          unavailable: true,
+        };
+      } else {
+        device.preferred_path = gatewayPaths[0] || (device.paths || [])[0] || null;
+      }
+      device.rssi = device.preferred_path?.rssi;
+      this._selectPreferredRoute(device);
+      this._render();
+      this._paint();
+      this._scan({ background: true });
+    } catch (err) {
+      this._error = this._message(err);
+      this._render();
+      this._paint();
+    }
+  },
+
   _selectPreferredRoute(device) {
     const preferred = device && device.preferred_path;
     this._selectedGatewayId = preferred && preferred.type === "gateway" ? preferred.id : "";
@@ -252,35 +290,39 @@ export const devicesMixin = {
     const address = String(device.address || "").toUpperCase();
     const { width: sourceWidth, height: sourceHeight, draft } = this._devicePreviewSize(device);
     const previewSizes = {
-      full: { canvasWidth: 360, canvasHeight: 205, targetHeight: 190, minWidth: 108, maxWidth: 420 },
-      large: { canvasWidth: 300, canvasHeight: 155, targetHeight: 148, minWidth: 96, maxWidth: 340 },
-      compact: { canvasWidth: 220, canvasHeight: 100, targetHeight: 92, minWidth: 78, maxWidth: 240 },
+      full: { targetHeight: 190, minWidth: 108, maxWidth: 420 },
+      large: { targetHeight: 148, minWidth: 96, maxWidth: 340 },
+      compact: { targetHeight: 92, minWidth: 78, maxWidth: 240 },
     };
     const previewMode = previewSizes[mode] ? mode : "full";
     const sizing = previewSizes[previewMode];
-    const maxCanvasWidth = sizing.canvasWidth;
-    const maxCanvasHeight = sizing.canvasHeight;
-    const scale = Math.min(maxCanvasWidth / sourceWidth, maxCanvasHeight / sourceHeight, 1);
-    const canvasWidth = Math.max(40, Math.round(sourceWidth * scale));
-    const canvasHeight = Math.max(28, Math.round(sourceHeight * scale));
     const portraitLayout = sourceHeight > sourceWidth;
     const large400Layout = this._isLarge400Device(device);
-    const frameRatio = large400Layout
+    const designerFrameRatio = large400Layout
       ? (portraitLayout ? 898 / 1039 : 1039 / 898)
       : Math.max(0.48, Math.min(3.7, (sourceWidth / sourceHeight) * (portraitLayout ? 0.95 : 1 / 0.95)));
-    const previewWidth = Math.max(sizing.minWidth, Math.min(sizing.maxWidth, Math.round(sizing.targetHeight * frameRatio)));
-    const previewFrameRadius = Math.max(4, Math.min(18, Math.round(Math.min(previewWidth, previewWidth / frameRatio) * 0.06)));
+    const designerFrameWidth = Math.max(150, Math.round(sourceWidth / (large400Layout ? (portraitLayout ? 0.67 : 0.77) : (portraitLayout ? 0.8 : 0.76))));
+    const designerFrameHeight = Math.round(designerFrameWidth / designerFrameRatio);
+    const nativeOuterWidth = designerFrameWidth;
+    const nativeOuterHeight = designerFrameHeight;
+    const nativeOuterRatio = nativeOuterWidth / nativeOuterHeight;
+    const previewWidth = Math.max(sizing.minWidth, Math.min(sizing.maxWidth, Math.round(sizing.targetHeight * nativeOuterRatio)));
+    const designerFrameRadius = Math.max(4, Math.min(28, Math.round(Math.min(designerFrameWidth, designerFrameHeight) * 0.06)));
     const pe29Layout = this._isPe29Device(device);
     const physicalCode = device.physical_code || "00.00.00.00";
     return `<div class="device-preview-wrap preview-${previewMode}">
-      <div class="device-preview-fit" style="--frame-ratio:${frameRatio.toFixed(4)};--preview-width:${previewWidth}px;--device-frame-radius:${previewFrameRadius}px">
-        <div class="device-preview-bezel ${pe29Layout ? "device-preview-pe29" : ""} ${large400Layout ? "device-preview-large400" : ""} ${portraitLayout ? "device-preview-portrait" : "device-preview-landscape"}" title="Náhled ${this._escape(sourceWidth)} × ${this._escape(sourceHeight)}">
-          ${large400Layout ? `<span class="device-large400-top-band"></span><span class="device-large400-bottom-band"><span class="device-large400-label">${this._renderDeviceBarcode(address, true)}<span class="device-large400-mac">${this._escape(address)}</span></span></span>` : pe29Layout ? `<span class="device-preview-identification"><span class="device-preview-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, portraitLayout)}</span>` : `<span class="device-preview-code">${this._escape(physicalCode)}</span>`}
-          <div class="device-preview-screen">
-            <canvas data-device-preview="${this._escape(address)}" data-source-width="${sourceWidth}" data-source-height="${sourceHeight}" width="${canvasWidth}" height="${canvasHeight}"></canvas>
-            ${draft ? "" : `<div class="device-preview-empty"><span><ha-icon icon="mdi:image-outline"></ha-icon>Prázdný návrh</span></div>`}
-          </div>
-        </div>
+      <div class="device-preview-fit" style="--frame-ratio:${nativeOuterRatio.toFixed(4)};--preview-width:${previewWidth}px">
+        <svg class="device-preview-designer-svg" viewBox="0 0 ${nativeOuterWidth} ${nativeOuterHeight}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Náhled ${this._escape(sourceWidth)} × ${this._escape(sourceHeight)}">
+          <foreignObject x="0" y="0" width="${nativeOuterWidth}" height="${nativeOuterHeight}">
+            <div xmlns="http://www.w3.org/1999/xhtml" class="designer-device-bezel device-preview-designer-copy ${pe29Layout ? "designer-device-pe29" : ""} ${large400Layout ? "designer-device-large400" : ""} designer-device-${portraitLayout ? "portrait" : "landscape"}" style="--designer-frame-ratio:${designerFrameRatio.toFixed(4)};--designer-frame-width:${designerFrameWidth}px;--designer-screen-width:${sourceWidth}px;--designer-screen-height:${sourceHeight}px;--device-frame-radius:${designerFrameRadius}px">
+              ${large400Layout ? `<span class="device-large400-top-band"></span><span class="device-large400-bottom-band"><span class="device-large400-label">${this._renderDeviceBarcode(address, true)}<span class="device-large400-mac">${this._escape(address)}</span></span></span>` : pe29Layout ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, portraitLayout)}</span>` : `<span class="designer-device-code">${this._escape(physicalCode)}</span>`}
+              <div class="designer-device-screen">
+                <canvas data-device-preview="${this._escape(address)}" data-source-width="${sourceWidth}" data-source-height="${sourceHeight}" width="${sourceWidth}" height="${sourceHeight}"></canvas>
+                ${draft ? "" : `<div class="device-preview-empty"><span><ha-icon icon="mdi:image-outline"></ha-icon>Prázdný návrh</span></div>`}
+              </div>
+            </div>
+          </foreignObject>
+        </svg>
       </div>
     </div>`;
   },
@@ -313,7 +355,7 @@ export const devicesMixin = {
       const battery = this._batteryInfo(device);
       const rssi = Number(device.rssi);
       const paths = device.paths || [];
-      const preferredPath = paths[0];
+      const preferredPath = device.preferred_path || paths[0];
       const previewSize = this._devicePreviewSize(device);
       const temporarilyUnseen = !!device.temporarily_unseen;
       const editing = this._editingDeviceAddress === device.address;
@@ -321,6 +363,13 @@ export const devicesMixin = {
         job.status === "writing"
         && String(job.address || "").toUpperCase() === String(device.address || "").toUpperCase()
       );
+      const configuredGateways = (this._gateways || []).length
+        ? this._gateways
+        : paths.filter((path) => path.type === "gateway").map((path) => ({ id: path.id, name: path.name, host: path.host }));
+      const selectedGatewayId = device.gateway_selection === "manual" ? String(device.selected_gateway_id || "") : "";
+      const gatewayOptions = configuredGateways.map((gateway) =>
+        `<option value="${this._escape(gateway.id)}" ${String(gateway.id) === selectedGatewayId ? "selected" : ""}>${this._escape(gateway.name || gateway.host || "DRATEK eInk gateway")}</option>`
+      ).join("");
       return `<article class="display-tile ${selected ? "selected" : ""} ${temporarilyUnseen ? "is-stale" : ""} ${writingJob ? "is-writing" : ""}" data-device-card-open="${this._escape(device.address)}" role="button" tabindex="0" aria-label="Vybrat ${this._escape(this._deviceTitle(device))}">
         <header class="display-tile-header">
           <span class="display-online-dot ${temporarilyUnseen ? "stale" : ""}" title="${temporarilyUnseen ? "Displej nebyl zachycen v posledním krátkém skenu" : "Displej je dostupný"}"></span>
@@ -338,6 +387,7 @@ export const devicesMixin = {
             <span class="health-route-text"><small>Připojeno</small><strong>${temporarilyUnseen ? "Čekám na signál" : this._escape(preferredPath?.name || "Nedostupné")}</strong></span>
           </div>
         </div>
+        <label class="display-gateway-selector"><ha-icon icon="mdi:router-wireless-settings"></ha-icon><span>Gateway</span><select data-device-gateway="${this._escape(device.address)}" aria-label="Gateway pro ${this._escape(this._deviceTitle(device))}"><option value="" ${selectedGatewayId ? "" : "selected"}>Automaticky (nejsilnější signál)</option>${gatewayOptions}</select></label>
         <footer class="display-tile-actions">
           <button data-select-device="${this._escape(device.address)}"><ha-icon icon="mdi:vector-square-edit"></ha-icon>Otevřít v designeru</button>
         </footer>

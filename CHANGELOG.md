@@ -2,6 +2,23 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.124] - 2026-07-27
+
+### Konzistentní náhledy a designer
+- Náhled na hlavní stránce přebírá fyzický rámeček i obsah přímo z designeru a celý se škáluje jako jeden celek, včetně textu, MAC štítku, čárového kódu, obrysů a radiusů.
+- Vykreslení náhledu čeká na načtení použitého fontu, takže při otevření už neproblikne náhradní písmo.
+- Přesouvaný objekt se v designeru vykresluje živě společně s výběrovým rámečkem, ne až po puštění myši.
+
+### Výběr gateway a automatické aktualizace
+- Automatický režim vybírá pro displej dostupnou gateway s nejsilnějším BLE signálem.
+- Ke každému displeji lze uložit ruční volbu konkrétní gateway; nastavení se používá také při automatických aktualizacích.
+- Fronta zápisu opakuje přenos při dočasně nedostupném BLE slotu místo okamžitého ukončení úlohy.
+
+### Flashování ESP32
+- Flashování používá pouze vhodné USB sériové porty, aktuální názvy příkazů `esptool` a bezpečnější výchozí rychlost.
+- Předání Wi-Fi konfigurace po flashnutí opakovaně navazuje komunikaci bez resetování desky a poskytuje přesnější diagnostiku při chybě potvrzení.
+- Závislost `esptool` byla zvýšena na podporovanou řadu 5.x.
+
 ## [0.1.123] - 2026-07-27
 
 ### Nové karty displejů a stav nahrávání

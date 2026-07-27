@@ -10,7 +10,7 @@ from homeassistant.helpers.event import async_call_later, async_track_state_chan
 from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN
-from .gateway import async_send_gateway_payload
+from .gateway import async_load_gateways, async_scan_gateway, async_send_gateway_payload
 from .queue import get_transfer_queue
 from .render import render_entity_bound_image
 from .transfer import DratekTransfer
@@ -25,6 +25,8 @@ MIN_REFRESH_INTERVAL_SECONDS = 30
 MAX_REFRESH_INTERVAL_SECONDS = 86400
 BATTERY_SAVER_THRESHOLD_PERCENT = 15
 BATTERY_SAVER_MIN_INTERVAL_SECONDS = 3600
+GATEWAY_ROUTE_SCAN_SECONDS = 3
+GATEWAY_ROUTE_CACHE_SECONDS = 30
 
 
 def _binding_sources(binding: dict[str, Any]) -> set[tuple[str, str]]:
@@ -143,6 +145,9 @@ class EntityAutoUpdateManager:
         self._pending_refreshes: set[str] = set()
         self._last_refresh_at: dict[str, float] = {}
         self._chart_series: dict[str, list[float]] = {}
+        self._gateway_route_cache: dict[str, dict[str, Any]] = {}
+        self._gateway_route_cache_at = 0.0
+        self._gateway_route_lock = asyncio.Lock()
         self._initialized = False
 
     async def async_initialize(self) -> None:
@@ -197,6 +202,32 @@ class EntityAutoUpdateManager:
         updated = dict(config)
         updated["refresh_interval_seconds"] = interval
         self._configs[normalized] = updated
+        await self._store.async_save({"configs": self._configs})
+
+    async def async_set_gateway_preference(
+        self,
+        address: str,
+        gateway_id: str,
+        transport_name: str = "",
+    ) -> None:
+        """Apply a persisted manual/automatic gateway choice to active automation."""
+        await self.async_initialize()
+        normalized = address.upper()
+        config = self._configs.get(normalized)
+        if not config:
+            return
+        updated = dict(config)
+        if gateway_id:
+            updated["gateway_selection"] = "manual"
+            updated["manual_gateway_id"] = gateway_id
+            updated["route_type"] = "gateway"
+            updated["gateway_id"] = gateway_id
+            updated["transport_name"] = transport_name or "DRATEK eInk gateway"
+        else:
+            updated["gateway_selection"] = "auto"
+            updated.pop("manual_gateway_id", None)
+        self._configs[normalized] = updated
+        self._gateway_route_cache_at = 0.0
         await self._store.async_save({"configs": self._configs})
 
     async def async_custom_element_changed(
@@ -455,6 +486,17 @@ class EntityAutoUpdateManager:
         image = await self.async_render_preview(address, config)
         route_type = config.get("route_type", "local")
         gateway_id = str(config.get("gateway_id") or "")
+        transport_name = str(config.get("transport_name") or "")
+        gateway_selection = str(config.get("gateway_selection") or "auto")
+        if gateway_selection == "manual" and config.get("manual_gateway_id"):
+            route_type = "gateway"
+            gateway_id = str(config["manual_gateway_id"])
+        else:
+            best_gateway = await self._async_best_gateway_route(address)
+            if best_gateway:
+                route_type = "gateway"
+                gateway_id = str(best_gateway["id"])
+                transport_name = str(best_gateway["name"])
         sdk_type = int(config["sdk_type"])
         transform = config.get("transform")
         orientation = config.get("orientation")
@@ -462,7 +504,7 @@ class EntityAutoUpdateManager:
 
         if route_type == "gateway" and gateway_id:
             async def run_gateway(add_log):
-                add_log(f"Automatic entity update via {config.get('transport_name') or 'gateway'}.")
+                add_log(f"Automatic entity update via {transport_name or 'gateway'}.")
                 result = await async_send_gateway_payload(
                     self.hass, gateway_id, address, sdk_type, image, transform, orientation
                 )
@@ -471,7 +513,7 @@ class EntityAutoUpdateManager:
             return await queue.async_submit(
                 resource=f"gateway:{gateway_id}",
                 transport_type="gateway",
-                transport_name=str(config.get("transport_name") or "DRATEK eInk gateway"),
+                transport_name=transport_name or "DRATEK eInk gateway",
                 address=address,
                 operation="entity_update",
                 runner=run_gateway,
@@ -491,6 +533,65 @@ class EntityAutoUpdateManager:
             operation="entity_update",
             runner=run_local,
         )
+
+    async def _async_best_gateway_route(self, address: str) -> dict[str, Any] | None:
+        """Return the gateway currently receiving this display with the strongest RSSI."""
+        now = time.monotonic()
+        if now - self._gateway_route_cache_at < GATEWAY_ROUTE_CACHE_SECONDS:
+            return self._gateway_route_cache.get(address.upper())
+
+        async with self._gateway_route_lock:
+            now = time.monotonic()
+            if now - self._gateway_route_cache_at < GATEWAY_ROUTE_CACHE_SECONDS:
+                return self._gateway_route_cache.get(address.upper())
+
+            try:
+                gateways = await async_load_gateways(self.hass)
+                scan_results = await asyncio.gather(
+                    *(
+                        async_scan_gateway(
+                            self.hass,
+                            str(gateway.get("id") or ""),
+                            GATEWAY_ROUTE_SCAN_SECONDS,
+                        )
+                        for gateway in gateways
+                        if gateway.get("id")
+                    ),
+                    return_exceptions=True,
+                )
+            except Exception:  # noqa: one unavailable gateway must not break local automation
+                self._gateway_route_cache = {}
+                self._gateway_route_cache_at = time.monotonic()
+                return None
+            scanned_gateways = [gateway for gateway in gateways if gateway.get("id")]
+            routes: dict[str, dict[str, Any]] = {}
+            for gateway, scan_result in zip(scanned_gateways, scan_results, strict=False):
+                if isinstance(scan_result, Exception) or not scan_result or not scan_result.get("ok"):
+                    continue
+                for device in scan_result.get("devices", []):
+                    device_address = str(device.get("address") or "").upper()
+                    if not device_address:
+                        continue
+                    try:
+                        rssi = float(device.get("rssi"))
+                    except (TypeError, ValueError):
+                        rssi = -999.0
+                    current = routes.get(device_address)
+                    if current is not None and float(current["rssi"]) >= rssi:
+                        continue
+                    routes[device_address] = {
+                        "id": str(gateway["id"]),
+                        "name": str(
+                            gateway.get("name")
+                            or gateway.get("host")
+                            or "DRATEK eInk gateway"
+                        ),
+                        "rssi": rssi,
+                    }
+
+            self._gateway_route_cache = routes
+            self._gateway_route_cache_at = time.monotonic()
+            return routes.get(address.upper())
 
 
 def get_entity_auto_update_manager(hass: HomeAssistant) -> EntityAutoUpdateManager:

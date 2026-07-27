@@ -34,10 +34,14 @@
     }
     await import("../custom_components/dratek_eink/frontend/dratek-eink-panel.js");
 
+    const gateways = [
+      { id:"gateway-workshop", name:"Gateway dílna", host:"192.168.1.41", status:{ok:true} },
+      { id:"gateway-office", name:"Gateway kancelář", host:"192.168.1.42", status:{ok:true} },
+    ];
     const devices = [
-      { address:"FF:FF:92:81:46:32", physical_code:"92.81.46.32", display_name:"Ceník dílna", model:"EPA LCD 296x128 1 BWR", sdk_type:46, battery_percent:82, battery_voltage:3.05, rssi:-48, preferred_path:{type:"gateway",name:"Gateway dílna"}, paths:[{type:"gateway",name:"Gateway dílna"}] },
+      { address:"FF:FF:92:81:46:32", physical_code:"92.81.46.32", display_name:"Ceník dílna", model:"EPA LCD 296x128 1 BWR", sdk_type:46, battery_percent:82, battery_voltage:3.05, rssi:-48, gateway_selection:"auto", selected_gateway_id:"", preferred_path:{type:"gateway",id:"gateway-workshop",name:"Gateway dílna",rssi:-48}, paths:[{type:"gateway",id:"gateway-workshop",name:"Gateway dílna",rssi:-48},{type:"gateway",id:"gateway-office",name:"Gateway kancelář",rssi:-61}] },
       { address:"FF:FF:94:20:10:78", physical_code:"94.20.10.78", display_name:"Teplota kancelář", model:"EPA LCD 400x300 BWR", sdk_type:75, battery_percent:54, battery_voltage:2.9, rssi:-63, preferred_path:{type:"local",name:"Home Assistant Bluetooth"}, paths:[{type:"local",name:"Home Assistant Bluetooth"}] },
-      { address:"FF:FF:91:31:18:11", physical_code:"91.31.18.11", model:"EPA LCD 250x128 1 BWR", sdk_type:264, battery_percent:28, battery_voltage:2.75, rssi:-72, preferred_path:{type:"gateway",name:"Gateway sklad"}, paths:[{type:"gateway",name:"Gateway sklad"}] },
+      { address:"FF:FF:91:31:18:11", physical_code:"91.31.18.11", model:"EPA LCD 250x128 1 BWR", sdk_type:264, battery_percent:28, battery_voltage:2.75, rssi:-72, gateway_selection:"manual", selected_gateway_id:"gateway-office", preferred_path:{type:"gateway",id:"gateway-office",name:"Gateway kancelář",rssi:-72}, paths:[{type:"gateway",id:"gateway-office",name:"Gateway kancelář",rssi:-72}] },
       { address:"FF:FF:96:41:12:54", physical_code:"96.41.12.54", model:"EPA LCD 296x128 1 BWR", sdk_type:46, battery_percent:9, battery_voltage:2.5, rssi:-83, temporarily_unseen:true, preferred_path:{type:"gateway",name:"Gateway sklad"}, paths:[{type:"gateway",name:"Gateway sklad"}] },
       { address:"FF:FF:93:10:22:41", physical_code:"93.10.22.41", display_name:"Vstup", model:"EPA LCD 296x128 1 BWR", sdk_type:46, battery_percent:64, battery_voltage:2.95, rssi:-55, preferred_path:{type:"local",name:"Home Assistant Bluetooth"}, paths:[{type:"local",name:"Home Assistant Bluetooth"}] },
     ];
@@ -83,7 +87,7 @@
         if (type === "dratek_eink/device_drafts/list") return { drafts };
         if (type === "dratek_eink/projects/list") return { projects: [] };
         if (type === "dratek_eink/custom_elements/list") return { elements: [] };
-        if (type === "dratek_eink/gateways/list") return { gateways: [] };
+        if (type === "dratek_eink/gateways/list") return { gateways };
         if (type === "dratek_eink/gateways/serial_ports") return { ports: [] };
           if (type === "dratek_eink/queue/list") return writingAddress
             ? { jobs:[{ id:"local-writing-job", address:writingAddress, status:"writing", operation:"Nahrání návrhu", transport_name:"Gateway dílna" }], queued:0, writing:1, succeeded:0, failed:0 }
@@ -92,6 +96,20 @@
           const device = devices.find((item) => item.address === msg.address);
           if (device) device.display_name = msg.name;
           return { name:msg.name };
+        }
+        if (type === "dratek_eink/devices/set_gateway") {
+          const device = devices.find((item) => item.address === msg.address);
+          const gateway = gateways.find((item) => item.id === msg.gateway_id);
+          if (device) {
+            device.gateway_selection = gateway ? "manual" : "auto";
+            device.selected_gateway_id = gateway?.id || "";
+          }
+          return {
+            address:msg.address,
+            gateway_selection:gateway ? "manual" : "auto",
+            gateway_id:gateway?.id || "",
+            transport_name:gateway?.name || "",
+          };
         }
         if (type === "dratek_eink/set_rgb_led") return { ok:true, address: msg.address, log: [] };
         if (type === "dratek_eink/flash_identify") return { ok:true, address: msg.address, log: [] };

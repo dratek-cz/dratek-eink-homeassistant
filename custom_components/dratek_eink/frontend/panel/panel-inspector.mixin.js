@@ -191,6 +191,13 @@ export const inspectorMixin = {
       const input = this.shadowRoot.querySelector(`[data-device-name-input="${address}"]`);
       this._saveDeviceName(address, input?.value ?? this._deviceNameDraft);
     }));
+    this.shadowRoot.querySelectorAll("[data-device-gateway]").forEach((select) => {
+      select.addEventListener("click", (event) => event.stopPropagation());
+      select.addEventListener("change", (event) => {
+        event.stopPropagation();
+        this._saveDeviceGateway(select.dataset.deviceGateway, event.target.value);
+      });
+    });
     this.shadowRoot.querySelector("#sendDesign")?.addEventListener("click", () => this._sendDesign());
     this.shadowRoot.querySelector("#sendPartialDesign")?.addEventListener("click", () => this._sendPartialDesign());
     this.shadowRoot.querySelector("#sendGatewayDesign")?.addEventListener("click", () => this._sendDesignViaGateway());

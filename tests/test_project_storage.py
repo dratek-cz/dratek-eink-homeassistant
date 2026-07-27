@@ -97,7 +97,24 @@ class ProjectStorageCompatibilityTests(unittest.TestCase):
         self.assertEqual([], data["projects"])
         self.assertEqual({}, data["device_drafts"])
         self.assertEqual({}, data["device_names"])
+        self.assertEqual({}, data["device_gateway_preferences"])
         self.assertEqual([], data["custom_elements"])
+
+    def test_normalizes_manual_gateway_preferences_by_display_address(self) -> None:
+        data = PROJECT_STORAGE.normalize_project_data(
+            {
+                "device_gateway_preferences": {
+                    "ff:ff:92:81:46:32": " gateway-office ",
+                    "": "ignored",
+                    "FF:FF:94:20:10:78": "",
+                }
+            }
+        )
+
+        self.assertEqual(
+            {"FF:FF:92:81:46:32": "gateway-office"},
+            data["device_gateway_preferences"],
+        )
 
 
 if __name__ == "__main__":

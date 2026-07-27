@@ -16,7 +16,14 @@ QUEUE_STORE_VERSION = 1
 QUEUE_DATA_KEY = "transfer_queue"
 HISTORY_LIMIT = 100
 TRANSFER_JOB_TIMEOUT_SECONDS = 240
+AUTOMATIC_BLUETOOTH_RETRY_DELAY_SECONDS = 20
 LEGACY_COMPLETION_TIMEOUT_MARKER = "waiting for the display to confirm the completed refresh"
+RETRYABLE_BLUETOOTH_ERROR_MARKERS = (
+    "available connection slot",
+    "no backend with an available",
+    "temporarily unavailable",
+    "le-connection-abort",
+)
 
 TransferRunner = Callable[[Callable[[str], None]], Awaitable[dict[str, Any]]]
 
@@ -163,7 +170,7 @@ class TransferQueue:
 
         try:
             async with asyncio.timeout(TRANSFER_JOB_TIMEOUT_SECONDS):
-                result = await runner(add_log)
+                result = await self._run_with_automatic_bluetooth_retry(job, runner, add_log)
             for line in result.get("log", []):
                 if line not in job["log"]:
                     add_log(line)
@@ -185,6 +192,38 @@ class TransferQueue:
         self._prune()
         await self._save_history()
         return result
+
+    async def _run_with_automatic_bluetooth_retry(
+        self,
+        job: dict[str, Any],
+        runner: TransferRunner,
+        add_log: Callable[[str], None],
+    ) -> dict[str, Any]:
+        """Give automatic BLE updates one cooldown retry before failing the job."""
+        try:
+            return await runner(add_log)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            if not self._is_retryable_automatic_bluetooth_error(job, exc):
+                raise
+
+            add_log(
+                "Bluetooth connection slot is temporarily unavailable. "
+                f"Automatic update will retry in {AUTOMATIC_BLUETOOTH_RETRY_DELAY_SECONDS} seconds."
+            )
+            job["status"] = "queued"
+            await asyncio.sleep(AUTOMATIC_BLUETOOTH_RETRY_DELAY_SECONDS)
+            job["status"] = "writing"
+            add_log("Retrying automatic update after the Bluetooth cooldown.")
+            return await runner(add_log)
+
+    @staticmethod
+    def _is_retryable_automatic_bluetooth_error(job: dict[str, Any], exc: Exception) -> bool:
+        if job.get("operation") != "entity_update":
+            return False
+        error = str(exc).lower()
+        return any(marker in error for marker in RETRYABLE_BLUETOOTH_ERROR_MARKERS)
 
     def _should_skip_automatic_update(self, job: dict[str, Any]) -> bool:
         return job.get("operation") == "entity_update" and bool(

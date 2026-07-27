@@ -27,6 +27,7 @@ DISCOVERY_SERVICE = "_dratek-eink-gateway._tcp.local."
 FIRMWARE_DIR = Path(__file__).parent / "firmware"
 FLASH_JOBS_KEY = "dratek_eink_flash_jobs"
 OTA_JOBS_KEY = "dratek_eink_ota_jobs"
+ESPTOOL_FLASH_BAUD = "115200"
 FLASH_PROFILES = {
     "esp32": {
         "label": "ESP32 / ESP32-WROOM",
@@ -531,12 +532,33 @@ async def async_discover_gateways(hass: HomeAssistant, seconds: int = 10) -> lis
     return await hass.async_add_executor_job(_discover_gateways_sync, seconds)
 
 
+def _is_flashable_serial_device(device: str, vid: int | None = None, pid: int | None = None) -> bool:
+    """Exclude built-in Linux UARTs which cannot be an attached USB ESP board."""
+    normalized = str(device or "").strip().lower().replace("\\", "/")
+    if not normalized:
+        return False
+    if normalized.startswith("com") and normalized[3:].isdigit():
+        return True
+    if vid is not None or pid is not None:
+        return True
+    return normalized.startswith(
+        (
+            "/dev/ttyusb",
+            "/dev/ttyacm",
+            "/dev/serial/by-id/",
+            "/dev/cu.usb",
+            "/dev/cu.wchusb",
+            "/dev/cu.slab_usb",
+        )
+    )
+
+
 def _list_serial_ports_sync() -> list[dict[str, Any]]:
     try:
         from serial.tools import list_ports
     except Exception as exc:
         raise RuntimeError(f"pyserial is not available: {exc}") from exc
-    return [
+    ports = [
         {
             "device": port.device,
             "name": port.name,
@@ -547,7 +569,15 @@ def _list_serial_ports_sync() -> list[dict[str, Any]]:
             "pid": port.pid,
         }
         for port in list_ports.comports()
+        if _is_flashable_serial_device(port.device, port.vid, port.pid)
     ]
+    return sorted(
+        ports,
+        key=lambda port: (
+            port.get("vid") is None and port.get("pid") is None,
+            str(port.get("device") or ""),
+        ),
+    )
 
 
 async def async_list_serial_ports(hass: HomeAssistant) -> list[dict[str, Any]]:
@@ -610,6 +640,67 @@ def _safe_network_hostname(hostname: str) -> str:
     return (normalized or "dratek-eink-gateway")[:63].strip("-") or "dratek-eink-gateway"
 
 
+def _open_serial_without_reset(serial_module: Any, port: str, timeout: float = 0.5) -> Any:
+    """Open a gateway serial port without deliberately toggling its reset lines."""
+    ser = serial_module.Serial()
+    ser.port = port
+    ser.baudrate = 115200
+    ser.timeout = timeout
+    ser.write_timeout = 3
+    ser.dsrdtr = False
+    ser.rtscts = False
+    ser.dtr = False
+    ser.rts = False
+    ser.open()
+    return ser
+
+
+def _provision_wifi_over_serial(
+    port: str,
+    ssid: str,
+    password: str,
+    hostname: str,
+    add_log: Any,
+    timeout_seconds: int = 35,
+) -> bool:
+    """Wait for the freshly flashed firmware and retry provisioning until acknowledged."""
+    import serial
+
+    payload = json.dumps(
+        {
+            "cmd": "wifi",
+            "ssid": ssid,
+            "password": password,
+            "hostname": _safe_network_hostname(hostname),
+        }
+    )
+    deadline = time.monotonic() + timeout_seconds
+    attempts = 0
+    next_send_at = time.monotonic() + 1.5
+    with _open_serial_without_reset(serial, port) as ser:
+        while time.monotonic() < deadline:
+            now = time.monotonic()
+            if now >= next_send_at:
+                attempts += 1
+                add_log(f"Sending Wi-Fi configuration (attempt {attempts}).")
+                ser.write((payload + "\n").encode())
+                ser.flush()
+                next_send_at = now + 3
+
+            line = ser.readline().decode(errors="ignore").strip()
+            if not line:
+                continue
+            add_log(line)
+            response = _extract_json_object(line)
+            if "wifi_config_saved" in line or (
+                response is not None
+                and response.get("ok")
+                and response.get("message") == "wifi_config_saved"
+            ):
+                return True
+    return False
+
+
 def _flash_gateway_sync(
     port: str,
     ssid: str,
@@ -629,6 +720,18 @@ def _flash_gateway_sync(
         job["status"] = "running"
         job["ok"] = None
     profile = FLASH_PROFILES.get(chip) or FLASH_PROFILES["esp32"]
+    if not _is_flashable_serial_device(port):
+        error = (
+            f"Port {port or '(none)'} is not a USB serial device suitable for flashing. "
+            "Connect the ESP directly to the Home Assistant machine and select "
+            "/dev/ttyACM*, /dev/ttyUSB*, or a USB device path."
+        )
+        add_log(error)
+        if job is not None:
+            job["status"] = "failed"
+            job["ok"] = False
+            job["error"] = error
+        return {"ok": False, "error": error, "log": log}
     files = profile["files"]
     missing = [str(path.name) for _offset, path in files.values() if not path.exists()]
     if missing:
@@ -655,8 +758,8 @@ def _flash_gateway_sync(
         "--port",
         port,
         "--baud",
-        "460800",
-        "write_flash",
+        ESPTOOL_FLASH_BAUD,
+        "write-flash",
         "-z",
     ]
     for key in ("bootloader", "partitions", "app"):
@@ -673,8 +776,8 @@ def _flash_gateway_sync(
             "--port",
             port,
             "--baud",
-            "460800",
-            "erase_region",
+            ESPTOOL_FLASH_BAUD,
+            "erase-region",
             "0xe000",
             "0x2000",
         ]
@@ -691,6 +794,13 @@ def _flash_gateway_sync(
             if line.strip():
                 add_log(line.strip())
         if erase_proc.returncode != 0:
+            erase_output = erase_proc.stdout.lower()
+            if "failed to connect" in erase_output or "no serial data received" in erase_output:
+                raise RuntimeError(
+                    f"{profile['label']} did not respond on {port}. Verify the USB port and cable. "
+                    "If the board has no automatic boot circuit, hold BOOT, press and release RESET, "
+                    "then release BOOT and start flashing again."
+                )
             raise RuntimeError(f"OTA metadata erase failed with exit code {erase_proc.returncode}")
 
         proc = subprocess.Popen(
@@ -730,24 +840,12 @@ def _flash_gateway_sync(
 
     add_log("Firmware flashed. Sending Wi-Fi configuration over serial...")
     try:
-        import serial
-
-        time.sleep(2)
-        with serial.Serial(port, 115200, timeout=8) as ser:
-            payload = json.dumps({"ssid": ssid, "password": password, "hostname": _safe_network_hostname(hostname)})
-            ser.write((payload + "\n").encode())
-            ser.flush()
-            deadline = time.time() + 12
-            while time.time() < deadline:
-                line = ser.readline().decode(errors="ignore").strip()
-                if line:
-                    add_log(line)
-                    if "wifi_config_saved" in line:
-                        if job is not None:
-                            job["status"] = "done"
-                            job["ok"] = True
-                            job["completed_at"] = int(time.time())
-                        return {"ok": True, "log": log}
+        if _provision_wifi_over_serial(port, ssid, password, hostname, add_log):
+            if job is not None:
+                job["status"] = "done"
+                job["ok"] = True
+                job["completed_at"] = int(time.time())
+            return {"ok": True, "log": log}
     except Exception as exc:
         if job is not None:
             job["status"] = "failed"
@@ -755,11 +853,15 @@ def _flash_gateway_sync(
             job["error"] = f"Wi-Fi provisioning failed: {exc}"
         return {"ok": False, "error": f"Wi-Fi provisioning failed: {exc}", "log": log}
 
+    error = (
+        "Firmware was flashed successfully, but the ESP32 did not acknowledge "
+        "the Wi-Fi configuration over serial."
+    )
     if job is not None:
         job["status"] = "failed"
         job["ok"] = False
-        job["error"] = "Wi-Fi provisioning acknowledgement timed out."
-    return {"ok": False, "error": "Wi-Fi provisioning acknowledgement timed out.", "log": log}
+        job["error"] = error
+    return {"ok": False, "error": error, "log": log}
 
 
 async def async_flash_gateway(
@@ -817,13 +919,16 @@ def _serial_gateway_command_sync(
     try:
         import serial
 
-        with serial.Serial(port, 115200, timeout=1) as ser:
-            ser.reset_input_buffer()
-            if command:
-                ser.write((json.dumps(command) + "\n").encode())
-                ser.flush()
+        with _open_serial_without_reset(serial, port) as ser:
+            serialized_command = json.dumps(command) + "\n" if command else ""
             deadline = time.time() + max(1, min(20, read_seconds))
+            next_send_at = time.time() + (1.0 if command else read_seconds + 1)
             while time.time() < deadline:
+                now = time.time()
+                if serialized_command and now >= next_send_at:
+                    ser.write(serialized_command.encode())
+                    ser.flush()
+                    next_send_at = now + 2
                 line = ser.readline().decode(errors="ignore").strip()
                 if line:
                     log.append(_safe_log_line(line, password))

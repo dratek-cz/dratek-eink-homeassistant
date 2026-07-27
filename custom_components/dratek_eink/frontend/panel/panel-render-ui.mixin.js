@@ -57,7 +57,7 @@ export const renderUiMixin = {
     const designerFrameRadius = Math.max(4, Math.min(28, Math.round(Math.min(designerFrameWidth, designerFrameWidth / designerFrameRatio) * 0.06)));
     const designerBattery = this._batteryInfo(device || {});
     const designerRssi = Number(device?.rssi);
-    const designerPath = device?.paths?.[0];
+    const designerPath = device?.preferred_path || device?.paths?.[0];
     this.shadowRoot.innerHTML = `
       <style>
         .device-card-details{display:grid;gap:13px}
@@ -111,6 +111,7 @@ export const renderUiMixin = {
         .display-battery-item .battery-segments,.display-signal-item .signal-bars{margin:0;align-self:center}
         .display-battery-item strong,.display-signal-item strong{max-width:100%;margin:0;line-height:1.2}
         .display-health-route{grid-column:1/-1;display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;align-content:center;text-align:left}
+        .display-gateway-selector{display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:center;gap:7px;padding:7px 9px;border:1px solid var(--divider-color);border-radius:8px;background:var(--secondary-background-color);font-size:10px;font-weight:800;color:var(--secondary-text-color)}.display-gateway-selector ha-icon{--mdc-icon-size:16px;color:var(--dratek-teal)}.display-gateway-selector select{min-width:0;width:100%;height:30px;padding:3px 7px;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color);font-size:11px}.display-grid.density-list .display-gateway-selector{grid-column:2;grid-row:2}.display-grid.density-list .display-health{grid-row:1}
         .display-health-route>ha-icon{grid-column:1;grid-row:1/3}
         .display-health-route>span{grid-column:2;grid-row:1/3;min-width:0}
         .display-grid.density-compact .display-battery-item,.display-grid.density-compact .display-signal-item{grid-template-rows:auto 23px auto;padding-inline:7px}
@@ -268,7 +269,7 @@ export const renderUiMixin = {
         .display-resolution ha-icon{--mdc-icon-size:12px}
         .display-preview-slot{padding:6px;min-height:0;overflow:hidden}
         .display-preview-slot .device-preview-wrap{width:100%;height:100%;min-height:0;min-width:0}
-        .display-preview-slot .device-preview-fit{width:100%;height:100%;min-width:0;min-height:0;display:grid;place-items:center;container-type:size}
+        .display-preview-slot .device-preview-fit{width:100%;height:100%;min-width:0;min-height:0;display:grid;place-items:center;container-type:size}.device-preview-designer-svg{display:block;width:min(100%,var(--preview-width,420px));height:auto;max-height:100%;aspect-ratio:var(--frame-ratio,2.15);overflow:visible}.device-preview-designer-svg foreignObject{overflow:visible}.device-preview-designer-copy{margin:0;transform:none;transform-origin:0 0}.device-preview-designer-copy .designer-device-screen canvas[data-device-preview]{image-rendering:pixelated}.device-preview-designer-copy .device-preview-empty{z-index:4}
         .display-preview-slot .device-preview-bezel{width:min(100%,calc(100cqh * var(--frame-ratio,2.15)));height:min(100%,calc(100cqw / var(--frame-ratio,2.15)));border-radius:var(--device-frame-radius,12px)}
         .designer-device-bezel{border-radius:var(--device-frame-radius,18px)}
         .display-grid.density-large .display-tile{grid-template-rows:auto minmax(0,1fr) auto auto;aspect-ratio:1/1;padding:15px 15px 0}
@@ -474,7 +475,11 @@ export const renderUiMixin = {
       this._designerFontLoading = null;
       this._paint();
     }).catch(() => {
+      // Kreslení nesmí zůstat zablokované, pokud prohlížeč vlastní font
+      // odmítne načíst. V takovém případě jednou použijeme systémový fallback.
+      this._designerFontReady = true;
       this._designerFontLoading = null;
+      this._paint();
     });
   },
 

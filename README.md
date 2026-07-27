@@ -4,6 +4,15 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.124
+
+- náhled displeje na hlavní stránce nyní používá stejný fyzický rámeček a obsah jako designer a celý se zmenšuje přesně 1:1
+- opraveno krátké probliknutí nesprávného fontu při načítání náhledů
+- při přesouvání objektu v designeru se objekt pohybuje živě společně s výběrovým rámečkem
+- displej automaticky vybírá dostupnou gateway s nejsilnějším signálem a pro každý displej lze gateway zvolit také ručně
+- automatické aktualizace lépe opakují přenos při dočasně obsazeném BLE spojení
+- spolehlivější flashování ESP32: filtrování vhodných sériových portů, aktuální příkazy `esptool` a odolnější předání Wi-Fi konfigurace po restartu
+
 ## Novinky ve verzi 0.1.123
 
 - přepracované karty displejů s větším náhledem a přesně zarovnanými indikátory baterie, signálu a připojení

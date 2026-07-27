@@ -111,6 +111,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn('data-flash-identify=', self.source)
         self.assertNotIn('class="device-name-edit display-name-edit"', self.source)
 
+    def test_each_display_can_choose_automatic_or_manual_gateway(self):
+        self.assertIn('data-device-gateway=', self.source)
+        self.assertIn('Automaticky (nejsilnější signál)', self.source)
+        self.assertIn('type: "dratek_eink/devices/set_gateway"', self.source)
+        self.assertIn('device.gateway_selection === "manual"', self.source)
+
     def test_designer_device_summary_is_one_compact_row(self):
         self.assertIn(".designer-device-strip{display:flex!important", self.source)
         self.assertIn("min-height:44px", self.source)
@@ -138,9 +144,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
 
     def test_400x300_display_uses_the_supplied_physical_frame(self):
         self.assertIn("_isLarge400Device", self.source)
-        self.assertIn('class="device-preview-bezel ${pe29Layout ? "device-preview-pe29" : ""} ${large400Layout ? "device-preview-large400" : ""}', self.source)
+        self.assertIn('class="designer-device-bezel device-preview-designer-copy', self.source)
+        self.assertIn('${large400Layout ? "designer-device-large400" : ""}', self.source)
         self.assertIn('"designer-device-large400"', self.source)
-        self.assertIn(".device-preview-large400 .device-preview-empty{background:repeating-linear-gradient", self.source)
+        self.assertIn(".device-preview-empty{position:absolute", self.source)
         self.assertIn("background:#fff;mix-blend-mode:normal", self.source)
         self.assertIn("1039 / 898", self.source)
         self.assertIn('class="device-large400-bottom-band"', self.source)
@@ -196,14 +203,19 @@ class FrontendToolLibraryTests(unittest.TestCase):
             "ctx.drawImage(nativeCanvas, 0, 0, canvas.width, canvas.height);",
             self.source,
         )
-        self.assertIn("Math.min(previewWidth, previewWidth / frameRatio) * 0.06", self.source)
         self.assertIn("Math.min(designerFrameWidth, designerFrameWidth / designerFrameRatio) * 0.06", self.source)
-        self.assertIn("border-radius:var(--device-frame-radius", self.source)
+        self.assertIn('class="device-preview-designer-svg"', self.source)
+        self.assertIn("<foreignObject", self.source)
+        self.assertIn("designer-device-bezel device-preview-designer-copy", self.source)
+        self.assertIn('width="${sourceWidth}" height="${sourceHeight}"', self.source)
+        self.assertIn("device-preview-designer-svg{display:block", self.source)
 
     def test_designer_and_backend_share_the_bundled_display_font(self):
         self.assertIn('value="DRATEK eInk Sans" disabled', self.source)
         self.assertIn('const family = \'"DRATEK eInk Sans"\';', self.source)
         self.assertIn('document.fonts.load(\'600 24px "DRATEK eInk Sans"\')', self.source)
+        self.assertIn("if (document.fonts && !this._designerFontReady)", self.source)
+        self.assertIn("this._ensureDesignerFont();", self.source)
 
     def test_chart_automation_preserves_the_complete_layout(self):
         for field in (
@@ -233,6 +245,9 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("this._paintCachedCanonicalPreview(canvas);", self.source)
         self.assertIn("this._backendPreviewAddress !== address", self.source)
         self.assertIn("context.imageSmoothingEnabled = false;", self.source)
+        self.assertIn("if (hasAutomaticBindings && !this._drag)", self.source)
+        self.assertIn('if (this._drag && this._drag.mode !== "marquee") return;', self.source)
+        self.assertIn("const finishedObjectDrag = !!this._drag && !marquee", self.source)
 
     def test_writing_device_card_has_live_orange_status(self):
         self.assertIn('job.status === "writing"', self.source)

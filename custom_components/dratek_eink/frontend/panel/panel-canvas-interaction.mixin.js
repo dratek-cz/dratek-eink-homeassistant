@@ -406,10 +406,17 @@ export const canvasInteractionMixin = {
 
   _onPointerUp() {
     const marquee = this._drag?.mode === "marquee";
-    if (this._drag && !marquee) this._scheduleDraftSave();
+    const finishedObjectDrag = !!this._drag && !marquee;
+    if (finishedObjectDrag) this._scheduleDraftSave();
     this._drag = null;
     if (marquee) {
       this._render();
+      this._paint();
+    } else if (finishedObjectDrag) {
+      // Starý kanonický obrázek nesmí po puštění vrátit objekt na původní
+      // pozici. Ponecháme živý lokální render a vyžádáme nový backendový.
+      this._backendPreviewImage = null;
+      this._backendPreviewAddress = "";
       this._paint();
     }
   },

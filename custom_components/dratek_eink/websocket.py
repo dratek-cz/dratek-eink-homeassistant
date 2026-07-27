@@ -75,6 +75,14 @@ async def _save_entity_automation(
         # Compatibility with an older cached panel: the current upload is still
         # a usable fallback for opaque chart and layered bindings.
         config["base_image"] = str(msg.get("image") or "")
+    project_data = await _load_project_data(hass)
+    manual_gateway_id = str(
+        project_data.get("device_gateway_preferences", {}).get(
+            _normalize_address(msg["address"]),
+            "",
+        )
+        or ""
+    )
     config.update(
         {
             "sdk_type": int(msg["sdk_type"]),
@@ -83,6 +91,8 @@ async def _save_entity_automation(
             "route_type": route_type,
             "gateway_id": gateway_id,
             "transport_name": transport_name,
+            "gateway_selection": "manual" if manual_gateway_id else "auto",
+            "manual_gateway_id": manual_gateway_id,
         }
     )
     await get_entity_auto_update_manager(hass).async_set_config(msg["address"], config)
@@ -108,6 +118,7 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_save_custom_element)
     websocket_api.async_register_command(hass, websocket_delete_custom_element)
     websocket_api.async_register_command(hass, websocket_set_device_name)
+    websocket_api.async_register_command(hass, websocket_set_device_gateway)
     websocket_api.async_register_command(hass, websocket_list_gateways)
     websocket_api.async_register_command(hass, websocket_add_gateway)
     websocket_api.async_register_command(hass, websocket_delete_gateway)
@@ -404,14 +415,40 @@ async def websocket_scan(
     devices = list(devices_by_address.values())
     project_data = await _load_project_data(hass)
     device_names = project_data.get("device_names", {})
+    gateway_preferences = project_data.get("device_gateway_preferences", {})
     for device in devices:
         device["paths"].sort(
             key=lambda path: path.get("rssi") if isinstance(path.get("rssi"), (int, float)) else -999,
             reverse=True,
         )
-        device["preferred_path"] = device["paths"][0]
+        gateway_paths = [path for path in device["paths"] if path.get("type") == "gateway"]
+        address = _normalize_address(device["address"])
+        selected_gateway_id = str(gateway_preferences.get(address) or "")
+        selected_gateway = next(
+            (gateway for gateway in gateways if str(gateway.get("id") or "") == selected_gateway_id),
+            None,
+        )
+        selected_path = next(
+            (path for path in gateway_paths if str(path.get("id") or "") == selected_gateway_id),
+            None,
+        )
+        if selected_gateway:
+            device["gateway_selection"] = "manual"
+            device["selected_gateway_id"] = selected_gateway_id
+            device["preferred_path"] = selected_path or {
+                "type": "gateway",
+                "id": selected_gateway_id,
+                "name": selected_gateway.get("name") or selected_gateway.get("host") or "DRATEK eInk gateway",
+                "host": selected_gateway.get("host"),
+                "rssi": None,
+                "unavailable": True,
+            }
+        else:
+            device["gateway_selection"] = "auto"
+            device["selected_gateway_id"] = ""
+            device["preferred_path"] = gateway_paths[0] if gateway_paths else device["paths"][0]
         device["rssi"] = device["preferred_path"].get("rssi")
-        device["display_name"] = str(device_names.get(_normalize_address(device["address"]), ""))
+        device["display_name"] = str(device_names.get(address, ""))
 
     devices.sort(key=lambda item: item["physical_code"])
     ble_devices.sort(key=lambda item: (item["name"] or "", item["address"]))
@@ -472,6 +509,58 @@ async def websocket_set_device_name(
     connection.send_result(msg["id"], {"address": address, "name": name})
 
 
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/devices/set_gateway",
+        "address": str,
+        "gateway_id": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_set_device_gateway(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    address = _normalize_address(msg["address"])
+    gateway_id = str(msg.get("gateway_id") or "").strip()
+    gateways = await async_load_gateways(hass)
+    gateway = next(
+        (item for item in gateways if str(item.get("id") or "") == gateway_id),
+        None,
+    )
+    if gateway_id and gateway is None:
+        connection.send_error(msg["id"], "gateway_not_found", "Gateway was not found.")
+        return
+
+    data = await _load_project_data(hass)
+    if gateway_id:
+        data["device_gateway_preferences"][address] = gateway_id
+    else:
+        data["device_gateway_preferences"].pop(address, None)
+    await _project_store(hass).async_save(data)
+
+    transport_name = str(
+        (gateway or {}).get("name")
+        or (gateway or {}).get("host")
+        or ""
+    )
+    await get_entity_auto_update_manager(hass).async_set_gateway_preference(
+        address,
+        gateway_id,
+        transport_name,
+    )
+    connection.send_result(
+        msg["id"],
+        {
+            "address": address,
+            "gateway_selection": "manual" if gateway_id else "auto",
+            "gateway_id": gateway_id,
+            "transport_name": transport_name,
+        },
+    )
+
+
 @websocket_api.websocket_command({"type": "dratek_eink/gateways/list"})
 @websocket_api.async_response
 async def websocket_list_gateways(
@@ -514,6 +603,21 @@ async def websocket_delete_gateway(
     msg: dict[str, Any],
 ) -> None:
     deleted = await async_delete_gateway(hass, msg["gateway_id"])
+    if deleted:
+        data = await _load_project_data(hass)
+        preferences = data["device_gateway_preferences"]
+        affected_addresses = [
+            address
+            for address, gateway_id in preferences.items()
+            if gateway_id == msg["gateway_id"]
+        ]
+        for address in affected_addresses:
+            preferences.pop(address, None)
+        if affected_addresses:
+            await _project_store(hass).async_save(data)
+            manager = get_entity_auto_update_manager(hass)
+            for address in affected_addresses:
+                await manager.async_set_gateway_preference(address, "")
     connection.send_result(msg["id"], {"ok": deleted})
 
 

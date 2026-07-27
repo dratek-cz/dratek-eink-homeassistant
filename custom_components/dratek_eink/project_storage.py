@@ -107,6 +107,14 @@ def normalize_project_data(value: Any) -> dict[str, Any]:
         for address, name in names.items()
         if str(address).strip() and isinstance(name, (str, int, float))
     } if isinstance(names, dict) else {}
+    gateway_preferences = source.get("device_gateway_preferences")
+    normalized["device_gateway_preferences"] = {
+        str(address).strip().upper(): str(gateway_id).strip()
+        for address, gateway_id in gateway_preferences.items()
+        if str(address).strip()
+        and isinstance(gateway_id, (str, int, float))
+        and str(gateway_id).strip()
+    } if isinstance(gateway_preferences, dict) else {}
     normalized["custom_elements"] = normalize_custom_elements(
         source.get("custom_elements")
     )

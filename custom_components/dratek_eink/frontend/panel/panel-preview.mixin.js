@@ -15,6 +15,7 @@ export const previewMixin = {
   _scheduleCanonicalDesignerPreview() {
     window.clearTimeout(this._backendPreviewTimer);
     const requestId = ++this._backendPreviewRequestId;
+    if (this._drag && this._drag.mode !== "marquee") return;
     if (this._activeTab !== "designer" || !this._device() || !this._hass) return;
     this._backendPreviewTimer = window.setTimeout(async () => {
       this._backendPreviewTimer = null;
@@ -49,12 +50,17 @@ export const previewMixin = {
   },
 
   _paint() {
+    if (document.fonts && !this._designerFontReady) {
+      this._ensureDesignerFont();
+      return;
+    }
     const canvas = this.shadowRoot.querySelector("#editor");
     if (canvas) {
       this._drawScene(canvas.getContext("2d", { willReadFrequently: true }), canvas.width, canvas.height, false);
-      if (this._automaticTextBindings().length) {
+      const hasAutomaticBindings = this._automaticTextBindings().length > 0;
+      if (hasAutomaticBindings && !this._drag) {
         this._paintCachedCanonicalPreview(canvas);
-      } else {
+      } else if (!hasAutomaticBindings) {
         this._backendPreviewImage = null;
         this._backendPreviewAddress = "";
       }

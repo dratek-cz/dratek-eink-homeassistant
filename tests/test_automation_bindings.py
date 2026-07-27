@@ -42,7 +42,11 @@ def _load_automation_module():
 
     local_modules = {
         "const": {"DOMAIN": "dratek_eink"},
-        "gateway": {"async_send_gateway_payload": lambda *_args, **_kwargs: None},
+        "gateway": {
+            "async_load_gateways": lambda *_args, **_kwargs: None,
+            "async_scan_gateway": lambda *_args, **_kwargs: None,
+            "async_send_gateway_payload": lambda *_args, **_kwargs: None,
+        },
         "queue": {"get_transfer_queue": lambda _hass: None},
         "render": {"render_entity_bound_image": lambda *_args, **_kwargs: None},
         "transfer": {"DratekTransfer": object},
@@ -261,6 +265,147 @@ class AutomationBindingTests(unittest.TestCase):
         self.assertEqual("[18.0,19.0,21.5]", values["temperature"])
         self.assertIn('"__selection__":"on"', values["socket"])
         self.assertIn('"sensor.power":{"state":"48"', values["socket"])
+
+
+class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_selects_gateway_with_strongest_display_signal(self):
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager.hass = object()
+        manager._gateway_route_cache = {}
+        manager._gateway_route_cache_at = 0.0
+        manager._gateway_route_lock = asyncio.Lock()
+        scan_calls = []
+
+        async def load_gateways(_hass):
+            return [
+                {"id": "workshop", "name": "Gateway dílna"},
+                {"id": "office", "name": "Gateway kancelář"},
+            ]
+
+        async def scan_gateway(_hass, gateway_id, _seconds):
+            scan_calls.append(gateway_id)
+            rssi = -72 if gateway_id == "workshop" else -48
+            return {
+                "ok": True,
+                "devices": [{"address": "FF:FF:92:81:46:32", "rssi": rssi}],
+            }
+
+        original_load = automation.async_load_gateways
+        original_scan = automation.async_scan_gateway
+        automation.async_load_gateways = load_gateways
+        automation.async_scan_gateway = scan_gateway
+        try:
+            route = await manager._async_best_gateway_route("ff:ff:92:81:46:32")
+            cached_route = await manager._async_best_gateway_route("FF:FF:92:81:46:32")
+        finally:
+            automation.async_load_gateways = original_load
+            automation.async_scan_gateway = original_scan
+
+        self.assertEqual("office", route["id"])
+        self.assertEqual("Gateway kancelář", route["name"])
+        self.assertEqual(-48, route["rssi"])
+        self.assertEqual(route, cached_route)
+        self.assertCountEqual(["workshop", "office"], scan_calls)
+
+    async def test_automatic_refresh_uses_the_fresh_strongest_gateway(self):
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager.hass = object()
+        manager._configs = {
+            address: {
+                "route_type": "gateway",
+                "gateway_id": "old-gateway",
+                "transport_name": "Stará gateway",
+                "sdk_type": 64,
+                "bindings": [{"type": "text"}],
+            }
+        }
+        manager.async_render_preview = lambda *_args: asyncio.sleep(0, result=object())
+        manager._async_best_gateway_route = lambda _address: asyncio.sleep(
+            0,
+            result={"id": "office", "name": "Gateway kancelář", "rssi": -48},
+        )
+        submitted = {}
+
+        class _Queue:
+            async def async_submit(self, **kwargs):
+                submitted.update(kwargs)
+                return await kwargs["runner"](lambda _line: None)
+
+        async def send_gateway(_hass, gateway_id, *_args):
+            submitted["sent_gateway_id"] = gateway_id
+            return {"ok": True}
+
+        original_queue = automation.get_transfer_queue
+        original_send = automation.async_send_gateway_payload
+        automation.get_transfer_queue = lambda _hass: _Queue()
+        automation.async_send_gateway_payload = send_gateway
+        try:
+            result = await manager._async_refresh(address)
+        finally:
+            automation.get_transfer_queue = original_queue
+            automation.async_send_gateway_payload = original_send
+
+        self.assertTrue(result["ok"])
+        self.assertEqual("gateway:office", submitted["resource"])
+        self.assertEqual("Gateway kancelář", submitted["transport_name"])
+        self.assertEqual("office", submitted["sent_gateway_id"])
+
+    async def test_manual_gateway_choice_overrides_stronger_automatic_route(self):
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager.hass = object()
+        manager._configs = {
+            address: {
+                "gateway_selection": "manual",
+                "manual_gateway_id": "workshop",
+                "route_type": "gateway",
+                "gateway_id": "workshop",
+                "transport_name": "Gateway dílna",
+                "sdk_type": 64,
+                "bindings": [{"type": "text"}],
+            }
+        }
+        manager.async_render_preview = lambda *_args: asyncio.sleep(0, result=object())
+        route_scan_called = False
+
+        async def best_route(_address):
+            nonlocal route_scan_called
+            route_scan_called = True
+            return {"id": "office", "name": "Gateway kancelář", "rssi": -35}
+
+        manager._async_best_gateway_route = best_route
+        submitted = {}
+
+        class _Queue:
+            async def async_submit(self, **kwargs):
+                submitted.update(kwargs)
+                return await kwargs["runner"](lambda _line: None)
+
+        async def send_gateway(_hass, gateway_id, *_args):
+            submitted["sent_gateway_id"] = gateway_id
+            return {"ok": True}
+
+        original_queue = automation.get_transfer_queue
+        original_send = automation.async_send_gateway_payload
+        automation.get_transfer_queue = lambda _hass: _Queue()
+        automation.async_send_gateway_payload = send_gateway
+        try:
+            result = await manager._async_refresh(address)
+        finally:
+            automation.get_transfer_queue = original_queue
+            automation.async_send_gateway_payload = original_send
+
+        self.assertTrue(result["ok"])
+        self.assertFalse(route_scan_called)
+        self.assertEqual("workshop", submitted["sent_gateway_id"])
+        self.assertEqual("gateway:workshop", submitted["resource"])
 
 
 if __name__ == "__main__":
