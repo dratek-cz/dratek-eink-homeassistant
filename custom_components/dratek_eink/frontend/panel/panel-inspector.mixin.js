@@ -78,6 +78,11 @@ export const inspectorMixin = {
     };
     this.shadowRoot.querySelectorAll("[data-gateway-open]").forEach((card) => {
       card.addEventListener("click", (event) => {
+        if (card.matches("button")) {
+          event.preventDefault();
+          openGatewayWeb(card);
+          return;
+        }
         if (event.target.closest("button,input,select,textarea,a,details,summary")) return;
         openGatewayWeb(card);
       });
@@ -129,7 +134,10 @@ export const inspectorMixin = {
         await this._loadQueue(true);
       }
       if (this._activeTab === "topology") {
-        await this._loadQueue(true);
+        await Promise.all([
+          this._loadGateways(false),
+          this._loadQueue(true),
+        ]);
       }
       if (this._activeTab === "gateways") {
         await this._loadGateways(true);
@@ -385,22 +393,34 @@ export const inspectorMixin = {
       this._paint();
       this._scheduleDraftSave();
     }));
+    const setEntityBinding = (object, rawValue) => {
+      const entityId = String(rawValue || "").trim();
+      if (entityId === (object.entityId || "")) return;
+      this._pushHistory();
+      object.entityId = entityId;
+      if (!entityId) object.entityAttribute = "";
+      if (entityId && ["text", "chart", "bar_gauge", "pie", "slider", "gauge", "potentiometer"].includes(object.type) && object.autoUpdate === undefined) object.autoUpdate = true;
+      this._render();
+      this._paint();
+      this._scheduleDraftSave();
+    };
     this.shadowRoot.querySelectorAll("[data-entity-picker]").forEach((picker) => {
       const object = this._objects.find((item) => item.id === picker.dataset.entityPicker);
       if (!object) return;
       picker.hass = this._hass;
       picker.value = object.entityId || "";
       picker.allowCustomEntity = true;
-      picker.addEventListener("value-changed", (event) => {
-        const entityId = event.detail?.value || "";
-        if (entityId === (object.entityId || "")) return;
-        this._pushHistory();
-        object.entityId = entityId;
-        if (!entityId) object.entityAttribute = "";
-        if (entityId && ["text", "chart", "bar_gauge", "pie", "slider", "gauge", "potentiometer"].includes(object.type) && object.autoUpdate === undefined) object.autoUpdate = true;
-        this._render();
-        this._paint();
-        this._scheduleDraftSave();
+      picker.addEventListener("value-changed", (event) => setEntityBinding(object, event.detail?.value));
+    });
+    this.shadowRoot.querySelectorAll("[data-entity-input]").forEach((input) => {
+      const object = this._objects.find((item) => item.id === input.dataset.entityInput);
+      if (!object) return;
+      input.addEventListener("change", () => setEntityBinding(object, input.value));
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          setEntityBinding(object, input.value);
+        }
       });
     });
     this.shadowRoot.querySelectorAll("[data-custom-type]").forEach((button) => button.addEventListener("click", () => {
@@ -424,6 +444,11 @@ export const inspectorMixin = {
           { operator: "greater", value: "100", symbol: "!" },
           { operator: "less_equal", value: "100", symbol: "✓" },
         ],
+        time: [
+          { operator: "time_between", value: "06:00|12:00", symbol: "●" },
+          { operator: "time_between", value: "12:00|18:00", symbol: "▲" },
+          { operator: "time_between", value: "18:00|06:00", symbol: "○" },
+        ],
       };
       this._customElementForm.condition_rules = structuredClone(templates[button.dataset.conditionTemplate] || []);
       this._customElementForm.default_symbol = "?";
@@ -441,7 +466,10 @@ export const inspectorMixin = {
     }));
     this.shadowRoot.querySelectorAll("[data-condition-operator]").forEach((input) => input.addEventListener("change", () => {
       const rule = this._customElementForm.condition_rules[Number(input.dataset.conditionOperator)];
-      if (rule) rule.operator = input.value;
+      if (rule) {
+        rule.operator = input.value;
+        if (input.value === "time_between" && !String(rule.value || "").includes("|")) rule.value = "08:00|16:00";
+      }
       this._stableCustomRender();
     }));
     this.shadowRoot.querySelectorAll("[data-condition-value]").forEach((input) => input.addEventListener("input", () => {
@@ -450,6 +478,14 @@ export const inspectorMixin = {
       this._paint();
     }));
     this.shadowRoot.querySelectorAll("[data-condition-value]").forEach((input) => input.addEventListener("change", () => {
+      this._stableCustomRender();
+    }));
+    this.shadowRoot.querySelectorAll("[data-condition-time-start],[data-condition-time-end]").forEach((input) => input.addEventListener("change", () => {
+      const index = Number(input.dataset.conditionTimeStart ?? input.dataset.conditionTimeEnd);
+      const rule = this._customElementForm.condition_rules[index];
+      if (!rule) return;
+      const [start = "08:00", end = "16:00"] = String(rule.value || "").split("|");
+      rule.value = input.dataset.conditionTimeStart !== undefined ? `${input.value || start}|${end}` : `${start}|${input.value || end}`;
       this._stableCustomRender();
     }));
     this.shadowRoot.querySelectorAll("[data-condition-symbol]").forEach((input) => input.addEventListener("change", () => {
@@ -601,9 +637,17 @@ export const inspectorMixin = {
       this._customElementForm.condition_rules.push({ operator: "equals", value: "", layer_id: this._customElementForm.layers[0]?.id || "" });
       this._stableCustomRender();
     });
+    this.shadowRoot.querySelector("#addLayerTimeRule")?.addEventListener("click", () => {
+      if (this._customElementForm.condition_rules.length >= 12) return;
+      this._customElementForm.condition_rules.push({ operator: "time_between", value: "08:00|16:00", layer_id: this._customElementForm.layers[0]?.id || "" });
+      this._stableCustomRender();
+    });
     this.shadowRoot.querySelectorAll("[data-layer-rule-operator]").forEach((input) => input.addEventListener("change", () => {
       const rule = this._customElementForm.condition_rules[Number(input.dataset.layerRuleOperator)];
-      if (rule) rule.operator = input.value;
+      if (rule) {
+        rule.operator = input.value;
+        if (input.value === "time_between" && !String(rule.value || "").includes("|")) rule.value = "08:00|16:00";
+      }
       this._stableCustomRender();
     }));
     this.shadowRoot.querySelectorAll("[data-layer-rule-value]").forEach((input) => input.addEventListener("input", () => {
@@ -611,6 +655,14 @@ export const inspectorMixin = {
       if (rule) rule.value = input.value;
     }));
     this.shadowRoot.querySelectorAll("[data-layer-rule-value]").forEach((input) => input.addEventListener("change", () => this._stableCustomRender()));
+    this.shadowRoot.querySelectorAll("[data-layer-rule-time-start],[data-layer-rule-time-end]").forEach((input) => input.addEventListener("change", () => {
+      const index = Number(input.dataset.layerRuleTimeStart ?? input.dataset.layerRuleTimeEnd);
+      const rule = this._customElementForm.condition_rules[index];
+      if (!rule) return;
+      const [start = "08:00", end = "16:00"] = String(rule.value || "").split("|");
+      rule.value = input.dataset.layerRuleTimeStart !== undefined ? `${input.value || start}|${end}` : `${start}|${input.value || end}`;
+      this._stableCustomRender();
+    }));
     this.shadowRoot.querySelectorAll("[data-layer-rule-target]").forEach((input) => input.addEventListener("change", () => {
       const rule = this._customElementForm.condition_rules[Number(input.dataset.layerRuleTarget)];
       if (rule) rule.layer_id = input.value;
@@ -715,8 +767,11 @@ export const inspectorMixin = {
         ${this._inspectorSegments("verticalAlign", object.verticalAlign || "middle", [{ value: "top", label: "Nahoru", icon: "mdi:format-vertical-align-top" }, { value: "middle", label: "Na střed", icon: "mdi:format-vertical-align-center" }, { value: "bottom", label: "Dolů", icon: "mdi:format-vertical-align-bottom" }], "Svislé zarovnání")}
         ${object.statusIcons ? `<div class="row"><div class="field"><label>Symbol zapnuto</label><input data-prop="statusOnSymbol" value="${this._escape(object.statusOnSymbol || "●")}"></div><div class="field"><label>Symbol vypnuto</label><input data-prop="statusOffSymbol" value="${this._escape(object.statusOffSymbol || "○")}"></div></div><div class="field"><label>Hodnoty zapnutého stavu</label><input data-prop="statusOnValues" value="${this._escape(object.statusOnValues || "on,true,1,open,home")}"><small>Oddělte čárkou, například on, true, open.</small></div>` : ""}`, true);
       const appearance = this._inspectorSection("mdi:palette-outline", "Vzhled", `${this._inspectorColor("color", object.color, "Barva textu")}<div class="toggle-stack">${this._inspectorToggle("bold", !!object.bold, "mdi:format-bold", "Tučné písmo")}${this._inspectorToggle("autoFit", object.autoFit !== false, "mdi:fit-to-page-outline", "Přizpůsobit text boxu")}</div>`);
-      const variable = this._inspectorSection("mdi:variable", "Proměnná", `<div class="toggle-stack">${this._inspectorToggle("variable", !!object.variable, "mdi:variable-box", "Proměnný text")}</div>${object.variable ? `<div class="field" style="margin-top:10px"><label><ha-icon icon="mdi:identifier"></ha-icon>Interní název</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="napr_teplota"><p class="inspector-help"><ha-icon icon="mdi:information-outline"></ha-icon><span>Název patří šabloně a není samostatnou entitou Home Assistantu.</span></p></div>${this._renderEntityBinding(object)}` : ""}`);
-      return `${geometry}${content}${appearance}${variable}`;
+      const variable = this._inspectorSection("mdi:variable", "Proměnná", `<div class="toggle-stack">${this._inspectorToggle("variable", !!object.variable, "mdi:variable-box", "Proměnný text")}</div>${object.variable ? `<div class="field" style="margin-top:10px"><label><ha-icon icon="mdi:identifier"></ha-icon>Interní název</label><input data-prop="variableName" value="${this._escape(object.variableName || "")}" placeholder="napr_teplota"><p class="inspector-help"><ha-icon icon="mdi:information-outline"></ha-icon><span>Název patří šabloně a není samostatnou entitou Home Assistantu.</span></p></div>${object.statusIcons ? "" : this._renderEntityBinding(object)}` : ""}`);
+      const statusSource = object.statusIcons
+        ? this._inspectorSection("mdi:database-sync-outline", "Vstup signalizace", this._renderEntityBinding(object), true)
+        : "";
+      return `${geometry}${content}${appearance}${variable}${statusSource}`;
     }
 
     if (object.type === "rect") return `${geometry}${this._inspectorSection("mdi:palette-outline", "Výplň a rámeček", `${this._inspectorColor("fill", object.fill, "Výplň", ["none", "black", "red", "white"])}${this._inspectorColor("stroke", object.stroke, "Rámeček", ["none", "black", "red"])}<div class="field"><label><ha-icon icon="mdi:border-width"></ha-icon>Síla rámečku</label><input data-prop="strokeWidth" type="number" min="0" value="${object.strokeWidth || 0}"></div>`)}`;

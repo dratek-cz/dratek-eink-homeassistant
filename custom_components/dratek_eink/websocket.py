@@ -1394,7 +1394,7 @@ async def websocket_save_custom_element(
         if not isinstance(rule_source, dict):
             continue
         operator = str(rule_source.get("operator") or "equals")
-        if operator not in {"equals", "not_equals", "greater", "greater_equal", "less", "less_equal", "contains", "is_on", "is_off"}:
+        if operator not in {"equals", "not_equals", "greater", "greater_equal", "less", "less_equal", "contains", "is_on", "is_off", "time_between"}:
             operator = "equals"
         condition_rules.append({
             "operator": operator,

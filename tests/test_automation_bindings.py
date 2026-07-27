@@ -102,6 +102,16 @@ class _States:
 
 
 class AutomationBindingTests(unittest.TestCase):
+    def test_time_condition_supports_daytime_and_overnight_intervals(self):
+        matches = automation.EntityAutoUpdateManager._condition_matches
+
+        self.assertTrue(matches("14:30", "time_between", "08:00|16:00"))
+        self.assertFalse(matches("18:00", "time_between", "08:00|16:00"))
+        self.assertTrue(matches("23:15", "time_between", "22:00|06:00"))
+        self.assertTrue(matches("2026-07-27T05:45:00+02:00", "time_between", "22:00|06:00"))
+        self.assertFalse(matches("12:00", "time_between", "22:00|06:00"))
+        self.assertFalse(matches("08:00", "time_between", "08:00|08:00"))
+
     def test_layered_binding_subscribes_to_widget_entities(self):
         binding = {
             "type": "layered",

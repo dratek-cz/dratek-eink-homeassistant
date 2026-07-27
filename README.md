@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.126
+
+- sekce **Gatewaye** má nové přehledné rozložení a karty ve stejném vizuálním stylu jako displeje
+- grafy a signalizace umožňují vybrat Home Assistant entitu nebo zadat její Entity ID ručně
+- Designer HA prvků podporuje časová pravidla **Od–Do**, včetně intervalů přes půlnoc
+- živý náhled a automatické vykreslování používají stejné vyhodnocení časových pravidel
+- signalizace nahrávání na kartě displeje už neposouvá ani nezmenšuje náhled
+
 ## Novinky ve verzi 0.1.125
 
 - ruční volba gateway se přesunula do **Mapy připojení**, kde lze displej přetáhnout na požadovanou gateway

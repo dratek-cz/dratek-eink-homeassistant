@@ -32,11 +32,29 @@
         }
       });
     }
+    if (!customElements.get("ha-entity-picker")) {
+      customElements.define("ha-entity-picker", class extends HTMLElement {
+        connectedCallback() { this._render(); }
+        set hass(value) { this._hass = value; this._render(); }
+        set value(value) { this._value = value || ""; this._render(); }
+        get value() { return this._value || ""; }
+        _render() {
+          if (!this.isConnected) return;
+          const states = Object.keys(this._hass?.states || {}).sort();
+          this.innerHTML = `<select style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color)"><option value="">Bez entity</option>${states.map((entityId) => `<option value="${entityId}" ${entityId === this.value ? "selected" : ""}>${entityId}</option>`).join("")}</select>`;
+          this.querySelector("select")?.addEventListener("change", (event) => {
+            this._value = event.target.value;
+            this.dispatchEvent(new CustomEvent("value-changed", { detail:{ value:this._value }, bubbles:true, composed:true }));
+          });
+        }
+      });
+    }
     await import("../custom_components/dratek_eink/frontend/dratek-eink-panel.js");
 
     const gateways = [
-      { id:"gateway-workshop", name:"Gateway dílna", host:"192.168.1.41", status:{ok:true} },
-      { id:"gateway-office", name:"Gateway kancelář", host:"192.168.1.42", status:{ok:true} },
+      { id:"gateway-workshop", name:"Gateway dílna", host:"192.168.1.41", status:{ok:true,hostname:"dratek-dilna.local",ip:"192.168.1.41",firmware:"0.1.125",chip:"ESP32-S3",wifi_rssi:-49,uptime_ms:184320000,ble_initialized:true,ota_supported:true,free_heap:182440} },
+      { id:"gateway-office", name:"Gateway kancelář", host:"192.168.1.42", status:{ok:true,hostname:"dratek-kancelar.local",ip:"192.168.1.42",firmware:"0.1.124",chip:"ESP32",wifi_rssi:-61,uptime_ms:45120000,ble_initialized:true,ota_supported:true,free_heap:146220} },
+      { id:"gateway-empty", name:"Gateway bez displeje", host:"192.168.1.43", status:{ok:false,hostname:"dratek-sklad.local",firmware:"0.1.122",chip:"ESP32-S3"} },
     ];
     const devices = [
       { address:"FF:FF:92:81:46:32", physical_code:"92.81.46.32", display_name:"Ceník dílna", model:"EPA LCD 296x128 1 BWR", sdk_type:46, battery_percent:82, battery_voltage:3.05, rssi:-48, gateway_selection:"auto", selected_gateway_id:"", preferred_path:{type:"gateway",id:"gateway-workshop",name:"Gateway dílna",rssi:-48}, paths:[{type:"gateway",id:"gateway-workshop",name:"Gateway dílna",rssi:-48},{type:"gateway",id:"gateway-office",name:"Gateway kancelář",rssi:-61}] },
@@ -81,14 +99,19 @@
     await mdiSheet.replace(mdiCssText + "\nha-icon .mdi{font-size:1.35em;line-height:1;display:inline-block;}");
     panel.shadowRoot.adoptedStyleSheets = [...panel.shadowRoot.adoptedStyleSheets, mdiSheet];
     panel.hass = {
-      states: {},
+      states: {
+        "sensor.spot_prices": { state:"2.18", attributes:{ friendly_name:"Spotové ceny", prices:[1.92,2.04,2.18,2.31,2.11] } },
+        "sensor.time": { state:"14:30", attributes:{ friendly_name:"Aktuální čas" } },
+        "binary_sensor.dvere_dilna": { state:"on", attributes:{ friendly_name:"Dveře dílna" } },
+        "input_number.cilova_teplota": { state:"22.5", attributes:{ friendly_name:"Cílová teplota", unit_of_measurement:"°C" } },
+      },
       callWS: async (msg) => {
         const { type } = msg;
         if (type === "dratek_eink/scan") return { ok:true, devices };
         if (type === "dratek_eink/device_drafts/list") return { drafts };
         if (type === "dratek_eink/projects/list") return { projects: [] };
         if (type === "dratek_eink/custom_elements/list") return { elements: [] };
-        if (type === "dratek_eink/gateways/list") return { gateways };
+        if (type === "dratek_eink/gateways/list" || type === "dratek_eink/gateways/refresh") return { gateways };
         if (type === "dratek_eink/gateways/serial_ports") return { ports: [] };
         if (type === "dratek_eink/queue/list") {
           const jobs = [

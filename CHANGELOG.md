@@ -2,6 +2,23 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.126] - 2026-07-27
+
+### Gatewaye
+- Sekce Gatewaye byla přepracována do přehledného pracovního prostoru pro správu, hledání v síti a USB instalaci.
+- Karty gatewayí nyní používají stejný kompaktní vizuální styl jako karty displejů, včetně centrálního náhledu zařízení, stavu, připojených displejů a pevné lišty akcí.
+- Přehled připojených displejů respektuje ručně uzamčenou gateway i automaticky vybranou aktivní cestu.
+
+### Designer HA prvků
+- Grafy, signalizace a další datové prvky mají spolehlivý výběr entity i možnost zadat Entity ID ručně.
+- Pravidla vrstev podporují porovnání času pomocí samostatných polí **Od** a **Do**.
+- Časové intervaly fungují také přes půlnoc, například `22:00–06:00`, a lze je přidávat samostatným tlačítkem.
+- Časová pravidla se vyhodnocují shodně v živém náhledu i při automatickém vykreslení v Home Assistantu.
+
+### Karty displejů a editor
+- Stav probíhajícího a dokončeného nahrávání je umístěný přímo v náhledové oblasti a nemění rozložení ani polohu náhledu.
+- Ovládací prvky editoru a stavové údaje displeje byly sjednoceny pro čitelnější a konzistentnější vzhled.
+
 ## [0.1.125] - 2026-07-27
 
 ### Mapa připojení a gatewaye

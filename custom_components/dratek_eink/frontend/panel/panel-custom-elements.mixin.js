@@ -394,6 +394,23 @@ export const customElementsMixin = {
     if (operator === "is_on") return onValues.has(current);
     if (operator === "is_off") return offValues.has(current);
     if (operator === "contains") return current.includes(expected);
+    if (operator === "time_between") {
+      const toMinutes = (input) => {
+        const match = String(input || "").match(/(?:^|[T\s])(\d{1,2}):(\d{2})(?::\d{2})?/);
+        if (!match) return null;
+        const hours = Number(match[1]);
+        const minutes = Number(match[2]);
+        return hours >= 0 && hours < 24 && minutes >= 0 && minutes < 60 ? hours * 60 + minutes : null;
+      };
+      const [startText, endText] = String(target || "").split("|");
+      const currentMinutes = toMinutes(current);
+      const startMinutes = toMinutes(startText);
+      const endMinutes = toMinutes(endText);
+      if (currentMinutes === null || startMinutes === null || endMinutes === null || startMinutes === endMinutes) return false;
+      return startMinutes < endMinutes
+        ? currentMinutes >= startMinutes && currentMinutes < endMinutes
+        : currentMinutes >= startMinutes || currentMinutes < endMinutes;
+    }
     if (["greater", "greater_equal", "less", "less_equal"].includes(operator)) {
       const currentNumber = Number(value);
       const targetNumber = Number(target);

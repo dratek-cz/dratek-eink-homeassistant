@@ -86,7 +86,17 @@ export const variablesMixin = {
     const state = object.entityId ? this._hass?.states?.[object.entityId] : null;
     const friendlyName = state?.attributes?.friendly_name || object.entityId || "";
     const value = object.entityId ? this._entityValue(object) : "";
-    return `<div class="entity-source"><h2>Zdroj z Home Assistantu</h2><div class="field"><label>Entita nebo Pomocník</label><ha-entity-picker data-entity-picker="${this._escape(object.id)}"></ha-entity-picker><small>Vyberte například input_text, input_number nebo libovolný senzor. Bez výběru se používá ruční hodnota z menu Proměnné.</small></div>${object.entityId ? `<div class="field"><label>Atribut entity (volitelné)</label><input data-prop="entityAttribute" value="${this._escape(object.entityAttribute || "")}" placeholder="Například prices"><small>Nechte prázdné pro hlavní stav entity. Atribut je vhodný například pro pole spotových cen.</small></div><label><input data-prop="autoUpdate" type="checkbox" ${object.autoUpdate !== false ? "checked" : ""}> Automaticky odeslat při změně</label><small>Všechny změny tohoto displeje se sloučí a odešlou nejvýše jednou za nastavený interval (${this._refreshIntervalSeconds < 60 ? `${this._refreshIntervalSeconds} s` : `${Math.round(this._refreshIntervalSeconds / 60)} min`}).</small><div class="entity-current"><ha-icon icon="mdi:home-assistant"></ha-icon><div><strong>${this._escape(value || "Bez hodnoty")}</strong><small>${this._escape(friendlyName)} · ${this._escape(object.entityId)}</small></div></div>` : ""}</div>`;
+    const entityIds = Object.keys(this._hass?.states || {}).sort();
+    const listId = `entity-list-${String(object.id || "").replace(/[^a-zA-Z0-9_-]/g, "")}`;
+    return `<div class="entity-source">
+      <div class="entity-source-title"><ha-icon icon="mdi:home-assistant"></ha-icon><div><strong>Home Assistant</strong><small>Entita, pomocník nebo atribut</small></div></div>
+      <div class="field"><label>Vybrat entitu nebo Pomocníka</label><ha-entity-picker data-entity-picker="${this._escape(object.id)}"></ha-entity-picker></div>
+      <div class="entity-source-divider"><span>nebo zadejte ID ručně</span></div>
+      <div class="field"><label>Entity ID</label><input data-entity-input="${this._escape(object.id)}" list="${listId}" value="${this._escape(object.entityId || "")}" placeholder="sensor.teplota nebo input_number.hodnota"><datalist id="${listId}">${entityIds.map((entityId) => `<option value="${this._escape(entityId)}"></option>`).join("")}</datalist><small>Ruční vstup funguje i pro vlastní entity, které picker nenabízí.</small></div>
+      <div class="field"><label>Atribut entity (volitelné)</label><input data-prop="entityAttribute" value="${this._escape(object.entityAttribute || "")}" placeholder="Například prices"><small>Prázdné pole použije hlavní stav entity.</small></div>
+      <label class="entity-auto-update"><input data-prop="autoUpdate" type="checkbox" ${object.autoUpdate !== false ? "checked" : ""}> <span>Automaticky odeslat při změně</span></label>
+      ${object.entityId ? `<div class="entity-current"><ha-icon icon="mdi:check-circle-outline"></ha-icon><div><strong>${this._escape(value || "Bez hodnoty")}</strong><small>${this._escape(friendlyName)} · ${this._escape(object.entityId)}${object.entityAttribute ? ` · ${this._escape(object.entityAttribute)}` : ""}</small></div></div>` : `<div class="entity-current is-empty"><ha-icon icon="mdi:database-off-outline"></ha-icon><div><strong>Ruční náhled</strong><small>Dokud nevyberete entitu, používá se hodnota nastavená v objektu.</small></div></div>`}
+    </div>`;
   },
 
   _automaticTextBindings() {

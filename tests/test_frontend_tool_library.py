@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "custom_components" / "dratek_eink" / "frontend"
 PANEL = FRONTEND / "dratek-eink-panel.js"
 PANEL_MODULES = FRONTEND / "panel"
+HARNESS = ROOT / "tests" / "dratek-eink-panel-harness.html"
 
 
 def _panel_source() -> str:
@@ -29,6 +30,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.source = _panel_source()
+        cls.harness = HARNESS.read_text(encoding="utf-8")
 
     def test_library_exposes_all_categories_and_direct_widgets(self):
         for category in ("basic", "data", "status", "custom"):
@@ -43,6 +45,43 @@ class FrontendToolLibraryTests(unittest.TestCase):
         for widget in ("bar_gauge", "pie", "slider", "gauge", "potentiometer"):
             self.assertIn(f'"{widget}"', automatic_filter)
         self.assertIn('type: "layered"', self.source)
+
+    def test_chart_and_status_have_reliable_entity_inputs(self):
+        self.assertIn('data-entity-input=', self.source)
+        self.assertIn('setEntityBinding', self.source)
+        self.assertIn('"Vstup signalizace"', self.source)
+        self.assertIn('placeholder="sensor.teplota nebo input_number.hodnota"', self.source)
+        self.assertIn('customElements.define("ha-entity-picker"', self.harness)
+        self.assertIn('"sensor.spot_prices"', self.harness)
+        self.assertIn('"binary_sensor.dvere_dilna"', self.harness)
+
+    def test_gateway_workspace_uses_compact_management_layout(self):
+        for marker in (
+            'class="gateway-page-hero"',
+            'class="gateway-workspace-tabs"',
+            'class="gateway-card-grid"',
+            'class="gateway-compact-card',
+            'class="gateway-setup-grid"',
+        ):
+            self.assertIn(marker, self.source)
+        self.assertIn("Moje gatewaye", self.source)
+        self.assertIn("Najít v síti", self.source)
+        self.assertIn("Nová gateway", self.source)
+        self.assertIn('class="gateway-visual-slot"', self.source)
+        self.assertIn(".gateway-compact-card{grid-template-rows:auto minmax(150px,1fr)", self.source)
+
+    def test_ha_element_rules_support_time_intervals(self):
+        for marker in (
+            '"time_between"',
+            'data-condition-template="time"',
+            'data-condition-time-start',
+            'data-condition-time-end',
+            'id="addLayerTimeRule"',
+            'data-layer-rule-time-start',
+            'data-layer-rule-time-end',
+        ):
+            self.assertIn(marker, self.source)
+        self.assertIn('"sensor.time"', self.harness)
 
     def test_inspector_sections_are_collapsible(self):
         self.assertIn('<details class="inspector-section"', self.source)
@@ -126,11 +165,16 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('data-topology-device=', self.source)
         self.assertIn('data-topology-gateway=', self.source)
         self.assertIn('data-topology-unlock=', self.source)
+        self.assertIn("gateway.id || gateway.gateway_id || gateway.host || gateway.name", self.source)
+        self.assertIn("this._loadGateways(false)", self.source)
+        self.assertIn("Gateway bez displeje", self.harness)
         self.assertIn('event.dataTransfer.setData("text/plain", address)', self.source)
         self.assertIn('await this._saveDeviceGateway(address, group.dataset.topologyGateway)', self.source)
         self.assertIn('type: "dratek_eink/devices/set_gateway"', self.source)
         self.assertIn('device.gateway_selection === "manual"', self.source)
         self.assertIn(".connection-device.is-locked", self.source)
+        self.assertIn("box-shadow:inset 3px 0 0 #2563eb", self.source)
+        self.assertIn("Modrý zámek vrátí automatický výběr", self.source)
         self.assertIn("Ručně přiřazeno", self.source)
 
     def test_connection_map_shows_live_upload_and_rendering_status(self):
@@ -154,10 +198,19 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("width:27px;height:16px;min-width:27px;min-height:16px", self.source)
         self.assertIn("width:22px;height:16px;min-width:22px;min-height:16px", self.source)
         self.assertIn(".designer-device-strip .designer-device-meter .signal-bars span:nth-child(4){height:14px}", self.source)
+        self.assertEqual(self.source.count('class="designer-meter-value"'), 2)
+        self.assertIn(".designer-device-meter .designer-meter-value{display:block;margin:0;color:var(--primary-text-color)", self.source)
 
     def test_designer_command_cards_match_the_page_visual_system(self):
-        for label in ("Soubor", "Proměnné", "Mapování", "Pozadí a zařízení", "Zobrazení"):
+        for label in ("Soubor", "Proměnné"):
             self.assertIn(f"<strong>{label}</strong>", self.source)
+        self.assertNotIn("<strong>Mapování</strong>", self.source)
+        self.assertNotIn("<strong>Zobrazení</strong>", self.source)
+        self.assertIn('class="designer-command-direct designer-command-orientation"', self.source)
+        self.assertIn('class="designer-command-direct designer-command-background"', self.source)
+        self.assertIn('data-orientation="landscape"', self.source)
+        for color in ("white", "black", "red"):
+            self.assertIn(f'data-background="{color}"', self.source)
         self.assertIn('class="designer-command-card', self.source)
         self.assertIn('class="designer-command-icon"', self.source)
         self.assertIn('class="designer-command-copy"', self.source)
@@ -233,6 +286,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("designer-device-bezel device-preview-designer-copy", self.source)
         self.assertIn('width="${sourceWidth}" height="${sourceHeight}"', self.source)
         self.assertIn("device-preview-designer-svg{display:block", self.source)
+        self.assertIn("calc(100cqh * var(--frame-ratio,2.15))", self.source)
+        self.assertIn(".display-preview-slot .device-preview-designer-copy{box-shadow:none;filter:none}", self.source)
 
     def test_designer_and_backend_share_the_bundled_display_font(self):
         self.assertIn('value="DRATEK eInk Sans" disabled', self.source)
@@ -280,6 +335,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('role="status" aria-live="polite"', self.source)
         self.assertIn(".display-tile.is-writing", self.source)
         self.assertIn(".display-writing-state", self.source)
+        self.assertIn(".display-preview-slot>.display-writing-state", self.source)
+        self.assertIn("position:absolute", self.source)
         self.assertIn('["queue", "devices", "topology"].includes(this._activeTab)', self.source)
 
     def test_recently_uploaded_device_card_has_non_blocking_green_status(self):

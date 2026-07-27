@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from typing import Any
 
@@ -293,6 +294,24 @@ class EntityAutoUpdateManager:
             return normalized in {"off", "false", "0", "closed", "not_home", "idle", "unavailable", "unknown", "locked"}
         if operator == "contains":
             return expected in normalized
+        if operator == "time_between":
+            match = re.search(r"(?:^|[T\s])(\d{1,2}):(\d{2})(?::\d{2})?", str(value))
+            parts = str(target).split("|", 1)
+            if match is None or len(parts) != 2:
+                return False
+
+            def minutes(raw: str) -> int | None:
+                parsed = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", raw)
+                if parsed is None:
+                    return None
+                hour, minute = int(parsed.group(1)), int(parsed.group(2))
+                return hour * 60 + minute if 0 <= hour <= 23 and 0 <= minute <= 59 else None
+
+            current = int(match.group(1)) * 60 + int(match.group(2))
+            start, end = minutes(parts[0]), minutes(parts[1])
+            if start is None or end is None or start == end:
+                return False
+            return start <= current < end if start < end else current >= start or current < end
         if operator in {"greater", "greater_equal", "less", "less_equal"}:
             try:
                 current_number = float(value)
