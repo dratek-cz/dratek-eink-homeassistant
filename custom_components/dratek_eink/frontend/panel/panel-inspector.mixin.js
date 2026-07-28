@@ -459,12 +459,32 @@ export const inspectorMixin = {
       this._paint();
       this._scheduleDraftSave();
     };
+    const configureEntitySelector = (selector, value) => {
+      selector.hass = this._hass;
+      selector.selector = { entity: {} };
+      selector.value = value || "";
+      selector.required = false;
+    };
+    this.shadowRoot.querySelectorAll("[data-variable-entity-picker]").forEach((picker) => {
+      const object = this._objects.find((item) => item.id === picker.dataset.variableEntityPicker);
+      if (!object) return;
+      configureEntitySelector(picker, object.entityId);
+      picker.addEventListener("value-changed", (event) => setEntityBinding(object, event.detail?.value));
+    });
+    this.shadowRoot.querySelectorAll("[data-variable-entity-attribute]").forEach((input) => {
+      const object = this._objects.find((item) => item.id === input.dataset.variableEntityAttribute);
+      if (!object) return;
+      input.addEventListener("change", () => {
+        object.entityAttribute = String(input.value || "").trim();
+        this._render();
+        this._paint();
+        this._scheduleDraftSave();
+      });
+    });
     this.shadowRoot.querySelectorAll("[data-entity-picker]").forEach((picker) => {
       const object = this._objects.find((item) => item.id === picker.dataset.entityPicker);
       if (!object) return;
-      picker.hass = this._hass;
-      picker.value = object.entityId || "";
-      picker.allowCustomEntity = true;
+      configureEntitySelector(picker, object.entityId);
       picker.addEventListener("value-changed", (event) => setEntityBinding(object, event.detail?.value));
     });
     this.shadowRoot.querySelectorAll("[data-entity-input]").forEach((input) => {
@@ -584,24 +604,19 @@ export const inspectorMixin = {
       this._applyCustomMappingPaths();
       this._fetchCustomElementUrl(false);
     });
-    const customEntity = this.shadowRoot.querySelector("#customElementEntity");
-    if (customEntity) {
-      customEntity.hass = this._hass;
-      customEntity.value = this._customElementForm.entity_id || "";
-      customEntity.allowCustomEntity = true;
+    this.shadowRoot.querySelectorAll("[data-custom-entity-picker]").forEach((customEntity) => {
+      configureEntitySelector(customEntity, this._customElementForm.entity_id);
       customEntity.addEventListener("value-changed", (event) => {
         const entityId = event.detail?.value || "";
         if (entityId === this._customElementForm.entity_id) return;
         this._customElementForm.entity_id = entityId;
         this._stableCustomRender();
       });
-    }
+    });
     this.shadowRoot.querySelectorAll("[data-layer-object-entity]").forEach((picker) => {
       const object = this._customSelectedLayerObject();
       if (!object || object.id !== picker.dataset.layerObjectEntity) return;
-      picker.hass = this._hass;
-      picker.value = object.entity_id || object.entityId || "";
-      picker.allowCustomEntity = true;
+      configureEntitySelector(picker, object.entity_id || object.entityId);
       picker.addEventListener("value-changed", (event) => {
         const entityId = event.detail?.value || "";
         if (entityId === (object.entity_id || object.entityId || "")) return;

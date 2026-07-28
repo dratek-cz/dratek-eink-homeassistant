@@ -32,20 +32,102 @@
         }
       });
     }
-    if (!customElements.get("ha-entity-picker")) {
-      customElements.define("ha-entity-picker", class extends HTMLElement {
+    // Standalone test fallback only. Inside Home Assistant its already
+    // registered native ha-selector is used and this block is skipped.
+    if (!customElements.get("ha-selector")) {
+      customElements.define("ha-selector", class extends HTMLElement {
+        constructor() {
+          super();
+          this._open = false;
+          this._query = "";
+        }
         connectedCallback() { this._render(); }
         set hass(value) { this._hass = value; this._render(); }
+        set selector(value) { this._selector = value; this._render(); }
+        get selector() { return this._selector || { entity:{} }; }
         set value(value) { this._value = value || ""; this._render(); }
         get value() { return this._value || ""; }
-        _render() {
+        _pickerKey() {
+          return this.getAttribute("data-variable-entity-picker")
+            || this.getAttribute("data-entity-picker")
+            || this.getAttribute("data-layer-object-entity")
+            || (this.hasAttribute("data-custom-entity-picker") ? "custom-element-entity" : "")
+            || this.id
+            || "entity-picker";
+        }
+        _pickerStore() {
+          window.__dratekHarnessEntityPicker ||= { openKey:"", queries:{} };
+          return window.__dratekHarnessEntityPicker;
+        }
+        _escape(value) {
+          return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[char]);
+        }
+        _render(focusSearch = false) {
           if (!this.isConnected) return;
-          const states = Object.keys(this._hass?.states || {}).sort();
-          this.innerHTML = `<select style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--divider-color);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color)"><option value="">Bez entity</option>${states.map((entityId) => `<option value="${entityId}" ${entityId === this.value ? "selected" : ""}>${entityId}</option>`).join("")}</select>`;
-          this.querySelector("select")?.addEventListener("change", (event) => {
-            this._value = event.target.value;
-            this.dispatchEvent(new CustomEvent("value-changed", { detail:{ value:this._value }, bubbles:true, composed:true }));
+          const states = this._hass?.states || {};
+          const entities = Object.keys(states).sort().map((entityId) => ({
+            id: entityId,
+            name: states[entityId]?.attributes?.friendly_name || entityId,
+            state: states[entityId]?.state ?? "—",
+          }));
+          const store = this._pickerStore();
+          const key = this._pickerKey();
+          this._query = store.queries[key] || this._query || "";
+          const query = this._query.trim().toLowerCase();
+          const filtered = query
+            ? entities.filter((entity) => `${entity.name} ${entity.id} ${entity.state}`.toLowerCase().includes(query))
+            : entities;
+          const selected = entities.find((entity) => entity.id === this.value);
+          this.innerHTML = `<style>
+            ha-selector{display:block;width:100%;font:inherit;color:var(--primary-text-color,#172127)}
+            button,input{font:inherit}
+            details{width:100%}summary{list-style:none}summary::-webkit-details-marker{display:none}.trigger{box-sizing:border-box;width:100%;min-height:42px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 11px;border:1px solid var(--divider-color,#d8dfdf);border-radius:8px;background:var(--card-background-color,#fff);color:inherit;text-align:left;cursor:pointer}
+            .trigger:hover{border-color:#009b9b}.trigger-copy{display:grid;min-width:0}.trigger-copy strong,.trigger-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.trigger-copy strong{font-size:12px}.trigger-copy small{margin-top:2px;color:var(--secondary-text-color,#64727b);font-size:9px}.chevron{color:#009b9b;font-size:17px}
+            details[open] .chevron{transform:rotate(180deg)}
+            .backdrop{position:fixed;inset:0;z-index:900;background:rgba(15,23,42,.42)}
+            .dialog{position:fixed;z-index:901;left:50%;top:50%;width:min(620px,calc(100vw - 32px));max-height:min(680px,calc(100vh - 32px));transform:translate(-50%,-50%);display:grid;grid-template-rows:auto auto minmax(0,1fr);overflow:hidden;border:1px solid var(--divider-color,#d8dfdf);border-radius:14px;background:var(--card-background-color,#fff);box-shadow:0 24px 70px rgba(0,0,0,.34)}
+            .head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 16px;border-bottom:1px solid var(--divider-color,#d8dfdf)}.head strong{font-size:15px}.close{border:0;background:none;color:inherit;font-size:22px;cursor:pointer}
+            .search{margin:12px 14px;padding:10px 12px;border:1px solid var(--divider-color,#d8dfdf);border-radius:9px;background:var(--secondary-background-color,#f3f6f6);color:inherit}
+            .results{min-height:160px;overflow:auto;padding:0 10px 12px}.entity{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:10px;border:0;border-bottom:1px solid var(--divider-color,#d8dfdf);background:none;color:inherit;text-align:left;cursor:pointer}.entity[hidden]{display:none}.entity:hover,.entity.selected{border-radius:8px;background:rgba(0,155,155,.09)}.entity strong,.entity small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.entity strong{font-size:12px}.entity small{margin-top:2px;color:var(--secondary-text-color,#64727b);font-size:9px}.entity-state{align-self:center;color:#008b8b;font-size:11px;font-weight:800}.empty{padding:24px;text-align:center;color:var(--secondary-text-color,#64727b)}
+          </style>
+          <details class="picker" ${store.openKey === key ? "open" : ""}>
+          <summary class="trigger" aria-haspopup="dialog">
+            <span class="trigger-copy"><strong>${this._escape(selected?.name || "Vybrat entitu Home Assistantu")}</strong><small>${this._escape(selected?.id || "Senzor, pomocník nebo jiná entita")}</small></span><span class="chevron">⌄</span>
+          </summary>
+          <div class="backdrop"></div><section class="dialog" role="dialog" aria-modal="true" aria-label="Výběr entity Home Assistantu">
+            <div class="head"><strong>Vyberte entitu Home Assistantu</strong><button class="close" type="button" aria-label="Zavřít">×</button></div>
+            <input class="search" type="search" value="${this._escape(this._query)}" placeholder="Hledat podle názvu, Entity ID nebo hodnoty…" aria-label="Hledat entity">
+            <div class="results"><button class="entity ${this.value ? "" : "selected"}" type="button" data-value=""><span><strong>Bez entity</strong><small>Použít ruční hodnotu</small></span></button>${filtered.map((entity) => `<button class="entity ${entity.id === this.value ? "selected" : ""}" type="button" data-value="${this._escape(entity.id)}"><span><strong>${this._escape(entity.name)}</strong><small>${this._escape(entity.id)}</small></span><span class="entity-state">${this._escape(entity.state)}</span></button>`).join("")}${filtered.length ? "" : `<div class="empty">Žádná entita neodpovídá hledání.</div>`}</div>
+          </section></details>`;
+          const details = this.querySelector("details");
+          const close = () => { details.open = false; this._open = false; this._query = ""; store.openKey = ""; store.queries[key] = ""; };
+          this.querySelector(".backdrop")?.addEventListener("click", close);
+          this.querySelector(".close")?.addEventListener("click", close);
+          this.querySelector(".trigger")?.addEventListener("click", () => {
+            store.openKey = details.open ? "" : key;
           });
+          details?.addEventListener("toggle", () => {
+            this._open = details.open;
+            store.openKey = details.open ? key : "";
+            if (details.open) requestAnimationFrame(() => this.querySelector(".search")?.focus());
+          });
+          this.querySelector(".search")?.addEventListener("input", (event) => {
+            this._query = event.target.value;
+            store.queries[key] = this._query;
+            const value = this._query.trim().toLowerCase();
+            this.querySelectorAll(".entity[data-value]").forEach((button) => {
+              button.hidden = value && !button.textContent.toLowerCase().includes(value);
+            });
+          });
+          this.querySelectorAll("[data-value]").forEach((button) => button.addEventListener("click", () => {
+            this._value = button.dataset.value || "";
+            this._open = false;
+            this._query = "";
+            store.openKey = "";
+            store.queries[key] = "";
+            this._render();
+            this.dispatchEvent(new CustomEvent("value-changed", { detail:{ value:this._value }, bubbles:true, composed:true }));
+          }));
         }
       });
     }

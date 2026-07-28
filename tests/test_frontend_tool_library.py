@@ -51,9 +51,20 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('setEntityBinding', self.source)
         self.assertIn('"Vstup signalizace"', self.source)
         self.assertIn('placeholder="sensor.teplota nebo input_number.hodnota"', self.source)
-        self.assertIn('customElements.define("ha-entity-picker"', self.harness)
+        self.assertIn('customElements.define("ha-selector"', self.harness)
         self.assertIn('"sensor.spot_prices"', self.harness)
         self.assertIn('"binary_sensor.dvere_dilna"', self.harness)
+
+    def test_variables_use_the_native_home_assistant_entity_selector(self):
+        self.assertIn('data-variable-entity-picker=', self.source)
+        self.assertIn('data-variable-entity-attribute=', self.source)
+        self.assertIn('<ha-selector data-variable-entity-picker=', self.source)
+        self.assertIn('selector.selector = { entity: {} }', self.source)
+        self.assertIn('selector.hass = this._hass', self.source)
+        self.assertNotIn('<ha-entity-picker', self.source)
+        self.assertIn('aria-label="Výběr entity Home Assistantu"', self.harness)
+        self.assertIn('placeholder="Hledat podle názvu, Entity ID nebo hodnoty…"', self.harness)
+        self.assertNotIn('this.innerHTML = `<select', self.harness)
 
     def test_gateway_workspace_uses_compact_management_layout(self):
         for marker in (
@@ -314,12 +325,24 @@ class FrontendToolLibraryTests(unittest.TestCase):
 
     def test_400x300_display_uses_the_supplied_physical_frame(self):
         self.assertIn("_isLarge400Device", self.source)
-        self.assertIn('class="designer-device-bezel device-preview-designer-copy', self.source)
+        self.assertIn('class="designer-device-stage device-preview-designer-copy', self.source)
+        self.assertNotIn(
+            'class="designer-device-stage device-preview-designer-copy ${large400Layout',
+            self.source,
+        )
+        self.assertNotIn(
+            'class="designer-device-stage ${designerLarge400',
+            self.source,
+        )
         self.assertIn('${large400Layout ? "designer-device-large400" : ""}', self.source)
         self.assertIn('"designer-device-large400"', self.source)
         self.assertIn(".device-preview-empty{position:absolute", self.source)
         self.assertIn("background:#fff;mix-blend-mode:normal", self.source)
         self.assertIn("1039 / 898", self.source)
+        self.assertIn("width:calc(var(--designer-body-width) + 2px)", self.source)
+        self.assertIn("--designer-body-width:${baseWidth}px", self.source)
+        self.assertIn("--designer-body-width:${designerBaseWidth * this._zoom}px", self.source)
+        self.assertIn(".device-preview-large400:after,.designer-device-large400:after{display:none}", self.source)
         self.assertIn('class="device-large400-bottom-band"', self.source)
         self.assertIn('class="device-large400-mac"', self.source)
         self.assertIn("_renderDeviceBarcode(address, true)", self.source)
@@ -373,14 +396,26 @@ class FrontendToolLibraryTests(unittest.TestCase):
             "ctx.drawImage(nativeCanvas, 0, 0, canvas.width, canvas.height);",
             self.source,
         )
-        self.assertIn("Math.min(designerFrameWidth, designerFrameWidth / designerFrameRatio) * 0.06", self.source)
+        self.assertIn("Math.min(designerFrameWidth, designerFrameHeight) * 0.06", self.source)
         self.assertIn('class="device-preview-designer-svg"', self.source)
         self.assertIn("<foreignObject", self.source)
-        self.assertIn("designer-device-bezel device-preview-designer-copy", self.source)
+        self.assertIn("designer-device-stage device-preview-designer-copy", self.source)
         self.assertIn('width="${sourceWidth}" height="${sourceHeight}"', self.source)
         self.assertIn("device-preview-designer-svg{display:block", self.source)
         self.assertIn("calc(100cqh * var(--frame-ratio,2.15))", self.source)
         self.assertIn(".display-preview-slot .device-preview-designer-copy{box-shadow:none;filter:none}", self.source)
+
+    def test_portrait_orientation_rotates_the_complete_physical_frame(self):
+        self.assertIn('class="designer-device-stage', self.source)
+        self.assertIn('--designer-frame-rotation:${this._orientation === "portrait" ? "90deg" : "0deg"}', self.source)
+        self.assertIn('--designer-frame-rotation:${portraitLayout ? "90deg" : "0deg"}', self.source)
+        self.assertIn("transform:translate(-50%,-50%) rotate(var(--designer-frame-rotation,0deg))", self.source)
+        self.assertIn("const outerWidth = portraitLayout ? frameHeight : frameWidth", self.source)
+
+    def test_ha_designer_binds_every_entity_picker(self):
+        self.assertIn("data-custom-entity-picker", self.source)
+        self.assertIn('querySelectorAll("[data-custom-entity-picker]")', self.source)
+        self.assertNotIn('id="customElementEntity"', self.source)
 
     def test_designer_and_backend_share_the_bundled_display_font(self):
         self.assertIn('value="DRATEK eInk Sans" disabled', self.source)

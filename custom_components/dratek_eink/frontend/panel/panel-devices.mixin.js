@@ -289,13 +289,18 @@ export const devicesMixin = {
     const { width: sourceWidth, height: sourceHeight, draft } = this._devicePreviewSize(device);
     const portraitLayout = sourceHeight > sourceWidth;
     const large400Layout = this._isLarge400Device(device);
+    const base = this._baseDisplaySize(device);
+    const baseWidth = Math.max(base.width, base.height);
+    const baseHeight = Math.min(base.width, base.height);
     const frameRatio = large400Layout
-      ? (portraitLayout ? 898 / 1039 : 1039 / 898)
-      : Math.max(0.48, Math.min(3.7, (sourceWidth / sourceHeight) * (portraitLayout ? 0.95 : 1 / 0.95)));
-    const frameWidth = Math.max(150, Math.round(sourceWidth / (large400Layout ? (portraitLayout ? 0.67 : 0.77) : (portraitLayout ? 0.8 : 0.76))));
+      ? 1039 / 898
+      : Math.max(0.48, Math.min(3.7, (baseWidth / baseHeight) / 0.95));
+    const frameWidth = Math.max(150, Math.round(baseWidth / (large400Layout ? 0.77 : 0.76)));
     const frameHeight = Math.round(frameWidth / frameRatio);
     const frameRadius = Math.max(4, Math.min(28, Math.round(Math.min(frameWidth, frameHeight) * 0.06)));
-    return { sourceWidth, sourceHeight, draft, portraitLayout, large400Layout, frameRatio, frameWidth, frameHeight, frameRadius };
+    const outerWidth = portraitLayout ? frameHeight : frameWidth;
+    const outerHeight = portraitLayout ? frameWidth : frameHeight;
+    return { sourceWidth, sourceHeight, draft, portraitLayout, large400Layout, baseWidth, frameRatio, frameWidth, frameHeight, outerWidth, outerHeight, frameRadius };
   },
 
   _renderDevicePreview(device, mode = "full", options = {}) {
@@ -310,12 +315,12 @@ export const devicesMixin = {
     const previewMode = previewSizes[mode] ? mode : "full";
     const sizing = previewSizes[previewMode];
     const geometry = this._deviceFrameGeometry(device);
-    const { sourceWidth, sourceHeight, draft, portraitLayout, large400Layout } = geometry;
+    const { sourceWidth, sourceHeight, draft, portraitLayout, large400Layout, baseWidth } = geometry;
     const designerFrameRatio = geometry.frameRatio;
     const designerFrameWidth = geometry.frameWidth;
     const designerFrameHeight = geometry.frameHeight;
-    const nativeOuterWidth = designerFrameWidth;
-    const nativeOuterHeight = designerFrameHeight;
+    const nativeOuterWidth = geometry.outerWidth;
+    const nativeOuterHeight = geometry.outerHeight;
     const nativeOuterRatio = nativeOuterWidth / nativeOuterHeight;
     const previewWidth = Math.max(sizing.minWidth, Math.min(sizing.maxWidth, Math.round(sizing.targetHeight * nativeOuterRatio)));
     const designerFrameRadius = geometry.frameRadius;
@@ -325,8 +330,8 @@ export const devicesMixin = {
       <div class="device-preview-fit" style="--frame-ratio:${nativeOuterRatio.toFixed(4)};--preview-width:${previewWidth}px">
         <svg class="device-preview-designer-svg" viewBox="0 0 ${nativeOuterWidth} ${nativeOuterHeight}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Náhled ${this._escape(sourceWidth)} × ${this._escape(sourceHeight)}">
           <foreignObject x="0" y="0" width="${nativeOuterWidth}" height="${nativeOuterHeight}">
-            <div xmlns="http://www.w3.org/1999/xhtml" class="designer-device-bezel device-preview-designer-copy ${pe29Layout ? "designer-device-pe29" : ""} ${large400Layout ? "designer-device-large400" : ""} designer-device-${portraitLayout ? "portrait" : "landscape"}" style="--designer-frame-ratio:${designerFrameRatio.toFixed(4)};--designer-frame-width:${designerFrameWidth}px;--designer-screen-width:${sourceWidth}px;--designer-screen-height:${sourceHeight}px;--device-frame-radius:${designerFrameRadius}px">
-              ${large400Layout ? `<span class="device-large400-top-band"></span><span class="device-large400-bottom-band"><span class="device-large400-label">${this._renderDeviceBarcode(address, true)}<span class="device-large400-mac">${this._escape(address)}</span></span></span>` : pe29Layout ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, portraitLayout)}</span>` : `<span class="designer-device-code">${this._escape(physicalCode)}</span>`}
+            <div xmlns="http://www.w3.org/1999/xhtml" class="designer-device-stage device-preview-designer-copy designer-stage-${portraitLayout ? "portrait" : "landscape"}" style="--designer-stage-width:${nativeOuterWidth}px;--designer-stage-height:${nativeOuterHeight}px;--designer-frame-ratio:${designerFrameRatio.toFixed(4)};--designer-frame-width:${designerFrameWidth}px;--designer-frame-rotation:${portraitLayout ? "90deg" : "0deg"};--designer-screen-width:${sourceWidth}px;--designer-screen-height:${sourceHeight}px;--designer-body-width:${baseWidth}px;--device-frame-radius:${designerFrameRadius}px">
+              <div class="designer-device-bezel ${pe29Layout ? "designer-device-pe29" : ""} ${large400Layout ? "designer-device-large400" : ""} designer-device-landscape">${large400Layout ? `<span class="device-large400-top-band"></span><span class="device-large400-bottom-band"><span class="device-large400-label">${this._renderDeviceBarcode(address, true)}<span class="device-large400-mac">${this._escape(address)}</span></span></span>` : pe29Layout ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, false)}</span>` : `<span class="designer-device-code">${this._escape(physicalCode)}</span>`}</div>
               <div class="designer-device-screen">
                 <canvas data-device-preview="${this._escape(address)}" data-source-width="${sourceWidth}" data-source-height="${sourceHeight}" width="${sourceWidth}" height="${sourceHeight}"></canvas>
                 ${draft ? "" : catalogWordmark

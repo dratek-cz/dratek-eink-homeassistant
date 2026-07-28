@@ -2,6 +2,18 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.128] - 2026-07-28
+
+### Výběr entit Home Assistantu
+- Hlavní designer i Designer HA prvků používají přímo nativní `ha-selector` Home Assistantu pro výběr entit.
+- Výběr je sjednocen pro proměnné, texty, grafy, stavové prvky, pravidla a objekty ve vrstvách.
+
+### Náhledy a orientace displejů
+- Fyzický rámeček displeje se při změně orientace otáčí jako jeden celek, zatímco obrazová plocha zůstává přesně zarovnaná.
+- Náhled velkého displeje 400 × 300 používá jeden souvislý šedý tvar pod obrazovou plochou bez zdvojených pásů nebo ořezu.
+- Šedé tělo velkého displeje má přesně stejnou šířku jako obrazová plocha včetně okraje, a to také po otočení na výšku.
+- Regresní testy kontrolují nativní výběr entit i správné skládání fyzického rámečku.
+
 ## [0.1.127] - 2026-07-28
 
 ### Rozhraní a lokalizace

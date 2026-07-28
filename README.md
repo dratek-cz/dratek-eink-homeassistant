@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.128
+
+- hlavní designer i Designer HA prvků používají přímo nativní výběr entit Home Assistantu
+- výběr entit je sjednocen pro proměnné, texty, grafy, stavové prvky, pravidla a vrstvy
+- fyzické rámečky displejů se při změně orientace otáčejí jako jeden celek
+- velký displej 400 × 300 má opravené tělo bez zdvojených šedých pásů a přesně zarovnanou obrazovou plochu
+
 ## Novinky ve verzi 0.1.127
 
 - celé rozhraní lze přepínat mezi češtinou a angličtinou přímo v horní liště
