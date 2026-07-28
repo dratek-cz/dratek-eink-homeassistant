@@ -98,6 +98,79 @@
     const mdiSheet = new CSSStyleSheet();
     await mdiSheet.replace(mdiCssText + "\nha-icon .mdi{font-size:1.35em;line-height:1;display:inline-block;}");
     panel.shadowRoot.adoptedStyleSheets = [...panel.shadowRoot.adoptedStyleSheets, mdiSheet];
+    const renderCanonicalHarness = async (automation) => {
+      const image = new Image();
+      image.src = automation.base_image;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const ctx = canvas.getContext("2d", { willReadFrequently:true });
+      ctx.drawImage(image, 0, 0);
+      for (const binding of automation.bindings || []) {
+        if (binding.type && binding.type !== "text") continue;
+        const state = binding.entity_id ? panel._hass?.states?.[binding.entity_id] : null;
+        const raw = state
+          ? (binding.entity_attribute ? state.attributes?.[binding.entity_attribute] : state.state)
+          : binding.fallback || "";
+        const value = `${binding.value_prefix || ""}${raw ?? binding.fallback ?? ""}${binding.value_suffix || ""}`;
+        const lines = String(value).split("\n");
+        const padding = Math.max(0, Number(binding.padding || 0));
+        const width = Math.max(1, Number(binding.w || 1));
+        const height = Math.max(1, Number(binding.h || 1));
+        const availableWidth = Math.max(1, width - padding * 2);
+        const availableHeight = Math.max(1, height - padding * 2);
+        const minimum = Math.max(10, Number(binding.minFontSize || 10));
+        let fontSize = Math.max(minimum, Number(binding.fontSize || 16));
+        const weight = binding.bold ? 700 : 600;
+        if (binding.autoFit !== false) {
+          ctx.font = `${weight} 100px "DRATEK eInk Sans"`;
+          const measuredWidth = Math.max(...lines.map((line) => ctx.measureText(line || " ").width), 1);
+          fontSize = Math.max(minimum, Math.floor(Math.min(
+            availableWidth * 100 / measuredWidth,
+            availableHeight / Math.max(1, lines.length * 1.08),
+          )));
+        }
+        ctx.save();
+        ctx.translate(Number(binding.x || 0) + width / 2, Number(binding.y || 0) + height / 2);
+        ctx.rotate(Number(binding.rotation || 0) * Math.PI / 180);
+        ctx.translate(-width / 2, -height / 2);
+        ctx.beginPath();
+        ctx.rect(0, 0, width, height);
+        ctx.clip();
+        ctx.fillStyle = binding.color === "red" ? "#dc140c" : binding.color === "white" ? "#fff" : "#000";
+        ctx.font = `${weight} ${fontSize}px "DRATEK eInk Sans"`;
+        ctx.textAlign = binding.textAlign || "left";
+        ctx.textBaseline = "top";
+        const lineHeight = fontSize * 1.08;
+        const totalHeight = lineHeight * lines.length;
+        const startY = padding + (
+          binding.verticalAlign === "bottom" ? Math.max(0, availableHeight - totalHeight)
+            : binding.verticalAlign === "middle" ? Math.max(0, (availableHeight - totalHeight) / 2)
+              : 0
+        );
+        const x = ctx.textAlign === "center" ? width / 2 : ctx.textAlign === "right" ? width - padding : padding;
+        lines.forEach((line, index) => ctx.fillText(line, x, startY + index * lineHeight));
+        ctx.restore();
+      }
+      const previewPixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      for (let index = 0; index < previewPixels.data.length; index += 4) {
+        const red = previewPixels.data[index];
+        const green = previewPixels.data[index + 1];
+        const blue = previewPixels.data[index + 2];
+        const luma = (red * 0.299) + (green * 0.587) + (blue * 0.114);
+        const color = luma > 160
+          ? [255, 255, 255]
+          : red > 160
+            ? [220, 20, 12]
+            : [0, 0, 0];
+        previewPixels.data[index] = color[0];
+        previewPixels.data[index + 1] = color[1];
+        previewPixels.data[index + 2] = color[2];
+      }
+      ctx.putImageData(previewPixels, 0, 0);
+      return { ok:true, image:canvas.toDataURL("image/png"), width:canvas.width, height:canvas.height };
+    };
     panel.hass = {
       states: {
         "sensor.spot_prices": { state:"2.18", attributes:{ friendly_name:"Spotové ceny", prices:[1.92,2.04,2.18,2.31,2.11] } },
@@ -109,14 +182,20 @@
         const { type } = msg;
         if (type === "dratek_eink/scan") return { ok:true, devices };
         if (type === "dratek_eink/device_drafts/list") return { drafts };
+        if (type === "dratek_eink/device_drafts/load") return { draft:drafts[String(msg.address || "").toUpperCase()] || null };
+        if (type === "dratek_eink/device_drafts/save") {
+          drafts[String(msg.address || "").toUpperCase()] = msg.draft;
+          return { draft:msg.draft };
+        }
         if (type === "dratek_eink/projects/list") return { projects: [] };
         if (type === "dratek_eink/custom_elements/list") return { elements: [] };
+        if (type === "dratek_eink/render_preview") return renderCanonicalHarness(msg.automation);
         if (type === "dratek_eink/gateways/list" || type === "dratek_eink/gateways/refresh") return { gateways };
         if (type === "dratek_eink/gateways/serial_ports") return { ports: [] };
         if (type === "dratek_eink/queue/list") {
           const jobs = [
-            ...(writingAddress ? [{ id:"local-writing-job", address:writingAddress, status:"writing", operation:"Nahrání návrhu", transport_name:"Gateway dílna" }] : []),
-            ...(uploadedAddress ? [{ id:"local-uploaded-job", address:uploadedAddress, status:"succeeded", operation:"Nahrání návrhu", transport_name:"Gateway dílna", finished_at:Math.floor(Date.now() / 1000) }] : []),
+            ...(writingAddress ? [{ id:"local-writing-job", address:writingAddress, status:"writing", operation:"design", transport_type:"gateway", transport_name:"Gateway dílna", created_at:Math.floor(Date.now() / 1000) - 4, started_at:Math.floor(Date.now() / 1000) - 4 }] : []),
+            ...(uploadedAddress ? [{ id:"local-uploaded-job", address:uploadedAddress, status:"succeeded", operation:"entity_update", transport_type:"local", transport_name:"Home Assistant Bluetooth", created_at:Math.floor(Date.now() / 1000) - 30, started_at:Math.floor(Date.now() / 1000) - 30, finished_at:Math.floor(Date.now() / 1000) }] : []),
           ];
           return { jobs, queued:0, writing:writingAddress ? 1 : 0, succeeded:uploadedAddress ? 1 : 0, failed:0 };
         }
@@ -126,17 +205,22 @@
           return { name:msg.name };
         }
         if (type === "dratek_eink/devices/set_gateway") {
+          // Zrcadlí websocket_set_device_gateway: "local" je platná ruční volba,
+          // ne neznámá gateway.
           const device = devices.find((item) => item.address === msg.address);
+          const localRoute = msg.gateway_id === "local";
           const gateway = gateways.find((item) => item.id === msg.gateway_id);
+          const manual = localRoute || Boolean(gateway);
+          const routeId = localRoute ? "local" : gateway?.id || "";
           if (device) {
-            device.gateway_selection = gateway ? "manual" : "auto";
-            device.selected_gateway_id = gateway?.id || "";
+            device.gateway_selection = manual ? "manual" : "auto";
+            device.selected_gateway_id = routeId;
           }
           return {
             address:msg.address,
-            gateway_selection:gateway ? "manual" : "auto",
-            gateway_id:gateway?.id || "",
-            transport_name:gateway?.name || "",
+            gateway_selection:manual ? "manual" : "auto",
+            gateway_id:routeId,
+            transport_name:localRoute ? "Home Assistant Bluetooth" : gateway?.name || "",
           };
         }
         if (type === "dratek_eink/set_rgb_led") return { ok:true, address: msg.address, log: [] };

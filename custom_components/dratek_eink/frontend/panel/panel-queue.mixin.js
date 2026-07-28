@@ -1,3 +1,51 @@
+const STATUS_LABELS = {
+  queued: "Ve frontě",
+  writing: "Zapisuje",
+  succeeded: "Dokončeno",
+  skipped: "Přeskočeno",
+  failed: "Selhalo",
+};
+
+const STATUS_ICONS = {
+  queued: "mdi:tray-arrow-down",
+  writing: "mdi:progress-upload",
+  succeeded: "mdi:check-circle-outline",
+  skipped: "mdi:skip-next-circle-outline",
+  failed: "mdi:alert-circle-outline",
+};
+
+const STATUS_PILLS = {
+  queued: "muted",
+  writing: "warn",
+  succeeded: "good",
+  skipped: "warn",
+  failed: "bad",
+};
+
+const OPERATION_LABELS = {
+  design: "Návrh",
+  partial_design: "Částečný zápis",
+  text: "Text",
+  service_text: "HA služba",
+  entity_update: "Změna entity",
+};
+
+const OPERATION_ICONS = {
+  design: "mdi:palette-outline",
+  partial_design: "mdi:square-edit-outline",
+  text: "mdi:format-text",
+  service_text: "mdi:cog-transfer-outline",
+  entity_update: "mdi:sync",
+};
+
+// Klíč filtru -> vlastnost stavu panelu.
+const FILTER_KEYS = {
+  device: "_queueDeviceFilter",
+  transport: "_queueTransportFilter",
+  operation: "_queueOperationFilter",
+  limit: "_queueLimit",
+};
+
 export const queueMixin = {
 
 
@@ -9,8 +57,7 @@ export const queueMixin = {
       this._queue = { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0, error: this._message(err) };
     }
     if (render) {
-      this._render();
-      this._paint();
+      this._renderQueueKeepingFocus();
     }
     window.clearTimeout(this._queuePollTimer);
     if (["queue", "devices", "topology"].includes(this._activeTab)) {
@@ -18,36 +65,120 @@ export const queueMixin = {
     }
   },
 
+  // Vlastní rozbalovací filtr. Nativní <select> tu nešel použít: fronta se
+  // překresluje každou 1,5 s a otevřený systémový seznam se tím zavřel dřív,
+  // než šlo kliknout. Navíc jeho položky nejdou nastylovat.
+  _renderQueueMenu(key, label, icon, current, options) {
+    const open = this._queueOpenMenu === key;
+    const selected = options.find((option) => String(option.value) === String(current)) || options[0];
+    const filtering = String(selected.value) !== "all" && key !== "limit";
+    return `<div class="queue-filter ${filtering ? "is-active" : ""} ${open ? "is-open" : ""}">
+      <button class="queue-select" data-queue-menu="${key}" aria-haspopup="listbox" aria-expanded="${open ? "true" : "false"}" title="${this._escape(label)}">
+        <ha-icon class="queue-select-icon" icon="${icon}"></ha-icon>
+        <span>${this._escape(selected.label)}</span>
+        <ha-icon class="queue-select-caret" icon="mdi:chevron-down"></ha-icon>
+      </button>
+      <div class="queue-menu" role="listbox" aria-label="${this._escape(label)}" ${open ? "" : "hidden"}>
+        <div class="queue-menu-title">${this._escape(label)}</div>
+        ${options.map((option) => {
+          const active = String(option.value) === String(selected.value);
+          return `<button class="queue-menu-item ${active ? "active" : ""}" role="option" aria-selected="${active ? "true" : "false"}" data-queue-filter="${key}" data-queue-value="${this._escape(String(option.value))}">
+            <ha-icon icon="${option.icon}"></ha-icon><span>${this._escape(option.label)}</span>${active ? `<ha-icon class="queue-menu-check" icon="mdi:check"></ha-icon>` : ""}
+          </button>`;
+        }).join("")}
+      </div>
+    </div>`;
+  },
+
+  _setQueueFilter(key, value) {
+    const property = FILTER_KEYS[key];
+    if (!property) return;
+    this[property] = key === "limit" ? Number(value) : value;
+    this._queueOpenMenu = "";
+    this._render();
+    this._paint();
+  },
+
+  _toggleQueueMenu(key) {
+    this._queueOpenMenu = this._queueOpenMenu === key ? "" : key;
+    this._render();
+    this._paint();
+  },
+
+  // Fronta se překresluje každou 1,5 s. _render() vymění celý shadow strom,
+  // takže bez tohohle by psaní do hledání po pár znacích ztratilo fokus.
+  _renderQueueKeepingFocus() {
+    // Otevřenou nabídku by pravidelné překreslení zavřelo pod rukama. Data už
+    // jsou uložená, seznam se dorovná při prvním dalším překreslení.
+    if (this._queueOpenMenu) return;
+    this._renderKeepingSearchFocus();
+  },
+
+  _renderKeepingSearchFocus() {
+    const active = this.shadowRoot.activeElement;
+    const searchIds = new Set(["deviceSearch", "queueSearch", "symbolSearch"]);
+    const activeId = searchIds.has(active?.id) ? active.id : "";
+    const selectionStart = activeId ? active.selectionStart : null;
+    const selectionEnd = activeId ? active.selectionEnd : null;
+    const selectionDirection = activeId ? active.selectionDirection : "none";
+    this._render();
+    this._paint();
+    if (!activeId) return;
+    const next = this.shadowRoot.querySelector(`#${activeId}`);
+    if (!next) return;
+    next.focus({ preventScroll: true });
+    try {
+      next.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
+    } catch (_err) {
+      // Některé typy inputu neumí rozsah výběru, samotný fokus stačí.
+    }
+  },
+
+  _queueFilters() {
+    return {
+      search: (this._queueSearch || "").trim().toLowerCase(),
+      status: this._queueStatusFilter || "all",
+      device: this._queueDeviceFilter || "all",
+      transport: this._queueTransportFilter || "all",
+      operation: this._queueOperationFilter || "all",
+      limit: Number(this._queueLimit === undefined ? 50 : this._queueLimit),
+    };
+  },
+
+  _queueFiltersActive() {
+    const { search, status, device, transport, operation } = this._queueFilters();
+    return Boolean(search) || status !== "all" || device !== "all" || transport !== "all" || operation !== "all";
+  },
+
+  _matchingQueueJobs(jobs, filters) {
+    return jobs.filter((job) => {
+      if (filters.status !== "all" && job.status !== filters.status) return false;
+      if (filters.device !== "all" && String(job.address || "").toUpperCase() !== filters.device.toUpperCase()) return false;
+      if (filters.transport !== "all" && String(job.transport_type || "local") !== filters.transport) return false;
+      if (filters.operation !== "all" && String(job.operation || "") !== filters.operation) return false;
+      if (filters.search) {
+        // Řádek ukazuje pojmenování displeje, takže se podle něj musí dát i hledat.
+        const label = OPERATION_LABELS[job.operation] || "";
+        const text = `${this._queueDeviceLabel(String(job.address || "").toUpperCase())} ${job.operation} ${label} ${job.transport_name} ${job.error || ""} ${job.log ? job.log.join(" ") : ""}`.toLowerCase();
+        if (!text.includes(filters.search)) return false;
+      }
+      return true;
+    });
+  },
+
   _renderQueue() {
     const queue = this._queue || { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0, skipped: 0, skipped_reasons: [], skipped_devices: [] };
     const allJobs = queue.jobs || [];
     const skippedReasons = queue.skipped_reasons || [];
     const skippedDevices = queue.skipped_devices || [];
+    const filters = this._queueFilters();
+    const filtersActive = this._queueFiltersActive();
 
-    const searchQuery = (this._queueSearch || "").trim().toLowerCase();
-    const statusFilter = this._queueStatusFilter || "all";
-    const deviceFilter = this._queueDeviceFilter || "all";
+    const filteredJobs = this._matchingQueueJobs(allJobs, filters);
+    const displayedJobs = filters.limit > 0 ? filteredJobs.slice(0, filters.limit) : filteredJobs;
 
-    const filteredJobs = allJobs.filter((job) => {
-      if (statusFilter !== "all" && job.status !== statusFilter) return false;
-      if (deviceFilter !== "all" && String(job.address || "").toUpperCase() !== deviceFilter.toUpperCase()) return false;
-      if (searchQuery) {
-        const text = `${job.address} ${job.operation} ${job.transport_name} ${job.error || ""} ${job.log ? job.log.join(" ") : ""}`.toLowerCase();
-        if (!text.includes(searchQuery)) return false;
-      }
-      return true;
-    });
-
-    const limit = Number(this._queueLimit === undefined ? 50 : this._queueLimit);
-    const displayedJobs = limit > 0 ? filteredJobs.slice(0, limit) : filteredJobs;
-
-    const stat = (icon, value, label, cls = "") => `
-      <div class="card queue-stat">
-        <ha-icon icon="${icon}"></ha-icon>
-        <div><strong class="${cls}">${value || 0}</strong><span>${label}</span></div>
-      </div>`;
-
-    const devicesList = [...new Set(allJobs.map((j) => String(j.address || "").toUpperCase()))].sort();
+    const deviceAddresses = [...new Set(allJobs.map((job) => String(job.address || "").toUpperCase()))].filter(Boolean).sort();
+    const operations = [...new Set(allJobs.map((job) => String(job.operation || "")))].filter(Boolean).sort();
 
     const skipWarningBanner = (queue.skipped > 0 || skippedReasons.length > 0) ? `
       <div class="card queue-skip-warning">
@@ -63,117 +194,105 @@ export const queueMixin = {
         <div class="warning-tip"><ha-icon icon="mdi:lightbulb-on-outline"></ha-icon><strong>Tip:</strong> Zkraťte interval nahrávání v hlavním záhlaví (např. na 10 s nebo 15 s) nebo prodlužte interval odesílání v automatizaci.</div>
       </div>` : "";
 
+    // Metriky jsou zároveň filtr stavu - proto už pod hledáním nejsou žádné
+    // čipy se stejnými stavy, jen zbylé filtry.
+    const stat = (status, icon, value, label, cls = "") => `
+      <button class="stat-tile ${filters.status === status ? "active" : ""} ${cls}" data-queue-status="${status}" title="Zobrazit jen ${label.toLowerCase()}">
+        <span class="stat-tile-icon"><ha-icon icon="${icon}"></ha-icon></span>
+        <span class="stat-tile-copy"><strong>${value || 0}</strong><small>${label}</small></span>
+      </button>`;
+
     return `
-    <style>
-      .queue-summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 12px; }
-      .queue-stat { display: flex; align-items: center; gap: 10px; padding: 12px; }
-      .queue-stat ha-icon { --mdc-icon-size: 28px; color: var(--dratek-teal); }
-      .queue-stat strong { font-size: 20px; display: block; }
-      .queue-stat span { font-size: 10px; color: var(--secondary-text-color); display: block; }
-      .queue-stat .warn-signal { color: var(--dratek-orange); }
-      .queue-stat .good-signal { color: #16803c; }
-      .queue-stat .bad-signal { color: #c62828; }
-      .queue-stat .skipped-signal { color: #d97706; }
+    <div class="queue-page">
+      <div class="stat-tiles">
+        ${stat("queued", "mdi:tray-full", queue.queued, "Ve frontě")}
+        ${stat("writing", "mdi:progress-upload", queue.writing, "Zapisuje", queue.writing ? "is-warn" : "")}
+        ${stat("succeeded", "mdi:check-circle-outline", queue.succeeded, "Dokončeno", "is-good")}
+        ${stat("skipped", "mdi:skip-next-circle-outline", queue.skipped, "Přeskočeno", queue.skipped ? "is-skipped" : "")}
+        ${stat("failed", "mdi:alert-circle-outline", queue.failed, "Selhalo", queue.failed ? "is-bad" : "")}
+      </div>
 
-      .queue-skip-warning { padding: 14px; margin-bottom: 14px; border: 1px solid rgba(217, 119, 6, 0.4); background: rgba(217, 119, 6, 0.07); border-radius: 12px; }
-      .warning-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; color: #b45309; }
-      .warning-header ha-icon { --mdc-icon-size: 28px; }
-      .warning-header strong { font-size: 13px; display: block; }
-      .warning-header small { font-size: 10px; color: var(--secondary-text-color); display: block; margin-top: 2px; }
-      .warning-reasons { margin: 8px 0; font-size: 11px; }
-      .warning-reasons ul { margin: 4px 0 0 16px; padding: 0; }
-      .warning-devices { margin: 6px 0; font-size: 11px; }
-      .warning-tip { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding: 8px; background: var(--card-background-color); border-radius: 8px; font-size: 10px; }
+      ${skipWarningBanner}
 
-      .queue-controls-bar { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto auto auto auto; gap: 8px; align-items: center; margin-bottom: 12px; }
-      .queue-controls-bar input, .queue-controls-bar select { padding: 7px 9px; font-size: 11px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); }
-      .queue-row { display: grid; grid-template-columns: 36px minmax(130px, 1fr) minmax(130px, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 12px; border-bottom: 1px solid var(--divider-color); font-size: 11px; }
-      .queue-row:last-child { border-bottom: 0; }
-      .queue-row.writing { background: rgba(255, 102, 0, 0.05); }
-      .queue-row.skipped { opacity: 0.85; background: rgba(217, 119, 6, 0.04); }
-      .queue-row.failed { background: rgba(198, 40, 40, 0.05); }
-      .queue-row .queue-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--secondary-background-color); color: var(--dratek-teal); }
-      .queue-row.writing .queue-icon { color: var(--dratek-orange); }
-      .queue-row.failed .queue-icon { color: #c62828; }
-      .queue-row.skipped .queue-icon { color: #d97706; }
-      .queue-meta-info { font-size: 10px; color: var(--secondary-text-color); margin-top: 2px; }
-      .queue-row-log { grid-column: 1 / -1; margin-top: 4px; padding: 6px 9px; font-family: monospace; font-size: 9px; border-radius: 6px; background: var(--secondary-background-color); color: var(--secondary-text-color); max-height: 80px; overflow-y: auto; }
-      @media(max-width:900px) { .queue-summary { grid-template-columns: repeat(3, 1fr); } .queue-controls-bar { grid-template-columns: 1fr 1fr; } }
-    </style>
-
-    <div class="queue-summary">
-      ${stat("mdi:tray-full", queue.queued, "Ve frontě")}
-      ${stat("mdi:progress-upload", queue.writing, "Zapisuje", queue.writing ? "warn-signal" : "")}
-      ${stat("mdi:check-circle-outline", queue.succeeded, "Dokončeno", "good-signal")}
-      ${stat("mdi:skip-next-circle-outline", queue.skipped, "Přeskočeno", queue.skipped ? "skipped-signal" : "")}
-      ${stat("mdi:alert-circle-outline", queue.failed, "Selhalo", queue.failed ? "bad-signal" : "")}
-    </div>
-
-    ${skipWarningBanner}
-
-    <div class="card">
-      <div class="section-title">
-        <div>
-          <h2>Fronta a historie zápisů</h2>
-          <small>Zobrazeno ${displayedJobs.length} z celkem ${filteredJobs.length} záznamů (${allJobs.length} celkem v paměti)</small>
+      <div class="card devices-toolbar-card">
+        <div class="devices-toolbar">
+          <div class="device-search"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" id="queueSearch" placeholder="Hledat displej, trasu nebo chybu..." value="${this._escape(this._queueSearch || "")}"></div>
+          <button id="resetQueueView" class="reset-icon-btn" title="Zrušit hledání i filtry a obnovit"><ha-icon icon="mdi:refresh"></ha-icon></button>
+          <div class="queue-filter-row">
+            ${this._renderQueueMenu("device", "Displej", "mdi:tablet-dashboard", filters.device, [
+              { value: "all", label: "Všechny displeje", icon: "mdi:select-all" },
+              ...deviceAddresses.map((addr) => ({ value: addr, label: this._queueDeviceLabel(addr), icon: "mdi:tablet-dashboard" })),
+            ])}
+            ${this._renderQueueMenu("transport", "Trasa", "mdi:transit-connection-variant", filters.transport, [
+              { value: "all", label: "Všechny trasy", icon: "mdi:select-all" },
+              { value: "gateway", label: "DRATEK gateway", icon: "mdi:router-wireless" },
+              { value: "local", label: "Home Assistant Bluetooth", icon: "mdi:home-assistant" },
+            ])}
+            ${this._renderQueueMenu("operation", "Operace", "mdi:cog-outline", filters.operation, [
+              { value: "all", label: "Všechny operace", icon: "mdi:select-all" },
+              ...operations.map((operation) => ({ value: operation, label: OPERATION_LABELS[operation] || operation, icon: OPERATION_ICONS[operation] || "mdi:cog-outline" })),
+            ])}
+            ${this._renderQueueMenu("limit", "Počet", "mdi:format-list-numbered", String(filters.limit), [
+              { value: "20", label: "20 položek", icon: "mdi:numeric" },
+              { value: "50", label: "50 položek", icon: "mdi:numeric" },
+              { value: "100", label: "100 položek", icon: "mdi:numeric" },
+              { value: "0", label: "Bez omezení", icon: "mdi:infinity" },
+            ])}
+          </div>
+          <div class="devices-toolbar-spacer"></div>
+          <button id="clearQueueHistory" class="danger"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vyčistit historii</button>
         </div>
       </div>
 
-      <div class="queue-controls-bar">
-        <input id="queueSearch" value="${this._escape(this._queueSearch || "")}" placeholder="Hledat MAC, zařízení, chybu...">
-        <select id="queueStatusFilter" title="Filtr stavu">
-          <option value="all" ${statusFilter === "all" ? "selected" : ""}>Všechny stavy</option>
-          <option value="writing" ${statusFilter === "writing" ? "selected" : ""}>Zapisuje</option>
-          <option value="queued" ${statusFilter === "queued" ? "selected" : ""}>Ve frontě</option>
-          <option value="succeeded" ${statusFilter === "succeeded" ? "selected" : ""}>Dokončeno</option>
-          <option value="skipped" ${statusFilter === "skipped" ? "selected" : ""}>Přeskočeno</option>
-          <option value="failed" ${statusFilter === "failed" ? "selected" : ""}>Selhalo</option>
-        </select>
-        <select id="queueDeviceFilter" title="Filtr zařízení">
-          <option value="all" ${deviceFilter === "all" ? "selected" : ""}>Všechna zařízení</option>
-          ${devicesList.map((addr) => `<option value="${this._escape(addr)}" ${deviceFilter.toUpperCase() === addr ? "selected" : ""}>${this._escape(addr)}</option>`).join("")}
-        </select>
-        <select id="queueLimit" title="Počet položek">
-          <option value="20" ${limit === 20 ? "selected" : ""}>20 položek</option>
-          <option value="50" ${limit === 50 ? "selected" : ""}>50 položek</option>
-          <option value="100" ${limit === 100 ? "selected" : ""}>100 položek</option>
-          <option value="0" ${limit === 0 ? "selected" : ""}>Všechny položky</option>
-        </select>
-        <button id="clearQueueHistory" class="secondary icon-btn" title="Vyčistit historii zápisů"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon></button>
-        <button id="refreshQueue" class="secondary"><ha-icon icon="mdi:refresh"></ha-icon>Obnovit</button>
+      <div class="card queue-list-card">
+        <div class="section-title">
+          <div>
+            <h2>Fronta a historie zápisů</h2>
+            <small>Zobrazeno ${displayedJobs.length} z ${filteredJobs.length} odpovídajících záznamů · ${allJobs.length} celkem v paměti</small>
+          </div>
+          ${filtersActive ? `<button id="clearQueueFilters" class="secondary"><ha-icon icon="mdi:filter-remove-outline"></ha-icon>Zrušit filtry</button>` : ""}
+        </div>
+
+        ${queue.error ? `<div class="pill bad">${this._escape(queue.error)}</div>` : ""}
+
+        ${displayedJobs.length ? `<div class="queue-list">${displayedJobs.map((job) => this._renderQueueJob(job)).join("")}</div>` : `
+          <div class="inspector-empty">
+            <ha-icon icon="${filtersActive ? "mdi:filter-remove-outline" : "mdi:tray"}"></ha-icon>
+            <p>${filtersActive ? "Žádný záznam neodpovídá zvolenému hledání a filtrům." : "Fronta je prázdná. Jakmile se začne zapisovat na displej, objeví se tu záznam."}</p>
+          </div>`}
       </div>
-
-      ${queue.error ? `<div class="pill bad">${this._escape(queue.error)}</div>` : ""}
-
-      ${displayedJobs.length ? `
-        <div class="queue-list">
-          ${displayedJobs.map((job) => {
-      const labels = { queued: "Ve frontě", writing: "Zapisuji", succeeded: "Dokončeno", failed: "Selhalo", skipped: "Přeskočeno" };
-      const classes = { queued: "muted", writing: "warn", succeeded: "good", failed: "bad", skipped: "warn" };
-      const icons = { queued: "mdi:tray-arrow-down", writing: "mdi:progress-upload", succeeded: "mdi:check", failed: "mdi:alert-circle-outline", skipped: "mdi:skip-next-circle-outline" };
-      const operation = { design: "Návrh", partial_design: "Částečný zápis", text: "Text", service_text: "HA služba", entity_update: "Změna entity" }[job.operation] || job.operation;
-      const logText = Array.isArray(job.log) && job.log.length ? job.log.slice(-3).join(" | ") : "";
-      return `
-            <div class="queue-row ${this._escape(job.status)}">
-              <div class="queue-icon"><ha-icon icon="${icons[job.status] || "mdi:help"}"></ha-icon></div>
-              <div class="queue-main">
-                <strong>${this._escape(job.address)}</strong>
-                <div class="queue-meta-info">${this._escape(operation)} · ${this._formatTime(job.created_at)}</div>
-              </div>
-              <div class="queue-route">
-                <strong>${this._escape(job.transport_name)}</strong>
-                <div class="queue-meta-info">${job.transport_type === "gateway" ? "DRATEK gateway" : "Home Assistant BLE"}</div>
-              </div>
-              <span class="pill ${classes[job.status] || "muted"}">${labels[job.status] || this._escape(job.status)}</span>
-              <div>${job.finished_at ? `<span class="pill muted">${this._formatDuration(job.started_at, job.finished_at)}</span>` : ""}</div>
-              ${(job.error || logText) ? `<div class="queue-row-log">${this._escape(job.error || logText)}</div>` : ""}
-            </div>`;
-    }).join("")}
-        </div>` : `
-        <div class="inspector-empty">
-          <ha-icon icon="mdi:tray"></ha-icon>
-          <p>${searchQuery || statusFilter !== "all" || deviceFilter !== "all" ? "Žádný záznam neodpovídá zvolenému vyhledávání a filtrům." : "Fronta je prázdná."}</p>
-        </div>`}
     </div>`;
+  },
+
+  _queueDeviceLabel(address) {
+    const device = (this._result?.devices || []).find((item) => String(item.address || "").toUpperCase() === address);
+    const name = device ? this._deviceTitle(device) : "";
+    return name && name !== address ? `${name} · ${address}` : address;
+  },
+
+  _renderQueueJob(job) {
+    const status = String(job.status || "");
+    const address = String(job.address || "").toUpperCase();
+    const device = (this._result?.devices || []).find((item) => String(item.address || "").toUpperCase() === address);
+    const operation = OPERATION_LABELS[job.operation] || job.operation;
+    const gateway = job.transport_type === "gateway";
+    const logText = Array.isArray(job.log) && job.log.length ? job.log.slice(-3).join(" | ") : "";
+    return `<article class="queue-row ${this._escape(status)}">
+      <span class="queue-icon"><ha-icon icon="${STATUS_ICONS[status] || "mdi:help"}"></ha-icon></span>
+      <div class="queue-main">
+        <strong>${this._escape(device ? this._deviceTitle(device) : address)}</strong>
+        <small>${this._escape(address)} · ${this._escape(operation)}</small>
+      </div>
+      <div class="queue-route">
+        <span class="queue-route-icon"><ha-icon icon="${gateway ? "mdi:router-wireless" : "mdi:home-assistant"}"></ha-icon></span>
+        <div><strong>${this._escape(job.transport_name || (gateway ? "DRATEK gateway" : "Home Assistant"))}</strong><small>${gateway ? "DRATEK gateway" : "Home Assistant Bluetooth"}</small></div>
+      </div>
+      <div class="queue-timing">
+        <small>${this._formatTime(job.created_at)}</small>
+        ${job.finished_at ? `<small class="queue-duration"><ha-icon icon="mdi:timer-outline"></ha-icon>${this._formatDuration(job.started_at, job.finished_at)}</small>` : ""}
+      </div>
+      <span class="pill ${STATUS_PILLS[status] || "muted"}">${STATUS_LABELS[status] || this._escape(status)}</span>
+      ${(job.error || logText) ? `<div class="queue-row-log">${this._escape(job.error || logText)}</div>` : ""}
+    </article>`;
   },
 };

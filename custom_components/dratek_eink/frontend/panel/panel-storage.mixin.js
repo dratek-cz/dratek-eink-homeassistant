@@ -4,7 +4,7 @@ export const storageMixin = {
   _loadUiPreference(key, fallback) {
     try {
       const value = window.localStorage.getItem(`dratek-eink-${key}`);
-      return ["auto", "full", "large", "compact", "list"].includes(value) ? value : fallback;
+      return ["auto", "full", "large", "compact", "list", "cs", "en"].includes(value) ? value : fallback;
     } catch (_err) {
       return fallback;
     }
@@ -118,18 +118,19 @@ export const storageMixin = {
   },
 
   _emptyCustomElementForm() {
+    const english = this._uiLanguage?.() === "en";
     const onLayer = {
-      id: `layer-${Date.now()}-on`, name: "Zapnuto",
+      id: `layer-${Date.now()}-on`, name: english ? "On" : "Zapnuto",
       objects: [
         { id: `item-${Date.now()}-on-icon`, type: "text", x: 88, y: 12, w: 120, h: 62, text: "●", color: "red", font_size: 52, bold: true, align: "center" },
-        { id: `item-${Date.now()}-on-text`, type: "text", x: 58, y: 78, w: 180, h: 36, text: "ZAPNUTO", color: "black", font_size: 28, bold: true, align: "center" },
+        { id: `item-${Date.now()}-on-text`, type: "text", x: 58, y: 78, w: 180, h: 36, text: english ? "ON" : "ZAPNUTO", color: "black", font_size: 28, bold: true, align: "center" },
       ],
     };
     const offLayer = {
-      id: `layer-${Date.now()}-off`, name: "Vypnuto",
+      id: `layer-${Date.now()}-off`, name: english ? "Off" : "Vypnuto",
       objects: [
         { id: `item-${Date.now()}-off-icon`, type: "text", x: 88, y: 12, w: 120, h: 62, text: "○", color: "black", font_size: 52, bold: true, align: "center" },
-        { id: `item-${Date.now()}-off-text`, type: "text", x: 58, y: 78, w: 180, h: 36, text: "VYPNUTO", color: "black", font_size: 28, bold: true, align: "center" },
+        { id: `item-${Date.now()}-off-text`, type: "text", x: 58, y: 78, w: 180, h: 36, text: english ? "OFF" : "VYPNUTO", color: "black", font_size: 28, bold: true, align: "center" },
       ],
     };
     return {

@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN
+from .const import DOMAIN, LOCAL_ROUTE_ID
 from .gateway import async_load_gateways, async_scan_gateway, async_send_gateway_payload
 from .queue import get_transfer_queue
 from .render import render_entity_bound_image
@@ -218,7 +218,14 @@ class EntityAutoUpdateManager:
         if not config:
             return
         updated = dict(config)
-        if gateway_id:
+        if gateway_id == LOCAL_ROUTE_ID:
+            # Zamčeno na adaptéru Home Assistantu - žádná gateway se nehledá.
+            updated["gateway_selection"] = "manual"
+            updated["manual_gateway_id"] = LOCAL_ROUTE_ID
+            updated["route_type"] = "local"
+            updated["gateway_id"] = ""
+            updated["transport_name"] = transport_name or "Home Assistant Bluetooth"
+        elif gateway_id:
             updated["gateway_selection"] = "manual"
             updated["manual_gateway_id"] = gateway_id
             updated["route_type"] = "gateway"
@@ -507,9 +514,14 @@ class EntityAutoUpdateManager:
         gateway_id = str(config.get("gateway_id") or "")
         transport_name = str(config.get("transport_name") or "")
         gateway_selection = str(config.get("gateway_selection") or "auto")
-        if gateway_selection == "manual" and config.get("manual_gateway_id"):
+        manual_route = str(config.get("manual_gateway_id") or "")
+        if gateway_selection == "manual" and manual_route == LOCAL_ROUTE_ID:
+            route_type = "local"
+            gateway_id = ""
+            transport_name = "Home Assistant Bluetooth"
+        elif gateway_selection == "manual" and manual_route:
             route_type = "gateway"
-            gateway_id = str(config["manual_gateway_id"])
+            gateway_id = manual_route
         else:
             best_gateway = await self._async_best_gateway_route(address)
             if best_gateway:

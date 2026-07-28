@@ -7,7 +7,8 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $previewUrl = "http://127.0.0.1:$Port/tests/dratek-eink-panel-harness.html"
-$server = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $Port)
+$server = [Net.HttpListener]::new()
+$server.Prefixes.Add("http://127.0.0.1:$Port/")
 
 $mimeTypes = @{
     ".html"  = "text/html; charset=utf-8"
@@ -34,26 +35,12 @@ try {
     }
 
     while ($true) {
-        $client = $server.AcceptTcpClient()
+        $context = $server.GetContext()
         try {
-            $stream = $client.GetStream()
-            $reader = [IO.StreamReader]::new(
-                $stream,
-                [Text.Encoding]::ASCII,
-                $false,
-                1024,
-                $true
-            )
-            $requestLine = $reader.ReadLine()
-            while ($reader.ReadLine()) {}
-
-            $requestParts = $requestLine -split " "
-            $method = $requestParts[0]
-            $requestPath = if ($requestParts.Count -ge 2) {
-                ($requestParts[1] -split "\?", 2)[0]
-            } else {
-                "/"
-            }
+            $request = $context.Request
+            $response = $context.Response
+            $method = $request.HttpMethod
+            $requestPath = $request.Url.AbsolutePath
 
             $relativePath = [Uri]::UnescapeDataString($requestPath).TrimStart("/")
             if (-not $relativePath) {
@@ -85,15 +72,16 @@ try {
                 $payload = [IO.File]::ReadAllBytes($requestedPath)
             }
 
-            $headers = "HTTP/1.1 $status`r`nContent-Type: $contentType`r`nContent-Length: $($payload.Length)`r`nCache-Control: no-store`r`nConnection: close`r`n`r`n"
-            $headerBytes = [Text.Encoding]::ASCII.GetBytes($headers)
-            $stream.Write($headerBytes, 0, $headerBytes.Length)
+            $response.StatusCode = [int]($status -split " ", 2)[0]
+            $response.ContentType = $contentType
+            $response.ContentLength64 = $payload.Length
+            $response.Headers["Cache-Control"] = "no-store"
             if ($method -ne "HEAD") {
-                $stream.Write($payload, 0, $payload.Length)
+                $response.OutputStream.Write($payload, 0, $payload.Length)
             }
-            $stream.Flush()
+            $response.OutputStream.Close()
         } finally {
-            $client.Close()
+            $context.Response.Close()
         }
     }
 } finally {

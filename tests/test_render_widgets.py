@@ -191,6 +191,20 @@ class RenderWidgetTests(unittest.TestCase):
             font = render.load_font(16, bold)
             self.assertIn("Arimo", font.getname()[0])
 
+    def test_canonical_preview_uses_only_physical_eink_colors(self):
+        image = render.Image.new("RGB", (4, 1))
+        image.putdata([
+            (0, 0, 0),
+            (210, 210, 210),
+            (220, 20, 12),
+            (120, 120, 120),
+        ])
+        preview = render.quantize_bwr_preview(image)
+        self.assertEqual(
+            set(preview.getdata()),
+            {(0, 0, 0), (255, 255, 255), (220, 20, 12)},
+        )
+
     def test_bar_gauge_reserves_a_white_value_band(self):
         image = self._render_objects(
             [

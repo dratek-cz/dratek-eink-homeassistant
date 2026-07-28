@@ -12,6 +12,7 @@ import { variablesMixin } from "./panel/panel-variables.mixin.js";
 import { sendMixin } from "./panel/panel-send.mixin.js";
 import { previewMixin } from "./panel/panel-preview.mixin.js";
 import { renderUiMixin } from "./panel/panel-render-ui.mixin.js";
+import { i18nMixin } from "./panel/panel-i18n.mixin.js";
 import { customLayersMixin } from "./panel/panel-custom-layers.mixin.js";
 import { inspectorMixin } from "./panel/panel-inspector.mixin.js";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js";
@@ -77,8 +78,10 @@ class DratekEinkPanel extends HTMLElement {
     this._displayTransform = "rotate_cw";
     this._refreshIntervalSeconds = 60;
     this._activeTab = "devices";
+    this._language = this._loadUiPreference("language", "cs") === "en" ? "en" : "cs";
     this._deviceViewMode = this._loadUiPreference("device-view-mode", "auto");
     this._deviceSearchQuery = "";
+    this._displayCatalogOpen = false;
     this._topologyViewMode = this._loadUiPreference("topology-view-mode", "auto");
     this._queue = { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0 };
     this._queuePollTimer = null;
@@ -121,6 +124,8 @@ class DratekEinkPanel extends HTMLElement {
     this._backendPreviewRequestId = 0;
     this._backendPreviewImage = null;
     this._backendPreviewAddress = "";
+    this._devicePreviewImages = new Map();
+    this._devicePreviewRequests = new Map();
     this._handleKeyDown = (event) => this._onKeyDown(event);
     this._handleLocationChanged = () => {
       if (String(window.location?.pathname || "").includes("dratek-eink")) this._scheduleAutomaticScan(0);
@@ -215,6 +220,7 @@ Object.assign(
   variablesMixin,
   sendMixin,
   previewMixin,
+  i18nMixin,
   renderUiMixin,
   customLayersMixin,
   inspectorMixin,

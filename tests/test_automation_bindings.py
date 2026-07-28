@@ -41,7 +41,7 @@ def _load_automation_module():
     )
 
     local_modules = {
-        "const": {"DOMAIN": "dratek_eink"},
+        "const": {"DOMAIN": "dratek_eink", "LOCAL_ROUTE_ID": "local"},
         "gateway": {
             "async_load_gateways": lambda *_args, **_kwargs: None,
             "async_scan_gateway": lambda *_args, **_kwargs: None,

@@ -8,23 +8,41 @@ export const customLayersMixin = {
       ? `<div class="custom-result ${this._customElementResult.ok ? "good" : "bad"}"><ha-icon icon="${this._customElementResult.ok ? "mdi:check-circle-outline" : "mdi:alert-circle-outline"}"></ha-icon>${this._escape(this._customElementResult.message || this._customElementResult.error || "")}</div>`
       : "";
     const css = `<style>
-      .ha-library-view,.ha-layer-editor{display:grid;gap:14px}.ha-library-head{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:26px;border-radius:14px;background:linear-gradient(115deg,rgba(0,162,165,.12),rgba(255,122,0,.08));border:1px solid rgba(0,162,165,.32)}.ha-library-head h2{font-size:26px;text-transform:none;color:var(--primary-text-color);margin:5px 0}.ha-library-head p{margin:0;color:var(--secondary-text-color)}.ha-library-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}.ha-library-card{display:grid;gap:12px;padding:14px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color)}.ha-library-card canvas{width:100%;aspect-ratio:296/128;background:#fff;border:1px solid var(--divider-color);border-radius:8px}.ha-library-card strong,.ha-library-card small{display:block}.ha-library-card small{margin-top:3px;color:var(--secondary-text-color)}.ha-card-actions{display:flex;gap:7px}.ha-empty-library{min-height:390px;display:grid;place-items:center;align-content:center;text-align:center;gap:10px;border:1px dashed rgba(0,162,165,.45);border-radius:14px;background:var(--card-background-color)}.ha-empty-library>ha-icon{--mdc-icon-size:54px;color:var(--dratek-teal)}.ha-empty-library h3,.ha-empty-library p{margin:0}
+      .ha-library-view,.ha-layer-editor{display:grid;gap:14px}.ha-library-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 15px;border-radius:14px;background:var(--card-background-color);border:1px solid var(--divider-color);box-shadow:0 4px 16px rgba(15,23,42,.05)}.ha-library-head h2{font-size:18px;text-transform:none;color:var(--primary-text-color);margin:2px 0 0}.ha-library-head p{margin:4px 0 0;color:var(--secondary-text-color);font-size:11px;line-height:1.45}.ha-library-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}.ha-library-card{display:grid;gap:12px;padding:14px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color)}.ha-library-card canvas{width:100%;aspect-ratio:296/128;background:#fff;border:1px solid var(--divider-color);border-radius:8px}.ha-library-card strong,.ha-library-card small{display:block}.ha-library-card small{margin-top:3px;color:var(--secondary-text-color)}.ha-card-actions{display:flex;gap:7px}.ha-empty-library{min-height:390px;display:grid;place-items:center;align-content:center;text-align:center;gap:10px;border:1px dashed rgba(0,162,165,.45);border-radius:14px;background:var(--card-background-color)}.ha-empty-library>ha-icon{--mdc-icon-size:54px;color:var(--dratek-teal)}.ha-empty-library h3,.ha-empty-library p{margin:0}
       .ha-editor-top{display:grid;grid-template-columns:auto minmax(220px,1fr) auto auto;align-items:end;gap:12px;padding:12px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color)}.ha-editor-top nav{display:flex;gap:7px}.ha-editor-top nav button b{display:grid;place-items:center;width:21px;height:21px;border-radius:50%;background:rgba(255,255,255,.2)}.name-field{margin:0}.ha-layer-layout{display:grid;grid-template-columns:230px minmax(420px,1fr) 260px;min-height:590px;border:1px solid var(--divider-color);border-radius:12px;overflow:hidden;background:var(--card-background-color)}.layer-list,.layer-properties{padding:13px;background:var(--secondary-background-color);overflow:auto}.panel-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:11px}.panel-heading strong,.panel-heading small{display:block}.panel-heading small{color:var(--secondary-text-color);font-size:10px}.layer-list-item{display:grid;grid-template-columns:72px 1fr;gap:8px;margin-bottom:9px;padding:8px;border:1px solid var(--divider-color);border-radius:10px;background:var(--card-background-color);cursor:pointer}.layer-list-item.active{border-color:var(--dratek-teal);box-shadow:inset 3px 0 0 var(--dratek-teal)}.layer-list-item canvas{width:72px;height:42px;background:#fff;border-radius:5px}.layer-list-item input{min-width:0;border:0;background:transparent;font-weight:800}.layer-list-item>div{grid-column:2;display:flex;gap:5px}.layer-stage{display:flex;flex-direction:column;align-items:stretch;padding:14px;min-width:0}.layer-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.layer-toolbar>span{margin-left:auto;color:var(--secondary-text-color);font-size:11px;font-weight:800}.layer-canvas-shell{flex:1;display:grid;place-items:center;margin-top:14px;padding:22px;background:radial-gradient(circle at 1px 1px,rgba(100,116,139,.24) 1px,transparent 0);background-size:18px 18px;border:1px solid var(--divider-color);border-radius:10px;overflow:auto}.layer-canvas-shell canvas{display:block;width:min(100%,820px);height:auto;max-height:490px;background:#fff;box-shadow:0 12px 36px rgba(0,0,0,.18);touch-action:none}.canvas-help{text-align:center;color:var(--secondary-text-color);font-size:11px}.layer-inspector{display:grid;gap:11px}.layer-inspector h3,.rules-card h3,.rules-source h3,.rule-preview h3{margin:0}.mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.layer-inspector-empty{display:grid;place-items:center;text-align:center;min-height:240px;color:var(--secondary-text-color)}.layer-inspector-empty ha-icon{--mdc-icon-size:42px}
       .ha-rules-layout{display:grid;grid-template-columns:minmax(260px,.8fr) minmax(460px,1.5fr) minmax(260px,.7fr);gap:14px}.rules-source{display:flex;gap:12px;align-items:flex-start}.step-number{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:10px;background:var(--dratek-teal);color:#fff;font-weight:900}.rules-source p,.rules-title p{color:var(--secondary-text-color);font-size:11px}.rules-title,.rules-title>div{display:flex;align-items:center;justify-content:space-between;gap:10px}.layer-rules{display:grid;gap:8px;margin:14px 0}.layer-rule{display:grid;grid-template-columns:26px minmax(125px,1fr) minmax(85px,.75fr) auto minmax(115px,1fr) auto;align-items:center;gap:7px;padding:8px;border:1px solid var(--divider-color);border-radius:9px}.layer-rule>b{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:var(--secondary-background-color)}.layer-rule-actions{display:flex;flex-wrap:wrap;gap:7px}.time-range-inputs{display:grid;grid-template-columns:1fr 1fr;gap:5px}.time-range-inputs label{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:4px;margin:0;color:var(--secondary-text-color);font-size:8px;font-weight:800}.time-range-inputs input{min-width:0;padding:7px 5px}.default-layer{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:16px;padding:13px;border-radius:10px;background:rgba(0,162,165,.08);border:1px solid rgba(0,162,165,.28)}.default-layer strong,.default-layer small{display:block}.default-layer small{color:var(--secondary-text-color)}.rule-preview{align-self:start;text-align:center}.rule-preview canvas{width:100%;height:auto;background:#fff;border:1px solid var(--divider-color);border-radius:8px;margin:12px 0}.rule-preview strong,.rule-preview small{display:block}.rule-preview small{color:var(--secondary-text-color);margin-top:4px}
       .ha-layer-editor{display:grid;gap:14px;min-width:0}.ha-editor-top{grid-template-columns:auto minmax(180px,1fr) minmax(390px,auto) auto;align-items:center;box-shadow:0 8px 26px rgba(15,23,42,.06)}.ha-editor-top>*{min-width:0}.ha-editor-top nav{min-width:0;flex-wrap:wrap}.ha-editor-top nav button{white-space:nowrap}.ha-layer-layout{grid-template-columns:minmax(190px,230px) minmax(0,1fr) minmax(240px,280px);grid-template-areas:"layers stage properties";min-width:0;min-height:clamp(520px,64vh,720px)}.ha-layer-layout>*{min-width:0}.ha-layer-layout>.layer-list{grid-area:layers;border-right:1px solid var(--divider-color)}.ha-layer-layout>.layer-stage{grid-area:stage}.ha-layer-layout>.layer-properties{grid-area:properties;border-left:1px solid var(--divider-color)}.layer-stage{overflow:hidden}.layer-canvas-shell{min-height:300px;max-width:100%;padding:clamp(12px,2vw,28px)}.layer-canvas-shell canvas{max-width:100%;max-height:min(52vh,520px);object-fit:contain}.layer-properties{overflow-wrap:anywhere}.layer-inspector-heading{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--divider-color)}.layer-inspector-heading>span{display:grid;place-items:center;width:38px;height:38px;border-radius:10px;color:var(--dratek-teal);background:rgba(0,162,165,.1)}.layer-inspector-heading h3,.layer-inspector-heading small{display:block;margin:0}.layer-inspector-heading small,.inspector-note{color:var(--secondary-text-color);font-size:11px}.check-row{display:flex;align-items:center;gap:7px}.inspector-note{margin:0;padding:9px;border-radius:8px;background:var(--secondary-background-color)}.inspector-divider{display:flex;align-items:center;gap:8px;color:var(--secondary-text-color);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.inspector-divider:after{content:"";height:1px;flex:1;background:var(--divider-color)}.ha-rules-layout{grid-template-columns:minmax(220px,.7fr) minmax(0,1.45fr) minmax(220px,.65fr);align-items:start}.ha-rules-layout>*{min-width:0}.rules-source>div{min-width:0;flex:1}.layer-rule>*{min-width:0}.ha-library-card{min-width:0}.ha-library-card canvas{max-width:100%}
       @media(max-width:1320px){.ha-editor-top{grid-template-columns:auto minmax(180px,1fr) auto}.ha-editor-top nav{grid-column:1/-1;grid-row:2}.ha-layer-layout{grid-template-columns:210px minmax(0,1fr);grid-template-areas:"layers stage" "properties properties"}.ha-layer-layout>.layer-properties{border-left:0;border-top:1px solid var(--divider-color);max-height:none}.layer-inspector{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.layer-inspector>.layer-inspector-heading,.layer-inspector>.inspector-divider,.layer-inspector>.inspector-note,.layer-inspector>#deleteLayerObject{grid-column:1/-1}.ha-rules-layout{grid-template-columns:minmax(220px,.7fr) minmax(0,1.3fr);}.rule-preview{grid-column:1/-1;display:grid;grid-template-columns:minmax(180px,320px) 1fr;align-items:center;text-align:left;gap:12px}.rule-preview h3{grid-column:1/-1}.rule-preview canvas{grid-row:2/4;margin:0}.rule-preview strong,.rule-preview small{grid-column:2}}@media(max-width:900px){.ha-editor-top{grid-template-columns:1fr auto}.ha-editor-top .name-field{grid-column:1/-1;grid-row:2}.ha-editor-top nav{grid-column:1/-1;grid-row:3}.ha-rules-layout{grid-template-columns:1fr}.rule-preview{grid-column:auto}.layer-rule{grid-template-columns:26px minmax(0,1fr) minmax(0,1fr);}.layer-rule>span{display:none}.layer-rule select:last-of-type{grid-column:2/4}.layer-rule button{grid-column:3;grid-row:1}}@media(max-width:680px){.ha-library-head{display:grid}.ha-layer-layout{grid-template-columns:minmax(0,1fr);grid-template-areas:"layers" "stage" "properties"}.layer-list{max-height:280px;border-right:0!important;border-bottom:1px solid var(--divider-color)}.ha-editor-top{display:flex;align-items:stretch;flex-direction:column}.ha-editor-top nav{display:grid;grid-template-columns:1fr 1fr}.ha-editor-top nav button{white-space:normal}.layer-toolbar button{font-size:0}.layer-toolbar button ha-icon{margin:0}.layer-inspector{grid-template-columns:1fr}.layer-inspector>*{grid-column:1!important}.layer-rule{grid-template-columns:26px 1fr}.layer-rule>*{grid-column:2}.layer-rule>b{grid-column:1}.layer-rule button{grid-column:2;grid-row:auto}.rule-preview{display:block;text-align:center}.rule-preview canvas{margin:12px 0}.ha-card-actions{flex-wrap:wrap}}
     </style>`;
     if (this._customWorkspaceView === "library") {
+      const totalLayers = this._customElements.reduce((sum, element) => sum + Math.max(1, (element.layers || []).length), 0);
+      const boundElements = this._customElements.filter((element) => element.entity_id).length;
       const cards = this._customElements.map((element) => {
         const layer = this._customLayerForValue(element, this._customElementCurrentValue(element));
         return `<article class="ha-library-card"><canvas width="296" height="128" data-custom-element-id="${this._escape(element.id)}" data-custom-layer-preview="${this._escape(layer?.id || "")}"></canvas><div><strong>${this._escape(element.name)}</strong><small>${this._escape(element.entity_id || "Bez entity")} · ${(element.layers || []).length || 1} vrstev</small></div><div class="ha-card-actions"><button data-custom-edit="${element.id}"><ha-icon icon="mdi:pencil-outline"></ha-icon>Upravit</button><button class="secondary" data-custom-insert="${element.id}"><ha-icon icon="mdi:vector-square-plus"></ha-icon>Do displeje</button><button class="secondary icon-btn" data-custom-delete="${element.id}" title="Smazat"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button></div></article>`;
       }).join("");
-      return `${css}<div class="ha-library-view"><section class="ha-library-head"><div><span class="eyebrow">Knihovna vlastních rozhraní</span><h2>Designer HA prvků</h2><p>Každý prvek může mít několik grafických vrstev. Home Assistant podle pravidel vždy vybere tu správnou.</p></div><button id="customElementNew"><ha-icon icon="mdi:plus"></ha-icon>Vytvořit nový prvek</button></section>${result}${cards ? `<div class="ha-library-grid">${cards}</div>` : `<div class="ha-empty-library"><ha-icon icon="mdi:layers-plus"></ha-icon><h3>Zatím nemáte žádný vlastní prvek</h3><p>Začněte například rozhraním zásuvky se dvěma vrstvami Zapnuto a Vypnuto.</p><button id="customElementEmptyNew"><ha-icon icon="mdi:plus"></ha-icon>Vytvořit první prvek</button></div>`}</div>`;
+      return `${css}<style>
+        .ha-library-head>div:first-child{display:flex;align-items:center;gap:12px}.ha-library-head-icon{width:42px;height:42px;display:grid;place-items:center;flex:0 0 auto;border-radius:11px;background:rgba(0,162,165,.11);color:var(--dratek-teal)}.ha-library-head-icon ha-icon{--mdc-icon-size:25px}
+        .ha-library-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.ha-library-stat{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:10px;padding:11px 13px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color)}.ha-library-stat>span{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;background:var(--secondary-background-color);color:var(--dratek-teal)}.ha-library-stat strong,.ha-library-stat small{display:block}.ha-library-stat small{margin-top:2px;color:var(--secondary-text-color);font-size:9px}
+        .ha-library-workspace{display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:12px;align-items:start}.ha-library-guide{display:grid;gap:10px;padding:14px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color)}.ha-library-guide h3,.ha-library-guide p{margin:0}.ha-library-guide p{color:var(--secondary-text-color);font-size:10px;line-height:1.45}.ha-guide-step{display:grid;grid-template-columns:28px 1fr;gap:8px;align-items:start}.ha-guide-step>b{width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:var(--dratek-teal);color:#fff}.ha-guide-step strong,.ha-guide-step small{display:block}.ha-guide-step small{margin-top:2px;color:var(--secondary-text-color);font-size:9px;line-height:1.35}.ha-library-grid{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}.ha-empty-library{min-height:330px}
+        @media(max-width:900px){.ha-library-workspace{grid-template-columns:1fr}.ha-library-guide{grid-template-columns:repeat(3,minmax(0,1fr))}.ha-library-guide>h3,.ha-library-guide>p{grid-column:1/-1}}@media(max-width:620px){.ha-library-head{align-items:stretch;flex-direction:column}.ha-library-head button{width:100%}.ha-library-stats,.ha-library-guide{grid-template-columns:1fr}}
+      </style><div class="ha-library-view">
+        ${result}
+        <div class="ha-library-stats">
+          <article class="ha-library-stat"><span><ha-icon icon="mdi:widgets-outline"></ha-icon></span><div><strong>${this._customElements.length}</strong><small>Uložených HA prvků</small></div></article>
+          <article class="ha-library-stat"><span><ha-icon icon="mdi:layers-triple-outline"></ha-icon></span><div><strong>${totalLayers}</strong><small>Stavových vrstev</small></div></article>
+          <article class="ha-library-stat"><span><ha-icon icon="mdi:home-lightning-bolt-outline"></ha-icon></span><div><strong>${boundElements}</strong><small>Napojených na entity</small></div></article>
+        </div>
+        <div class="ha-library-workspace">
+          ${cards ? `<div class="ha-library-grid">${cards}</div>` : `<div class="ha-empty-library"><ha-icon icon="mdi:layers-plus"></ha-icon><h3>Zatím nemáte žádný vlastní prvek</h3><p>Začněte například rozhraním zásuvky se dvěma vrstvami Zapnuto a Vypnuto.</p><button id="customElementEmptyNew"><ha-icon icon="mdi:plus"></ha-icon>Vytvořit první prvek</button></div>`}
+          <aside class="ha-library-guide"><h3>Jak HA prvek funguje</h3><p>Jednou ho vytvoříte a potom ho vložíte do libovolného displeje.</p><div class="ha-guide-step"><b>1</b><div><strong>Navrhněte grafiku</strong><small>Text, symboly, tvary, kódy, obrázky a datové ukazatele.</small></div></div><div class="ha-guide-step"><b>2</b><div><strong>Vytvořte stavy</strong><small>Každá vrstva může představovat jiný stav entity.</small></div></div><div class="ha-guide-step"><b>3</b><div><strong>Nastavte pravidla</strong><small>Home Assistant automaticky vybere správnou vrstvu.</small></div></div></aside>
+        </div>
+      </div>`;
     }
     const layers = form.layers || [];
     const activeLayer = this._customActiveLayer();
     const selected = this._customSelectedLayerObject();
-    const top = `<header class="ha-editor-top"><button id="customBackToLibrary" class="secondary"><ha-icon icon="mdi:arrow-left"></ha-icon>Knihovna</button><div class="field name-field"><label>Název prvku</label><input data-custom-element-field="name" value="${this._escape(form.name)}" placeholder="Například Zásuvka v kuchyni"></div><nav><button class="${this._customLayerStep === "design" ? "" : "secondary"}" data-custom-step="design"><b>1</b> Grafika vrstev</button><button class="${this._customLayerStep === "rules" ? "" : "secondary"}" data-custom-step="rules"><b>2</b> Pravidla zobrazení</button></nav><button id="customElementSave" ${this._customElementBusy || !this._customElementFormValid() ? "disabled" : ""}><ha-icon icon="mdi:content-save-outline"></ha-icon>${this._customElementBusy ? "Ukládám…" : "Uložit prvek"}</button></header>`;
+    const top = `<header class="ha-editor-top"><button id="customBackToLibrary" class="secondary"><ha-icon icon="mdi:arrow-left"></ha-icon>Knihovna</button><div class="field name-field"><label>Název HA prvku</label><input data-custom-element-field="name" value="${this._escape(form.name)}" placeholder="Například Zásuvka v kuchyni"></div><nav aria-label="Kroky návrhu"><button class="${this._customLayerStep === "design" ? "" : "secondary"}" data-custom-step="design"><b>1</b> Designer</button><button class="${this._customLayerStep === "rules" ? "" : "secondary"}" data-custom-step="rules"><b>2</b> HA pravidla</button></nav><button id="customElementSave" ${this._customElementBusy || !this._customElementFormValid() ? "disabled" : ""}><ha-icon icon="mdi:content-save-outline"></ha-icon>${this._customElementBusy ? "Ukládám…" : "Uložit prvek"}</button></header>`;
     return `${css}<div class="ha-layer-editor">${top}${result}${this._customLayerStep === "design" ? this._renderCustomLayerDesign(layers, activeLayer, selected) : this._renderCustomLayerRules(layers)}</div>`;
   },
 
@@ -54,6 +72,7 @@ export const customLayersMixin = {
   _addDefaultLayerIcon(key) {
     const layer = this._customActiveLayer();
     if (!layer || !this._defaultLayerIcons().some(([item]) => item === key)) return;
+    this._rememberCustomLayerState();
     const canvas = document.createElement("canvas");
     canvas.width = 128;
     canvas.height = 128;
@@ -116,6 +135,9 @@ export const customLayersMixin = {
       <div class="layer-inspector-heading">
         <span><ha-icon icon="${selected.type === "text" ? "mdi:format-text" :
         selected.type === "rect" ? "mdi:rectangle-outline" :
+          selected.type === "line" ? "mdi:vector-line" :
+            selected.type === "barcode" ? "mdi:barcode" :
+              selected.type === "qr" ? "mdi:qrcode" :
           selected.type === "bar_gauge" ? "mdi:chart-bar" :
             selected.type === "pie" ? "mdi:chart-pie" :
               selected.type === "slider" ? "mdi:tune-horizontal" :
@@ -126,6 +148,9 @@ export const customLayersMixin = {
           <h3>Vybraný objekt</h3>
           <small>${selected.type === "text" ? "Text" :
         selected.type === "rect" ? "Tvar / Obdélník" :
+          selected.type === "line" ? "Čára" :
+            selected.type === "barcode" ? "Čárový kód EAN‑13" :
+              selected.type === "qr" ? "QR kód" :
           selected.type === "bar_gauge" ? "Sloupcový ukazatel" :
             selected.type === "pie" ? "Koláčový / Donut graf" :
               selected.type === "slider" ? "Posuvník / Slider" :
@@ -147,6 +172,13 @@ export const customLayersMixin = {
         ${this._renderLayerColorPalette("fill", selected.fill || "none", "Výplň", ["none", "black", "red", "white"])}
         ${this._renderLayerColorPalette("stroke", selected.stroke || "black", "Obrys", ["none", "black", "red", "white"])}
         <div class="field"><label>Tloušťka obrysu (px)</label><input data-layer-object="stroke_width" type="number" min="1" max="20" value="${Number(selected.stroke_width || 2)}"></div>
+      ` : selected.type === "line" ? `
+        ${this._renderLayerColorPalette("color", selected.color || "black", "Barva čáry", ["black", "red"])}
+        <div class="field"><label>Tloušťka čáry (px)</label><input data-layer-object="stroke_width" type="number" min="1" max="20" value="${Number(selected.stroke_width || 2)}"></div>
+      ` : selected.type === "barcode" || selected.type === "qr" ? `
+        <div class="field"><label>${selected.type === "qr" ? "Text nebo URL" : "Čísla EAN‑13"}</label><input data-layer-object="text" value="${this._escape(selected.text || "")}"></div>
+        ${this._renderLayerColorPalette("color", selected.color || "black", "Barva kódu", ["black", "red"])}
+        ${this._renderLayerColorPalette("backgroundColor", selected.backgroundColor || "white", "Pozadí", ["white", "black", "red"])}
       ` : selected.type === "bar_gauge" ? `
         <div class="field"><label>Popisek / Název</label><input data-layer-object="label" value="${this._escape(selected.label || "")}" placeholder="Ukazatel"></div>
         <div class="field"><label>Entita Home Assistantu (volitelné)</label><ha-entity-picker data-layer-object-entity="${selected.id}"></ha-entity-picker></div>
@@ -208,16 +240,18 @@ export const customLayersMixin = {
       `}
 
       <div class="inspector-divider"><span>Poloha a velikost</span></div>
-      <div class="mini-grid">${["x", "y", "w", "h"].map((key) => `<div class="field"><label>${key.toUpperCase()}</label><input data-layer-object="${key}" type="number" value="${Math.round(Number(selected[key] || 0))}"></div>`).join("")}</div>
+      <div class="mini-grid">${["x", "y", "w", "h", "rotation"].map((key) => `<div class="field"><label>${key === "rotation" ? "Otočení °" : key.toUpperCase()}</label><input data-layer-object="${key}" type="number" value="${Math.round(Number(selected[key] || 0))}"></div>`).join("")}</div>
       <button id="deleteLayerObject" class="danger"><ha-icon icon="mdi:trash-can-outline"></ha-icon>Odstranit objekt</button>
     </div>` : `<div class="layer-inspector-empty"><div><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon><p>Klikněte na objekt v náhledu a upravte jej zde.</p></div></div>`;
 
     const layerList = layers.map((layer) => `<article class="layer-list-item ${layer.id === activeLayer?.id ? "active" : ""}" data-custom-layer="${this._escape(layer.id)}"><div class="layer-card-title"><input data-custom-layer-name="${this._escape(layer.id)}" value="${this._escape(layer.name)}" aria-label="Název vrstvy">${layer.id === activeLayer?.id ? `<span>Aktivní</span>` : ""}</div><div class="layer-card-preview"><canvas width="296" height="128" data-custom-layer-preview="${this._escape(layer.id)}"></canvas></div><div class="layer-card-actions"><button data-custom-layer-copy="${this._escape(layer.id)}" class="secondary" title="Duplikovat vrstvu"><ha-icon icon="mdi:content-copy"></ha-icon><span>Kopírovat</span></button><button data-custom-layer-delete="${this._escape(layer.id)}" class="secondary" title="Smazat vrstvu" ${layers.length <= 1 ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon><span>Odstranit</span></button></div></article>`).join("");
+    const layerZoom = [1, 2, 3, 4].includes(Number(this._customLayerZoom)) ? Number(this._customLayerZoom) : "fit";
+    const canvasZoomStyle = layerZoom === "fit" ? "" : `style="width:${form.canvas_width * layerZoom}px;max-width:none;max-height:none"`;
     const designCss = `<style>
       .layer-list-item{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding:10px;cursor:pointer}.layer-list-item>*{grid-column:1!important}.layer-card-title{display:flex;align-items:center;gap:6px}.layer-card-title input{width:100%;min-width:0;padding:5px 2px;font-size:12px}.layer-card-title span{padding:3px 6px;border-radius:999px;background:rgba(0,162,165,.11);color:var(--dratek-teal);font-size:8px;font-weight:900}.layer-card-preview{padding:6px;border:5px solid #eee8e8;border-radius:999px;border-radius:9px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.1)}.layer-card-preview canvas{display:block;width:100%;height:auto;background:#fff;border:1px solid rgba(0,0,0,.14);border-radius:2px}.layer-card-actions{display:grid!important;grid-template-columns:1fr 1fr;gap:6px}.layer-card-actions button{min-width:0;min-height:31px;padding:5px;font-size:8px}.layer-card-actions button span{display:inline}.layer-card-actions ha-icon{--mdc-icon-size:15px}
       .default-icon-library{margin-top:10px;border:1px solid var(--divider-color);border-radius:10px;background:var(--secondary-background-color)}.default-icon-library summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;cursor:pointer;list-style:none}.default-icon-library summary::-webkit-details-marker{display:none}.default-icon-library summary span{display:flex;align-items:center;gap:7px}.default-icon-library summary ha-icon{color:var(--dratek-teal)}.default-icon-library summary small{color:var(--secondary-text-color);font-size:9px}.default-icon-grid{display:grid;grid-template-columns:repeat(8,minmax(52px,1fr));gap:5px;padding:0 9px 9px}.default-layer-icon{display:grid;place-items:center;gap:3px;min-width:0;min-height:54px;padding:5px;background:var(--card-background-color);color:var(--primary-text-color)}.default-layer-icon ha-icon{--mdc-icon-size:23px;color:var(--dratek-teal)}.default-layer-icon span{font-size:8px}
-      .layer-toolbar button{display:inline-flex;align-items:center;gap:5px;padding:6px 10px;font-size:11px;white-space:nowrap}
-      .layer-canvas-shell{padding:clamp(18px,3vw,38px)}.layer-device-frame{display:grid;place-items:center;width:min(100%,850px);padding:clamp(14px,2.3vw,30px);border:clamp(7px,1vw,12px) solid #eee8e8;border-radius:clamp(12px,1.8vw,22px);background:#fff;box-shadow:0 14px 38px rgba(15,23,42,.17),inset 0 0 0 1px rgba(0,0,0,.04)}.layer-device-frame canvas{width:100%;max-height:min(48vh,500px);border:1px solid rgba(0,0,0,.17);box-shadow:inset 0 0 5px rgba(0,0,0,.1)}
+      .layer-tool-title{display:flex;align-items:center;justify-content:space-between;gap:10px}.layer-tool-title strong,.layer-tool-title small{display:block}.layer-tool-title small{margin-top:2px;color:var(--secondary-text-color);font-size:9px}.layer-tool-title>span{color:var(--secondary-text-color);font-size:10px;font-weight:850}.layer-toolbar{padding:7px;border:1px solid var(--divider-color);border-radius:10px;background:var(--secondary-background-color)}.layer-toolbar button{display:inline-flex;align-items:center;gap:5px;padding:6px 10px;font-size:11px;white-space:nowrap}.layer-selection-toolbar{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:6px 7px;border:1px solid var(--divider-color);border-radius:10px;background:var(--card-background-color)}.layer-selection-toolbar .icon-btn{width:32px;height:32px;min-height:32px;padding:0}.layer-selection-toolbar .toolbar-divider{width:1px;height:24px;margin:0 2px;background:var(--divider-color)}.layer-zoom-controls{display:flex;align-items:center;gap:4px;margin-left:auto}.layer-zoom-controls button{min-height:28px;padding:4px 7px;font-size:9px}.layer-zoom-controls button.active{background:var(--dratek-teal);color:#fff}.layer-selection-summary{color:var(--secondary-text-color);font-size:9px;font-weight:800}
+      .layer-canvas-shell{padding:clamp(18px,3vw,38px)}.layer-device-frame{display:grid;place-items:center;width:max-content;max-width:none;padding:clamp(14px,2.3vw,30px);border:clamp(7px,1vw,12px) solid #eee8e8;border-radius:clamp(12px,1.8vw,22px);background:#fff;box-shadow:0 14px 38px rgba(15,23,42,.17),inset 0 0 0 1px rgba(0,0,0,.04)}.layer-device-frame canvas{width:min(100%,820px);max-height:min(48vh,500px);border:1px solid rgba(0,0,0,.17);box-shadow:inset 0 0 5px rgba(0,0,0,.1)}
       .layer-color-field{margin:0;padding:0;border:0}.layer-color-field legend{margin-bottom:7px;color:var(--secondary-text-color);font-size:10px;font-weight:800}.layer-color-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.layer-color-options label{display:grid;grid-template-columns:28px minmax(0,1fr);align-items:center;gap:7px;padding:6px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);cursor:pointer}.layer-color-options label.selected{border-color:var(--dratek-teal);box-shadow:inset 0 0 0 1px var(--dratek-teal)}.layer-color-options input{position:absolute;opacity:0;pointer-events:none}.layer-color-options small{overflow:hidden;color:var(--primary-text-color);font-size:9px;font-weight:750;text-overflow:ellipsis;white-space:nowrap}.layer-color-swatch{display:grid;place-items:center;width:28px;height:28px;border:1px solid rgba(0,0,0,.2);border-radius:7px}.layer-color-swatch.black{background:#050505}.layer-color-swatch.red{background:#dc140c}.layer-color-swatch.white{background:#fff}.layer-color-swatch.original{background:conic-gradient(#00a2a5,#ff6800,#dc140c,#111,#00a2a5);color:#fff}.layer-color-swatch.none{background:repeating-linear-gradient(135deg,#fff 0 5px,#e5e7eb 5px 10px);color:#c62828}.layer-color-swatch ha-icon{--mdc-icon-size:17px}
       @media(max-width:1050px){.default-icon-grid{grid-template-columns:repeat(4,minmax(52px,1fr))}}@media(max-width:680px){.default-icon-library summary{align-items:flex-start;flex-direction:column}.default-icon-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.layer-card-actions button span{display:none}}
     </style>`;
@@ -227,16 +261,36 @@ export const customLayersMixin = {
         ${layerList}
       </aside>
       <main class="layer-stage">
+        <div class="layer-tool-title"><div><strong>Knihovna prvků</strong><small>Stejné základní a datové prvky jako v designeru displeje</small></div><span>${form.canvas_width} × ${form.canvas_height} px</span></div>
         <div class="layer-toolbar">
           <button data-add-layer-object="text"><ha-icon icon="mdi:format-text"></ha-icon>Text</button>
+          <button id="openCustomLayerSymbols" class="secondary"><ha-icon icon="mdi:shape-outline"></ha-icon>Symbol</button>
           <button data-add-layer-object="rect" class="secondary"><ha-icon icon="mdi:rectangle-outline"></ha-icon>Tvar</button>
+          <button data-add-layer-object="line" class="secondary"><ha-icon icon="mdi:vector-line"></ha-icon>Čára</button>
+          <button data-add-layer-object="barcode" class="secondary"><ha-icon icon="mdi:barcode"></ha-icon>Čárový kód</button>
+          <button data-add-layer-object="qr" class="secondary"><ha-icon icon="mdi:qrcode"></ha-icon>QR kód</button>
           <button data-add-layer-object="bar_gauge" class="secondary"><ha-icon icon="mdi:chart-bar"></ha-icon>Sloupec</button>
           <button data-add-layer-object="pie" class="secondary"><ha-icon icon="mdi:chart-pie"></ha-icon>Koláč</button>
           <button data-add-layer-object="slider" class="secondary"><ha-icon icon="mdi:tune-horizontal"></ha-icon>Slider</button>
           <button data-add-layer-object="potentiometer" class="secondary"><ha-icon icon="mdi:gauge"></ha-icon>Potenciometr</button>
           <button id="addLayerImage" class="secondary"><ha-icon icon="mdi:image-plus-outline"></ha-icon>Obrázek</button>
           <input id="layerImageFile" type="file" accept="image/*" hidden>
-          <span>${form.canvas_width} × ${form.canvas_height} px</span>
+        </div>
+        <div class="layer-selection-toolbar">
+          <button class="secondary icon-btn" data-custom-layer-action="undo" title="Zpět" aria-label="Zpět" ${this._customLayerHistory?.length ? "" : "disabled"}><ha-icon icon="mdi:undo"></ha-icon></button>
+          <button class="secondary icon-btn" data-custom-layer-action="redo" title="Znovu" aria-label="Znovu" ${this._customLayerFuture?.length ? "" : "disabled"}><ha-icon icon="mdi:redo"></ha-icon></button>
+          <span class="toolbar-divider"></span>
+          <button class="secondary icon-btn" data-custom-layer-action="duplicate" title="Duplikovat vybraný objekt" aria-label="Duplikovat vybraný objekt" ${selected ? "" : "disabled"}><ha-icon icon="mdi:content-copy"></ha-icon></button>
+          <button class="secondary icon-btn" data-custom-layer-action="back" title="Poslat dozadu" aria-label="Poslat dozadu" ${selected ? "" : "disabled"}><ha-icon icon="mdi:arrange-send-backward"></ha-icon></button>
+          <button class="secondary icon-btn" data-custom-layer-action="front" title="Přenést dopředu" aria-label="Přenést dopředu" ${selected ? "" : "disabled"}><ha-icon icon="mdi:arrange-bring-forward"></ha-icon></button>
+          <span class="toolbar-divider"></span>
+          ${[["left", "mdi:align-horizontal-left", "Zarovnat vlevo"], ["center", "mdi:align-horizontal-center", "Vodorovně na střed"], ["right", "mdi:align-horizontal-right", "Zarovnat vpravo"], ["top", "mdi:align-vertical-top", "Zarovnat nahoru"], ["middle", "mdi:align-vertical-center", "Svisle na střed"], ["bottom", "mdi:align-vertical-bottom", "Zarovnat dolů"]].map(([action, icon, title]) => `<button class="secondary icon-btn" data-custom-layer-action="${action}" title="${title}" aria-label="${title}" ${selected ? "" : "disabled"}><ha-icon icon="${icon}"></ha-icon></button>`).join("")}
+          <button class="secondary icon-btn" data-custom-layer-action="rotate-left" title="Otočit o 90° doleva" aria-label="Otočit o 90° doleva" ${selected ? "" : "disabled"}><ha-icon icon="mdi:rotate-left"></ha-icon></button>
+          <button class="secondary icon-btn" data-custom-layer-action="rotate-right" title="Otočit o 90° doprava" aria-label="Otočit o 90° doprava" ${selected ? "" : "disabled"}><ha-icon icon="mdi:rotate-right"></ha-icon></button>
+          <button class="secondary icon-btn danger" data-custom-layer-action="delete" title="Smazat vybraný objekt" aria-label="Smazat vybraný objekt" ${selected ? "" : "disabled"}><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>
+          <button class="secondary icon-btn" data-custom-layer-action="clear" title="Vyčistit aktivní vrstvu" aria-label="Vyčistit aktivní vrstvu" ${activeLayer?.objects?.length ? "" : "disabled"}><ha-icon icon="mdi:broom"></ha-icon></button>
+          <span class="layer-selection-summary">${selected ? "Objekt vybrán" : "Vyberte objekt"}</span>
+          <div class="layer-zoom-controls"><span>Zoom</span>${["fit", 1, 2, 3, 4].map((zoom) => `<button class="secondary ${layerZoom === zoom ? "active" : ""}" data-custom-layer-zoom="${zoom}">${zoom === "fit" ? "Fit" : `${zoom}×`}</button>`).join("")}</div>
         </div>
         <details class="default-icon-library" open>
           <summary><span><ha-icon icon="mdi:shape-plus-outline"></ha-icon><strong>Knihovna ikon</strong></span><small>Kliknutím vložíte ikonu do vrstvy</small></summary>
@@ -244,7 +298,7 @@ export const customLayersMixin = {
         </details>
         <div class="layer-canvas-shell">
           <div class="layer-device-frame">
-            <canvas id="customLayerCanvas" width="${form.canvas_width}" height="${form.canvas_height}"></canvas>
+            <canvas id="customLayerCanvas" width="${form.canvas_width}" height="${form.canvas_height}" ${canvasZoomStyle}></canvas>
           </div>
         </div>
         <p class="canvas-help">Objekty přetahujte myší. Přesnou polohu, velikost, barvy a rozsahy hodnot upravíte v pravém panelu.</p>
@@ -441,6 +495,19 @@ export const customLayersMixin = {
           ctx.lineWidth = Math.max(1, Number(object.stroke_width || 2));
           ctx.strokeRect(x, y, w, h);
         }
+      } else if (object.type === "line") {
+        ctx.strokeStyle = this._color(object.color || "black");
+        ctx.lineWidth = Math.max(1, Number(object.stroke_width || 2));
+        ctx.beginPath();
+        ctx.moveTo(x, y + h / 2);
+        ctx.lineTo(x + w, y + h / 2);
+        ctx.stroke();
+      } else if (object.type === "barcode" || object.type === "qr") {
+        ctx.save();
+        ctx.translate(x, y);
+        if (object.type === "barcode") this._drawBarcode(ctx, object, { w, h });
+        else this._drawQr(ctx, object, { w, h });
+        ctx.restore();
       } else if (object.type === "bar_gauge") {
         this._drawBarGauge(ctx, object, x, y, w, h);
       } else if (object.type === "pie") {
@@ -507,6 +574,7 @@ export const customLayersMixin = {
 
   _addCustomLayer() {
     this._ensureLayeredCustomForm();
+    this._rememberCustomLayerState();
     const layer = { id: `layer-${Date.now()}`, name: `Vrstva ${this._customElementForm.layers.length + 1}`, objects: [] };
     this._customElementForm.layers.push(layer);
     this._customActiveLayerId = layer.id;
@@ -517,6 +585,7 @@ export const customLayersMixin = {
   _duplicateCustomLayer(layerId) {
     const source = this._customElementForm.layers.find((layer) => layer.id === layerId);
     if (!source) return;
+    this._rememberCustomLayerState();
     const copy = structuredClone(source);
     copy.id = `layer-${Date.now()}`;
     copy.name = `${source.name} – kopie`;
@@ -528,6 +597,7 @@ export const customLayersMixin = {
 
   _deleteCustomLayer(layerId) {
     if (this._customElementForm.layers.length <= 1) return;
+    this._rememberCustomLayerState();
     this._customElementForm.layers = this._customElementForm.layers.filter((layer) => layer.id !== layerId);
     this._customElementForm.condition_rules = this._customElementForm.condition_rules.filter((rule) => rule.layer_id !== layerId);
     if (this._customElementForm.default_layer_id === layerId) this._customElementForm.default_layer_id = this._customElementForm.layers[0].id;
@@ -539,6 +609,7 @@ export const customLayersMixin = {
   _deleteCustomLayerObject() {
     const layer = this._customActiveLayer();
     if (!layer || !this._customSelectedObjectId) return;
+    this._rememberCustomLayerState();
     const previousLength = layer.objects.length;
     layer.objects = layer.objects.filter((object) => object.id !== this._customSelectedObjectId);
     if (layer.objects.length === previousLength) return;
@@ -547,9 +618,141 @@ export const customLayersMixin = {
     this._stableCustomRender();
   },
 
+  _customLayerStateSnapshot() {
+    return {
+      form: structuredClone(this._customElementForm),
+      activeLayerId: this._customActiveLayerId,
+      selectedObjectId: this._customSelectedObjectId,
+    };
+  },
+
+  _rememberCustomLayerState() {
+    this._customLayerHistory ||= [];
+    this._customLayerFuture = [];
+    this._customLayerHistory.push(this._customLayerStateSnapshot());
+    if (this._customLayerHistory.length > 40) this._customLayerHistory.shift();
+  },
+
+  _restoreCustomLayerState(snapshot) {
+    if (!snapshot) return;
+    this._customElementForm = structuredClone(snapshot.form);
+    this._customActiveLayerId = snapshot.activeLayerId;
+    this._customSelectedObjectId = snapshot.selectedObjectId;
+    this._customLayerDrag = null;
+    this._stableCustomRender();
+  },
+
+  _undoCustomLayerChange() {
+    const snapshot = this._customLayerHistory?.pop();
+    if (!snapshot) return;
+    this._customLayerFuture ||= [];
+    this._customLayerFuture.push(this._customLayerStateSnapshot());
+    this._restoreCustomLayerState(snapshot);
+  },
+
+  _redoCustomLayerChange() {
+    const snapshot = this._customLayerFuture?.pop();
+    if (!snapshot) return;
+    this._customLayerHistory ||= [];
+    this._customLayerHistory.push(this._customLayerStateSnapshot());
+    this._restoreCustomLayerState(snapshot);
+  },
+
+  _duplicateCustomLayerObject() {
+    const layer = this._customActiveLayer();
+    const source = this._customSelectedLayerObject();
+    if (!layer || !source) return;
+    this._rememberCustomLayerState();
+    const copy = structuredClone(source);
+    copy.id = `item-${Date.now()}`;
+    copy.x = Math.min(this._customElementForm.canvas_width - Math.max(1, Number(copy.w || 1)), Number(copy.x || 0) + 8);
+    copy.y = Math.min(this._customElementForm.canvas_height - Math.max(1, Number(copy.h || 1)), Number(copy.y || 0) + 8);
+    layer.objects.push(copy);
+    this._customSelectedObjectId = copy.id;
+    this._stableCustomRender();
+  },
+
+  _arrangeCustomLayerObject(direction) {
+    const layer = this._customActiveLayer();
+    const index = layer?.objects?.findIndex((object) => object.id === this._customSelectedObjectId) ?? -1;
+    if (!layer || index < 0) return;
+    const target = direction === "front" ? layer.objects.length - 1 : 0;
+    if (index === target) return;
+    this._rememberCustomLayerState();
+    const [object] = layer.objects.splice(index, 1);
+    layer.objects.splice(target, 0, object);
+    this._stableCustomRender();
+  },
+
+  _alignCustomLayerObject(alignment) {
+    const object = this._customSelectedLayerObject();
+    if (!object) return;
+    this._rememberCustomLayerState();
+    const width = this._customElementForm.canvas_width;
+    const height = this._customElementForm.canvas_height;
+    if (alignment === "left") object.x = 0;
+    if (alignment === "center") object.x = Math.round((width - object.w) / 2);
+    if (alignment === "right") object.x = Math.max(0, width - object.w);
+    if (alignment === "top") object.y = 0;
+    if (alignment === "middle") object.y = Math.round((height - object.h) / 2);
+    if (alignment === "bottom") object.y = Math.max(0, height - object.h);
+    this._stableCustomRender();
+  },
+
+  _rotateCustomLayerObject(delta) {
+    const object = this._customSelectedLayerObject();
+    if (!object) return;
+    this._rememberCustomLayerState();
+    object.rotation = ((Number(object.rotation || 0) + delta) % 360 + 360) % 360;
+    this._stableCustomRender();
+  },
+
+  _moveCustomLayerObjectByKeyboard(dx, dy) {
+    const object = this._customSelectedLayerObject();
+    if (!object || (!dx && !dy)) return;
+    this._rememberCustomLayerState();
+    object.x = Math.max(0, Math.min(this._customElementForm.canvas_width - object.w, Math.round(Number(object.x || 0) + dx)));
+    object.y = Math.max(0, Math.min(this._customElementForm.canvas_height - object.h, Math.round(Number(object.y || 0) + dy)));
+    this._stableCustomRender();
+  },
+
+  _clearCustomLayer() {
+    const layer = this._customActiveLayer();
+    if (!layer?.objects?.length) return;
+    this._rememberCustomLayerState();
+    layer.objects = [];
+    this._customSelectedObjectId = "";
+    this._stableCustomRender();
+  },
+
+  _addCustomLayerSymbol(symbol) {
+    const layer = this._customActiveLayer();
+    if (!layer || !symbol) return;
+    this._rememberCustomLayerState();
+    const side = Math.max(40, Math.round(Math.min(this._customElementForm.canvas_width, this._customElementForm.canvas_height) * .48));
+    const object = {
+      id: `item-${Date.now()}`,
+      type: "text",
+      x: Math.round((this._customElementForm.canvas_width - side) / 2),
+      y: Math.round((this._customElementForm.canvas_height - side) / 2),
+      w: side,
+      h: side,
+      text: symbol,
+      color: "black",
+      font_size: Math.max(28, Math.round(side * .68)),
+      bold: true,
+      align: "center",
+    };
+    layer.objects.push(object);
+    this._customSelectedObjectId = object.id;
+    this._symbolPickerOpen = false;
+    this._stableCustomRender();
+  },
+
   _addCustomLayerObject(type) {
     const layer = this._customActiveLayer();
     if (!layer) return;
+    this._rememberCustomLayerState();
     let object;
     if (type === "rect") {
       object = { id: `item-${Date.now()}`, type: "rect", x: 48, y: 28, w: 120, h: 64, fill: "none", stroke: "black", stroke_width: 2 };
@@ -561,6 +764,12 @@ export const customLayersMixin = {
       object = { id: `item-${Date.now()}`, type: "slider", x: 28, y: 38, w: 240, h: 52, label: "Posuvník", min_value: 0, max_value: 100, unit: "°C", color: "black", show_value: true };
     } else if (type === "potentiometer" || type === "gauge") {
       object = { id: `item-${Date.now()}`, type: "potentiometer", x: 78, y: 14, w: 140, h: 100, label: "Potenciometr", min_value: 0, max_value: 100, unit: "°C", color: "black", stroke_width: 6, arc_mode: "240", show_arc: true, show_needle: true, show_value: true };
+    } else if (type === "line") {
+      object = { id: `item-${Date.now()}`, type: "line", x: 38, y: 62, w: 220, h: 4, color: "black", stroke_width: 3 };
+    } else if (type === "barcode") {
+      object = { id: `item-${Date.now()}`, type: "barcode", x: 38, y: 24, w: 220, h: 80, text: "8591234567890", color: "black", backgroundColor: "white" };
+    } else if (type === "qr") {
+      object = { id: `item-${Date.now()}`, type: "qr", x: 98, y: 14, w: 100, h: 100, text: "https://dratek.cz", color: "black", backgroundColor: "white" };
     } else {
       object = { id: `item-${Date.now()}`, type: "text", x: 38, y: 38, w: 220, h: 52, text: "Nový text", color: "black", font_size: 28, bold: true, align: "center" };
     }
@@ -580,6 +789,7 @@ export const customLayersMixin = {
     reader.onload = () => {
       const layer = this._customActiveLayer();
       if (!layer) return;
+      this._rememberCustomLayerState();
       const side = Math.round(Math.min(this._customElementForm.canvas_width, this._customElementForm.canvas_height) * 0.55);
       const object = { id: `item-${Date.now()}`, type: "image", x: 18, y: 18, w: side, h: side, image: reader.result, tint: "original" };
       layer.objects.push(object);
@@ -608,6 +818,7 @@ export const customLayersMixin = {
       const handles = this._handles(box);
       const hitHandle = handles.find((h) => Math.hypot(point.x - h.x, point.y - h.y) <= 12);
       if (hitHandle) {
+        this._rememberCustomLayerState();
         this._customLayerDrag = {
           mode: hitHandle.name === "rotate" ? "rotate" : "resize",
           handle: hitHandle.name,
@@ -628,6 +839,7 @@ export const customLayersMixin = {
 
     this._customSelectedObjectId = clickedObj?.id || "";
     if (clickedObj) {
+      this._rememberCustomLayerState();
       this._customLayerDrag = {
         mode: "move",
         startX: point.x,

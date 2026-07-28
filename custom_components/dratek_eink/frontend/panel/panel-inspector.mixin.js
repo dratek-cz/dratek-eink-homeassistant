@@ -9,38 +9,59 @@ export const inspectorMixin = {
     });
     this.shadowRoot.querySelector("#deviceSearch")?.addEventListener("input", (event) => {
       this._deviceSearchQuery = event.target.value;
-      // _render() replaces the whole shadow tree, which destroys the input the
-      // user is typing into and drops focus after every keystroke. Re-render,
-      // then put the caret back where it was.
-      const caret = event.target.selectionStart;
-      this._render();
-      this._paint();
-      const next = this.shadowRoot.querySelector("#deviceSearch");
-      if (next) {
-        next.focus();
-        try {
-          next.setSelectionRange(caret, caret);
-        } catch (_err) {
-          // Some input types don't support selection ranges; focus alone is enough.
-        }
-      }
+      this._renderKeepingSearchFocus();
     });
     this.shadowRoot.querySelector("#refreshQueue")?.addEventListener("click", () => this._loadQueue(true));
     this.shadowRoot.querySelector("#queueSearch")?.addEventListener("input", (event) => {
       this._queueSearch = event.target.value;
+      this._renderQueueKeepingFocus();
+    });
+    // Dlaždice stavu je zároveň filtr; opakovaný klik na aktivní stav ho zruší.
+    this.shadowRoot.querySelectorAll("[data-queue-status]").forEach((button) => button.addEventListener("click", () => {
+      const value = button.dataset.queueStatus;
+      this._queueStatusFilter = this._queueStatusFilter === value ? "all" : value;
+      this._render();
+    }));
+    this.shadowRoot.querySelectorAll("[data-queue-menu]").forEach((button) => button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this._toggleQueueMenu(button.dataset.queueMenu);
+    }));
+    this.shadowRoot.querySelectorAll("[data-queue-filter]").forEach((button) => button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this._setQueueFilter(button.dataset.queueFilter, button.dataset.queueValue);
+    }));
+    // Klik mimo rozbalený filtr ho zavře. Posluchač se váže jednou za život
+    // komponenty, ne při každém _bind(), aby se nehromadil.
+    if (!this._queueMenuDismissBound) {
+      this._queueMenuDismissBound = true;
+      this.shadowRoot.addEventListener("click", () => {
+        if (!this._queueOpenMenu) return;
+        this._queueOpenMenu = "";
+        this._render();
+        this._paint();
+      });
+      this.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape" || !this._queueOpenMenu) return;
+        this._queueOpenMenu = "";
+        this._render();
+        this._paint();
+      });
+    }
+    const resetQueueFilters = () => {
+      this._queueSearch = "";
+      this._queueStatusFilter = "all";
+      this._queueDeviceFilter = "all";
+      this._queueTransportFilter = "all";
+      this._queueOperationFilter = "all";
+      this._queueOpenMenu = "";
+    };
+    this.shadowRoot.querySelector("#clearQueueFilters")?.addEventListener("click", () => {
+      resetQueueFilters();
       this._render();
     });
-    this.shadowRoot.querySelector("#queueStatusFilter")?.addEventListener("change", (event) => {
-      this._queueStatusFilter = event.target.value;
-      this._render();
-    });
-    this.shadowRoot.querySelector("#queueDeviceFilter")?.addEventListener("change", (event) => {
-      this._queueDeviceFilter = event.target.value;
-      this._render();
-    });
-    this.shadowRoot.querySelector("#queueLimit")?.addEventListener("change", (event) => {
-      this._queueLimit = Number(event.target.value);
-      this._render();
+    this.shadowRoot.querySelector("#resetQueueView")?.addEventListener("click", async () => {
+      resetQueueFilters();
+      await this._loadQueue(true);
     });
     this.shadowRoot.querySelector("#clearQueueHistory")?.addEventListener("click", async () => {
       await this._hass.callWS({ type: "dratek_eink/queue/clear" });
@@ -64,8 +85,21 @@ export const inspectorMixin = {
       if (wifiButton) wifiButton.disabled = this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid;
     };
     this.shadowRoot.querySelector("#refreshSerialPorts")?.addEventListener("click", async () => { await this._loadSerialPorts(); this._render(); this._paint(); });
-    this.shadowRoot.querySelector("#flashPort")?.addEventListener("change", (event) => { this._flashForm.port = event.target.value; syncFlashButton(); });
-    this.shadowRoot.querySelector("#flashChip")?.addEventListener("change", (event) => { this._flashForm.chip = event.target.value; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#flashPort")?.addEventListener("change", (event) => {
+      this._flashForm.port = event.target.value;
+      syncFlashButton();
+      // Nápověda pod výběrem popisuje zvolený port, takže ji musíme přepsat
+      // ručně - plný _render() by tady sebral fokus z rozbaleného seznamu.
+      const hint = this.shadowRoot.querySelector(".port-picker-hint");
+      const port = (this._serialPorts || []).find((item) => item.device === this._flashForm.port);
+      if (hint) hint.lastChild.textContent = port ? (port.description || port.name || port.device) : "Vyberte port, do kterého je deska zapojená";
+    });
+    this.shadowRoot.querySelectorAll("[data-flash-chip]").forEach((button) => button.addEventListener("click", (event) => {
+      event.preventDefault();
+      this._flashForm.chip = button.dataset.flashChip;
+      this._render();
+      this._paint();
+    }));
     this.shadowRoot.querySelector("#flashSsid")?.addEventListener("input", (event) => { this._flashForm.ssid = event.target.value; syncFlashButton(); });
     this.shadowRoot.querySelector("#flashPassword")?.addEventListener("input", (event) => { this._flashForm.password = event.target.value; });
     this.shadowRoot.querySelector("#flashHostname")?.addEventListener("input", (event) => { this._flashForm.hostname = event.target.value; });
@@ -121,11 +155,15 @@ export const inspectorMixin = {
     this.shadowRoot.querySelectorAll("[data-gateway-name-input]").forEach((input) => input.addEventListener("input", (event) => { this._gatewayNameDraft = event.target.value; }));
     this.shadowRoot.querySelectorAll("[data-gateway-name-save]").forEach((button) => button.addEventListener("click", () => this._renameGateway(button.dataset.gatewayNameSave)));
     this.shadowRoot.querySelectorAll("[data-gateway-name-cancel]").forEach((button) => button.addEventListener("click", () => { this._editingGatewayId = ""; this._render(); this._paint(); }));
+    this.shadowRoot.querySelectorAll("[data-language]").forEach((button) => button.addEventListener("click", () => this._setUiLanguage(button.dataset.language)));
     this.shadowRoot.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", async () => {
       this._activeTab = button.dataset.tab;
       window.clearTimeout(this._queuePollTimer);
       this._render();
       this._paint();
+      // Nová záložka se otevře od začátku. Bez toho zůstane odrolovaná pozice
+      // z předchozí stránky a lišta záložek působí, jako by uskočila.
+      this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
       if (this._activeTab === "devices") {
         this._scheduleAutomaticScan(60);
         await this._loadQueue(true);
@@ -165,6 +203,18 @@ export const inspectorMixin = {
         event.preventDefault();
         await openDeviceInDesigner(card.dataset.deviceCardOpen);
       });
+    });
+    this.shadowRoot.querySelector("#closeDisplayCatalog")?.addEventListener("click", () => {
+      this._displayCatalogOpen = false;
+      this._render();
+      this._paint();
+      window.requestAnimationFrame(() => this.shadowRoot.querySelector("#openDisplayCatalog")?.focus());
+    });
+    this.shadowRoot.querySelector("#displayCatalogBackdrop")?.addEventListener("click", (event) => {
+      if (event.target !== event.currentTarget) return;
+      this._displayCatalogOpen = false;
+      this._render();
+      this._paint();
     });
     this.shadowRoot.querySelectorAll("[data-device-rename]").forEach((button) => button.addEventListener("click", () => {
       const device = (this._result?.devices || []).find((item) => item.address === button.dataset.deviceRename);
@@ -239,11 +289,15 @@ export const inspectorMixin = {
         if (address) await this._saveDeviceGateway(address, group.dataset.topologyGateway);
       });
     });
-    this.shadowRoot.querySelectorAll("[data-topology-unlock]").forEach((button) => {
+    this.shadowRoot.querySelectorAll("[data-topology-lock]").forEach((button) => {
       button.addEventListener("click", async (event) => {
         event.preventDefault();
         event.stopPropagation();
-        await this._saveDeviceGateway(button.dataset.topologyUnlock, "");
+        if (button.disabled) return;
+        const locked = button.dataset.topologyLocked === "1";
+        const gatewayId = button.dataset.topologyLockGateway || "";
+        if (!locked && !gatewayId) return;
+        await this._saveDeviceGateway(button.dataset.topologyLock, locked ? "" : gatewayId);
       });
     });
     this.shadowRoot.querySelector("#sendDesign")?.addEventListener("click", () => this._sendDesign());
@@ -304,8 +358,9 @@ export const inspectorMixin = {
     this.shadowRoot.querySelector("#projectName")?.addEventListener("input", (event) => { this._projectName = event.target.value; this._scheduleDraftSave(); });
     this.shadowRoot.querySelector("#projectSelect")?.addEventListener("change", (event) => { this._selectedProjectId = event.target.value; const project = this._projects.find((item) => item.id === this._selectedProjectId); if (project) this._projectName = project.name; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#openSymbols")?.addEventListener("click", () => { this._symbolPickerOpen = true; this._symbolSearch = ""; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#openCustomLayerSymbols")?.addEventListener("click", () => { this._symbolPickerOpen = true; this._symbolSearch = ""; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#closeSymbols")?.addEventListener("click", () => { this._symbolPickerOpen = false; this._render(); this._paint(); });
-    this.shadowRoot.querySelector("#symbolSearch")?.addEventListener("input", (event) => { this._symbolSearch = event.target.value; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("#symbolSearch")?.addEventListener("input", (event) => { this._symbolSearch = event.target.value; this._renderKeepingSearchFocus(); });
     this.shadowRoot.querySelectorAll("[data-symbol-category]").forEach((button) => button.addEventListener("click", () => { this._symbolCategory = button.dataset.symbolCategory; this._render(); this._paint(); }));
     this.shadowRoot.querySelectorAll("[data-symbol]").forEach((button) => button.addEventListener("click", () => this._addSymbol(button.dataset.symbol)));
     this.shadowRoot.querySelectorAll("[data-designer-side]").forEach((button) => button.addEventListener("click", () => {
@@ -576,6 +631,9 @@ export const inspectorMixin = {
       this._customLayerStep = "design";
       this._customActiveLayerId = this._customElementForm.layers[0].id;
       this._customSelectedObjectId = "";
+      this._customLayerHistory = [];
+      this._customLayerFuture = [];
+      this._customLayerZoom = "fit";
       this._customElementResult = null;
       this._stableCustomRender();
     };
@@ -605,6 +663,22 @@ export const inspectorMixin = {
     this.shadowRoot.querySelectorAll("[data-custom-layer-copy]").forEach((button) => button.addEventListener("click", () => this._duplicateCustomLayer(button.dataset.customLayerCopy)));
     this.shadowRoot.querySelectorAll("[data-custom-layer-delete]").forEach((button) => button.addEventListener("click", () => this._deleteCustomLayer(button.dataset.customLayerDelete)));
     this.shadowRoot.querySelectorAll("[data-add-layer-object]").forEach((button) => button.addEventListener("click", () => this._addCustomLayerObject(button.dataset.addLayerObject)));
+    this.shadowRoot.querySelectorAll("[data-custom-layer-action]").forEach((button) => button.addEventListener("click", () => {
+      const action = button.dataset.customLayerAction;
+      if (action === "undo") this._undoCustomLayerChange();
+      else if (action === "redo") this._redoCustomLayerChange();
+      else if (action === "duplicate") this._duplicateCustomLayerObject();
+      else if (action === "front" || action === "back") this._arrangeCustomLayerObject(action);
+      else if (["left", "center", "right", "top", "middle", "bottom"].includes(action)) this._alignCustomLayerObject(action);
+      else if (action === "rotate-left" || action === "rotate-right") this._rotateCustomLayerObject(action === "rotate-left" ? -90 : 90);
+      else if (action === "delete") this._deleteCustomLayerObject();
+      else if (action === "clear") this._clearCustomLayer();
+    }));
+    this.shadowRoot.querySelectorAll("[data-custom-layer-zoom]").forEach((button) => button.addEventListener("click", () => {
+      const value = button.dataset.customLayerZoom;
+      this._customLayerZoom = value === "fit" ? "fit" : Number(value);
+      this._stableCustomRender();
+    }));
     this.shadowRoot.querySelectorAll("[data-default-layer-icon]").forEach((button) => button.addEventListener("click", () => this._addDefaultLayerIcon(button.dataset.defaultLayerIcon)));
     this.shadowRoot.querySelector("#addLayerImage")?.addEventListener("click", () => this.shadowRoot.querySelector("#layerImageFile")?.click());
     this.shadowRoot.querySelector("#layerImageFile")?.addEventListener("change", (event) => this._setCustomLayerImage(event.target.files?.[0]));
@@ -612,6 +686,10 @@ export const inspectorMixin = {
       const update = () => {
         const object = this._customSelectedLayerObject();
         if (!object || (input.type === "radio" && !input.checked)) return;
+        if (input.dataset.customHistoryCaptured !== "true") {
+          this._rememberCustomLayerState();
+          input.dataset.customHistoryCaptured = "true";
+        }
         const key = input.dataset.layerObject;
         object[key] = input.type === "checkbox" ? input.checked : input.type === "number" ? Number(input.value) : input.value;
         if (input.type === "radio") {
@@ -688,6 +766,9 @@ export const inspectorMixin = {
       this._customLayerStep = "design";
       this._customActiveLayerId = this._customElementForm.layers?.[0]?.id || "";
       this._customSelectedObjectId = "";
+      this._customLayerHistory = [];
+      this._customLayerFuture = [];
+      this._customLayerZoom = "fit";
       this._customElementFields = [];
       this._customElementInspection = { collections: [] };
       this._customElementResult = null;

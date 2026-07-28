@@ -79,6 +79,23 @@ def _decode_data_image(image_data: str) -> Image.Image:
     return Image.open(io.BytesIO(base64.b64decode(image_data))).convert("RGB")
 
 
+def quantize_bwr_preview(image: Image.Image) -> Image.Image:
+    """Convert RGB pixels to the exact black/white/red classes used by packing."""
+    output = image.convert("RGB")
+    pixels = output.load()
+    for y in range(output.height):
+        for x in range(output.width):
+            r, g, b = pixels[x, y]
+            luma = (38 * r + 75 * g + 15 * b) >> 7
+            if luma > 160:
+                pixels[x, y] = (255, 255, 255)
+            elif r > 160:
+                pixels[x, y] = (220, 20, 12)
+            else:
+                pixels[x, y] = (0, 0, 0)
+    return output
+
+
 def _fit_text_font(
     draw: ImageDraw.ImageDraw,
     lines: list[str],
@@ -796,7 +813,7 @@ def render_entity_bound_image(
         x -= (layer.width - max(1, round(float(binding.get("w", 1))))) // 2
         y -= (layer.height - max(1, round(float(binding.get("h", 1))))) // 2
         image.alpha_composite(layer, (x, y))
-    return image.convert("RGB")
+    return quantize_bwr_preview(image)
 
 
 def render_text_image(

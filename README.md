@@ -4,6 +4,15 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.127
+
+- celé rozhraní lze přepínat mezi češtinou a angličtinou přímo v horní liště
+- každá sekce má kontextovou nápovědu a dialogy se správně zobrazují nad hlavičkou
+- hlavní stránka má opravené náhledy, shodný displejový font a přehledné seznamové zobrazení
+- vyhledávací pole udrží fokus i během automatického překreslování stránky
+- Designer HA prvků sdílí nástroje hlavního designeru a podporuje pokročilé vrstvy a pravidla
+- mapa připojení umožňuje spolehlivě uzamknout displej také k lokálnímu Bluetooth adaptéru
+
 ## Novinky ve verzi 0.1.126
 
 - sekce **Gatewaye** má nové přehledné rozložení a karty ve stejném vizuálním stylu jako displeje

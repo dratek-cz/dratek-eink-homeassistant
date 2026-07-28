@@ -269,6 +269,10 @@ export const templatesMixin = {
   },
 
   _addSymbol(symbol) {
+    if (this._activeTab === "custom" && this._customWorkspaceView === "editor") {
+      this._addCustomLayerSymbol(symbol);
+      return;
+    }
     this._pushHistory();
     const size = this._displaySize();
     const object = {
@@ -510,12 +514,15 @@ export const templatesMixin = {
       const queryMatch = !query || item.label.toLowerCase().includes(query) || item.symbol.includes(query);
       return categoryMatch && queryMatch;
     });
-    return `<div class="modal-backdrop">
-      <div class="symbol-dialog">
-        <div class="section-title"><h2>Vložit symbol</h2><button id="closeSymbols" class="secondary"><ha-icon icon="mdi:close"></ha-icon>Zavřít</button></div>
-        <div class="symbol-search"><input id="symbolSearch" value="${this._escape(this._symbolSearch)}" placeholder="Hledat symbol, například Wi-Fi, teplota, světlo..."><span class="pill muted">${symbols.length} symbolů</span></div>
+    return `<div class="modal-backdrop symbol-modal-backdrop">
+      <div class="symbol-dialog" role="dialog" aria-modal="true" aria-labelledby="symbolDialogTitle">
+        <div class="section-title"><h2 id="symbolDialogTitle">Vložit symbol</h2><button id="closeSymbols" class="secondary"><ha-icon icon="mdi:close"></ha-icon>Zavřít</button></div>
+        <div class="symbol-search"><input type="search" id="symbolSearch" value="${this._escape(this._symbolSearch)}" placeholder="Hledat symbol, například Wi-Fi, teplota, světlo..."><span class="pill muted">${symbols.length} symbolů</span></div>
         <div class="category-row">${this._symbolCategories().map(([id, label]) => `<button class="secondary ${this._symbolCategory === id ? "active" : ""}" data-symbol-category="${this._escape(id)}">${this._escape(label)}</button>`).join("")}</div>
-        <div class="symbol-grid">${symbols.map((item) => `<button class="symbol-tile" data-symbol="${this._escape(item.symbol)}" title="${this._escape(item.label)}"><strong>${this._escape(item.symbol)}</strong><span>${this._escape(item.label)}</span></button>`).join("")}</div>
+        <div class="symbol-grid">${symbols.map((item) => {
+          const label = this._translateSymbolLabel(item.label);
+          return `<button class="symbol-tile" data-symbol="${this._escape(item.symbol)}" title="${this._escape(label)}"><strong>${this._escape(item.symbol)}</strong><span>${this._escape(label)}</span></button>`;
+        }).join("")}</div>
       </div>
     </div>`;
   },

@@ -103,10 +103,15 @@ export const variablesMixin = {
     return this._objects.filter((object) => ["text", "chart", "layered", "bar_gauge", "pie", "slider", "gauge", "potentiometer"].includes(object.type) && object.entityId && object.autoUpdate !== false);
   },
 
-  _entityAutomationPayload() {
-    const objects = this._automaticTextBindings();
+  _canonicalRenderObjects() {
+    const automaticIds = new Set(this._automaticTextBindings().map((object) => object.id));
+    return this._objects.filter((object) => object.type === "text" || automaticIds.has(object.id));
+  },
+
+  _entityAutomationPayload(device = this._device(), sizeOverride = null) {
+    const objects = this._canonicalRenderObjects();
     if (!objects.length) return { enabled: false };
-    const size = this._displaySize();
+    const size = sizeOverride || this._displaySize(device);
     const canvas = document.createElement("canvas");
     canvas.width = size.width;
     canvas.height = size.height;
@@ -190,15 +195,15 @@ export const variablesMixin = {
         return {
           id: object.id,
           custom_element_id: object.customElementId || "",
-          entity_id: object.entityId,
+          entity_id: object.entityId && object.autoUpdate !== false ? object.entityId : "",
           entity_attribute: object.entityAttribute || "",
           include_unit: !object.entityAttribute && !object.valueSuffix,
-          fallback: object.text || "",
+          fallback: this._textObjectValue(object),
           x: Number(object.x || 0), y: Number(object.y || 0),
           w: Number(object.w || 1), h: Number(object.h || 1),
           rotation: Number(object.rotation || 0), flipH: !!object.flipH,
           color: effectiveColor(object.color), fontSize: Number(object.fontSize || 16),
-          minFontSize: Number(object.minFontSize || this._readableMinFontSize()),
+          minFontSize: Number(object.minFontSize || this._readableMinFontSize(size)),
           bold: !!object.bold, textAlign: object.textAlign || "left",
           verticalAlign: object.verticalAlign || "middle", autoFit: object.autoFit !== false,
           padding: Number(object.padding || 0),

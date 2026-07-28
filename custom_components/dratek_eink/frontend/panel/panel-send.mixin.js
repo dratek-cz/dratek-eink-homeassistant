@@ -100,16 +100,27 @@ export const sendMixin = {
       return;
     }
     const full = this._renderExportCanvas();
+    const automation = this._entityAutomationPayload();
     const crop = document.createElement("canvas");
     crop.width = region.width;
     crop.height = region.height;
     const ctx = crop.getContext("2d", { willReadFrequently: true });
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(full, region.x, region.y, region.width, region.height, 0, 0, region.width, region.height);
     this._sending = true;
     this._sendResult = null;
     this._render();
     try {
+      if (automation.enabled) {
+        const source = await this._renderCanonicalPreview(automation, device.address);
+        const image = new Image();
+        image.src = source;
+        await image.decode();
+        const fullContext = full.getContext("2d", { willReadFrequently: true });
+        fullContext.clearRect(0, 0, full.width, full.height);
+        fullContext.imageSmoothingEnabled = false;
+        fullContext.drawImage(image, 0, 0, full.width, full.height);
+      }
+      ctx.drawImage(full, region.x, region.y, region.width, region.height, 0, 0, region.width, region.height);
       this._sendResult = await this._hass.callWS({
         type: "dratek_eink/send_partial_design",
         address: device.address,

@@ -62,16 +62,11 @@ export const drawBasicMixin = {
     this._drawCustomLayer(ctx, layer, box.w, box.h, canvasWidth, canvasHeight, "", false);
   },
 
-  _drawText(ctx, object, box) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, box.w, box.h);
-    ctx.clip();
-    ctx.fillStyle = this._color(object.color);
+  _textObjectValue(object) {
     const rawEntityValue = object.entityId ? this._entityRawValue(object) : undefined;
     const rawBoundValue = object.entityId ? rawEntityValue : object.variable && object.variableName ? this._variables[object.variableName] : object.text;
     const activeStatusValues = new Set(String(object.statusOnValues || "on,true,1,open,home").split(",").map((item) => item.trim().toLowerCase()).filter(Boolean));
-    const value = Array.isArray(object.conditionRules) && object.conditionRules.length
+    return Array.isArray(object.conditionRules) && object.conditionRules.length
       ? (object.conditionRules.find((rule) => this._customConditionMatches(rawBoundValue, rule.operator || "equals", rule.value || ""))?.symbol || object.defaultSymbol || "?")
       : object.statusIcons
         ? (activeStatusValues.has(String(rawBoundValue ?? "").trim().toLowerCase()) ? object.statusOnSymbol || "●" : object.statusOffSymbol || "○")
@@ -80,6 +75,15 @@ export const drawBasicMixin = {
           : object.variable && object.variableName
             ? (this._variables[object.variableName] ?? object.text ?? "")
             : (object.text || "");
+  },
+
+  _drawText(ctx, object, box) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, box.w, box.h);
+    ctx.clip();
+    ctx.fillStyle = this._color(object.color);
+    const value = this._textObjectValue(object);
     const lines = String(value).split("\n");
     const family = '"DRATEK eInk Sans"';
     const weight = object.bold ? "700 " : "600 ";
@@ -122,8 +126,8 @@ export const drawBasicMixin = {
     ctx.restore();
   },
 
-  _readableMinFontSize() {
-    const size = this._displaySize();
+  _readableMinFontSize(sizeOverride = null) {
+    const size = sizeOverride || this._displaySize();
     const shortSide = Math.min(size.width, size.height);
     if (shortSide <= 128) return 11;
     if (shortSide <= 168) return 12;

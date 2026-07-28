@@ -9,7 +9,7 @@ export const devicesMixin = {
     if (!background) {
       this._loading = true;
       this._error = "";
-      this._render();
+      this._renderKeepingSearchFocus();
     }
     try {
       const scannedResult = await this._hass.callWS({ type: "dratek_eink/scan" });
@@ -19,11 +19,9 @@ export const devicesMixin = {
       const presenceChanged = this._devicePresenceSignature(this._result) !== this._devicePresenceSignature(nextResult);
       this._result = nextResult;
       if (!background || changed || presenceChanged) {
-        this._render();
-        this._paint();
+        this._renderKeepingSearchFocus();
         this._loadDevicePreviewDrafts(this._result.devices || []).then(() => {
-          this._render();
-          this._paint();
+          this._renderKeepingSearchFocus();
         });
       }
       const found = (this._result?.devices || []).some((device) => device.address === this._selectedDeviceAddress);
@@ -36,8 +34,7 @@ export const devicesMixin = {
       if (!background) this._loading = false;
       if (!background || this._deviceAddressSignature(this._result) !== this._lastRenderedDeviceSignature) {
         this._lastRenderedDeviceSignature = this._deviceAddressSignature(this._result);
-        this._render();
-        this._paint();
+        this._renderKeepingSearchFocus();
       }
       if (this._activeTab === "devices") this._scheduleAutomaticScan(30 * 1000);
     }
@@ -286,31 +283,45 @@ export const devicesMixin = {
     return `<svg class="device-preview-barcode ${horizontal ? "horizontal" : "vertical"}" viewBox="${viewBox}" preserveAspectRatio="none" role="img" aria-label="Čárový kód ${this._escape(text)}">${bars.join("")}</svg>`;
   },
 
-  _renderDevicePreview(device, mode = "full") {
-    const address = String(device.address || "").toUpperCase();
+  // Geometrie rámečku displeje. Sdílí ji velký náhled na stránce displejů
+  // i miniatura v mapě připojení, aby oba ukazovaly stejný tvar zařízení.
+  _deviceFrameGeometry(device) {
     const { width: sourceWidth, height: sourceHeight, draft } = this._devicePreviewSize(device);
+    const portraitLayout = sourceHeight > sourceWidth;
+    const large400Layout = this._isLarge400Device(device);
+    const frameRatio = large400Layout
+      ? (portraitLayout ? 898 / 1039 : 1039 / 898)
+      : Math.max(0.48, Math.min(3.7, (sourceWidth / sourceHeight) * (portraitLayout ? 0.95 : 1 / 0.95)));
+    const frameWidth = Math.max(150, Math.round(sourceWidth / (large400Layout ? (portraitLayout ? 0.67 : 0.77) : (portraitLayout ? 0.8 : 0.76))));
+    const frameHeight = Math.round(frameWidth / frameRatio);
+    const frameRadius = Math.max(4, Math.min(28, Math.round(Math.min(frameWidth, frameHeight) * 0.06)));
+    return { sourceWidth, sourceHeight, draft, portraitLayout, large400Layout, frameRatio, frameWidth, frameHeight, frameRadius };
+  },
+
+  _renderDevicePreview(device, mode = "full", options = {}) {
+    const address = String(device.address || "").toUpperCase();
+    const catalogWordmark = options.catalogWordmark === true;
     const previewSizes = {
       full: { targetHeight: 190, minWidth: 108, maxWidth: 420 },
       large: { targetHeight: 148, minWidth: 96, maxWidth: 340 },
       compact: { targetHeight: 92, minWidth: 78, maxWidth: 240 },
+      mini: { targetHeight: 30, minWidth: 22, maxWidth: 76 },
     };
     const previewMode = previewSizes[mode] ? mode : "full";
     const sizing = previewSizes[previewMode];
-    const portraitLayout = sourceHeight > sourceWidth;
-    const large400Layout = this._isLarge400Device(device);
-    const designerFrameRatio = large400Layout
-      ? (portraitLayout ? 898 / 1039 : 1039 / 898)
-      : Math.max(0.48, Math.min(3.7, (sourceWidth / sourceHeight) * (portraitLayout ? 0.95 : 1 / 0.95)));
-    const designerFrameWidth = Math.max(150, Math.round(sourceWidth / (large400Layout ? (portraitLayout ? 0.67 : 0.77) : (portraitLayout ? 0.8 : 0.76))));
-    const designerFrameHeight = Math.round(designerFrameWidth / designerFrameRatio);
+    const geometry = this._deviceFrameGeometry(device);
+    const { sourceWidth, sourceHeight, draft, portraitLayout, large400Layout } = geometry;
+    const designerFrameRatio = geometry.frameRatio;
+    const designerFrameWidth = geometry.frameWidth;
+    const designerFrameHeight = geometry.frameHeight;
     const nativeOuterWidth = designerFrameWidth;
     const nativeOuterHeight = designerFrameHeight;
     const nativeOuterRatio = nativeOuterWidth / nativeOuterHeight;
     const previewWidth = Math.max(sizing.minWidth, Math.min(sizing.maxWidth, Math.round(sizing.targetHeight * nativeOuterRatio)));
-    const designerFrameRadius = Math.max(4, Math.min(28, Math.round(Math.min(designerFrameWidth, designerFrameHeight) * 0.06)));
+    const designerFrameRadius = geometry.frameRadius;
     const pe29Layout = this._isPe29Device(device);
     const physicalCode = device.physical_code || "00.00.00.00";
-    return `<div class="device-preview-wrap preview-${previewMode}">
+    return `<div class="device-preview-wrap preview-${previewMode} ${catalogWordmark ? "catalog-device-preview" : ""}">
       <div class="device-preview-fit" style="--frame-ratio:${nativeOuterRatio.toFixed(4)};--preview-width:${previewWidth}px">
         <svg class="device-preview-designer-svg" viewBox="0 0 ${nativeOuterWidth} ${nativeOuterHeight}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Náhled ${this._escape(sourceWidth)} × ${this._escape(sourceHeight)}">
           <foreignObject x="0" y="0" width="${nativeOuterWidth}" height="${nativeOuterHeight}">
@@ -318,7 +329,9 @@ export const devicesMixin = {
               ${large400Layout ? `<span class="device-large400-top-band"></span><span class="device-large400-bottom-band"><span class="device-large400-label">${this._renderDeviceBarcode(address, true)}<span class="device-large400-mac">${this._escape(address)}</span></span></span>` : pe29Layout ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, portraitLayout)}</span>` : `<span class="designer-device-code">${this._escape(physicalCode)}</span>`}
               <div class="designer-device-screen">
                 <canvas data-device-preview="${this._escape(address)}" data-source-width="${sourceWidth}" data-source-height="${sourceHeight}" width="${sourceWidth}" height="${sourceHeight}"></canvas>
-                ${draft ? "" : `<div class="device-preview-empty"><span><ha-icon icon="mdi:image-outline"></ha-icon>Prázdný návrh</span></div>`}
+                ${draft ? "" : catalogWordmark
+                  ? `<div class="device-preview-empty catalog-eink-screen"><span class="catalog-eink-wordmark">Eink</span></div>`
+                  : `<div class="device-preview-empty"><span><ha-icon icon="mdi:image-outline"></ha-icon>Prázdný návrh</span></div>`}
               </div>
             </div>
           </foreignObject>
@@ -340,7 +353,7 @@ export const devicesMixin = {
     return haystack.includes(query);
   },
 
-  _renderDeviceCards(devices, selectedAddress) {
+  _renderDeviceCards(devices) {
     if (!devices.length) {
       return `<div class="empty-state"><img class="empty-logo" src="${this._frontendAssetUrl("dratek-eink-logo.png")}" alt="DRATEK.CZ eInk"><h2>${this._loading ? "Hledám displeje v okolí" : "V okolí zatím není žádný displej"}</h2><p>${this._loading ? "Scan se spustil automaticky po otevření panelu." : "Hledání můžeš kdykoliv zopakovat tlačítkem Obnovit."}</p></div>`;
     }
@@ -351,7 +364,6 @@ export const devicesMixin = {
     }
     const mode = this._effectiveViewMode(this._deviceViewMode, filtered.length);
     return `<div class="display-grid density-${mode}">${filtered.map((device) => {
-      const selected = device.address === selectedAddress;
       const battery = this._batteryInfo(device);
       const rssi = Number(device.rssi);
       const paths = device.paths || [];
@@ -373,7 +385,7 @@ export const devicesMixin = {
         : recentlySucceededJob
           ? `<div class="display-uploaded-state" role="status" aria-live="polite"><ha-icon icon="mdi:check-circle"></ha-icon><strong>Úspěšně nahráno</strong><span>Displej se vykresluje</span></div>`
           : "";
-      return `<article class="display-tile ${selected ? "selected" : ""} ${temporarilyUnseen ? "is-stale" : ""} ${writingJob ? "is-writing" : ""} ${recentlySucceededJob ? "is-uploaded" : ""}" data-device-card-open="${this._escape(device.address)}" role="button" tabindex="0" aria-label="Vybrat ${this._escape(this._deviceTitle(device))}">
+      return `<article class="display-tile ${temporarilyUnseen ? "is-stale" : ""} ${writingJob ? "is-writing" : ""} ${recentlySucceededJob ? "is-uploaded" : ""}" data-device-card-open="${this._escape(device.address)}" role="button" tabindex="0" aria-label="Vybrat ${this._escape(this._deviceTitle(device))}">
         <header class="display-tile-header">
           <span class="display-online-dot ${temporarilyUnseen ? "stale" : ""}" title="${temporarilyUnseen ? "Displej nebyl zachycen v posledním krátkém skenu" : "Displej je dostupný"}"></span>
           <div class="display-tile-identity ${editing ? "is-editing" : ""}">${editing ? `<input class="display-name-inline" data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Například Kuchyň" aria-label="Název displeje">` : `<strong>${this._escape(this._deviceTitle(device))}</strong>`}<span>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</span></div>

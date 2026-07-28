@@ -2,6 +2,26 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.127] - 2026-07-28
+
+### Rozhraní a lokalizace
+- Celý panel lze přepínat mezi češtinou a angličtinou pomocí vlaječek v horní liště.
+- Kontextová nápověda jednotlivých stránek je dostupná z horní lišty bez problikávání.
+- Dialog symbolů se zobrazuje nad pevnou hlavičkou a není překrytý navigací.
+- Byla odstraněna nákupní tlačítka a zjednodušeny rušivé informační panely.
+
+### Hlavní stránka a náhledy displejů
+- Text v kartách, designeru a výsledném náhledu používá stejný přibalený displejový font.
+- Seznamové zobrazení má stabilní sloupce pro identitu displeje, baterii, signál, připojení a akce.
+- Karty nezachovávají označení naposledy otevřeného displeje a vyberou se až po kliknutí.
+- Vyhledávací pole mají dostatečnou šířku a během automatického překreslování neztrácejí fokus.
+
+### Designery, fronta a připojení
+- Designer HA prvků používá stejný pracovní prostor a nástroje jako hlavní designer, rozšířené o Home Assistant vrstvy a pravidla.
+- Fronta zápisu a správa gatewayí byly vizuálně sjednoceny s ostatními částmi panelu.
+- Mapa připojení podporuje trvalé ruční uzamčení displeje k lokálnímu Bluetooth adaptéru i ke gatewayi.
+- Rozšířeny byly regresní testy frontendu, vykreslování a volby lokální přenosové cesty.
+
 ## [0.1.126] - 2026-07-27
 
 ### Gatewaye

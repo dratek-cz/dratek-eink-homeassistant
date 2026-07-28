@@ -17,7 +17,11 @@ from PIL import Image
 import voluptuous as vol
 
 from .automation import get_entity_auto_update_manager
-from .const import GATEWAY_FIRMWARE_VERSION, PARTIAL_UPDATE_CONFIRMED_SDK_TYPES
+from .const import (
+    GATEWAY_FIRMWARE_VERSION,
+    LOCAL_ROUTE_ID,
+    PARTIAL_UPDATE_CONFIRMED_SDK_TYPES,
+)
 from .discovery import parse_dratek_advertisement, parse_dratek_manufacturer_data
 from .gateway import (
     async_add_gateway,
@@ -432,7 +436,21 @@ async def websocket_scan(
             (path for path in gateway_paths if str(path.get("id") or "") == selected_gateway_id),
             None,
         )
-        if selected_gateway:
+        if selected_gateway_id == LOCAL_ROUTE_ID:
+            local_path = next(
+                (path for path in device["paths"] if path.get("type") == "local"),
+                None,
+            )
+            device["gateway_selection"] = "manual"
+            device["selected_gateway_id"] = LOCAL_ROUTE_ID
+            device["preferred_path"] = local_path or {
+                "type": "local",
+                "id": LOCAL_ROUTE_ID,
+                "name": "Home Assistant Bluetooth",
+                "rssi": None,
+                "unavailable": True,
+            }
+        elif selected_gateway:
             device["gateway_selection"] = "manual"
             device["selected_gateway_id"] = selected_gateway_id
             device["preferred_path"] = selected_path or {
@@ -524,12 +542,13 @@ async def websocket_set_device_gateway(
 ) -> None:
     address = _normalize_address(msg["address"])
     gateway_id = str(msg.get("gateway_id") or "").strip()
+    local_route = gateway_id == LOCAL_ROUTE_ID
     gateways = await async_load_gateways(hass)
     gateway = next(
         (item for item in gateways if str(item.get("id") or "") == gateway_id),
         None,
     )
-    if gateway_id and gateway is None:
+    if gateway_id and not local_route and gateway is None:
         connection.send_error(msg["id"], "gateway_not_found", "Gateway was not found.")
         return
 
@@ -540,7 +559,7 @@ async def websocket_set_device_gateway(
         data["device_gateway_preferences"].pop(address, None)
     await _project_store(hass).async_save(data)
 
-    transport_name = str(
+    transport_name = "Home Assistant Bluetooth" if local_route else str(
         (gateway or {}).get("name")
         or (gateway or {}).get("host")
         or ""

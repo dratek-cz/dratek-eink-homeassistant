@@ -2,7 +2,7 @@ DOMAIN = "dratek_eink"
 
 DRATEK_COMPANY_ID = 0x5053
 
-PANEL_VERSION = "0.1.126"
+PANEL_VERSION = "0.1.127"
 GATEWAY_FIRMWARE_VERSION = "0.1.42-gateway"
 
 CONTROL_CHARS = {
@@ -139,3 +139,8 @@ SDK_MODELS = {
 # for every model. This set marks the one that is known-good, so the UI can say
 # "confirmed" versus "untested" instead of blocking the attempt outright.
 PARTIAL_UPDATE_CONFIRMED_SDK_TYPES = {2635}
+
+# Sentinel stored in device_gateway_preferences when a display is pinned to the
+# Home Assistant Bluetooth adapter instead of a gateway. Gateways are addressed
+# by their generated id, so a reserved word cannot collide with one.
+LOCAL_ROUTE_ID = "local"
