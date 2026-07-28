@@ -66,6 +66,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('placeholder="Hledat podle názvu, Entity ID nebo hodnoty…"', self.harness)
         self.assertNotIn('this.innerHTML = `<select', self.harness)
 
+    def test_designer_send_action_adds_transfers_to_the_queue(self):
+        self.assertIn("Odeslat do fronty", self.source)
+        self.assertIn("Přidávám do fronty...", self.source)
+        self.assertIn("Návrh byl přidán do fronty zápisu.", self.source)
+        self.assertIn("mdi:tray-arrow-down", self.source)
+
     def test_gateway_workspace_uses_compact_management_layout(self):
         for marker in (
             'class="page-heading"',

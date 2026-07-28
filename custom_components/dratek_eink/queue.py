@@ -38,6 +38,7 @@ class TransferQueue:
         self._device_locks: dict[str, asyncio.Lock] = {}
         self._manual_pending: dict[str, int] = {}
         self._automatic_tasks: dict[str, tuple[str, asyncio.Task[Any]]] = {}
+        self._background_tasks: set[asyncio.Task[Any]] = set()
         self._preempted_jobs: set[str] = set()
         self._load_lock = asyncio.Lock()
         self._save_lock = asyncio.Lock()
@@ -83,6 +84,7 @@ class TransferQueue:
         address: str,
         operation: str,
         runner: TransferRunner,
+        wait_for_completion: bool = True,
     ) -> dict[str, Any]:
         await self._ensure_loaded()
         normalized_address = address.upper()
@@ -117,27 +119,46 @@ class TransferQueue:
             current_task = asyncio.current_task()
             if current_task is not None:
                 self._automatic_tasks[normalized_address] = (job["id"], current_task)
-        try:
-            return await self._run(job, runner)
-        except asyncio.CancelledError:
-            if not manual and job["id"] in self._preempted_jobs:
-                return await self._skip_automatic_update(
-                    job,
-                    "Automatic update cancelled because a manual upload took priority.",
-                )
-            raise
-        finally:
-            if manual:
-                pending = self._manual_pending.get(normalized_address, 1) - 1
-                if pending > 0:
-                    self._manual_pending[normalized_address] = pending
+        async def process_job() -> dict[str, Any]:
+            try:
+                return await self._run(job, runner)
+            except asyncio.CancelledError:
+                if not manual and job["id"] in self._preempted_jobs:
+                    return await self._skip_automatic_update(
+                        job,
+                        "Automatic update cancelled because a manual upload took priority.",
+                    )
+                raise
+            finally:
+                if manual:
+                    pending = self._manual_pending.get(normalized_address, 1) - 1
+                    if pending > 0:
+                        self._manual_pending[normalized_address] = pending
+                    else:
+                        self._manual_pending.pop(normalized_address, None)
                 else:
-                    self._manual_pending.pop(normalized_address, None)
-            else:
-                active = self._automatic_tasks.get(normalized_address)
-                if active and active[0] == job["id"]:
-                    self._automatic_tasks.pop(normalized_address, None)
-                self._preempted_jobs.discard(job["id"])
+                    active = self._automatic_tasks.get(normalized_address)
+                    if active and active[0] == job["id"]:
+                        self._automatic_tasks.pop(normalized_address, None)
+                    self._preempted_jobs.discard(job["id"])
+
+        if wait_for_completion:
+            return await process_job()
+
+        task = self.hass.async_create_task(
+            process_job(),
+            f"{DOMAIN} transfer {job['id']}",
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return {
+            "ok": True,
+            "queued": True,
+            "address": normalized_address,
+            "log": ["Transfer added to queue."],
+            "queue_job_id": job["id"],
+            "queue_status": "queued",
+        }
 
     def _preempt_automatic_update(self, address: str) -> None:
         active = self._automatic_tasks.get(address)

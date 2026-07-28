@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.130
+
+- návrhy lze přidávat do fronty i během probíhajícího zápisu
+- různé gatewaye mohou zapisovat na různé displeje současně
+- každá gateway zachovává bezpečné pořadí vlastních úloh
+- editor ihned potvrdí zařazení návrhu do fronty a nezůstává blokovaný až do dokončení přenosu
+
 ## Novinky ve verzi 0.1.129
 
 - HACS stahuje explicitní release ZIP obsahující ikonu a ostatní lokální značky integrace

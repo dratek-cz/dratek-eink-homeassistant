@@ -650,7 +650,7 @@ export const renderUiMixin = {
           <button id="variablesDialogOpen" class="designer-command-card"><span class="designer-command-icon"><ha-icon icon="mdi:variable"></ha-icon></span><span class="designer-command-copy"><strong>Proměnné</strong><small>Hodnoty návrhu</small></span></button>
           <div class="designer-command-direct designer-command-orientation"><span class="designer-command-direct-title"><ha-icon icon="mdi:screen-rotation"></ha-icon>Orientace</span><div class="designer-command-direct-options"><button class="${this._orientation === "landscape" ? "active" : ""}" data-orientation="landscape" title="Otočit displej na šířku"><ha-icon icon="mdi:monitor"></ha-icon><span>Na šířku</span></button><button class="${this._orientation === "portrait" ? "active" : ""}" data-orientation="portrait" title="Otočit displej na výšku"><ha-icon icon="mdi:monitor-vertical"></ha-icon><span>Na výšku</span></button></div></div>
           <div class="designer-command-direct designer-command-background"><span class="designer-command-direct-title"><ha-icon icon="mdi:palette-outline"></ha-icon>Pozadí</span><div class="designer-command-direct-options"><button data-background="white" class="${this._backgroundColor === "white" ? "selected" : ""}" title="Bílé pozadí návrhu"><span class="color-swatch white"></span><span>Bílé</span></button><button data-background="black" class="${this._backgroundColor === "black" ? "selected" : ""}" title="Černé pozadí návrhu"><span class="color-swatch black"></span><span>Černé</span></button><button data-background="red" class="${this._backgroundColor === "red" ? "selected" : ""}" title="Červené pozadí návrhu"><span class="color-swatch red"></span><span>Červené</span></button></div></div>
-        </div><div class="designer-command-actions"><span class="ribbon-project"><ha-icon icon="mdi:file-document-edit-outline"></ha-icon>${this._escape(this._projectName)}</span><button id="sendPartialDesign" class="secondary ribbon-partial" ${!device || this._sending || !this._selectedIds.length ? "disabled" : ""} title="${this._selectedIds.length ? "Přepíše na displeji jen oblast označených objektů" : "Nejprve označ objekty, jejichž oblast se má přepsat"}"><ha-icon icon="mdi:select-drag"></ha-icon>Odeslat výběr</button><button id="sendDesign" class="ribbon-send" ${!device || this._sending ? "disabled" : ""}><ha-icon icon="mdi:upload"></ha-icon>${this._sending ? "Odesílám..." : "Odeslat do displeje"}</button></div>${this._renderFileMenu()}</div>
+        </div><div class="designer-command-actions"><span class="ribbon-project"><ha-icon icon="mdi:file-document-edit-outline"></ha-icon>${this._escape(this._projectName)}</span><button id="sendPartialDesign" class="secondary ribbon-partial" ${!device || this._sending || !this._selectedIds.length ? "disabled" : ""} title="${this._selectedIds.length ? "Zařadí přepis oblasti označených objektů do fronty" : "Nejprve označ objekty, jejichž oblast se má přepsat"}"><ha-icon icon="mdi:select-drag"></ha-icon>Odeslat výběr</button><button id="sendDesign" class="ribbon-send" ${!device || this._sending ? "disabled" : ""} title="Zařadí aktuální návrh do fronty zápisu"><ha-icon icon="mdi:tray-arrow-down"></ha-icon>${this._sending ? "Přidávám do fronty..." : "Odeslat do fronty"}</button></div>${this._renderFileMenu()}</div>
         ${this._renderSendResult()}
         <div class="editor-shell">
           ${this._renderToolSidebar()}
@@ -973,7 +973,11 @@ export const renderUiMixin = {
   _renderSendResult() {
     if (!this._sendResult) return "";
     const cls = this._sendResult.ok ? "good" : "bad";
-    const text = this._sendResult.ok ? "Odeslano do displeje." : `Odeslani selhalo: ${this._sendResult.error || "neznama chyba"}`;
+    const text = this._sendResult.queued || this._sendResult.queue_status === "queued"
+      ? "Návrh byl přidán do fronty zápisu."
+      : this._sendResult.ok
+        ? "Odesláno do displeje."
+        : `Odesílání selhalo: ${this._sendResult.error || "neznámá chyba"}`;
     return `<div class="send-result"><span class="pill ${cls}">${this._escape(text)}</span></div>`;
   },
 

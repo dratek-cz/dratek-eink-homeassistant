@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 from pathlib import Path
 import sys
@@ -49,6 +50,16 @@ def _load_queue_module():
 queue_module = _load_queue_module()
 
 
+class FakeHass:
+    def __init__(self):
+        self.tasks = []
+
+    def async_create_task(self, coro, name):
+        task = asyncio.create_task(coro, name=name)
+        self.tasks.append(task)
+        return task
+
+
 class TransferQueueRetryTests(unittest.IsolatedAsyncioTestCase):
     async def test_automatic_update_retries_after_connection_slot_error(self):
         queue = queue_module.TransferQueue(object())
@@ -89,6 +100,117 @@ class TransferQueueRetryTests(unittest.IsolatedAsyncioTestCase):
             await queue._run_with_automatic_bluetooth_retry(job, runner, lambda _line: None)
 
         self.assertEqual(attempts, 1)
+
+    async def test_editor_transfers_can_be_queued_while_another_is_writing(self):
+        hass = FakeHass()
+        queue = queue_module.TransferQueue(hass)
+        queue._loaded = True
+
+        async def save_history():
+            return None
+
+        queue._save_history = save_history
+        first_started = asyncio.Event()
+        release_first = asyncio.Event()
+        order = []
+
+        async def first_runner(_add_log):
+            order.append("first-start")
+            first_started.set()
+            await release_first.wait()
+            order.append("first-end")
+            return {"ok": True}
+
+        async def second_runner(_add_log):
+            order.append("second-start")
+            order.append("second-end")
+            return {"ok": True}
+
+        first_result = await queue.async_submit(
+            resource="local",
+            transport_type="local",
+            transport_name="Bluetooth",
+            address="aa:bb:cc:dd:ee:ff",
+            operation="design",
+            runner=first_runner,
+            wait_for_completion=False,
+        )
+        await first_started.wait()
+        second_result = await queue.async_submit(
+            resource="local",
+            transport_type="local",
+            transport_name="Bluetooth",
+            address="aa:bb:cc:dd:ee:ff",
+            operation="design",
+            runner=second_runner,
+            wait_for_completion=False,
+        )
+
+        snapshot = await queue.async_snapshot()
+        self.assertTrue(first_result["queued"])
+        self.assertTrue(second_result["queued"])
+        self.assertNotEqual(first_result["queue_job_id"], second_result["queue_job_id"])
+        self.assertEqual(snapshot["writing"], 1)
+        self.assertEqual(snapshot["queued"], 1)
+
+        release_first.set()
+        await asyncio.gather(*hass.tasks)
+
+        self.assertEqual(order, ["first-start", "first-end", "second-start", "second-end"])
+        self.assertTrue(all(job["status"] == "succeeded" for job in queue._jobs))
+
+    async def test_two_gateways_can_write_to_different_displays_in_parallel(self):
+        hass = FakeHass()
+        queue = queue_module.TransferQueue(hass)
+        queue._loaded = True
+
+        async def save_history():
+            return None
+
+        queue._save_history = save_history
+        both_started = asyncio.Event()
+        release_transfers = asyncio.Event()
+        active_gateways = set()
+
+        def gateway_runner(gateway_id):
+            async def runner(_add_log):
+                active_gateways.add(gateway_id)
+                if len(active_gateways) == 2:
+                    both_started.set()
+                await release_transfers.wait()
+                return {"ok": True}
+
+            return runner
+
+        first_result = await queue.async_submit(
+            resource="gateway:gateway-a",
+            transport_type="gateway",
+            transport_name="Gateway A",
+            address="aa:bb:cc:dd:ee:01",
+            operation="design",
+            runner=gateway_runner("gateway-a"),
+            wait_for_completion=False,
+        )
+        second_result = await queue.async_submit(
+            resource="gateway:gateway-b",
+            transport_type="gateway",
+            transport_name="Gateway B",
+            address="aa:bb:cc:dd:ee:02",
+            operation="design",
+            runner=gateway_runner("gateway-b"),
+            wait_for_completion=False,
+        )
+
+        await asyncio.wait_for(both_started.wait(), timeout=1)
+        snapshot = await queue.async_snapshot()
+        self.assertTrue(first_result["queued"])
+        self.assertTrue(second_result["queued"])
+        self.assertEqual(snapshot["writing"], 2)
+        self.assertEqual(snapshot["queued"], 0)
+
+        release_transfers.set()
+        await asyncio.gather(*hass.tasks)
+        self.assertTrue(all(job["status"] == "succeeded" for job in queue._jobs))
 
 
 if __name__ == "__main__":

@@ -753,6 +753,14 @@ async def websocket_send_gateway_design(
                 msg.get("transform"),
                 msg.get("orientation"),
             )
+            if transfer_result and transfer_result.get("ok") is not False:
+                await _save_entity_automation(
+                    hass,
+                    msg,
+                    route_type="gateway",
+                    gateway_id=msg["gateway_id"],
+                    transport_name=str(gateway.get("name") or gateway.get("host") or "DRATEK eInk gateway"),
+                )
             return transfer_result or {"ok": False, "error": "Gateway nebyla nalezena.", "log": []}
 
         result = await get_transfer_queue(hass).async_submit(
@@ -762,6 +770,7 @@ async def websocket_send_gateway_design(
             address=msg["address"],
             operation="design",
             runner=run_transfer,
+            wait_for_completion=False,
         )
         if result is None:
             connection.send_result(
@@ -769,14 +778,6 @@ async def websocket_send_gateway_design(
                 {"ok": False, "error": "Gateway nebyla nalezena.", "log": log_lines},
             )
             return
-        if result.get("ok") is not False:
-            await _save_entity_automation(
-                hass,
-                msg,
-                route_type="gateway",
-                gateway_id=msg["gateway_id"],
-                transport_name=str(gateway.get("name") or gateway.get("host") or "DRATEK eInk gateway"),
-            )
     except Exception as exc:
         log_lines.append(f"Gateway send failed: {exc}")
         connection.send_result(msg["id"], {"ok": False, "error": str(exc), "log": log_lines})
@@ -1744,6 +1745,12 @@ async def websocket_send_design(
             transfer = DratekTransfer(log=add_log, hass=hass)
             await transfer.send_image(address, sdk_type, image, transform, orientation)
             add_log("Design sent.")
+            await _save_entity_automation(
+                hass,
+                msg,
+                route_type="local",
+                transport_name="Home Assistant Bluetooth",
+            )
             return {"ok": True, "address": address, "log": []}
 
         result = await get_transfer_queue(hass).async_submit(
@@ -1753,14 +1760,8 @@ async def websocket_send_design(
             address=address,
             operation="design",
             runner=run_transfer,
+            wait_for_completion=False,
         )
-        if result.get("ok") is not False:
-            await _save_entity_automation(
-                hass,
-                msg,
-                route_type="local",
-                transport_name="Home Assistant Bluetooth",
-            )
     except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
         log(f"Send failed: {exc}")
         connection.send_result(
@@ -1839,6 +1840,7 @@ async def websocket_send_partial_design(
             address=address,
             operation="partial_design",
             runner=run_transfer,
+            wait_for_completion=False,
         )
     except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
         log(f"Partial send failed: {exc}")

@@ -2,6 +2,15 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.130] - 2026-07-28
+
+### Fronta zápisu a paralelní gatewaye
+- Odeslání návrhu z editoru se nyní okamžitě zařadí do fronty, takže lze přidat další návrh i během probíhajícího zápisu.
+- Zápisy přes různé gatewaye mohou probíhat paralelně; každá gateway má vlastní sériovou frontu.
+- Zápisy pro stejnou gateway nebo stejný displej zůstávají bezpečně seřazené a provedou se postupně.
+- Uložení automatizace návrhu proběhne až po skutečně úspěšném přenosu.
+- Doplněny byly regresní testy řazení úloh a paralelního zápisu přes dvě gatewaye.
+
 ## [0.1.129] - 2026-07-28
 
 ### Ikona integrace v HACS
