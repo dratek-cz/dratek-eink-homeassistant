@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.129] - 2026-07-28
+
+### Ikona integrace v HACS
+- HACS nyní používá explicitní release balíček `dratek_eink.zip`, který vždy obsahuje lokální značku integrace včetně `brand/icon.png`.
+- ZIP má přenositelnou strukturu pro Linux a rozbaluje obsah přímo do adresáře integrace bez chybného vnoření nebo zpětných lomítek.
+- Přidány byly regresní testy rozměrů a shody ikon v repozitáři a instalované integraci.
+
 ## [0.1.128] - 2026-07-28
 
 ### Výběr entit Home Assistantu

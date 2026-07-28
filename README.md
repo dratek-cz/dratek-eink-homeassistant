@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.129
+
+- HACS stahuje explicitní release ZIP obsahující ikonu a ostatní lokální značky integrace
+- balíček má správnou strukturu pro přímé rozbalení do `custom_components/dratek_eink`
+- cesty uvnitř ZIPu jsou přenositelné mezi Windows a Linuxem
+
 ## Novinky ve verzi 0.1.128
 
 - hlavní designer i Designer HA prvků používají přímo nativní výběr entit Home Assistantu

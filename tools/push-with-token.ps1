@@ -50,6 +50,10 @@ $tagName = "v$version"
 
 $tempDir = Join-Path $env:TEMP "dratek_eink_zip_build"
 if (Test-Path $tempDir) { Remove-Item -Recurse -Force $tempDir }
+New-Item -ItemType Directory -Path $tempDir | Out-Null
+# $env:TEMP can use a DOS 8.3 alias (for example ECLIPS~1), while child
+# FileInfo paths use the long name. Normalize before calculating substrings.
+$tempDir = (Get-Item -LiteralPath $tempDir).FullName
 $targetFolder = Join-Path $tempDir "dratek_eink"
 New-Item -ItemType Directory -Path $targetFolder | Out-Null
 Copy-Item -Recurse -Path (Join-Path $repoRoot "custom_components\dratek_eink\*") -Destination $targetFolder
@@ -57,8 +61,31 @@ Copy-Item -Recurse -Path (Join-Path $repoRoot "custom_components\dratek_eink\*")
 $zipPath = Join-Path $repoRoot "dratek_eink.zip"
 if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
 
+Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-[System.IO.Compression.ZipFile]::CreateFromDirectory($tempDir, $zipPath)
+$archive = [System.IO.Compression.ZipFile]::Open(
+    $zipPath,
+    [System.IO.Compression.ZipArchiveMode]::Create
+)
+try {
+    # HACS extracts a zip_release directly into
+    # /config/custom_components/dratek_eink, so archive the integration
+    # contents without another dratek_eink/ directory around them.
+    Get-ChildItem -LiteralPath $targetFolder -Recurse -File | ForEach-Object {
+        # ZIP uses forward slashes on every platform. Backslashes created on
+        # Windows are not directory separators when HACS extracts on Linux.
+        $entryName = $_.FullName.Substring($targetFolder.Length).TrimStart("\", "/").Replace("\", "/")
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $archive,
+            $_.FullName,
+            $entryName,
+            [System.IO.Compression.CompressionLevel]::Optimal
+        ) | Out-Null
+    }
+}
+finally {
+    $archive.Dispose()
+}
 Write-Output "Vytvořen zip balíček pro HACS: dratek_eink.zip ($(Get-Item $zipPath | Select-Object -ExpandProperty Length) bajtů)."
 
 # 4. Extract release notes from README.md in explicit UTF-8
