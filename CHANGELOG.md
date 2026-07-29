@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.140] - 2026-07-29
+
+### Opraveno
+- **Zásadní oprava odesílání do displeje.** Export obrázku pro odeslání odstraňoval ikony (`ha-icon`), které se ještě nestihly asynchronně vykreslit do svého shadow DOM. Šablony ale rozmisťují prvky pomocí CSS grid podle pořadí v DOM, takže odstranění jedné ikony posunulo všechny další prvky o řádek – text a patička se pak zobrazily na úplně jiném místě a překrývaly se, přesně jak vypadal odeslaný obrázek oproti čistému náhledu. Export teď před vykreslením počká, až se ikony načtou, a i kdyby se to nestihlo, prázdnou ikonu z DOM neodstraňuje, takže rozložení šablony zůstává vždy zachované.
+
 ## [0.1.139] - 2026-07-29
 
 ### Opraveno

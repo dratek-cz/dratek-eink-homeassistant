@@ -981,6 +981,14 @@ export const devicesMixin = {
   async _rasterizeDisplayTemplatePreview(screen) {
     const layout = screen.querySelector(".template-device-layout");
     if (!layout) throw new Error("Náhled displeje není dostupný.");
+    // mdi ha-icon elements render their glyph into their shadow root
+    // asynchronously; give any that were just added a moment to finish so
+    // the export doesn't have to fall back to leaving them empty.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const pending = [...layout.querySelectorAll("ha-icon")].some((el) => !el.shadowRoot?.querySelector("svg"));
+      if (!pending) break;
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    }
     const sourceResponsivePreviews = [...layout.querySelectorAll("svg.template-responsive-preview")];
     const clone = layout.cloneNode(true);
     const sourceIcons = [...layout.querySelectorAll("ha-icon")];
@@ -988,7 +996,10 @@ export const devicesMixin = {
       const source = sourceIcons[index];
       const sourceSvg = source?.shadowRoot?.querySelector("svg");
       if (!sourceSvg) {
-        target.remove();
+        // Leave the (empty) element in place instead of removing it: templates
+        // lay out their children with CSS grid in DOM order, so deleting an
+        // icon that hasn't finished rendering yet shifts every later element
+        // into the wrong row and corrupts the whole layout.
         return;
       }
       const icon = sourceSvg.cloneNode(true);

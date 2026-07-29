@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.140
+
+- zásadní oprava odesílání do displeje – export obrázku odstraňoval ikony, které se ještě nestihly vykreslit, což posunulo celé rozložení šablony a způsobilo, že odeslaný obrázek vůbec neodpovídal náhledu (text přes text, chybějící ikony); export teď na ikony počká a rozložení šablony už nikdy nenaruší
+
 ## Novinky ve verzi 0.1.139
 
 - opravena šablona Počasí – nadpis omylem ukazoval ukázkový text dne v týdnu místo stavu počasí, což při napojení na reálnou entitu způsobovalo zmatený/přetékající text
