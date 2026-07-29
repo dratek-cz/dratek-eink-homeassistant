@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.142] - 2026-07-29
+
+### Opraveno
+- Čekání na dokreslení ikon před exportem obrázku (přidané v 0.1.140) bylo příliš krátké (max. 150 ms) a v praxi téměř vždy vypršelo dřív, než se ikona stihla vykreslit – ikony se tak v odeslaném i v novém 1:1 náhledu vůbec neobjevily. Čekání je nyní výrazně delší (až 3 sekundy), takže má ikona reálnou šanci se stihnout načíst.
+
 ## [0.1.141] - 2026-07-29
 
 ### Přidáno

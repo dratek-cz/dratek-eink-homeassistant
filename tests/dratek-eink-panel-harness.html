@@ -37,11 +37,25 @@
     if (!customElements.get("ha-icon")) {
       customElements.define("ha-icon", class extends HTMLElement {
         static get observedAttributes() { return ["icon"]; }
-        connectedCallback() { this._render(); }
+        connectedCallback() {
+          this.innerHTML = "";
+          this._shadow ||= this.attachShadow({ mode: "open" });
+          this._render();
+        }
         attributeChangedCallback() { this._render(); }
         _render() {
+          if (!this._shadow) return;
           const icon = String(this.getAttribute("icon") || "").replace(/^mdi:/, "");
-          this.innerHTML = icon ? `<span class="mdi mdi-${icon}"></span>` : "";
+          if (!icon) { this._shadow.innerHTML = ""; return; }
+          // Real ha-icon fetches mdi path data and renders it into its shadow
+          // root asynchronously; mimic that delay so the panel's own
+          // "wait for icons before exporting" logic gets exercised for real
+          // instead of racing against an instantly-available mock.
+          this._shadow.innerHTML = "";
+          setTimeout(() => {
+            if (String(this.getAttribute("icon") || "").replace(/^mdi:/, "") !== icon) return;
+            this._shadow.innerHTML = `<span class="mdi mdi-${icon}"></span><svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M4 4h16v16H4z"></path></svg>`;
+          }, 60);
         }
       });
     }

@@ -984,10 +984,10 @@ export const devicesMixin = {
     // mdi ha-icon elements render their glyph into their shadow root
     // asynchronously; give any that were just added a moment to finish so
     // the export doesn't have to fall back to leaving them empty.
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 40; attempt++) {
       const pending = [...layout.querySelectorAll("ha-icon")].some((el) => !el.shadowRoot?.querySelector("svg"));
       if (!pending) break;
-      await new Promise((resolve) => setTimeout(resolve, 30));
+      await new Promise((resolve) => setTimeout(resolve, 75));
     }
     const sourceResponsivePreviews = [...layout.querySelectorAll("svg.template-responsive-preview")];
     const clone = layout.cloneNode(true);
