@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.136
+
+- opraveno tlačítko **Odeslat do displeje**, které hlásilo „Unknown command“ a nikdy neodeslalo návrh – chyběla registrace příkazu při startu integrace
+
 ## Novinky ve verzi 0.1.135
 
 - šablona v ploše pro šablony se automaticky vyplní na celou plochu displeje nebo celou polovinu u velkého displeje, bez ručního posouvání a bez chybějících pixelů po okrajích

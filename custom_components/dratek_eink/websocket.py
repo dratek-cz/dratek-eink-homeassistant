@@ -130,6 +130,7 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_gateway_ota_job)
     websocket_api.async_register_command(hass, websocket_transfer_queue)
     websocket_api.async_register_command(hass, websocket_clear_queue)
+    websocket_api.async_register_command(hass, websocket_send_design)
 
 
 @websocket_api.websocket_command(

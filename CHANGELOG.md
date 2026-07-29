@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.136] - 2026-07-29
+
+### Opraveno
+- Tlačítko **Odeslat do displeje** hlásilo „Unknown command“ a nikdy nefungovalo – příkaz `dratek_eink/send_design` byl v backendu definovaný, ale chyběla jeho registrace při startu integrace.
+
 ## [0.1.135] - 2026-07-29
 
 ### Přidáno
