@@ -236,6 +236,10 @@ export const inspectorMixin = {
       this._selectedDeviceAddress = address;
       this._displaySettingsView = "templates";
       this._activeTab = "display-settings";
+      const openedDevice = this._device();
+      if (openedDevice) {
+        this._displayTemplateOrientation = this._deviceFrameGeometry(openedDevice).portraitLayout ? "portrait" : "landscape";
+      }
       this._render();
       this._paint();
       this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
@@ -307,7 +311,13 @@ export const inspectorMixin = {
       this._paint();
       this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
     };
-    this.shadowRoot.querySelectorAll("[data-display-template-open]").forEach((button) => button.addEventListener("click", () => {
+    this.shadowRoot.querySelectorAll("[data-display-template-open]").forEach((button) => {
+      button.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        button.click();
+      });
+      button.addEventListener("click", () => {
       const templateId = button.dataset.displayTemplateOpen || "";
       const device = this._device();
       const size = this._devicePreviewSize(device);
@@ -321,7 +331,8 @@ export const inspectorMixin = {
         return;
       }
       openDisplayTemplate(templateId);
-    }));
+      });
+    });
     this.shadowRoot.querySelectorAll("[data-display-template-drag]").forEach((card) => {
       card.addEventListener("dragstart", (event) => {
         const templateId = card.dataset.displayTemplateDrag || "";
@@ -333,37 +344,59 @@ export const inspectorMixin = {
       });
       card.addEventListener("dragend", () => {
         card.classList.remove("is-dragging");
-        this.shadowRoot.querySelector("[data-display-template-dropzone]")?.classList.remove("is-drag-over");
+        const dropzone = this.shadowRoot.querySelector("[data-display-template-dropzone]");
+        dropzone?.classList.remove("is-drag-over");
+        dropzone?.querySelectorAll("[data-display-template-drop-half]").forEach((half) => half.classList.remove("is-target"));
+        this._pendingLargeDropHalfIndex = null;
       });
     });
     const templateDropzone = this.shadowRoot.querySelector("[data-display-template-dropzone]");
+    const dropHalves = templateDropzone?.querySelector("[data-display-template-drop-halves]");
+    const dropHalfElements = dropHalves ? Array.from(dropHalves.querySelectorAll("[data-display-template-drop-half]")) : [];
+    const dropScreenEl = templateDropzone?.querySelector(".designer-device-screen");
+    const clearDropHalfHighlight = () => {
+      dropHalfElements.forEach((half) => half.classList.remove("is-target"));
+      this._pendingLargeDropHalfIndex = null;
+    };
     templateDropzone?.addEventListener("dragover", (event) => {
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
       templateDropzone.classList.add("is-drag-over");
+      if (!dropHalves || !dropScreenEl) return;
+      const dzRect = templateDropzone.getBoundingClientRect();
+      const screenRect = dropScreenEl.getBoundingClientRect();
+      dropHalves.style.left = `${screenRect.left - dzRect.left}px`;
+      dropHalves.style.top = `${screenRect.top - dzRect.top}px`;
+      dropHalves.style.width = `${screenRect.width}px`;
+      dropHalves.style.height = `${screenRect.height}px`;
+      const axis = dropHalves.dataset.displayTemplateDropHalves === "stacked" ? "y" : "x";
+      const fraction = axis === "y"
+        ? (event.clientY - screenRect.top) / (screenRect.height || 1)
+        : (event.clientX - screenRect.left) / (screenRect.width || 1);
+      const index = fraction < 0.5 ? 0 : 1;
+      this._pendingLargeDropHalfIndex = index;
+      dropHalfElements.forEach((half) => half.classList.toggle("is-target", Number(half.dataset.displayTemplateDropHalf) === index));
     });
     templateDropzone?.addEventListener("dragleave", (event) => {
-      if (!templateDropzone.contains(event.relatedTarget)) templateDropzone.classList.remove("is-drag-over");
+      if (!templateDropzone.contains(event.relatedTarget)) {
+        templateDropzone.classList.remove("is-drag-over");
+        clearDropHalfHighlight();
+      }
     });
     templateDropzone?.addEventListener("drop", (event) => {
       event.preventDefault();
       templateDropzone.classList.remove("is-drag-over");
       const templateId = event.dataTransfer.getData("application/x-dratek-display-template")
         || event.dataTransfer.getData("text/plain");
+      const pendingHalfIndex = this._pendingLargeDropHalfIndex;
+      clearDropHalfHighlight();
       if (!this._displayTemplateCards().some((item) => item.id === templateId)) return;
       const device = this._device();
       const size = this._devicePreviewSize(device);
       const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
       const assigned = this._assignedDisplayTemplates(device);
-      const primaryIsLarge = this._displayTemplateSizes?.primary !== "small";
-      if (largeDisplay && assigned.length === 1 && primaryIsLarge && !assigned.includes(templateId)) {
-        this._pendingDisplayTemplateConflict = { templateId, stayInCatalog: true };
-        this._render();
-        this._paint();
-        return;
-      }
-      const replaceIndex = largeDisplay && assigned.length >= 2 && !assigned.includes(templateId)
-        ? (this._selectedTemplateCanvasSlot === "secondary" ? 1 : 0)
+      const replaceIndex = largeDisplay
+        ? (Number.isInteger(pendingHalfIndex) ? pendingHalfIndex : (assigned.length < 2 ? assigned.length : 0))
         : null;
       openDisplayTemplate(templateId, replaceIndex, true);
     });
@@ -417,7 +450,7 @@ export const inspectorMixin = {
       this._render();
       this._paint();
     }));
-    this.shadowRoot.querySelectorAll("[data-template-canvas-slot]").forEach((item) => {
+    this.shadowRoot.querySelectorAll("[data-template-canvas-slot]:not(.is-auto-fit)").forEach((item) => {
       item.addEventListener("click", (event) => {
         event.stopPropagation();
         const slot = item.dataset.templateCanvasSlot || "primary";

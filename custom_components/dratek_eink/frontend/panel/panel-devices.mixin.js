@@ -309,9 +309,10 @@ export const devicesMixin = {
     const catalogWordmark = options.catalogWordmark === true;
     const previewSizes = {
       full: { targetHeight: 190, minWidth: 108, maxWidth: 420 },
-      large: { targetHeight: 148, minWidth: 96, maxWidth: 340 },
-      compact: { targetHeight: 92, minWidth: 78, maxWidth: 240 },
+      large: { targetHeight: 190, minWidth: 120, maxWidth: 420 },
+      compact: { targetHeight: 112, minWidth: 92, maxWidth: 260 },
       mini: { targetHeight: 30, minWidth: 22, maxWidth: 76 },
+      template: { targetHeight: 470, minWidth: 250, maxWidth: 620 },
     };
     const previewMode = previewSizes[mode] ? mode : "full";
     const sizing = previewSizes[previewMode];
@@ -707,16 +708,13 @@ export const devicesMixin = {
           <div class="display-template-device-info">
             <span class="display-template-device-info-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></span>
             <div class="display-template-device-info-identity">
-              <small>Aktuální displej</small>
-              <div class="display-settings-name-row">
-                ${editing ? `<input class="display-settings-name-input" data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Název displeje" aria-label="Název displeje"><button class="display-settings-name-button is-save" data-device-name-save="${this._escape(device.address)}" title="Uložit název" aria-label="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button>` : `<strong>${this._escape(this._deviceTitle(device))}</strong><button class="display-settings-name-button" data-device-rename="${this._escape(device.address)}" title="Přejmenovat displej" aria-label="Přejmenovat displej"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>`}
+              <div class="display-template-device-info-name-row">
+                ${editing ? `<input class="display-settings-name-input" data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Název displeje" aria-label="Název displeje"><button class="display-settings-name-button is-save" data-device-name-save="${this._escape(device.address)}" title="Uložit název" aria-label="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button>` : `<strong>${this._escape(this._deviceTitle(device))}</strong><span class="display-template-device-info-address">${this._escape(device.address)}</span><button class="display-settings-name-button" data-device-rename="${this._escape(device.address)}" title="Přejmenovat displej" aria-label="Přejmenovat displej"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>`}
               </div>
-              <span>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</span>
-            </div>
-            <div class="display-template-device-info-stats">
-              <span><ha-icon icon="mdi:identifier"></ha-icon><small>Kód</small><strong>${this._escape(device.physical_code || "-")}</strong></span>
-              <span><ha-icon icon="mdi:battery-medium"></ha-icon><small>Baterie</small><strong>${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></span>
-              <span><ha-icon icon="mdi:signal"></ha-icon><small>Signál</small><strong>${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></span>
+              <div class="display-template-device-info-health">
+                <span class="display-health-item display-battery-item" title="Baterie${Number.isFinite(battery.percent) ? ` ${battery.percent} %` : ""}">${this._renderBatterySegments(battery.percent)}<strong class="health-value battery-value level-${this._batteryLevel(battery.percent)}">${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></span>
+                <span class="display-health-item display-signal-item" title="Síla signálu${Number.isFinite(rssi) ? ` ${rssi} dBm` : ""}">${this._renderSignalBars(rssi)}<strong class="health-value signal-value level-${this._signalLevel(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></span>
+              </div>
             </div>
           </div>
           <header>
@@ -725,9 +723,12 @@ export const devicesMixin = {
           </header>
           <div class="display-template-dropzone ${assignedTemplates.length ? "has-template" : ""}" data-display-template-dropzone tabindex="0" aria-label="Přetáhněte sem šablonu">
             ${primaryTemplate
-              ? this._renderTemplatePhysicalDevicePreview(device, primaryTemplate, secondaryTemplate, orientation, layout)
-              : this._renderDevicePreview(device, "large")}
-            <span class="display-template-drop-hint"><ha-icon icon="mdi:drag-variant"></ha-icon>${assignedTemplates.length ? "Přetáhněte sem další šablonu nebo nahraďte vybranou" : "Přetáhněte sem šablonu"}</span>
+              ? this._renderTemplatePhysicalDevicePreview(device, primaryTemplate, secondaryTemplate, orientation, layout, true)
+              : this._renderDevicePreview(device, "template")}
+            ${largeDisplay ? `<div class="display-template-drop-halves" data-display-template-drop-halves="${["side-by-side", "stacked"].includes(this._displayTemplateLargeLayout) ? this._displayTemplateLargeLayout : "side-by-side"}">
+              <span class="display-template-drop-half" data-display-template-drop-half="0"></span>
+              <span class="display-template-drop-half" data-display-template-drop-half="1"></span>
+            </div>` : ""}
           </div>
           <div class="display-template-drop-controls">
             <div class="template-preview-zoom" role="group" aria-label="Přiblížení náhledu">
@@ -747,10 +748,6 @@ export const devicesMixin = {
           ${this._templateSendResult ? `<div class="template-send-result ${this._templateSendResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSendResult.ok ? "check-circle-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSendResult.message)}</span></div>` : ""}
         </aside>
         <section class="display-template-library">
-          <header class="card display-templates-heading">
-            <span><ha-icon icon="mdi:view-grid-outline"></ha-icon></span>
-            <div><small>Knihovna šablon</small><h1>Přetáhněte obsah na displej</h1><p>Hotové šablony se pokusí nastavit samy. U vlastních vyberete zdroje dat ručně.</p></div>
-          </header>
           <div class="card devices-toolbar-card display-template-toolbar">
             <div class="devices-toolbar">
               <div class="device-search">
@@ -775,7 +772,7 @@ export const devicesMixin = {
                   <span class="display-template-guide" role="tooltip"><strong>Jak nastavit ${this._escape(template.title)}</strong><ol>${guide.map((step) => `<li>${this._escape(step)}</li>`).join("")}</ol></span>
                 </span>
               </header>
-              <div class="display-template-tile-preview">
+              <div class="display-template-tile-preview" data-display-template-open="${template.id}" role="button" tabindex="0" aria-label="Umístit šablonu ${this._escape(template.title)} na displej">
                 <span class="display-template-drag-handle"><ha-icon icon="mdi:drag"></ha-icon>Přetáhnout na displej</span>
                 <span class="display-template-preview">${this._renderDisplayTemplatePreview(template)}</span>
               </div>
@@ -1094,7 +1091,7 @@ export const devicesMixin = {
     return canvas.toDataURL("image/png");
   },
 
-  _renderTemplatePhysicalDevicePreview(device, template, secondaryTemplate, orientation, layout) {
+  _renderTemplatePhysicalDevicePreview(device, template, secondaryTemplate, orientation, layout, autoFit = false) {
     const address = String(device.address || "").toUpperCase();
     const base = this._baseDisplaySize(device);
     const sourceWidth = orientation === "portrait" ? Math.min(base.width, base.height) : Math.max(base.width, base.height);
@@ -1111,6 +1108,9 @@ export const devicesMixin = {
     const frameRadius = Math.max(4, Math.min(28, Math.round(Math.min(frameWidth, frameHeight) * 0.06)));
     const physicalCode = device.physical_code || "00.00.00.00";
     const previewZoom = Math.max(0.5, Math.min(1.8, Number(this._displayTemplatePreviewZoom || 1)));
+    const autoSlotWidth = layout === "side-by-side" ? sourceWidth / 2 : sourceWidth;
+    const autoSlotHeight = layout === "stacked" ? sourceHeight / 2 : sourceHeight;
+    const autoFormat = autoSlotWidth >= autoSlotHeight ? "wide" : "narrow";
     return `<div class="template-physical-preview device-preview-wrap" style="--template-preview-zoom:${previewZoom}">
       <div class="device-preview-fit" style="--frame-ratio:${(outerWidth / outerHeight).toFixed(4)};--preview-width:${Math.min(620, Math.max(250, Math.round(470 * outerWidth / outerHeight)))}px">
         <svg class="device-preview-designer-svg" viewBox="0 0 ${outerWidth} ${outerHeight}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Náhled šablony v rámečku displeje">
@@ -1119,8 +1119,8 @@ export const devicesMixin = {
               <div class="designer-device-bezel ${pe29Layout ? "designer-device-pe29" : ""} ${large400Layout ? "designer-device-large400" : ""} designer-device-landscape">${large400Layout ? `<span class="device-large400-top-band"></span><span class="device-large400-bottom-band"><span class="device-large400-label">${this._renderDeviceBarcode(address, true)}<span class="device-large400-mac">${this._escape(address)}</span></span></span>` : pe29Layout ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, false)}</span>` : `<span class="designer-device-code">${this._escape(physicalCode)}</span>`}</div>
               <div class="designer-device-screen template-designer-screen">
                 <div class="template-device-layout layout-${layout} ${large400Layout ? "is-large-display" : "is-small-display"}">
-                  ${this._renderDisplayTemplateSurface(template, large400Layout ? (this._displayTemplateFormats?.primary || "narrow") : (orientation === "landscape" ? "wide" : "narrow"), true, "primary", !large400Layout, large400Layout ? (this._displayTemplateSizes?.primary || "large") : "large")}
-                  ${large400Layout && layout !== "single" ? this._renderDisplayTemplateSurface(secondaryTemplate, this._displayTemplateFormats?.secondary || "narrow", false, "secondary", false, "small") : ""}
+                  ${this._renderDisplayTemplateSurface(template, large400Layout ? (autoFit ? autoFormat : (this._displayTemplateFormats?.primary || "narrow")) : (orientation === "landscape" ? "wide" : "narrow"), true, "primary", autoFit || !large400Layout, large400Layout ? (this._displayTemplateSizes?.primary || "large") : "large", autoFit)}
+                  ${large400Layout && layout !== "single" ? this._renderDisplayTemplateSurface(secondaryTemplate, autoFit ? autoFormat : (this._displayTemplateFormats?.secondary || "narrow"), false, "secondary", autoFit, "small", autoFit) : ""}
                 </div>
               </div>
             </div>
@@ -1368,7 +1368,7 @@ export const devicesMixin = {
     </div>`;
   },
 
-  _renderDisplayTemplateSurface(template, format, primary = false, slot = "primary", fillDisplay = false, templateSize = "small") {
+  _renderDisplayTemplateSurface(template, format, primary = false, slot = "primary", fillDisplay = false, templateSize = "small", autoFit = false) {
     const orientation = format === "wide" ? "landscape" : "portrait";
     const preview = this._renderDisplayTemplatePreview(template);
     const orientedPreview = orientation === "landscape"
@@ -1379,16 +1379,16 @@ export const devicesMixin = {
     const placement = this._templateCanvasPlacements?.[slot] || { x: 9, y: 9 };
     const placementX = fillDisplay ? Math.max(0, Math.min(4, Number(placement.x || 0))) : Number(placement.x || 0);
     const placementY = fillDisplay ? Math.max(0, Math.min(4, Number(placement.y || 0))) : Number(placement.y || 0);
-    const selected = this._selectedTemplateCanvasSlot === slot;
+    const selected = !autoFit && this._selectedTemplateCanvasSlot === slot;
     return `<div class="template-display-slot" data-template-display-slot="${slot}">
-      <div class="display-template-surface template-canvas-item size-${templateSize === "large" ? "large" : "small"} format-${format === "wide" ? "wide" : "narrow"} is-${orientation} ${selected ? "is-selected" : ""}" data-preview-template="${template.id}" data-template-canvas-slot="${slot}" tabindex="0" role="button" aria-label="Šablona ${this._escape(template.title)}. Kliknutím vyberte a tažením přesuňte." style="--template-item-x:${placementX}%;--template-item-y:${placementY}%">
+      <div class="display-template-surface template-canvas-item size-${templateSize === "large" ? "large" : "small"} format-${format === "wide" ? "wide" : "narrow"} is-${orientation} ${selected ? "is-selected" : ""} ${autoFit ? "is-auto-fit" : ""}" data-preview-template="${template.id}" data-template-canvas-slot="${slot}" ${autoFit ? "" : `tabindex="0" role="button" aria-label="Šablona ${this._escape(template.title)}. Kliknutím vyberte a tažením přesuňte."`} style="--template-item-x:${placementX}%;--template-item-y:${placementY}%">
         <svg class="template-responsive-preview" viewBox="0 0 ${templateWidth} ${templateHeight}" preserveAspectRatio="${fillDisplay ? "none" : "xMidYMid meet"}" aria-hidden="true">
           <foreignObject x="0" y="0" width="${templateWidth}" height="${templateHeight}">
             <div xmlns="http://www.w3.org/1999/xhtml" class="template-responsive-preview-body">${orientedPreview}</div>
           </foreignObject>
         </svg>
-        ${primary ? this._renderTemplateEditorOverlays() : ""}
-        <span class="template-canvas-selection-label">${this._escape(template.title)}</span>
+        ${primary && !autoFit ? this._renderTemplateEditorOverlays() : ""}
+        ${autoFit ? "" : `<span class="template-canvas-selection-label">${this._escape(template.title)}</span>`}
       </div>
     </div>`;
   },

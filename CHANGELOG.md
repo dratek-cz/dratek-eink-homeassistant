@@ -2,6 +2,21 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.135] - 2026-07-29
+
+### Přidáno
+- Při přetahování šablony na velký displej se podle pozice kurzoru oranžově zvýrazní cílová polovina (jen na skutečné zobrazovací ploše, ne na celém rámečku) a šablona se umístí přesně tam, kam byla puštěna.
+
+### Změněno
+- Šablona v ploše pro šablony se vždy automaticky vyplní na celou plochu displeje, nebo celou polovinu u velkého displeje – bez ručního posouvání a bez chybějících pixelů po okrajích.
+- Formát šablony (na výšku / na šířku) se nastavuje automaticky podle skutečného tvaru zobrazovací plochy.
+- Zjednodušen informační blok aktuálního displeje na dva řádky (název s adresou, baterie a signál se stejnými ikonami jako na hlavní stránce).
+- Zvětšeny náhledy displejů na hlavní stránce pro lepší čitelnost obsahu.
+- Odstraněn rámeček, barevné pozadí a bublina s nápovědou v ploše pro šablony; náhled šablony lze umístit i kliknutím, ne jen přetažením.
+
+### Opraveno
+- Náhled displeje v nastavení šablon nyní vždy odpovídá tvarem rámečku náhledu na hlavní stránce – orientace se odvozuje automaticky ze skutečných rozměrů displeje místo pevně nastavené hodnoty.
+
 ## [0.1.134] - 2026-07-29
 
 ### Změněno
