@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.132] - 2026-07-29
+
+### Publikování pro HACS
+- Opraveno vydání jako skutečný GitHub Release.
+- Release obsahuje soubor `dratek_eink.zip` se správnou kořenovou strukturou pro HACS `zip_release`.
+- Verze byla zvýšena po tagu 0.1.131, který nebyl publikován jako skutečný GitHub Release.
+
 ## [0.1.131] - 2026-07-29
 
 ### Nastavení displeje a šablony

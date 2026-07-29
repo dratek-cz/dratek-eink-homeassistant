@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.132
+
+- opraveno publikování aktualizací pro HACS
+- verze je publikována jako skutečný GitHub Release s přiloženým `dratek_eink.zip`
+- balíček obsahuje integrační soubory přímo v kořeni, jak vyžaduje `zip_release`
+
 ## Novinky ve verzi 0.1.131
 
 - karty displejů otevírají nové nastavení s informacemi o zařízení, galerií šablon a editorem
