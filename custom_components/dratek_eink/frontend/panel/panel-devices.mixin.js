@@ -900,10 +900,36 @@ export const devicesMixin = {
     </section>`;
   },
 
+  // Resolves everything the native-SVG renderer needs for the currently
+  // selected display: which templates sit on it, the panel's exact pixel
+  // resolution in the active orientation, and how two templates are split.
+  _currentDisplayTemplateSvgRequest(device = this._device()) {
+    if (!device) return null;
+    const cards = this._displayTemplateCards();
+    const assigned = this._assignedDisplayTemplates(device);
+    const templates = assigned.map((id) => cards.find((item) => item.id === id)).filter(Boolean);
+    if (!templates.length) return null;
+    const base = this._baseDisplaySize(device);
+    const portrait = this._displayTemplateOrientation === "portrait";
+    const width = portrait ? Math.min(base.width, base.height) : Math.max(base.width, base.height);
+    const height = portrait ? Math.max(base.width, base.height) : Math.min(base.width, base.height);
+    const size = this._devicePreviewSize(device);
+    const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
+    const layout = largeDisplay && templates.length > 1
+      ? (["side-by-side", "stacked"].includes(this._displayTemplateLargeLayout) ? this._displayTemplateLargeLayout : "side-by-side")
+      : "single";
+    return { templates, width, height, layout };
+  },
+
+  async _renderCurrentDisplayTemplateImage(device = this._device()) {
+    const request = this._currentDisplayTemplateSvgRequest(device);
+    if (!request) throw new Error("Není vybrána žádná šablona.");
+    return this._rasterizeDisplayTemplateSvg(request.templates, request.width, request.height, request.layout);
+  },
+
   async _sendDisplayTemplatePreview() {
     const device = this._device();
-    const screen = this.shadowRoot.querySelector(".template-designer-screen");
-    if (!device || !screen || !this._hass || this._templateSending) return;
+    if (!device || !this._hass || this._templateSending) return;
     this._templateSending = true;
     this._templateSendResult = null;
     const sendButton = this.shadowRoot.querySelector("[data-template-send]");
@@ -915,7 +941,7 @@ export const devicesMixin = {
       if (label) label.textContent = "Odesílám náhled…";
     }
     try {
-      const image = await this._rasterizeDisplayTemplatePreview(screen);
+      const image = await this._renderCurrentDisplayTemplateImage(device);
       const result = await this._hass.callWS({
         type: "dratek_eink/send_design",
         address: device.address,

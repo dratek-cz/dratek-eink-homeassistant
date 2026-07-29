@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.144
+
+- šablony se nově generují přímo jako nativní SVG v rozlišení displeje, s dosazenými hodnotami z Home Assistantu a ikonami jako skutečnými vektory
+- náhled i obrázek odeslaný do displeje vznikají z jednoho a téhož SVG, takže si odpovídají z principu
+- šablona vždy vyplní celou plochu displeje a text má výrazně větší, na e-inku čitelné velikosti
+
 ## Novinky ve verzi 0.1.143
 
 - opravena skutečná příčina chybějících ikon v odeslaném obrázku – ikona `ha-icon` v Home Assistantu vykresluje SVG přes vnořený prvek s vlastním shadow rootem, což export dřív vůbec nedokázal najít; export teď prochází libovolně vnořené shadow roots

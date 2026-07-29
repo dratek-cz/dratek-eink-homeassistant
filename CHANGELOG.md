@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.144] - 2026-07-29
+
+### Změněno
+- **Šablony se nově generují přímo jako nativní SVG.** Dosavadní postup kopíroval živý HTML náhled do obrázku, což záviselo na vnitřní struktuře prvků Home Assistantu, na kompletním CSS panelu a na tom, jak prohlížeč rozvrhne HTML ve velikosti, pro kterou nikdy nebylo navržené – odtud opakované rozdíly mezi náhledem a odeslaným obrázkem. Šablona se teď skládá z nativních SVG prvků přímo v rozlišení displeje, hodnoty z Home Assistantu se dosazují jako text a ikony se vkládají jako skutečná vektorová data.
+- Náhled i obrázek odeslaný do displeje vznikají z jednoho a téhož SVG, takže si odpovídají z principu, ne shodou okolností.
+- Šablona vždy vyplní celou plochu displeje (u dvou šablon přesně polovinu) a text má výrazně větší, na e-inku čitelné velikosti.
+
 ## [0.1.143] - 2026-07-29
 
 ### Opraveno

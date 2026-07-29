@@ -13,6 +13,7 @@ import { i18nMixin } from "./panel/panel-i18n.mixin.js";
 import { inspectorMixin } from "./panel/panel-inspector.mixin.js";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js";
+import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js";
 
 import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js";
 
@@ -213,7 +214,8 @@ Object.assign(
   renderUiMixin,
   inspectorMixin,
   drawBasicMixin,
-  drawChartsMixin
+  drawChartsMixin,
+  templateSvgMixin
 );
 
 if (!customElements.get("dratek-eink-panel")) {

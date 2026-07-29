@@ -76,11 +76,10 @@ export const previewMixin = {
     this._scheduleCanonicalDesignerPreview();
   },
 
-  // Templates render as crisp HTML/SVG on screen, but the physical e-ink
-  // panel only shows a dithered, native-resolution 3-color bitmap - the same
-  // one _rasterizeDisplayTemplatePreview produces before sending. Paint that
-  // exact bitmap into the dropzone preview (pixelated, no smoothing) so what
-  // you see there matches 1:1 what actually gets sent to the display.
+  // The physical e-ink panel shows a 3-color bitmap at its own native
+  // resolution, so paint the very same bitmap that gets sent (built by the
+  // native-SVG renderer) into the dropzone preview, pixelated and unsmoothed.
+  // Preview and sent image are then identical by construction.
   _paintDisplayTemplateDitheredPreviews() {
     const canvases = [...this.shadowRoot.querySelectorAll("canvas[data-dithered-preview]")];
     if (!canvases.length) return;
@@ -100,9 +99,9 @@ export const previewMixin = {
       }
       if (this._ditheredPreviewPending[address] === key) return;
       this._ditheredPreviewPending[address] = key;
-      const screen = canvas.closest(".designer-device-screen");
-      if (!screen) return;
-      this._rasterizeDisplayTemplatePreview(screen).then((dataUrl) => {
+      const device = (this._result?.devices || []).find((item) => String(item.address || "").toUpperCase() === address.toUpperCase());
+      if (!device) { delete this._ditheredPreviewPending[address]; return; }
+      this._renderCurrentDisplayTemplateImage(device).then((dataUrl) => {
         if (this._ditheredPreviewPending[address] !== key) return;
         const image = new Image();
         image.onload = () => {
