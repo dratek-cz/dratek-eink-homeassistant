@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.134
+
+- Katalog šablon má nové karty ve stylu karet displejů a podporuje přetažení šablony přímo na displej.
+- Informace o aktuálním displeji jsou nyní v kompaktním bloku nad plochou displeje bez duplicitního náhledu.
+- Název displeje, model, adresa, fyzický kód, baterie a signál zůstávají dostupné na jednom místě.
+
 ## Novinky ve verzi 0.1.133
 
 - Nové nastavení displeje se šablonami, vyhledáváním, kategoriemi a napojením proměnných z Home Assistantu.

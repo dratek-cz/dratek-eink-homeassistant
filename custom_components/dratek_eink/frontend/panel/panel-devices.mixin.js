@@ -424,44 +424,8 @@ export const devicesMixin = {
       </section>`;
     }
     if (!["templates", "designer"].includes(this._displaySettingsView)) this._displaySettingsView = "templates";
-    const size = this._devicePreviewSize(device);
-    const battery = this._batteryInfo(device);
-    const rssi = Number(device.rssi);
-    const editing = this._editingDeviceAddress === device.address;
-    const storedMode = this._displayDesignMode(device);
-    const activeMode = this._displaySettingsView === "templates"
-      ? "templates"
-      : this._displaySettingsView === "designer" ? "custom" : storedMode;
-    const options = [
-      { id: "templates", icon: "mdi:view-grid-outline", title: "Šablony", ready: true },
-      { id: "custom", icon: "mdi:palette-outline", title: "Vlastní design", ready: true },
-      { id: "ha", icon: "mdi:home-assistant", title: "Vlastní design HA prvku" },
-    ];
     return `<section class="display-settings-page">
       <button id="displaySettingsBack" class="display-settings-back"><ha-icon icon="mdi:arrow-left"></ha-icon>Zpět</button>
-      <div class="card display-settings-device-summary">
-        <header class="display-settings-heading">
-          <span><ha-icon icon="mdi:tablet-dashboard"></ha-icon></span>
-          <div>
-            <small>Aktuální displej</small>
-            <div class="display-settings-name-row">
-              ${editing ? `<input class="display-settings-name-input" data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Název displeje" aria-label="Název displeje"><button class="display-settings-name-button is-save" data-device-name-save="${this._escape(device.address)}" title="Uložit název" aria-label="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button>` : `<h1>${this._escape(this._deviceTitle(device))}</h1><button class="display-settings-name-button" data-device-rename="${this._escape(device.address)}" title="Přejmenovat displej" aria-label="Přejmenovat displej"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>`}
-            </div>
-            <p>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)} · ${size.width} × ${size.height} px</p><strong class="display-settings-physical-code">${this._escape(device.physical_code || "-")}</strong>
-          </div>
-        </header>
-        <div class="display-settings-preview">${this._renderDevicePreview(device, "compact")}</div>
-        <div class="display-settings-health">
-          <div class="display-settings-health-item"><small>Baterie</small>${this._renderBatterySegments(battery.percent)}<strong>${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></div>
-          <div class="display-settings-health-item"><small>Signál</small>${this._renderSignalBars(rssi)}<strong>${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>
-        </div>
-      </div>
-      <div class="display-settings-actions">${options.map((option) => `
-        <button type="button" class="display-settings-action ${activeMode === option.id ? "is-active" : ""} ${(option.id === "templates" && this._displaySettingsView === "templates") || (option.id === "custom" && this._displaySettingsView === "designer") ? "is-expanded" : ""}" data-display-settings-section="${option.id}" ${option.ready ? `aria-expanded="${(option.id === "templates" && this._displaySettingsView === "templates") || (option.id === "custom" && this._displaySettingsView === "designer")}"` : 'aria-disabled="true"'} ${activeMode === option.id ? 'aria-current="true"' : ""} title="${option.id === "templates" ? "Otevřít nabídku šablon" : option.id === "custom" ? "Otevřít designer" : "Tato stránka bude doplněna později"}">
-          <ha-icon icon="${option.icon}"></ha-icon>
-          <span><strong>${option.title}</strong><small>${activeMode === option.id ? "Aktivní" : option.id === "templates" ? "Vybrat šablonu" : option.id === "custom" ? "Otevřít designer" : "Připravujeme"}</small></span>
-        </button>`).join("")}
-      </div>
       ${this._displaySettingsView === "templates" ? this._renderDisplayTemplatesSection(device) : ""}
       ${this._displaySettingsView === "designer" ? this._renderDisplayTemplateEditor(device) : ""}
       ${this._renderDisplayTemplateConflictDialog(device)}
@@ -505,7 +469,7 @@ export const devicesMixin = {
   },
 
   _displayTemplateCards() {
-    return [
+    const templates = [
       { id: "weather", number: "01", category: "nature", title: "Počasí", variables: [["thermometer", "Teplota"], ["weather-partly-cloudy", "Stav počasí"], ["clock-outline", "Čas"], ["calendar-outline", "Datum"], ["weather-rainy", "Předpověď"]] },
       { id: "energy", number: "02", category: "energy", title: "Cena elektřiny", variables: [["currency-usd", "Aktuální cena"], ["clock-outline", "Cenový interval"], ["chart-line", "Denní průběh"], ["tag-outline", "Minimum dne"]] },
       { id: "home", number: "03", category: "home", title: "Dům", variables: [["thermometer", "Teplota"], ["water-percent", "Vlhkost"], ["lightbulb-on-outline", "Světla"], ["lock-outline", "Zámky"]] },
@@ -527,6 +491,52 @@ export const devicesMixin = {
       { id: "server", number: "19", category: "technology", title: "Stav serveru", variables: [["server-network", "Dostupnost"], ["chip", "CPU"], ["memory", "RAM"], ["harddisk", "Disk"], ["thermometer", "Teplota"], ["clock-outline", "Doba provozu"]] },
       { id: "garden", number: "20", category: "nature", title: "Zahrada", variables: [["sprout-outline", "Záhon"], ["water-percent", "Vlhkost půdy"], ["thermometer", "Teplota"], ["weather-windy", "Vítr"], ["sprinkler-variant", "Další zálivka"]] },
     ];
+    const prepared = new Set(["weather", "home", "solar", "living", "calendar", "security", "air", "thermostat", "server", "garden"]);
+    return templates.map((template) => ({
+      ...template,
+      kind: prepared.has(template.id) ? "prepared" : "custom",
+    }));
+  },
+
+  _displayTemplateSetupGuide(template) {
+    if (template.id === "weather") {
+      return [
+        "Přetáhněte šablonu na náhled displeje vlevo.",
+        "Aplikace automaticky najde první entitu weather.* v Home Assistantu.",
+        "Teplota, stav počasí, datum a čas se doplní automaticky; zdroj lze později změnit v nastavení šablony.",
+      ];
+    }
+    if (template.kind === "prepared") {
+      return [
+        "Přetáhněte šablonu na náhled displeje vlevo.",
+        "Aplikace zkusí automaticky přiřadit odpovídající entity Home Assistantu.",
+        "Po kliknutí na Nastavit můžete zkontrolovat nebo změnit každý zdroj dat.",
+      ];
+    }
+    return [
+      "Přetáhněte šablonu na náhled displeje vlevo.",
+      "Klikněte na Nastavit a u jednotlivých údajů vyberte vlastní entity Home Assistantu.",
+      "Zkontrolujte živý náhled a odešlete hotový obsah do displeje.",
+    ];
+  },
+
+  _prepareDisplayTemplateBindings(template) {
+    if (!template) return;
+    this._displayTemplateBindings ||= {};
+    const weatherEntity = template.id === "weather"
+      ? Object.keys(this._hass?.states || {}).find((entityId) => entityId.startsWith("weather."))
+      : "";
+    template.variables.forEach((variable, index) => {
+      const meta = this._templateVariableMeta(variable, index);
+      const key = `${template.id}:${meta.key}`;
+      if (Object.prototype.hasOwnProperty.call(this._displayTemplateBindings, key)) return;
+      if (meta.automatic) {
+        this._displayTemplateBindings[key] = `internal:${meta.key}`;
+        return;
+      }
+      const suggested = weatherEntity || this._suggestTemplateEntity(meta);
+      if (suggested) this._displayTemplateBindings[key] = suggested;
+    });
   },
 
   _renderDisplayTemplatePreview(template) {
@@ -664,88 +674,121 @@ export const devicesMixin = {
 
   _renderDisplayTemplatesSection(device) {
     const size = this._devicePreviewSize(device);
+    const battery = this._batteryInfo(device);
+    const rssi = Number(device.rssi);
+    const editing = this._editingDeviceAddress === device.address;
     const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
     const assignedTemplates = this._assignedDisplayTemplates(device);
-    const primaryTemplateSize = this._displayTemplateSizes?.primary === "small" ? "small" : "large";
     const categories = [
-      { id: "all", icon: "view-grid-outline", title: "Všechny" },
-      { id: "nature", icon: "weather-partly-cloudy", title: "Počasí a příroda" },
-      { id: "home", icon: "home-outline", title: "Domácnost" },
-      { id: "energy", icon: "lightning-bolt-outline", title: "Energie a spotřeba" },
-      { id: "information", icon: "information-outline", title: "Informace" },
-      { id: "technology", icon: "shield-cog-outline", title: "Bezpečnost a technika" },
+      { id: "prepared", icon: "auto-fix", title: "Předpřipravené" },
+      { id: "custom", icon: "tune-variant", title: "Vlastní nastavení" },
     ];
     const cards = this._displayTemplateCards();
     const query = String(this._displayTemplateSearchQuery || "").trim().toLocaleLowerCase("cs");
     const activeCategory = categories.some((category) => category.id === this._displayTemplateCategory)
       ? this._displayTemplateCategory
-      : "all";
+      : "prepared";
     const visibleCards = cards.filter((template) => {
-      if (activeCategory !== "all" && template.category !== activeCategory) return false;
+      if (template.kind !== activeCategory) return false;
       if (!query) return true;
-      const category = categories.find((item) => item.id === template.category)?.title || "";
-      const searchable = [template.title, category, ...template.variables.map(([, label]) => label)].join(" ").toLocaleLowerCase("cs");
+      const searchable = [template.title, ...template.variables.map(([, label]) => label)].join(" ").toLocaleLowerCase("cs");
       return searchable.includes(query);
     });
+    const primaryTemplate = cards.find((item) => item.id === assignedTemplates[0]);
+    const secondaryTemplate = cards.find((item) => item.id === assignedTemplates[1]) || primaryTemplate;
+    const orientation = this._displayTemplateOrientation === "landscape" ? "landscape" : "portrait";
+    const layout = largeDisplay && assignedTemplates.length > 1
+      ? (["side-by-side", "stacked"].includes(this._displayTemplateLargeLayout) ? this._displayTemplateLargeLayout : "side-by-side")
+      : "single";
+    const previewZoom = Math.max(0.5, Math.min(1.8, Number(this._displayTemplatePreviewZoom || 1)));
     return `<section class="display-templates-inline">
-      <header class="card display-templates-heading">
-        <span><ha-icon icon="mdi:view-grid-outline"></ha-icon></span>
-        <div><small>Šablony displeje</small><h1>Vyberte hotové rozložení</h1><p>Vzorové šablony pro displej ${size.width} × ${size.height} px kombinují obrysové a plné ikony.</p></div>
-      </header>
-      <div class="card devices-toolbar-card display-template-toolbar">
-        <div class="devices-toolbar">
-          <div class="device-search">
-            <ha-icon icon="mdi:magnify"></ha-icon>
-            <input type="search" data-display-template-search value="${this._escape(this._displayTemplateSearchQuery || "")}" placeholder="Hledat podle názvu nebo proměnné…" aria-label="Hledat šablony">
-          </div>
-          <div class="display-template-categories" aria-label="Kategorie šablon">
-            ${categories.map((category) => `<button type="button" class="${activeCategory === category.id ? "is-active" : ""}" data-display-template-category="${category.id}" aria-pressed="${activeCategory === category.id}"><ha-icon icon="mdi:${category.icon}"></ha-icon>${category.title}</button>`).join("")}
-          </div>
-          <span class="pill muted display-template-result-count">Zobrazeno ${visibleCards.length} z ${cards.length}</span>
-        </div>
-      </div>
-      ${visibleCards.length ? `<div class="display-template-grid">${visibleCards.map((template) => {
-        const used = assignedTemplates.includes(template.id);
-        const needsReplacementChoice = largeDisplay && assignedTemplates.length >= 2 && !used;
-        const needsSpaceDecision = largeDisplay && assignedTemplates.length === 1 && primaryTemplateSize === "large" && !used;
-        const action = used
-          ? { icon: "check-circle", label: "Právě se používá" }
-          : needsSpaceDecision
-            ? { icon: "resize", label: "Přidat a vyřešit místo" }
-            : largeDisplay && assignedTemplates.length < 2
-            ? { icon: "plus-circle-outline", label: "Přidat na displej" }
-            : largeDisplay
-              ? { icon: "swap-horizontal", label: "Vybrat nahrazovanou šablonu" }
-              : assignedTemplates.length
-                ? { icon: "swap-horizontal", label: "Nahradit stávající šablonu" }
-                : { icon: "plus-circle-outline", label: "Použít šablonu" };
-        const cardContent = `
-          <span class="display-template-caption"><strong>${this._escape(template.title)}</strong><small>Šablona ${template.number} · ${size.width} × ${size.height} px</small></span>
-          <span class="display-template-variable-count">${template.variables.length} ${template.variables.length >= 2 && template.variables.length <= 4 ? "proměnné" : "proměnných"}</span>
-          <span class="display-template-preview">${this._renderDisplayTemplatePreview(template)}</span>
-          <span class="display-template-variables" aria-label="Požadované proměnné">
-            <strong>Požadované proměnné</strong>
-            ${template.variables.map(([iconName, label]) => `<span><ha-icon icon="mdi:${iconName}"></ha-icon>${this._escape(label)}</span>`).join("")}
-          </span>`;
-        if (needsReplacementChoice) {
-          return `<article class="display-template-card display-template-card-replace" aria-label="${this._escape(template.title)}">
-            ${cardContent}
-            <div class="display-template-replace-control">
-              <label><span>Nahradit šablonu</span><select data-template-replace-target aria-label="Vyberte šablonu, kterou chcete nahradit">
-                ${assignedTemplates.map((assignedId, index) => {
-                  const assigned = cards.find((item) => item.id === assignedId);
-                  return `<option value="${index}">${index + 1}. ${this._escape(assigned?.title || assignedId)}</option>`;
-                }).join("")}
-              </select></label>
-              <button type="button" data-display-template-replace="${template.id}"><ha-icon icon="mdi:swap-horizontal"></ha-icon>Nahradit</button>
+      <div class="display-template-workspace">
+        <aside class="card display-template-drop-panel">
+          <div class="display-template-device-info">
+            <span class="display-template-device-info-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></span>
+            <div class="display-template-device-info-identity">
+              <small>Aktuální displej</small>
+              <div class="display-settings-name-row">
+                ${editing ? `<input class="display-settings-name-input" data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Název displeje" aria-label="Název displeje"><button class="display-settings-name-button is-save" data-device-name-save="${this._escape(device.address)}" title="Uložit název" aria-label="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button>` : `<strong>${this._escape(this._deviceTitle(device))}</strong><button class="display-settings-name-button" data-device-rename="${this._escape(device.address)}" title="Přejmenovat displej" aria-label="Přejmenovat displej"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>`}
+              </div>
+              <span>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</span>
             </div>
-          </article>`;
-        }
-        return `<button type="button" class="display-template-card ${used ? "is-used" : ""}" data-display-template-open="${template.id}" title="${this._escape(action.label)}: ${this._escape(template.title)}" aria-label="${this._escape(action.label)} ${this._escape(template.title)}" ${used ? 'aria-current="true"' : ""}>
-          ${cardContent}
-          <span class="display-template-card-action"><ha-icon icon="mdi:${action.icon}"></ha-icon>${this._escape(action.label)}</span>
-        </button>`;
-      }).join("")}</div>` : `<div class="display-template-empty"><ha-icon icon="mdi:magnify-close"></ha-icon><strong>Žádná šablona neodpovídá filtru</strong><span>Zkuste jiný název nebo vyberte jinou kategorii.</span></div>`}
+            <div class="display-template-device-info-stats">
+              <span><ha-icon icon="mdi:identifier"></ha-icon><small>Kód</small><strong>${this._escape(device.physical_code || "-")}</strong></span>
+              <span><ha-icon icon="mdi:battery-medium"></ha-icon><small>Baterie</small><strong>${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></span>
+              <span><ha-icon icon="mdi:signal"></ha-icon><small>Signál</small><strong>${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></span>
+            </div>
+          </div>
+          <header>
+            <span><small>Váš displej</small><strong>Plocha pro šablony</strong></span>
+            <span class="pill muted">${size.width} × ${size.height} px</span>
+          </header>
+          <div class="display-template-dropzone ${assignedTemplates.length ? "has-template" : ""}" data-display-template-dropzone tabindex="0" aria-label="Přetáhněte sem šablonu">
+            ${primaryTemplate
+              ? this._renderTemplatePhysicalDevicePreview(device, primaryTemplate, secondaryTemplate, orientation, layout)
+              : this._renderDevicePreview(device, "large")}
+            <span class="display-template-drop-hint"><ha-icon icon="mdi:drag-variant"></ha-icon>${assignedTemplates.length ? "Přetáhněte sem další šablonu nebo nahraďte vybranou" : "Přetáhněte sem šablonu"}</span>
+          </div>
+          <div class="display-template-drop-controls">
+            <div class="template-preview-zoom" role="group" aria-label="Přiblížení náhledu">
+              <button type="button" data-template-preview-zoom="out" title="Oddálit"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon></button>
+              <button type="button" class="template-preview-zoom-value" data-template-preview-zoom="reset">${Math.round(previewZoom * 100)} %</button>
+              <button type="button" data-template-preview-zoom="in" title="Přiblížit"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></button>
+            </div>
+            <div class="display-template-orientation" role="group" aria-label="Orientace displeje">
+              <button type="button" class="${orientation === "portrait" ? "is-active" : ""}" data-template-orientation="portrait" title="Na výšku"><ha-icon icon="mdi:phone-rotate-portrait"></ha-icon></button>
+              <button type="button" class="${orientation === "landscape" ? "is-active" : ""}" data-template-orientation="landscape" title="Na šířku"><ha-icon icon="mdi:phone-rotate-landscape"></ha-icon></button>
+            </div>
+          </div>
+          <button type="button" class="display-template-send-button" data-template-send ${assignedTemplates.length && !this._templateSending ? "" : "disabled"}>
+            <ha-icon icon="mdi:${this._templateSending ? "loading" : "send"}" ${this._templateSending ? 'class="spin"' : ""}></ha-icon>
+            <span><strong>${this._templateSending ? "Odesílám náhled…" : "Odeslat do displeje"}</strong><small>${assignedTemplates.length ? "Zapíše aktuální obsah displeje" : "Nejprve přetáhněte šablonu"}</small></span>
+          </button>
+          ${this._templateSendResult ? `<div class="template-send-result ${this._templateSendResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSendResult.ok ? "check-circle-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSendResult.message)}</span></div>` : ""}
+        </aside>
+        <section class="display-template-library">
+          <header class="card display-templates-heading">
+            <span><ha-icon icon="mdi:view-grid-outline"></ha-icon></span>
+            <div><small>Knihovna šablon</small><h1>Přetáhněte obsah na displej</h1><p>Hotové šablony se pokusí nastavit samy. U vlastních vyberete zdroje dat ručně.</p></div>
+          </header>
+          <div class="card devices-toolbar-card display-template-toolbar">
+            <div class="devices-toolbar">
+              <div class="device-search">
+                <ha-icon icon="mdi:magnify"></ha-icon>
+                <input type="search" data-display-template-search value="${this._escape(this._displayTemplateSearchQuery || "")}" placeholder="Hledat šablonu nebo údaj…" aria-label="Hledat šablony">
+              </div>
+              <div class="display-template-categories" aria-label="Kategorie šablon">
+                ${categories.map((category) => `<button type="button" class="${activeCategory === category.id ? "is-active" : ""}" data-display-template-category="${category.id}" aria-pressed="${activeCategory === category.id}"><ha-icon icon="mdi:${category.icon}"></ha-icon>${category.title}</button>`).join("")}
+              </div>
+              <span class="pill muted display-template-result-count">${visibleCards.length} šablon</span>
+            </div>
+          </div>
+          ${visibleCards.length ? `<div class="display-template-grid">${visibleCards.map((template) => {
+            const used = assignedTemplates.includes(template.id);
+            const guide = this._displayTemplateSetupGuide(template);
+            return `<article class="display-template-card display-template-drag-card ${used ? "is-used" : ""}" draggable="true" data-display-template-drag="${template.id}" aria-label="${this._escape(template.title)}. Přetáhněte na displej.">
+              <header class="display-template-tile-header">
+                <span class="display-template-kind-icon"><ha-icon icon="mdi:${template.kind === "prepared" ? "auto-fix" : "tune-variant"}"></ha-icon></span>
+                <span class="display-template-tile-identity"><strong>${this._escape(template.title)}</strong><small>${template.kind === "prepared" ? "Automatické nastavení" : "Vlastní zdroje dat"}</small></span>
+                <span class="display-template-variable-count">${template.variables.length} údajů</span>
+                <span class="display-template-help" tabindex="0" aria-label="Zobrazit návod pro šablonu ${this._escape(template.title)}"><ha-icon icon="mdi:information-outline"></ha-icon>
+                  <span class="display-template-guide" role="tooltip"><strong>Jak nastavit ${this._escape(template.title)}</strong><ol>${guide.map((step) => `<li>${this._escape(step)}</li>`).join("")}</ol></span>
+                </span>
+              </header>
+              <div class="display-template-tile-preview">
+                <span class="display-template-drag-handle"><ha-icon icon="mdi:drag"></ha-icon>Přetáhnout na displej</span>
+                <span class="display-template-preview">${this._renderDisplayTemplatePreview(template)}</span>
+              </div>
+              <div class="display-template-tile-meta">
+                <span class="display-template-variables" aria-label="Použité údaje">${template.variables.map(([iconName, label]) => `<span><ha-icon icon="mdi:${iconName}"></ha-icon>${this._escape(label)}</span>`).join("")}</span>
+              </div>
+              <div class="display-template-tile-actions">
+                <button type="button" class="display-template-card-action" data-display-template-open="${template.id}"><ha-icon icon="mdi:tune-variant"></ha-icon>${used ? "Upravit nastavení" : "Nastavit šablonu"}</button>
+              </div>
+            </article>`;
+          }).join("")}</div>` : `<div class="display-template-empty"><ha-icon icon="mdi:magnify-close"></ha-icon><strong>Žádná šablona neodpovídá filtru</strong><span>Zkuste jiný název nebo druh šablony.</span></div>`}
+        </section>
+      </div>
     </section>`;
   },
 
@@ -1185,9 +1228,21 @@ export const devicesMixin = {
       return fallback;
     }
     const state = binding ? this._hass?.states?.[binding] : null;
-    const raw = state?.state;
+    const weatherState = String(binding || "").startsWith("weather.");
+    const weatherAttributes = state?.attributes || {};
+    let raw = state?.state;
+    let forcedUnit = "";
+    if (weatherState && normalized.includes("teplot")) {
+      raw = weatherAttributes.temperature;
+      forcedUnit = weatherAttributes.temperature_unit || "°C";
+    } else if (weatherState && normalized.includes("predpoved")) {
+      const forecast = Array.isArray(weatherAttributes.forecast) ? weatherAttributes.forecast[0] : null;
+      raw = forecast
+        ? `${forecast.condition || state?.state || ""}${Number.isFinite(Number(forecast.temperature)) ? ` ${forecast.temperature} ${weatherAttributes.temperature_unit || "°C"}` : ""}`
+        : state?.state;
+    }
     if (raw === undefined || raw === null || ["", "unknown", "unavailable"].includes(String(raw).toLowerCase())) return fallback;
-    const unit = String(state?.attributes?.unit_of_measurement || "").trim();
+    const unit = String(forcedUnit || state?.attributes?.unit_of_measurement || "").trim();
     const numeric = Number(raw);
     const text = Number.isFinite(numeric)
       ? new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 2 }).format(numeric)

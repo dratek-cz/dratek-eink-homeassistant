@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.134] - 2026-07-29
+
+### Změněno
+- Katalog šablon používá přehlednější karty ve stylu hlavních karet displejů.
+- Šablony lze z katalogu přetáhnout přímo na plochu vybraného displeje.
+- Horní souhrnný panel byl nahrazen kompaktním informačním blokem nad plochou displeje.
+
+### Opraveno
+- Odstraněn duplicitní náhled a opakované informace o aktuálním displeji.
+- Název, model, adresa, fyzický kód, baterie a signál jsou seskupené na jednom místě.
+
 ## [0.1.133] - 2026-07-29
 
 ### Přidáno

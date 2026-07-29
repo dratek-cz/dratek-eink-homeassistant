@@ -35,7 +35,7 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedDeviceAddress = "";
     this._displaySettingsView = "templates";
     this._displayTemplateSearchQuery = "";
-    this._displayTemplateCategory = "all";
+    this._displayTemplateCategory = "prepared";
     this._selectedDisplayTemplateId = "";
     this._selectedDisplayTemplateSecondaryId = "";
     this._displayTemplateOrientation = "portrait";

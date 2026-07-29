@@ -255,22 +255,6 @@ export const inspectorMixin = {
         openDisplaySettings(card.dataset.deviceCardSettings);
       });
     });
-    this.shadowRoot.querySelectorAll("[data-display-settings-section]").forEach((button) => button.addEventListener("click", async () => {
-      const section = button.dataset.displaySettingsSection;
-      if (!["templates", "custom"].includes(section)) return;
-      if (section === "templates" && this._displaySettingsView === "designer") {
-        await this._captureCurrentDisplayTemplatePreview();
-      }
-      if (section === "templates") {
-        this._displaySettingsView = "templates";
-      } else {
-        this._displayDesignerReturnView = "templates";
-        this._displaySettingsView = "designer";
-      }
-      this._render();
-      this._paint();
-      this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
-    }));
     this.shadowRoot.querySelector("[data-display-template-search]")?.addEventListener("input", (event) => {
       const cursor = event.target.selectionStart;
       this._displayTemplateSearchQuery = event.target.value;
@@ -283,12 +267,14 @@ export const inspectorMixin = {
       });
     });
     this.shadowRoot.querySelectorAll("[data-display-template-category]").forEach((button) => button.addEventListener("click", () => {
-      this._displayTemplateCategory = button.dataset.displayTemplateCategory || "all";
+      this._displayTemplateCategory = button.dataset.displayTemplateCategory || "prepared";
       this._render();
       this._paint();
     }));
-    const openDisplayTemplate = (templateId, replaceIndex = null) => {
+    const openDisplayTemplate = (templateId, replaceIndex = null, stayInCatalog = false) => {
       const device = this._device();
+      const template = this._displayTemplateCards().find((item) => item.id === templateId);
+      this._prepareDisplayTemplateBindings(template);
       const previousAssigned = this._assignedDisplayTemplates(device);
       const assigned = this._assignDisplayTemplate(device, templateId, replaceIndex);
       const size = this._devicePreviewSize(device);
@@ -316,7 +302,7 @@ export const inspectorMixin = {
       }
       this._pendingDisplayTemplateConflict = null;
       this._displayDesignerReturnView = "templates";
-      this._displaySettingsView = "designer";
+      this._displaySettingsView = stayInCatalog ? "templates" : "designer";
       this._render();
       this._paint();
       this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
@@ -336,6 +322,51 @@ export const inspectorMixin = {
       }
       openDisplayTemplate(templateId);
     }));
+    this.shadowRoot.querySelectorAll("[data-display-template-drag]").forEach((card) => {
+      card.addEventListener("dragstart", (event) => {
+        const templateId = card.dataset.displayTemplateDrag || "";
+        if (!templateId) return;
+        event.dataTransfer.effectAllowed = "copy";
+        event.dataTransfer.setData("application/x-dratek-display-template", templateId);
+        event.dataTransfer.setData("text/plain", templateId);
+        card.classList.add("is-dragging");
+      });
+      card.addEventListener("dragend", () => {
+        card.classList.remove("is-dragging");
+        this.shadowRoot.querySelector("[data-display-template-dropzone]")?.classList.remove("is-drag-over");
+      });
+    });
+    const templateDropzone = this.shadowRoot.querySelector("[data-display-template-dropzone]");
+    templateDropzone?.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      templateDropzone.classList.add("is-drag-over");
+    });
+    templateDropzone?.addEventListener("dragleave", (event) => {
+      if (!templateDropzone.contains(event.relatedTarget)) templateDropzone.classList.remove("is-drag-over");
+    });
+    templateDropzone?.addEventListener("drop", (event) => {
+      event.preventDefault();
+      templateDropzone.classList.remove("is-drag-over");
+      const templateId = event.dataTransfer.getData("application/x-dratek-display-template")
+        || event.dataTransfer.getData("text/plain");
+      if (!this._displayTemplateCards().some((item) => item.id === templateId)) return;
+      const device = this._device();
+      const size = this._devicePreviewSize(device);
+      const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
+      const assigned = this._assignedDisplayTemplates(device);
+      const primaryIsLarge = this._displayTemplateSizes?.primary !== "small";
+      if (largeDisplay && assigned.length === 1 && primaryIsLarge && !assigned.includes(templateId)) {
+        this._pendingDisplayTemplateConflict = { templateId, stayInCatalog: true };
+        this._render();
+        this._paint();
+        return;
+      }
+      const replaceIndex = largeDisplay && assigned.length >= 2 && !assigned.includes(templateId)
+        ? (this._selectedTemplateCanvasSlot === "secondary" ? 1 : 0)
+        : null;
+      openDisplayTemplate(templateId, replaceIndex, true);
+    });
     this.shadowRoot.querySelectorAll("[data-display-template-replace]").forEach((button) => button.addEventListener("click", () => {
       const card = button.closest(".display-template-card-replace");
       const target = Number(card?.querySelector("[data-template-replace-target]")?.value);
@@ -354,13 +385,13 @@ export const inspectorMixin = {
       if (action === "shrink") {
         this._displayTemplateSizes.primary = "small";
         this._displayTemplateSizes.secondary = "small";
-        openDisplayTemplate(pendingTemplateId);
+        openDisplayTemplate(pendingTemplateId, null, this._pendingDisplayTemplateConflict?.stayInCatalog === true);
         return;
       }
       if (action === "replace") {
         this._displayTemplateSizes.primary = "large";
         this._displayTemplateSizes.secondary = "small";
-        openDisplayTemplate(pendingTemplateId, 0);
+        openDisplayTemplate(pendingTemplateId, 0, this._pendingDisplayTemplateConflict?.stayInCatalog === true);
       }
     }));
     this.shadowRoot.querySelectorAll("[data-template-orientation]").forEach((button) => button.addEventListener("click", () => {
