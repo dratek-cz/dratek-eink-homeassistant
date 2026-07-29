@@ -464,7 +464,32 @@ export const devicesMixin = {
       </div>
       ${this._displaySettingsView === "templates" ? this._renderDisplayTemplatesSection(device) : ""}
       ${this._displaySettingsView === "designer" ? this._renderDisplayTemplateEditor(device) : ""}
+      ${this._renderDisplayTemplateConflictDialog(device)}
     </section>`;
+  },
+
+  _renderDisplayTemplateConflictDialog(device) {
+    const pending = this._pendingDisplayTemplateConflict;
+    if (!pending?.templateId) return "";
+    const templates = this._displayTemplateCards();
+    const nextTemplate = templates.find((item) => item.id === pending.templateId);
+    const currentTemplate = templates.find((item) => item.id === this._assignedDisplayTemplates(device)[0]);
+    if (!nextTemplate) return "";
+    return `<div class="modal-backdrop template-space-dialog-backdrop">
+      <section class="template-space-dialog" role="dialog" aria-modal="true" aria-labelledby="templateSpaceDialogTitle">
+        <span class="template-space-dialog-icon"><ha-icon icon="mdi:view-dashboard-edit-outline"></ha-icon></span>
+        <div>
+          <small>Nedostatek místa na displeji</small>
+          <h2 id="templateSpaceDialogTitle">První šablona je nastavená jako velká</h2>
+          <p>Šablona <strong>${this._escape(currentTemplate?.title || "První šablona")}</strong> zabírá celý displej. Chcete ji zmenšit a přidat <strong>${this._escape(nextTemplate.title)}</strong>, nebo ji novou šablonou nahradit?</p>
+        </div>
+        <div class="template-space-dialog-actions">
+          <button type="button" class="template-space-shrink" data-template-conflict-action="shrink"><ha-icon icon="mdi:arrow-collapse-all"></ha-icon>Zmenšit a přidat</button>
+          <button type="button" class="secondary" data-template-conflict-action="replace"><ha-icon icon="mdi:swap-horizontal"></ha-icon>Nahradit velkou šablonu</button>
+          <button type="button" class="ghost" data-template-conflict-action="cancel">Zrušit</button>
+        </div>
+      </section>
+    </div>`;
   },
 
   _displayDesignMode(device = this._device()) {
@@ -506,6 +531,7 @@ export const devicesMixin = {
 
   _renderDisplayTemplatePreview(template) {
     const icon = (name, className = "") => `<ha-icon class="${className}" icon="mdi:${name}"></ha-icon>`;
+    const value = (index, fallback) => this._escape(this._templateDisplayValue(template, index, fallback));
     const energySeries = this._templateSeries(template, 2, [4, 2, 5, 8, 7, 11, 15, 13, 18, 14, 10, 12, 6, 9]);
     const energyMin = Math.min(...energySeries);
     const energyMax = Math.max(...energySeries);
@@ -518,116 +544,118 @@ export const devicesMixin = {
     const waterSeries = this._templateSeries(template, 3, [42, 70, 52, 88, 61, 45, 73]);
     const waterMax = Math.max(1, ...waterSeries);
     const waterBars = waterSeries.slice(-9).map((value) => `<b style="height:${Math.max(8, Math.round((value / waterMax) * 92))}%"></b>`).join("");
+    const wifiNetwork = this._templateDisplayValue(template, 0, "Home_Network");
+    const wifiPassword = this._templateDisplayValue(template, 1, "MyPassword123");
     const wifiCode = qrcode(0, "M");
-    wifiCode.addData("WIFI:T:WPA;S:Home_Network;P:MyPassword123;;");
+    wifiCode.addData(`WIFI:T:WPA;S:${wifiNetwork};P:${wifiPassword};;`);
     wifiCode.make();
-    const wifiQr = wifiCode.createSvgTag(3, 0, "QR kód pro připojení k Wi-Fi", "Wi-Fi Home_Network");
+    const wifiQr = wifiCode.createSvgTag(3, 0, "QR kód pro připojení k Wi-Fi", `Wi-Fi ${wifiNetwork}`);
     const previews = {
       weather: `<div class="tpl tpl-weather">
         ${icon("weather-partly-cloudy", "tpl-weather-icon")}
-        <strong>Pátek</strong><span>23. května</span><i></i><b>12:45</b><i></i>
-        <em>23 °C</em><small>${icon("thermometer")} Polojasno<br>24° / 13°</small>
-        <footer><span>SO<br>${icon("weather-partly-cloudy")}<br>22°</span><span>NE<br>${icon("weather-sunny")}<br>25°</span><span>PO<br>${icon("weather-rainy")}<br>18°</span><span>ÚT<br>${icon("weather-cloudy")}<br>20°</span></footer>
+        <strong>${value(1, "Pátek")}</strong><span>${value(3, "23. května")}</span><i></i><b>${value(2, "12:45")}</b><i></i>
+        <em>${value(0, "23 °C")}</em><small>${icon("thermometer")} ${value(1, "Polojasno")}<br>${value(4, "24° / 13°")}</small>
+        <footer><span>SO<br>${icon("weather-partly-cloudy")}<br>${value(4, "22°")}</span><span>NE<br>${icon("weather-sunny")}<br>25°</span><span>PO<br>${icon("weather-rainy")}<br>18°</span><span>ÚT<br>${icon("weather-cloudy")}<br>20°</span></footer>
       </div>`,
       energy: `<div class="tpl tpl-energy">
         <header>${icon("lightning-bolt", "tpl-red")}<span><strong>Cena elektřiny</strong><small>Kč / kWh</small></span></header><i></i>
-        <em>2,45 <small>Kč</small></em><span>12:00–13:00</span><span>Dnes</span>
+        <em>${value(0, "2,45 Kč")}</em><span>${value(1, "12:00–13:00")}</span><span>Dnes</span>
         <svg viewBox="0 0 180 70" aria-hidden="true" data-template-chart="energy"><polyline points="${energyPoints}"></polyline></svg>
-        <footer>${icon("tag")}<span>Nejlevnější dnes<br><b>2,45 Kč</b></span><small>12:00–13:00</small></footer>
+        <footer>${icon("tag")}<span>Nejlevnější dnes<br><b>${value(3, "2,45 Kč")}</b></span><small>${value(1, "12:00–13:00")}</small></footer>
       </div>`,
       home: `<div class="tpl tpl-home">
         <h3>Dům</h3>${icon("home", "tpl-home-icon tpl-red")}
-        <ul><li>${icon("thermometer")}<span>21,5 °C</span></li><li>${icon("water")}<span>45 %</span></li><li>${icon("lightbulb-on")}<span>3 světla ON</span></li><li>${icon("lock")}<span>Vše zamčeno</span></li></ul><i></i>
+        <ul><li>${icon("thermometer")}<span>${value(0, "21,5 °C")}</span></li><li>${icon("water")}<span>${value(1, "45 %")}</span></li><li>${icon("lightbulb-on")}<span>${value(2, "3 světla ON")}</span></li><li>${icon("lock")}<span>${value(3, "Vše zamčeno")}</span></li></ul><i></i>
         <footer>${icon("check-circle")}<strong>Všechno v pořádku</strong></footer>
       </div>`,
       waste: `<div class="tpl tpl-waste">
-        <h3>Odpady</h3><section>${icon("trash-can-outline")}<span><b>ZÍTRA</b><strong>Plast</strong></span></section><i></i>
-        <section>${icon("recycle")}<span><b>za 7 dní</b><strong>Papír</strong></span></section>
+        <h3>Odpady</h3><section>${icon("trash-can-outline")}<span><b>${value(0, "ZÍTRA")}</b><strong>Plast</strong></span></section><i></i>
+        <section>${icon("recycle")}<span><b>${value(1, "za 7 dní")}</b><strong>${value(2, "Papír")}</strong></span></section>
       </div>`,
       solar: `<div class="tpl tpl-solar">
         <header>${icon("weather-sunny-outline")}<span><strong>Fotovoltaika</strong><small>Aktuální výkon</small></span></header>
-        ${icon("solar-power", "tpl-solar-icon")}<em>2,35 <small>kW</small></em><i></i>
-        <ul><li><span>Dnes</span><b>8,2 kWh</b></li><li><span>Tento měsíc</span><b>152 kWh</b></li><li><span>Celkem</span><b>3,45 MWh</b></li></ul>
-        <footer>${icon("leaf")} Úspora CO₂: 125 kg</footer>
+        ${icon("solar-power", "tpl-solar-icon")}<em>${value(0, "2,35 kW")}</em><i></i>
+        <ul><li><span>Dnes</span><b>${value(1, "8,2 kWh")}</b></li><li><span>Tento měsíc</span><b>${value(2, "152 kWh")}</b></li><li><span>Celkem</span><b>${value(3, "3,45 MWh")}</b></li></ul>
+        <footer>${icon("leaf")} Úspora CO₂: ${value(4, "125 kg")}</footer>
       </div>`,
       washer: `<div class="tpl tpl-washer">
         <h3>Pračka</h3>${icon("washing-machine", "tpl-washer-icon")}
-        <label>Program</label><strong class="tpl-red">Bavlna 60°</strong><i></i>
-        <section>${icon("clock-outline")}<span>Zbývá</span><b>01:15</b></section><i></i><footer>Skončí v 14:30</footer>
+        <label>Program</label><strong class="tpl-red">${value(0, "Bavlna 60°")}</strong><i></i>
+        <section>${icon("clock-outline")}<span>Zbývá</span><b>${value(1, "01:15")}</b></section><i></i><footer>Skončí v ${value(2, "14:30")}</footer>
       </div>`,
       living: `<div class="tpl tpl-living">
-        <h3>Obývák</h3><section>${icon("thermometer", "tpl-red")}<em>23,5 °C</em></section><i></i>
-        <section>${icon("water")}<strong>Vlhkost: 40 %</strong></section><i></i><footer>CO₂: 650 ppm</footer>
+        <h3>Obývák</h3><section>${icon("thermometer", "tpl-red")}<em>${value(0, "23,5 °C")}</em></section><i></i>
+        <section>${icon("water")}<strong>Vlhkost: ${value(1, "40 %")}</strong></section><i></i><footer>CO₂: ${value(2, "650 ppm")}</footer>
       </div>`,
       presence: `<div class="tpl tpl-presence">
         <h3>Kdo je doma</h3>
-        <ul><li>${icon("account")}<strong>Petr</strong>${icon("home", "tpl-red")}</li><li>${icon("account")}<strong>Jana</strong>${icon("home", "tpl-red")}</li><li>${icon("account")}<strong>Eliška</strong><b>Ve škole</b></li></ul>
-        <footer>${icon("clock-outline")}<span>Poslední aktualizace<br><strong>12:45</strong></span></footer>
+        <ul><li>${icon("account")}<strong>${value(0, "Petr")}</strong>${icon("home", "tpl-red")}</li><li>${icon("account")}<strong>Jana</strong>${icon("home", "tpl-red")}</li><li>${icon("account")}<strong>Eliška</strong><b>${value(2, "Ve škole")}</b></li></ul>
+        <footer>${icon("clock-outline")}<span>${value(1, "Poslední aktualizace")}<br><strong>${value(3, "12:45")}</strong></span></footer>
       </div>`,
       wifi: `<div class="tpl tpl-wifi">
         <h3>Wi-Fi</h3><span class="tpl-wifi-qr">${wifiQr}</span>
-        <label>Síť</label><strong class="tpl-red">Home_Network</strong><i></i><label>Heslo</label><strong class="tpl-red">MyPassword123</strong><i></i>
+        <label>Síť</label><strong class="tpl-red">${this._escape(wifiNetwork)}</strong><i></i><label>Heslo</label><strong class="tpl-red">${this._escape(wifiPassword)}</strong><i></i>
         <footer>${icon("wifi")} Naskenuj pro připojení</footer>
       </div>`,
       calendar: `<div class="tpl tpl-calendar">
         <h3>Kalendář</h3>
-        <section><span class="tpl-date">${icon("calendar-blank")}<b>23</b></span><span><b>PÁTEK</b><strong>Schůzka</strong><small>15:00</small></span></section><i></i>
-        <section><span class="tpl-date">${icon("calendar-blank")}<b>24</b></span><span><b>SOBOTA</b><strong>Narozeniny</strong><small>Tomáš</small></span></section>
-        <footer>${icon("cake-variant")}<span>Zítra má svátek<br><strong>Jana</strong></span></footer>
+        <section><span class="tpl-date">${icon("calendar-blank")}<b>23</b></span><span><b>PÁTEK</b><strong>${value(0, "Schůzka")}</strong><small>15:00</small></span></section><i></i>
+        <section><span class="tpl-date">${icon("calendar-blank")}<b>24</b></span><span><b>SOBOTA</b><strong>${value(1, "Narozeniny")}</strong><small>Tomáš</small></span></section>
+        <footer>${icon("cake-variant")}<span>Zítra má svátek<br><strong>${value(2, "Jana")}</strong></span></footer>
       </div>`,
       security: `<div class="tpl tpl-security">
         <h3>Zabezpečení</h3>${icon("shield-home", "tpl-security-icon")}
-        <em>ZAPNUTO</em><span>Dům je zabezpečený</span><i></i>
-        <ul><li>${icon("door-closed-lock")}<span>Dveře</span><b>Zamčeno</b></li><li>${icon("window-closed")}<span>Okna</span><b>Zavřeno</b></li><li>${icon("motion-sensor")}<span>Pohyb</span><b>Klid</b></li></ul>
+        <em>${value(0, "ZAPNUTO")}</em><span>Dům je zabezpečený</span><i></i>
+        <ul><li>${icon("door-closed-lock")}<span>Dveře</span><b>${value(1, "Zamčeno")}</b></li><li>${icon("window-closed")}<span>Okna</span><b>${value(2, "Zavřeno")}</b></li><li>${icon("motion-sensor")}<span>Pohyb</span><b>${value(3, "Klid")}</b></li></ul>
         <footer>${icon("check-circle")} Všechny zóny v pořádku</footer>
       </div>`,
       transport: `<div class="tpl tpl-transport">
-        <h3>Odjezdy</h3><header>${icon("tram")}<span><strong>Hlavní nádraží</strong><small>směr Centrum</small></span></header>
-        <ul><li><b>9</b><span>Náměstí</span><em>3 min</em></li><li><b>4</b><span>Univerzita</span><em>8 min</em></li><li><b>12</b><span>Nemocnice</span><em>14 min</em></li></ul>
-        <footer>${icon("walk")} Zastávka 240 m</footer>
+        <h3>Odjezdy</h3><header>${icon("tram")}<span><strong>${value(0, "Hlavní nádraží")}</strong><small>směr Centrum</small></span></header>
+        <ul><li><b>${value(1, "9")}</b><span>Náměstí</span><em>${value(2, "3 min")}</em></li><li><b>4</b><span>Univerzita</span><em>8 min</em></li><li><b>12</b><span>Nemocnice</span><em>14 min</em></li></ul>
+        <footer>${icon("walk")} Zastávka ${value(3, "240 m")}</footer>
       </div>`,
       shopping: `<div class="tpl tpl-shopping">
-        <h3>Nákupní seznam</h3><ul><li>${icon("checkbox-marked")}<span>Mléko</span></li><li>${icon("checkbox-blank-outline")}<span>Chléb</span></li><li>${icon("checkbox-blank-outline")}<span>Jablka</span></li><li>${icon("checkbox-blank-outline")}<span>Káva</span></li><li>${icon("checkbox-blank-outline")}<span>Prací gel</span></li></ul>
-        <footer>${icon("cart-outline")} Zbývají 4 položky</footer>
+        <h3>Nákupní seznam</h3><ul><li>${icon("checkbox-marked")}<span>${value(0, "Mléko")}</span></li><li>${icon("checkbox-blank-outline")}<span>Chléb</span></li><li>${icon("checkbox-blank-outline")}<span>Jablka</span></li><li>${icon("checkbox-blank-outline")}<span>Káva</span></li><li>${icon("checkbox-blank-outline")}<span>${value(1, "Prací gel")}</span></li></ul>
+        <footer>${icon("cart-outline")} ${value(2, "Zbývají 4 položky")}</footer>
       </div>`,
       air: `<div class="tpl tpl-air">
-        <h3>Kvalita vzduchu</h3>${icon("air-filter", "tpl-air-icon")}<em>Výborná</em><strong>42 <small>AQI</small></strong><i></i>
-        <section><span>CO₂<b>612 ppm</b></span><span>PM2.5<b>8 µg/m³</b></span><span>Vlhkost<b>46 %</b></span></section>
+        <h3>Kvalita vzduchu</h3>${icon("air-filter", "tpl-air-icon")}<em>Výborná</em><strong>${value(0, "42 AQI")}</strong><i></i>
+        <section><span>CO₂<b>${value(1, "612 ppm")}</b></span><span>PM2.5<b>${value(2, "8 µg/m³")}</b></span><span>Vlhkost<b>${value(3, "46 %")}</b></span></section>
         <footer>${icon("leaf")} Doporučeno nevětrat</footer>
       </div>`,
       thermostat: `<div class="tpl tpl-thermostat">
-        <h3>Topení</h3>${icon("radiator", "tpl-thermostat-icon")}<label>Obývací pokoj</label><em>22,5 °C</em><span>Cílová teplota 23 °C</span>
+        <h3>Topení</h3>${icon("radiator", "tpl-thermostat-icon")}<label>Obývací pokoj</label><em>${value(0, "22,5 °C")}</em><span>Cílová teplota ${value(1, "23 °C")}</span>
         <div class="tpl-heat-scale"><i></i><b></b></div>
-        <section><span>${icon("fire")} Topení aktivní</span><strong>48 %</strong></section>
-        <footer>Další změna v 22:00</footer>
+        <section><span>${icon("fire")} Topení aktivní</span><strong>${value(2, "48 %")}</strong></section>
+        <footer>Další změna v ${value(3, "22:00")}</footer>
       </div>`,
       water: `<div class="tpl tpl-water">
-        <h3>Spotřeba vody</h3>${icon("water-pump", "tpl-water-icon")}<em>126 l</em><span>Dnes</span>
+        <h3>Spotřeba vody</h3>${icon("water-pump", "tpl-water-icon")}<em>${value(0, "126 l")}</em><span>Dnes</span>
         <section data-template-chart="water">${waterBars}</section>
-        <ul><li><span>Tento týden</span><b>0,84 m³</b></li><li><span>Tento měsíc</span><b>3,12 m³</b></li></ul>
-        <footer>${icon("trending-down")} O 12 % méně než včera</footer>
+        <ul><li><span>Tento týden</span><b>${value(1, "0,84 m³")}</b></li><li><span>Tento měsíc</span><b>${value(2, "3,12 m³")}</b></li></ul>
+        <footer>${icon("trending-down")} ${value(3, "O 12 % méně než včera")}</footer>
       </div>`,
       parcel: `<div class="tpl tpl-parcel">
-        <h3>Zásilka</h3>${icon("package-variant-closed", "tpl-parcel-icon")}<em>Na cestě</em><strong>RR 458 921 730 CZ</strong>
-        <ol><li class="done"><b></b><span>Převzato dopravcem</span></li><li class="done"><b></b><span>Na depu Brno</span></li><li class="active"><b></b><span>Doručení dnes</span></li></ol>
-        <footer>${icon("truck-delivery-outline")} 13:00–15:00</footer>
+        <h3>Zásilka</h3>${icon("package-variant-closed", "tpl-parcel-icon")}<em>${value(0, "Na cestě")}</em><strong>${value(1, "RR 458 921 730 CZ")}</strong>
+        <ol><li class="done"><b></b><span>Převzato dopravcem</span></li><li class="done"><b></b><span>Na depu Brno</span></li><li class="active"><b></b><span>${value(2, "Doručení dnes")}</span></li></ol>
+        <footer>${icon("truck-delivery-outline")} ${value(3, "13:00–15:00")}</footer>
       </div>`,
       birthdays: `<div class="tpl tpl-birthdays">
-        <h3>Narozeniny</h3>${icon("cake-variant", "tpl-birthday-icon")}<em>Dnes slaví</em><strong>Lucie</strong><span>32 let</span><i></i>
-        <section><small>Další narozeniny</small><b>Tomáš</b><span>za 4 dny</span></section>
-        <footer>${icon("gift-outline")} Nezapomeň popřát</footer>
+        <h3>Narozeniny</h3>${icon("cake-variant", "tpl-birthday-icon")}<em>Dnes slaví</em><strong>${value(0, "Lucie")}</strong><span>${value(1, "32 let")}</span><i></i>
+        <section><small>Další narozeniny</small><b>${value(2, "Tomáš")}</b><span>za 4 dny</span></section>
+        <footer>${icon("gift-outline")} ${value(3, "Nezapomeň popřát")}</footer>
       </div>`,
       server: `<div class="tpl tpl-server">
-        <h3>Stav serveru</h3><header>${icon("server-network")}<span><strong>Home server</strong><small>192.168.1.10</small></span><b>ONLINE</b></header>
-        <section><span>CPU<b>24 %</b><i style="width:24%"></i></span><span>RAM<b>61 %</b><i style="width:61%"></i></span><span>Disk<b>73 %</b><i style="width:73%"></i></span></section>
-        <ul><li>${icon("thermometer")}<span>Teplota</span><b>48 °C</b></li><li>${icon("clock-outline")}<span>Provoz</span><b>18 dní</b></li></ul>
+        <h3>Stav serveru</h3><header>${icon("server-network")}<span><strong>Home server</strong><small>192.168.1.10</small></span><b>${value(0, "ONLINE")}</b></header>
+        <section><span>CPU<b>${value(1, "24 %")}</b><i style="width:24%"></i></span><span>RAM<b>${value(2, "61 %")}</b><i style="width:61%"></i></span><span>Disk<b>${value(3, "73 %")}</b><i style="width:73%"></i></span></section>
+        <ul><li>${icon("thermometer")}<span>Teplota</span><b>${value(4, "48 °C")}</b></li><li>${icon("clock-outline")}<span>Provoz</span><b>${value(5, "18 dní")}</b></li></ul>
         <footer>${icon("check-network-outline")} Všechny služby běží</footer>
       </div>`,
       garden: `<div class="tpl tpl-garden">
-        <h3>Zahrada</h3><header>${icon("flower")}<span><strong>Záhon rajčat</strong><small>Automatická závlaha</small></span></header>
-        <em>Vlhkost 36 %</em><div class="tpl-moisture"><i></i></div>
-        <section><span>${icon("weather-sunny")} 24 °C</span><span>${icon("water-percent")} 36 %</span><span>${icon("weather-windy")} 8 km/h</span></section>
-        <i></i><strong>Další zalévání</strong><b>18:30 · 12 minut</b>
+        <h3>Zahrada</h3><header>${icon("flower")}<span><strong>${value(0, "Záhon rajčat")}</strong><small>Automatická závlaha</small></span></header>
+        <em>Vlhkost ${value(1, "36 %")}</em><div class="tpl-moisture"><i></i></div>
+        <section><span>${icon("weather-sunny")} ${value(2, "24 °C")}</span><span>${icon("water-percent")} ${value(1, "36 %")}</span><span>${icon("weather-windy")} ${value(3, "8 km/h")}</span></section>
+        <i></i><strong>Další zalévání</strong><b>${value(4, "18:30 · 12 minut")}</b>
         <footer>${icon("sprinkler-variant")} Závlaha připravena</footer>
       </div>`,
     };
@@ -638,6 +666,7 @@ export const devicesMixin = {
     const size = this._devicePreviewSize(device);
     const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
     const assignedTemplates = this._assignedDisplayTemplates(device);
+    const primaryTemplateSize = this._displayTemplateSizes?.primary === "small" ? "small" : "large";
     const categories = [
       { id: "all", icon: "view-grid-outline", title: "Všechny" },
       { id: "nature", icon: "weather-partly-cloudy", title: "Počasí a příroda" },
@@ -678,9 +707,12 @@ export const devicesMixin = {
       ${visibleCards.length ? `<div class="display-template-grid">${visibleCards.map((template) => {
         const used = assignedTemplates.includes(template.id);
         const needsReplacementChoice = largeDisplay && assignedTemplates.length >= 2 && !used;
+        const needsSpaceDecision = largeDisplay && assignedTemplates.length === 1 && primaryTemplateSize === "large" && !used;
         const action = used
           ? { icon: "check-circle", label: "Právě se používá" }
-          : largeDisplay && assignedTemplates.length < 2
+          : needsSpaceDecision
+            ? { icon: "resize", label: "Přidat a vyřešit místo" }
+            : largeDisplay && assignedTemplates.length < 2
             ? { icon: "plus-circle-outline", label: "Přidat na displej" }
             : largeDisplay
               ? { icon: "swap-horizontal", label: "Vybrat nahrazovanou šablonu" }
@@ -735,11 +767,11 @@ export const devicesMixin = {
       next = [templateId];
     } else if (current.includes(templateId)) {
       next = current;
-    } else if (current.length < 2) {
-      next = [...current, templateId];
     } else if (Number.isInteger(replaceIndex) && replaceIndex >= 0 && replaceIndex < current.length) {
       next = [...current];
       next[replaceIndex] = templateId;
+    } else if (current.length < 2) {
+      next = [...current, templateId];
     } else {
       next = current;
     }
@@ -761,8 +793,9 @@ export const devicesMixin = {
       ? this._displayTemplateLargeLayout
       : "single";
     const selectedSlot = this._selectedTemplateCanvasSlot === "secondary" && layout !== "single" ? "secondary" : "primary";
-    const selectedFormat = this._displayTemplateFormats?.[selectedSlot] === "wide" ? "wide" : "narrow";
+    const selectedSize = largeDisplay && this._displayTemplateSizes?.[selectedSlot] === "small" ? "small" : "large";
     const activeTemplate = selectedSlot === "secondary" ? secondaryTemplate : template;
+    const previewZoom = Math.max(0.5, Math.min(1.8, Number(this._displayTemplatePreviewZoom || 1)));
     return `<section class="display-template-editor-page">
       <header class="display-template-editor-header">
         <div>
@@ -775,10 +808,21 @@ export const devicesMixin = {
         <aside class="card display-template-editor-panel display-template-editor-left" aria-label="Editor prvků">
           ${this._renderTemplateEditorTools()}
         </aside>
-        <main class="card display-template-editor-canvas">
+        <main class="display-template-editor-canvas">
           <div class="display-template-preview-card">
             <div class="display-template-preview-card-head">
               <span><small>Náhled displeje</small><strong>${size.width} × ${size.height} px</strong></span>
+              <div class="template-preview-controls">
+                <div class="template-preview-zoom" role="group" aria-label="Přiblížení náhledu">
+                  <button type="button" data-template-preview-zoom="out" title="Oddálit náhled" aria-label="Oddálit náhled"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon></button>
+                  <button type="button" class="template-preview-zoom-value" data-template-preview-zoom="reset" title="Obnovit přiblížení" aria-label="Obnovit přiblížení">${Math.round(previewZoom * 100)} %</button>
+                  <button type="button" data-template-preview-zoom="in" title="Přiblížit náhled" aria-label="Přiblížit náhled"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></button>
+                </div>
+                <div class="display-template-orientation" role="group" aria-label="Orientace displeje">
+                  <button type="button" class="${orientation === "portrait" ? "is-active" : ""}" data-template-orientation="portrait" title="Displej na výšku" aria-label="Displej na výšku"><ha-icon icon="mdi:phone-rotate-portrait"></ha-icon></button>
+                  <button type="button" class="${orientation === "landscape" ? "is-active" : ""}" data-template-orientation="landscape" title="Displej na šířku" aria-label="Displej na šířku"><ha-icon icon="mdi:phone-rotate-landscape"></ha-icon></button>
+                </div>
+              </div>
             </div>
             <div class="display-template-editor-stage">
               ${this._renderTemplatePhysicalDevicePreview(device, template, secondaryTemplate, orientation, layout)}
@@ -793,25 +837,18 @@ export const devicesMixin = {
           ${this._templateSendResult ? `<div class="template-send-result ${this._templateSendResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSendResult.ok ? "check-circle-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSendResult.message)}</span></div>` : ""}
           <aside class="card display-template-editor-panel display-template-editor-right" aria-label="Nastavení šablony">
             <div class="template-editor-panel-heading"><ha-icon icon="mdi:tune-variant"></ha-icon><span><strong>Nastavení šablony</strong><small>${this._escape(activeTemplate.title)}</small></span></div>
-            <section class="template-format-settings">
-              <div><strong>Otočení displeje</strong><small>Nastavte fyzickou orientaci celého displeje.</small></div>
-              <div class="template-settings-segments">
-                <button type="button" class="${orientation === "portrait" ? "is-active" : ""}" data-template-orientation="portrait"><ha-icon icon="mdi:phone-rotate-portrait"></ha-icon>Na výšku</button>
-                <button type="button" class="${orientation === "landscape" ? "is-active" : ""}" data-template-orientation="landscape"><ha-icon icon="mdi:phone-rotate-landscape"></ha-icon>Na šířku</button>
-              </div>
-              <div><strong>Formát vybrané šablony</strong><small>${selectedSlot === "secondary" ? "Nastavujete druhou šablonu." : "Nastavujete první šablonu."} Kliknutím na šablonu v náhledu změníte výběr.</small></div>
-              <div class="template-settings-segments">
-                <button type="button" class="${selectedFormat === "narrow" ? "is-active" : ""}" data-template-format="narrow"><ha-icon icon="mdi:rectangle-outline"></ha-icon>Úzký panel</button>
-                <button type="button" class="${selectedFormat === "wide" ? "is-active" : ""}" data-template-format="wide"><ha-icon icon="mdi:rectangle"></ha-icon>Široký panel</button>
-              </div>
-            </section>
-            <div class="template-editor-panel-heading template-layout-heading"><ha-icon icon="mdi:view-dashboard-outline"></ha-icon><span><strong>Rozložení displeje</strong><small>${largeDisplay ? "Velký displej podporuje až dvě šablony" : "Malý displej podporuje jednu šablonu"}</small></span></div>
-            <div class="template-layout-options">
-              <button type="button" class="${layout === "single" ? "is-active" : ""}" data-template-layout="single"><ha-icon icon="mdi:rectangle-outline"></ha-icon>Jedna šablona</button>
-              ${largeDisplay ? `<button type="button" class="${layout === "side-by-side" ? "is-active" : ""}" data-template-layout="side-by-side"><ha-icon icon="mdi:view-column-outline"></ha-icon>Dvě vedle sebe</button>
-              <button type="button" class="${layout === "stacked" ? "is-active" : ""}" data-template-layout="stacked"><ha-icon icon="mdi:view-agenda-outline"></ha-icon>Dvě nad sebou</button>` : ""}
+            <div class="template-editor-panel-heading template-layout-heading"><ha-icon icon="mdi:resize"></ha-icon><span><strong>Velikost šablony</strong><small>${selectedSlot === "secondary" ? "Nastavujete druhou šablonu" : "Nastavujete první šablonu"}</small></span></div>
+            <div class="template-layout-options template-size-options">
+              <button type="button" class="${selectedSize === "large" ? "is-active" : ""}" data-template-size="large" ${largeDisplay ? "" : "disabled"}><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon>Velká</button>
+              <button type="button" class="${selectedSize === "small" ? "is-active" : ""}" data-template-size="small" ${largeDisplay ? "" : "disabled"}><ha-icon icon="mdi:arrow-collapse-all"></ha-icon>Malá</button>
             </div>
-            ${largeDisplay && layout !== "single" ? `<label class="template-secondary-picker"><span>Druhá šablona</span><select data-template-secondary>${templates.map((item) => `<option value="${item.id}" ${item.id === secondaryTemplate.id ? "selected" : ""}>${this._escape(item.title)}</option>`).join("")}</select></label>` : ""}
+            <p class="template-size-help">${largeDisplay
+              ? selectedSize === "large"
+                ? "Velká šablona zabírá celý displej a uzamkne přidání druhé."
+                : layout === "single"
+                  ? "Místo pro druhou šablonu je odemčené. Přidejte ji v galerii šablon."
+                  : "Na displeji jsou dvě malé šablony. Kliknutím v náhledu vyberete tu, kterou upravujete."
+              : "Malý displej používá jednu šablonu přes celou plochu. Při otočení displeje se šablona otočí automaticky."}</p>
             <p class="template-settings-intro">Vyberte, ze kterých entit Home Assistantu se mají načítat hodnoty. Systémové údaje jsou nastavené automaticky.</p>
             <div class="template-variable-settings">${activeTemplate.variables.map((variable, index) => this._renderTemplateVariableSetting(activeTemplate, variable, index)).join("")}</div>
           </aside>
@@ -848,6 +885,7 @@ export const devicesMixin = {
         transform: this._displayTransform || "rotate_cw",
       });
       if (result?.ok === false) throw new Error(result.error || "Odeslání se nezdařilo.");
+      this._rememberSentDisplayPreview(device, image);
       this._templateSendResult = {
         ok: true,
         message: result?.queued || result?.queue_status === "queued"
@@ -864,9 +902,46 @@ export const devicesMixin = {
     }
   },
 
+  _rememberSentDisplayPreview(device, image) {
+    const address = String(device?.address || "").toUpperCase();
+    if (!address || !String(image || "").startsWith("data:image/")) return;
+    const base = this._baseDisplaySize(device);
+    const portrait = this._displayTemplateOrientation === "portrait";
+    const width = portrait ? Math.min(base.width, base.height) : Math.max(base.width, base.height);
+    const height = portrait ? Math.max(base.width, base.height) : Math.min(base.width, base.height);
+    const previous = this._deviceDrafts?.[address] || {};
+    this._deviceDrafts ||= {};
+    this._deviceDrafts[address] = {
+      ...previous,
+      width,
+      height,
+      orientation: portrait ? "portrait" : "landscape",
+      preview_image: image,
+      preview_updated_at: Date.now(),
+    };
+    this._devicePreviewImages?.delete(address);
+    this._devicePreviewRequests?.delete(address);
+    this._saveCachedDeviceDrafts?.();
+  },
+
+  async _captureCurrentDisplayTemplatePreview() {
+    const device = this._device();
+    const screen = this.shadowRoot.querySelector(".template-designer-screen");
+    if (!device || !screen) return false;
+    try {
+      const image = await this._rasterizeDisplayTemplatePreview(screen);
+      this._rememberSentDisplayPreview(device, image);
+      return true;
+    } catch (err) {
+      console.warn("DRATEK eInk template preview capture failed:", err);
+      return false;
+    }
+  },
+
   async _rasterizeDisplayTemplatePreview(screen) {
     const layout = screen.querySelector(".template-device-layout");
     if (!layout) throw new Error("Náhled displeje není dostupný.");
+    const sourceResponsivePreviews = [...layout.querySelectorAll("svg.template-responsive-preview")];
     const clone = layout.cloneNode(true);
     const sourceIcons = [...layout.querySelectorAll("ha-icon")];
     [...clone.querySelectorAll("ha-icon")].forEach((target, index) => {
@@ -886,50 +961,94 @@ export const devicesMixin = {
     });
     clone.querySelectorAll(".is-selected,.is-dragging").forEach((item) => item.classList.remove("is-selected", "is-dragging"));
     clone.querySelectorAll(".template-canvas-selection-label").forEach((item) => item.remove());
+    // The interactive preview uses an SVG foreignObject per template so it can
+    // scale responsively. Nesting those foreignObjects inside the export SVG
+    // makes Chromium mark the resulting bitmap as cross-origin. Flatten every
+    // template back to ordinary XHTML before creating the single export SVG.
+    clone.querySelectorAll("svg.template-responsive-preview").forEach((preview, index) => {
+      const body = preview.querySelector(".template-responsive-preview-body");
+      const sourcePreview = sourceResponsivePreviews[index];
+      if (!body) {
+        preview.remove();
+        return;
+      }
+      const viewBox = String(sourcePreview?.getAttribute("viewBox") || preview.getAttribute("viewBox") || "0 0 1 1")
+        .trim().split(/\s+/).map(Number);
+      const nativeWidth = Math.max(1, Number(viewBox[2]) || 1);
+      const nativeHeight = Math.max(1, Number(viewBox[3]) || 1);
+      const previewBounds = sourcePreview?.getBoundingClientRect();
+      const scaleX = Math.max(0.001, Number(previewBounds?.width || nativeWidth) / nativeWidth);
+      const scaleY = Math.max(0.001, Number(previewBounds?.height || nativeHeight) / nativeHeight);
+      const replacement = document.createElement("div");
+      replacement.className = "template-responsive-preview-body template-export-preview-body";
+      replacement.style.width = `${nativeWidth}px`;
+      replacement.style.height = `${nativeHeight}px`;
+      replacement.style.transform = `scale(${scaleX},${scaleY})`;
+      replacement.style.transformOrigin = "0 0";
+      replacement.style.overflow = "hidden";
+      replacement.innerHTML = body.innerHTML;
+      preview.replaceWith(replacement);
+    });
+    // Canvas becomes unreadable as soon as the SVG foreignObject resolves a
+    // font or image through an external URL. Keep the exported SVG completely
+    // self-contained: imported user images are already converted to data URLs.
+    clone.querySelectorAll("img").forEach((image) => {
+      const source = String(image.getAttribute("src") || "").trim();
+      if (!source.startsWith("data:image/")) image.remove();
+    });
+    clone.querySelectorAll("[style]").forEach((element) => {
+      const style = String(element.getAttribute("style") || "");
+      const safeStyle = style.replace(/url\((?!["']?data:)[^)]+\)/gi, "none");
+      if (safeStyle !== style) element.setAttribute("style", safeStyle);
+    });
     const bounds = screen.getBoundingClientRect();
     const orientation = this._displayTemplateOrientation === "portrait" ? "portrait" : "landscape";
     const base = this._baseDisplaySize(this._device());
     const width = orientation === "portrait" ? Math.min(base.width, base.height) : Math.max(base.width, base.height);
     const height = orientation === "portrait" ? Math.max(base.width, base.height) : Math.min(base.width, base.height);
-    const css = [...this.shadowRoot.querySelectorAll("style")].map((style) => style.textContent || "").join("\n");
+    const css = [...this.shadowRoot.querySelectorAll("style")]
+      .map((style) => style.textContent || "")
+      .join("\n")
+      .replace(/@font-face\s*\{[^}]*\}/gi, "")
+      .replace(/url\((?!["']?data:)[^)]+\)/gi, "none");
+    const exportCss = `${css}
+      .template-device-layout,
+      .template-device-layout * {
+        font-family: Arial, sans-serif !important;
+      }`;
     const markup = new XMLSerializer().serializeToString(clone);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.max(1, bounds.width)}" height="${Math.max(1, bounds.height)}" viewBox="0 0 ${Math.max(1, bounds.width)} ${Math.max(1, bounds.height)}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;overflow:hidden;background:#fff"><style>${css}</style>${markup}</div></foreignObject></svg>`;
-    const blobUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
-    try {
-      const bitmap = new Image();
-      await new Promise((resolve, reject) => {
-        bitmap.onload = resolve;
-        bitmap.onerror = () => reject(new Error("Náhled se nepodařilo převést na obrázek."));
-        bitmap.src = blobUrl;
-      });
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext("2d", { willReadFrequently: true });
-      context.fillStyle = "#fff";
-      context.fillRect(0, 0, width, height);
-      context.drawImage(bitmap, 0, 0, width, height);
-      const pixels = context.getImageData(0, 0, width, height);
-      for (let index = 0; index < pixels.data.length; index += 4) {
-        const red = pixels.data[index];
-        const green = pixels.data[index + 1];
-        const blue = pixels.data[index + 2];
-        const blackDistance = red * red + green * green + blue * blue;
-        const whiteDistance = (255 - red) ** 2 + (255 - green) ** 2 + (255 - blue) ** 2;
-        const redDistance = (227 - red) ** 2 + (27 - green) ** 2 + (27 - blue) ** 2;
-        const color = redDistance < blackDistance && redDistance < whiteDistance
-          ? [227, 27, 27]
-          : blackDistance < whiteDistance ? [0, 0, 0] : [255, 255, 255];
-        pixels.data[index] = color[0];
-        pixels.data[index + 1] = color[1];
-        pixels.data[index + 2] = color[2];
-        pixels.data[index + 3] = 255;
-      }
-      context.putImageData(pixels, 0, 0);
-      return canvas.toDataURL("image/png");
-    } finally {
-      URL.revokeObjectURL(blobUrl);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.max(1, bounds.width)}" height="${Math.max(1, bounds.height)}" viewBox="0 0 ${Math.max(1, bounds.width)} ${Math.max(1, bounds.height)}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;overflow:hidden;background:#fff"><style>${exportCss}</style>${markup}</div></foreignObject></svg>`;
+    const bitmap = new Image();
+    await new Promise((resolve, reject) => {
+      bitmap.onload = resolve;
+      bitmap.onerror = () => reject(new Error("Náhled se nepodařilo převést na obrázek."));
+      bitmap.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, width, height);
+    context.drawImage(bitmap, 0, 0, width, height);
+    const pixels = context.getImageData(0, 0, width, height);
+    for (let index = 0; index < pixels.data.length; index += 4) {
+      const red = pixels.data[index];
+      const green = pixels.data[index + 1];
+      const blue = pixels.data[index + 2];
+      const blackDistance = red * red + green * green + blue * blue;
+      const whiteDistance = (255 - red) ** 2 + (255 - green) ** 2 + (255 - blue) ** 2;
+      const redDistance = (227 - red) ** 2 + (27 - green) ** 2 + (27 - blue) ** 2;
+      const color = redDistance < blackDistance && redDistance < whiteDistance
+        ? [227, 27, 27]
+        : blackDistance < whiteDistance ? [0, 0, 0] : [255, 255, 255];
+      pixels.data[index] = color[0];
+      pixels.data[index + 1] = color[1];
+      pixels.data[index + 2] = color[2];
+      pixels.data[index + 3] = 255;
     }
+    context.putImageData(pixels, 0, 0);
+    return canvas.toDataURL("image/png");
   },
 
   _renderTemplatePhysicalDevicePreview(device, template, secondaryTemplate, orientation, layout) {
@@ -948,7 +1067,8 @@ export const devicesMixin = {
     const outerHeight = orientation === "portrait" ? frameWidth : frameHeight;
     const frameRadius = Math.max(4, Math.min(28, Math.round(Math.min(frameWidth, frameHeight) * 0.06)));
     const physicalCode = device.physical_code || "00.00.00.00";
-    return `<div class="template-physical-preview device-preview-wrap">
+    const previewZoom = Math.max(0.5, Math.min(1.8, Number(this._displayTemplatePreviewZoom || 1)));
+    return `<div class="template-physical-preview device-preview-wrap" style="--template-preview-zoom:${previewZoom}">
       <div class="device-preview-fit" style="--frame-ratio:${(outerWidth / outerHeight).toFixed(4)};--preview-width:${Math.min(620, Math.max(250, Math.round(470 * outerWidth / outerHeight)))}px">
         <svg class="device-preview-designer-svg" viewBox="0 0 ${outerWidth} ${outerHeight}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Náhled šablony v rámečku displeje">
           <foreignObject x="0" y="0" width="${outerWidth}" height="${outerHeight}">
@@ -956,8 +1076,8 @@ export const devicesMixin = {
               <div class="designer-device-bezel ${pe29Layout ? "designer-device-pe29" : ""} ${large400Layout ? "designer-device-large400" : ""} designer-device-landscape">${large400Layout ? `<span class="device-large400-top-band"></span><span class="device-large400-bottom-band"><span class="device-large400-label">${this._renderDeviceBarcode(address, true)}<span class="device-large400-mac">${this._escape(address)}</span></span></span>` : pe29Layout ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, false)}</span>` : `<span class="designer-device-code">${this._escape(physicalCode)}</span>`}</div>
               <div class="designer-device-screen template-designer-screen">
                 <div class="template-device-layout layout-${layout} ${large400Layout ? "is-large-display" : "is-small-display"}">
-                  ${this._renderDisplayTemplateSurface(template, this._displayTemplateFormats?.primary || "narrow", true, "primary", !large400Layout)}
-                  ${large400Layout && layout !== "single" ? this._renderDisplayTemplateSurface(secondaryTemplate, this._displayTemplateFormats?.secondary || "narrow", false, "secondary", false) : ""}
+                  ${this._renderDisplayTemplateSurface(template, large400Layout ? (this._displayTemplateFormats?.primary || "narrow") : (orientation === "landscape" ? "wide" : "narrow"), true, "primary", !large400Layout, large400Layout ? (this._displayTemplateSizes?.primary || "large") : "large")}
+                  ${large400Layout && layout !== "single" ? this._renderDisplayTemplateSurface(secondaryTemplate, this._displayTemplateFormats?.secondary || "narrow", false, "secondary", false, "small") : ""}
                 </div>
               </div>
             </div>
@@ -1041,6 +1161,38 @@ export const devicesMixin = {
       if (item.type === "line") return `<span class="template-overlay template-overlay-line" style="${style}"></span>`;
       return `<span class="template-overlay template-overlay-icon" style="${style}"><ha-icon icon="mdi:${item.icon || "star"}"></ha-icon></span>`;
     }).join("")}</div>`;
+  },
+
+  _templateDisplayValue(template, variableIndex, fallback = "") {
+    const variable = template?.variables?.[variableIndex];
+    if (!variable) return fallback;
+    const meta = this._templateVariableMeta(variable, variableIndex);
+    const binding = this._templateBinding(template, meta);
+    const normalized = String(meta.label || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    if (binding?.startsWith("internal:")) {
+      const now = new Date();
+      if (normalized.includes("datum")) {
+        return new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "long" }).format(now);
+      }
+      if (normalized.includes("cas") || normalized.includes("aktualizace")) {
+        return new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(now);
+      }
+      if (normalized.includes("interval")) {
+        const next = new Date(now.getTime() + 60 * 60 * 1000);
+        const format = (date) => new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(date);
+        return `${format(now)}–${format(next)}`;
+      }
+      return fallback;
+    }
+    const state = binding ? this._hass?.states?.[binding] : null;
+    const raw = state?.state;
+    if (raw === undefined || raw === null || ["", "unknown", "unavailable"].includes(String(raw).toLowerCase())) return fallback;
+    const unit = String(state?.attributes?.unit_of_measurement || "").trim();
+    const numeric = Number(raw);
+    const text = Number.isFinite(numeric)
+      ? new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 2 }).format(numeric)
+      : String(raw);
+    return unit && !String(text).toLowerCase().endsWith(unit.toLowerCase()) ? `${text} ${unit}` : text;
   },
 
   _templateSeries(template, variableIndex, fallback) {
@@ -1155,13 +1307,13 @@ export const devicesMixin = {
     const details = template.variables.slice(1, 4);
     return `<div class="tpl-wide tpl-wide-${template.id}">
       <header><span><ha-icon icon="mdi:${primary.icon}"></ha-icon></span><div><small>Šablona ${template.number}</small><strong>${this._escape(template.title)}</strong></div></header>
-      <section class="tpl-wide-main"><small>${this._escape(primary.label)}</small><strong>${this._escape(this._templateSampleValue(primary.label))}</strong></section>
-      <div class="tpl-wide-metrics">${details.map(([icon, label]) => `<span><ha-icon icon="mdi:${icon}"></ha-icon><small>${this._escape(label)}</small><strong>${this._escape(this._templateSampleValue(label))}</strong></span>`).join("")}</div>
+      <section class="tpl-wide-main"><small>${this._escape(primary.label)}</small><strong>${this._escape(this._templateDisplayValue(template, 0, this._templateSampleValue(primary.label)))}</strong></section>
+      <div class="tpl-wide-metrics">${details.map(([icon, label], index) => `<span><ha-icon icon="mdi:${icon}"></ha-icon><small>${this._escape(label)}</small><strong>${this._escape(this._templateDisplayValue(template, index + 1, this._templateSampleValue(label)))}</strong></span>`).join("")}</div>
       <footer><ha-icon icon="mdi:home-assistant"></ha-icon>Aktualizováno z Home Assistantu</footer>
     </div>`;
   },
 
-  _renderDisplayTemplateSurface(template, format, primary = false, slot = "primary", fillDisplay = false) {
+  _renderDisplayTemplateSurface(template, format, primary = false, slot = "primary", fillDisplay = false, templateSize = "small") {
     const orientation = format === "wide" ? "landscape" : "portrait";
     const preview = this._renderDisplayTemplatePreview(template);
     const orientedPreview = orientation === "landscape"
@@ -1174,7 +1326,7 @@ export const devicesMixin = {
     const placementY = fillDisplay ? Math.max(0, Math.min(4, Number(placement.y || 0))) : Number(placement.y || 0);
     const selected = this._selectedTemplateCanvasSlot === slot;
     return `<div class="template-display-slot" data-template-display-slot="${slot}">
-      <div class="display-template-surface template-canvas-item format-${format === "wide" ? "wide" : "narrow"} is-${orientation} ${selected ? "is-selected" : ""}" data-preview-template="${template.id}" data-template-canvas-slot="${slot}" tabindex="0" role="button" aria-label="Šablona ${this._escape(template.title)}. Kliknutím vyberte a tažením přesuňte." style="--template-item-x:${placementX}%;--template-item-y:${placementY}%">
+      <div class="display-template-surface template-canvas-item size-${templateSize === "large" ? "large" : "small"} format-${format === "wide" ? "wide" : "narrow"} is-${orientation} ${selected ? "is-selected" : ""}" data-preview-template="${template.id}" data-template-canvas-slot="${slot}" tabindex="0" role="button" aria-label="Šablona ${this._escape(template.title)}. Kliknutím vyberte a tažením přesuňte." style="--template-item-x:${placementX}%;--template-item-y:${placementY}%">
         <svg class="template-responsive-preview" viewBox="0 0 ${templateWidth} ${templateHeight}" preserveAspectRatio="${fillDisplay ? "none" : "xMidYMid meet"}" aria-hidden="true">
           <foreignObject x="0" y="0" width="${templateWidth}" height="${templateHeight}">
             <div xmlns="http://www.w3.org/1999/xhtml" class="template-responsive-preview-body">${orientedPreview}</div>

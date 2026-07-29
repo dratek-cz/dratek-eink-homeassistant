@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.133
+
+- Nové nastavení displeje se šablonami, vyhledáváním, kategoriemi a napojením proměnných z Home Assistantu.
+- Designer podporuje orientaci, přiblížení, velikost a přesouvání šablon včetně rozložení jedné nebo dvou šablon.
+- Opraveno odesílání náhledu do displeje, tříbarevný převod a zpracování obrázků bez chyby CORS canvasu.
+- Náhled na hlavní stránce se po odeslání aktualizuje podle skutečného rozložení a velikosti v designeru.
+- Editor má stabilní výšku a samostatně posuvný panel nastavení.
+
 ## Novinky ve verzi 0.1.132
 
 - opraveno publikování aktualizací pro HACS

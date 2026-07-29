@@ -157,6 +157,9 @@ export const inspectorMixin = {
     this.shadowRoot.querySelectorAll("[data-gateway-name-cancel]").forEach((button) => button.addEventListener("click", () => { this._editingGatewayId = ""; this._render(); this._paint(); }));
     this.shadowRoot.querySelectorAll("[data-language]").forEach((button) => button.addEventListener("click", () => this._setUiLanguage(button.dataset.language)));
     this.shadowRoot.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", async () => {
+      if (this._activeTab === "display-settings" && this._displaySettingsView === "designer") {
+        await this._captureCurrentDisplayTemplatePreview();
+      }
       this._activeTab = button.dataset.tab;
       window.clearTimeout(this._queuePollTimer);
       this._render();
@@ -252,9 +255,12 @@ export const inspectorMixin = {
         openDisplaySettings(card.dataset.deviceCardSettings);
       });
     });
-    this.shadowRoot.querySelectorAll("[data-display-settings-section]").forEach((button) => button.addEventListener("click", () => {
+    this.shadowRoot.querySelectorAll("[data-display-settings-section]").forEach((button) => button.addEventListener("click", async () => {
       const section = button.dataset.displaySettingsSection;
       if (!["templates", "custom"].includes(section)) return;
+      if (section === "templates" && this._displaySettingsView === "designer") {
+        await this._captureCurrentDisplayTemplatePreview();
+      }
       if (section === "templates") {
         this._displaySettingsView = "templates";
       } else {
@@ -283,15 +289,32 @@ export const inspectorMixin = {
     }));
     const openDisplayTemplate = (templateId, replaceIndex = null) => {
       const device = this._device();
+      const previousAssigned = this._assignedDisplayTemplates(device);
       const assigned = this._assignDisplayTemplate(device, templateId, replaceIndex);
       const size = this._devicePreviewSize(device);
       const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
+      this._displayTemplateSizes ||= { primary: "large", secondary: "small" };
+      if (!largeDisplay) {
+        this._displayTemplateSizes.primary = "large";
+        this._displayTemplateSizes.secondary = "small";
+      } else if (assigned.length > 1) {
+        this._displayTemplateSizes.primary = "small";
+        this._displayTemplateSizes.secondary = "small";
+      } else if (!previousAssigned.length || Number.isInteger(replaceIndex)) {
+        this._displayTemplateSizes.primary = "large";
+        this._displayTemplateSizes.secondary = "small";
+      }
       this._selectedDisplayTemplateId = assigned[0] || templateId;
       this._selectedDisplayTemplateSecondaryId = assigned[1] || "";
-      this._displayTemplateOrientation = "portrait";
       this._displayTemplateLargeLayout = largeDisplay && assigned.length > 1 ? "side-by-side" : "single";
       this._templateOrientationMenuOpen = false;
       this._selectedTemplateCanvasSlot = assigned.indexOf(templateId) === 1 ? "secondary" : "primary";
+      if (!largeDisplay) {
+        const format = this._displayTemplateOrientation === "landscape" ? "wide" : "narrow";
+        this._displayTemplateFormats.primary = format;
+        this._displayTemplateFormats.secondary = format;
+      }
+      this._pendingDisplayTemplateConflict = null;
       this._displayDesignerReturnView = "templates";
       this._displaySettingsView = "designer";
       this._render();
@@ -299,16 +322,67 @@ export const inspectorMixin = {
       this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
     };
     this.shadowRoot.querySelectorAll("[data-display-template-open]").forEach((button) => button.addEventListener("click", () => {
-      openDisplayTemplate(button.dataset.displayTemplateOpen || "");
+      const templateId = button.dataset.displayTemplateOpen || "";
+      const device = this._device();
+      const size = this._devicePreviewSize(device);
+      const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
+      const assigned = this._assignedDisplayTemplates(device);
+      const primaryIsLarge = this._displayTemplateSizes?.primary !== "small";
+      if (largeDisplay && assigned.length === 1 && primaryIsLarge && !assigned.includes(templateId)) {
+        this._pendingDisplayTemplateConflict = { templateId };
+        this._render();
+        this._paint();
+        return;
+      }
+      openDisplayTemplate(templateId);
     }));
     this.shadowRoot.querySelectorAll("[data-display-template-replace]").forEach((button) => button.addEventListener("click", () => {
       const card = button.closest(".display-template-card-replace");
       const target = Number(card?.querySelector("[data-template-replace-target]")?.value);
       openDisplayTemplate(button.dataset.displayTemplateReplace || "", Number.isInteger(target) ? target : 0);
     }));
+    this.shadowRoot.querySelectorAll("[data-template-conflict-action]").forEach((button) => button.addEventListener("click", () => {
+      const pendingTemplateId = this._pendingDisplayTemplateConflict?.templateId || "";
+      const action = button.dataset.templateConflictAction;
+      if (!pendingTemplateId || action === "cancel") {
+        this._pendingDisplayTemplateConflict = null;
+        this._render();
+        this._paint();
+        return;
+      }
+      this._displayTemplateSizes ||= { primary: "large", secondary: "small" };
+      if (action === "shrink") {
+        this._displayTemplateSizes.primary = "small";
+        this._displayTemplateSizes.secondary = "small";
+        openDisplayTemplate(pendingTemplateId);
+        return;
+      }
+      if (action === "replace") {
+        this._displayTemplateSizes.primary = "large";
+        this._displayTemplateSizes.secondary = "small";
+        openDisplayTemplate(pendingTemplateId, 0);
+      }
+    }));
     this.shadowRoot.querySelectorAll("[data-template-orientation]").forEach((button) => button.addEventListener("click", () => {
       this._displayTemplateOrientation = button.dataset.templateOrientation === "landscape" ? "landscape" : "portrait";
+      const device = this._device();
+      const size = this._devicePreviewSize(device);
+      const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
+      if (!largeDisplay) {
+        const format = this._displayTemplateOrientation === "landscape" ? "wide" : "narrow";
+        this._displayTemplateFormats.primary = format;
+        this._displayTemplateFormats.secondary = format;
+      }
       this._templateOrientationMenuOpen = false;
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelectorAll("[data-template-preview-zoom]").forEach((button) => button.addEventListener("click", () => {
+      const action = button.dataset.templatePreviewZoom;
+      const current = Math.max(0.5, Math.min(1.8, Number(this._displayTemplatePreviewZoom || 1)));
+      this._displayTemplatePreviewZoom = action === "reset"
+        ? 1
+        : Math.max(0.5, Math.min(1.8, Math.round((current + (action === "in" ? 0.1 : -0.1)) * 10) / 10));
       this._render();
       this._paint();
     }));
@@ -331,6 +405,9 @@ export const inspectorMixin = {
         const itemBounds = item.getBoundingClientRect();
         if (!bounds?.width || !bounds?.height) return;
         this._selectedTemplateCanvasSlot = slot;
+        this.shadowRoot.querySelectorAll("[data-template-canvas-slot].is-selected").forEach((selectedItem) => {
+          if (selectedItem !== item) selectedItem.classList.remove("is-selected");
+        });
         const placement = this._templateCanvasPlacements?.[slot] || { x: 9, y: 9 };
         this._templateCanvasDrag = {
           slot,
@@ -367,42 +444,49 @@ export const inspectorMixin = {
       item.addEventListener("pointerup", finishTemplateDrag);
       item.addEventListener("pointercancel", finishTemplateDrag);
     });
-    this.shadowRoot.querySelectorAll("[data-template-layout]").forEach((button) => button.addEventListener("click", () => {
-      this._displayTemplateLargeLayout = button.dataset.templateLayout || "single";
-      const address = String(this._device()?.address || "").toUpperCase();
-      if (address) {
-        const ids = this._displayTemplateLargeLayout === "single"
-          ? [this._selectedDisplayTemplateId]
-          : [this._selectedDisplayTemplateId, this._selectedDisplayTemplateSecondaryId].filter(Boolean);
-        this._displayTemplateAssignments[address] = [...new Set(ids)].slice(0, 2);
+    this.shadowRoot.querySelectorAll("[data-template-size]").forEach((button) => button.addEventListener("click", () => {
+      const device = this._device();
+      const size = this._devicePreviewSize(device);
+      const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
+      if (!largeDisplay) return;
+      const slot = this._selectedTemplateCanvasSlot === "secondary" && this._displayTemplateLargeLayout !== "single"
+        ? "secondary"
+        : "primary";
+      const templateSize = button.dataset.templateSize === "small" ? "small" : "large";
+      this._displayTemplateSizes ||= { primary: "large", secondary: "small" };
+      const address = String(device?.address || "").toUpperCase();
+      if (templateSize === "large") {
+        const activeTemplateId = slot === "secondary"
+          ? this._selectedDisplayTemplateSecondaryId
+          : this._selectedDisplayTemplateId;
+        this._selectedDisplayTemplateId = activeTemplateId || this._selectedDisplayTemplateId;
+        this._selectedDisplayTemplateSecondaryId = "";
+        this._selectedTemplateCanvasSlot = "primary";
+        this._displayTemplateSizes.primary = "large";
+        this._displayTemplateSizes.secondary = "small";
+        this._displayTemplateLargeLayout = "single";
+        const format = this._displayTemplateFormats.primary === "wide" ? "wide" : "narrow";
+        this._templateCanvasPlacements.primary = format === "wide" ? { x: 3, y: 6 } : { x: 14, y: 3 };
+        if (address) this._displayTemplateAssignments[address] = [this._selectedDisplayTemplateId].filter(Boolean);
+      } else {
+        this._displayTemplateSizes[slot] = "small";
+        const format = this._displayTemplateFormats?.[slot] === "wide" ? "wide" : "narrow";
+        const placement = this._templateCanvasPlacements?.[slot] || { x: 9, y: 9 };
+        const width = format === "wide" ? 82 : 46;
+        const height = format === "wide" ? 46 : 82;
+        this._templateCanvasPlacements[slot] = {
+          x: Math.max(0, Math.min(100 - width, Number(placement.x || 0))),
+          y: Math.max(0, Math.min(100 - height, Number(placement.y || 0))),
+        };
+        if (this._selectedDisplayTemplateSecondaryId) {
+          this._displayTemplateSizes.primary = "small";
+          this._displayTemplateSizes.secondary = "small";
+          this._displayTemplateLargeLayout = "side-by-side";
+        }
       }
       this._render();
       this._paint();
     }));
-    this.shadowRoot.querySelectorAll("[data-template-format]").forEach((button) => button.addEventListener("click", () => {
-      const slot = this._selectedTemplateCanvasSlot === "secondary" && this._displayTemplateLargeLayout !== "single"
-        ? "secondary"
-        : "primary";
-      const format = button.dataset.templateFormat === "wide" ? "wide" : "narrow";
-      this._displayTemplateFormats ||= {};
-      this._displayTemplateFormats[slot] = format;
-      const placement = this._templateCanvasPlacements?.[slot] || { x: 9, y: 9 };
-      const width = format === "wide" ? 82 : 46;
-      const height = format === "wide" ? 46 : 82;
-      this._templateCanvasPlacements[slot] = {
-        x: Math.max(0, Math.min(100 - width, Number(placement.x || 0))),
-        y: Math.max(0, Math.min(100 - height, Number(placement.y || 0))),
-      };
-      this._render();
-      this._paint();
-    }));
-    this.shadowRoot.querySelector("[data-template-secondary]")?.addEventListener("change", (event) => {
-      this._selectedDisplayTemplateSecondaryId = event.target.value || "";
-      const address = String(this._device()?.address || "").toUpperCase();
-      if (address) this._displayTemplateAssignments[address] = [...new Set([this._selectedDisplayTemplateId, this._selectedDisplayTemplateSecondaryId].filter(Boolean))].slice(0, 2);
-      this._render();
-      this._paint();
-    });
     this.shadowRoot.querySelectorAll("[data-template-entity-picker]").forEach((picker) => {
       const bindingKey = picker.dataset.templateEntityPicker;
       picker.hass = this._hass;
@@ -433,7 +517,10 @@ export const inspectorMixin = {
       this._paint();
     }));
     this.shadowRoot.querySelector("[data-template-send]")?.addEventListener("click", () => this._sendDisplayTemplatePreview());
-    this.shadowRoot.querySelector("#displaySettingsBack")?.addEventListener("click", () => {
+    this.shadowRoot.querySelector("#displaySettingsBack")?.addEventListener("click", async () => {
+      if (this._displaySettingsView === "designer") {
+        await this._captureCurrentDisplayTemplatePreview();
+      }
       this._displaySettingsView = "overview";
       this._activeTab = "devices";
       this._render();

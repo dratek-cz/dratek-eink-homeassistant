@@ -102,6 +102,7 @@ export const previewMixin = {
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.imageSmoothingEnabled = false;
+        if (this._paintStoredDevicePreview(canvas, address, draft)) return;
         if (!draft) {
           ctx.fillStyle = "#fff";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -139,6 +140,39 @@ export const previewMixin = {
       this._invertColors = previous.invertColors;
     }
     canonicalRequests.forEach((request) => this._requestCanonicalDevicePreview(request));
+  },
+
+  _paintStoredDevicePreview(canvas, address, draft) {
+    const source = String(draft?.preview_image || "");
+    if (!source.startsWith("data:image/")) return false;
+    const key = `sent:${Number(draft?.preview_updated_at || 0)}:${source.length}:${this._hash(source)}`;
+    const cached = this._devicePreviewImages.get(address);
+    const draw = (target, image) => {
+      const context = target.getContext("2d", { willReadFrequently: true });
+      context.clearRect(0, 0, target.width, target.height);
+      context.imageSmoothingEnabled = false;
+      context.drawImage(image, 0, 0, target.width, target.height);
+    };
+    if (cached?.key === key && cached.image?.complete) {
+      draw(canvas, cached.image);
+      return true;
+    }
+    if (this._devicePreviewRequests.get(address) === key) return true;
+    this._devicePreviewRequests.set(address, key);
+    const image = new Image();
+    image.onload = () => {
+      if (this._devicePreviewRequests.get(address) !== key) return;
+      this._devicePreviewImages.set(address, { key, image });
+      this._devicePreviewRequests.delete(address);
+      const currentCanvas = [...this.shadowRoot.querySelectorAll("canvas[data-device-preview]")]
+        .find((item) => String(item.dataset.devicePreview || "").toUpperCase() === address);
+      if (currentCanvas) draw(currentCanvas, image);
+    };
+    image.onerror = () => {
+      if (this._devicePreviewRequests.get(address) === key) this._devicePreviewRequests.delete(address);
+    };
+    image.src = source;
+    return true;
   },
 
   async _requestCanonicalDevicePreview({ address, automation, key }) {

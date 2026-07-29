@@ -52,10 +52,11 @@ export const projectsMixin = {
     this._loadingDraft = true;
     try {
       const result = await this._hass.callWS({ type: "dratek_eink/device_drafts/load", address });
-      this._deviceDrafts[String(address).toUpperCase()] = result.draft || null;
+      const normalizedAddress = String(address).toUpperCase();
+      this._deviceDrafts[normalizedAddress] = this._mergeDraftWithSentPreview(normalizedAddress, result.draft || null);
       this._saveCachedDeviceDrafts();
       this._applyDraft(result.draft || null);
-      this._loadedDraftAddress = String(address).toUpperCase();
+      this._loadedDraftAddress = normalizedAddress;
     } catch (err) {
       // Do NOT clear the canvas here. _applyDraft(null) would blank it, and the
       // next edit would then autosave that blank over the stored design - one
@@ -78,7 +79,10 @@ export const projectsMixin = {
     this._deviceDraftsLoading = true;
     try {
       const result = await this._hass.callWS({ type: "dratek_eink/device_drafts/list" });
-      this._deviceDrafts = { ...this._deviceDrafts, ...(result.drafts || {}) };
+      for (const [address, draft] of Object.entries(result.drafts || {})) {
+        const normalizedAddress = String(address).toUpperCase();
+        this._deviceDrafts[normalizedAddress] = this._mergeDraftWithSentPreview(normalizedAddress, draft);
+      }
     } catch (_bulkError) {
       const entries = await Promise.all(devices.map(async (device) => {
         const address = String(device.address || "").toUpperCase();
@@ -90,11 +94,26 @@ export const projectsMixin = {
           return null;
         }
       }));
-      for (const entry of entries.filter(Boolean)) this._deviceDrafts[entry[0]] = entry[1];
+      for (const entry of entries.filter(Boolean)) {
+        this._deviceDrafts[entry[0]] = this._mergeDraftWithSentPreview(entry[0], entry[1]);
+      }
     } finally {
       this._deviceDraftsLoading = false;
       this._saveCachedDeviceDrafts();
     }
+  },
+
+  _mergeDraftWithSentPreview(address, draft) {
+    const local = this._deviceDrafts?.[String(address || "").toUpperCase()];
+    if (!local?.preview_image) return draft || null;
+    return {
+      ...(draft || {}),
+      width: local.width,
+      height: local.height,
+      orientation: local.orientation,
+      preview_image: local.preview_image,
+      preview_updated_at: local.preview_updated_at,
+    };
   },
 
   /**

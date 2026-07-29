@@ -2,6 +2,19 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.133] - 2026-07-29
+
+### Přidáno
+- Nastavení displeje s katalogem šablon, kategoriemi, vyhledáváním a výběrem proměnných Home Assistantu.
+- Ovládání orientace, zoomu, velikosti a pozice šablon v designeru.
+- Podpora jedné velké nebo dvou malých šablon na kompatibilních displejích.
+
+### Opraveno
+- Export plátna a odesílání do displeje bez chyby cross-origin `getImageData`.
+- Aktualizace náhledu displeje na hlavní stránce podle výsledku z designeru.
+- Rozměry, rozložení a škálování šablon v náhledech různě velkých displejů.
+- Výška editoru a rolování pravého panelu nastavení.
+
 ## [0.1.132] - 2026-07-29
 
 ### Publikování pro HACS

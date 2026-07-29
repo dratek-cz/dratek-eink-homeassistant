@@ -52,8 +52,14 @@ class DratekEinkPanel extends HTMLElement {
       primary: "narrow",
       secondary: "narrow",
     };
+    this._displayTemplateSizes = {
+      primary: "large",
+      secondary: "small",
+    };
+    this._displayTemplatePreviewZoom = 1;
     this._templateCanvasDrag = null;
     this._displayTemplateAssignments = {};
+    this._pendingDisplayTemplateConflict = null;
     this._templateSending = false;
     this._templateSendResult = null;
     this._displayDesignerReturnView = "overview";
