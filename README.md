@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.138
+
+- opravena verze zobrazená v hlavičce panelu, která zůstávala natvrdo na 0.1.134 – číslo verze bylo zdvojené na čtyřech místech a tři z nich se při minulých vydáních neaktualizovaly
+
 ## Novinky ve verzi 0.1.137
 
 - opraven export šablony do obrázku odesílaného na displej – dřív se v exportu neuplatnilo správné rozvržení a použil se nesouvisející styl se stejným názvem třídy, takže odeslaný obrázek vůbec neodpovídal náhledu

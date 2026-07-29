@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.138] - 2026-07-29
+
+### Opraveno
+- Zobrazená verze v hlavičce panelu (`version-badge`), cache busting frontendových assetů a přehledové karty zůstávaly natvrdo na 0.1.134, přestože `manifest.json` už byl na novější verzi. Číslo verze bylo zdvojené na čtyřech místech (`manifest.json`, `const.py: PANEL_VERSION`, `panel-constants.js: DRATEK_EINK_VERSION`, `dratek-eink-overview-card.js`) a poslední tři se při vydávání verzí 0.1.135–0.1.137 neaktualizovaly. Nově jsou všechny sladěné.
+
 ## [0.1.137] - 2026-07-29
 
 ### Opraveno
