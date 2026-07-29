@@ -52,10 +52,15 @@
           // "wait for icons before exporting" logic gets exercised for real
           // instead of racing against an instantly-available mock.
           this._shadow.innerHTML = "";
-          setTimeout(() => {
+          const attempt = (tries) => {
             if (String(this.getAttribute("icon") || "").replace(/^mdi:/, "") !== icon) return;
-            this._shadow.innerHTML = `<span class="mdi mdi-${icon}"></span><svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M4 4h16v16H4z"></path></svg>`;
-          }, 60);
+            const codepoints = window.__mdiCodepoints;
+            if (!codepoints && tries < 20) { setTimeout(() => attempt(tries + 1), 50); return; }
+            const codepoint = codepoints?.[icon];
+            const glyph = codepoint ? String.fromCodePoint(codepoint) : "?";
+            this._shadow.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24"><text x="12" y="13" text-anchor="middle" dominant-baseline="central" font-family="Material Design Icons" font-size="21" fill="currentColor">${glyph}</text></svg>`;
+          };
+          setTimeout(() => attempt(0), 60);
         }
       });
     }
@@ -205,6 +210,13 @@
     await mdiFont.load();
     document.fonts.add(mdiFont);
     const mdiCssText = await (await fetch("/tests/vendor/mdi/materialdesignicons.min.css")).text();
+    // Extract icon-name -> unicode codepoint map from the webfont CSS so the
+    // ha-icon mock below can render a real glyph via <text> instead of a
+    // placeholder shape, without needing a separate SVG path dataset.
+    window.__mdiCodepoints = {};
+    mdiCssText.replace(/\.mdi-([a-z0-9-]+)::?before\{content:"\\([0-9a-fA-F]+)"/g, (_, name, hex) => {
+      window.__mdiCodepoints[name] = parseInt(hex, 16);
+    });
     const mdiSheet = new CSSStyleSheet();
     await mdiSheet.replace(mdiCssText + "\nha-icon .mdi{font-size:1.35em;line-height:1;display:inline-block;}");
     panel.shadowRoot.adoptedStyleSheets = [...panel.shadowRoot.adoptedStyleSheets, mdiSheet];

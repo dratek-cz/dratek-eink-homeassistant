@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.143
+
+- opravena skutečná příčina chybějících ikon v odeslaném obrázku – ikona `ha-icon` v Home Assistantu vykresluje SVG přes vnořený prvek s vlastním shadow rootem, což export dřív vůbec nedokázal najít; export teď prochází libovolně vnořené shadow roots
+
 ## Novinky ve verzi 0.1.142
 
 - prodlouženo čekání na dokreslení ikon před exportem obrázku (ze 150 ms na až 3 sekundy) – ikony se předtím do odeslaného obrázku i do nového 1:1 náhledu téměř nikdy nestihly zahrnout

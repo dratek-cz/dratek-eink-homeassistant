@@ -978,6 +978,27 @@ export const devicesMixin = {
     }
   },
 
+  // Home Assistant's real ha-icon renders its glyph through a nested
+  // ha-svg-icon child that has its own separate shadow root, so the actual
+  // <svg> can sit two (or more) shadow boundaries deep. shadowRoot.querySelector
+  // never pierces into a further-nested shadow root, so walk the tree and
+  // enter every shadow root we find until an <svg> turns up.
+  _findSvgDeep(root) {
+    if (!root) return null;
+    const direct = root.querySelector("svg");
+    if (direct) return direct;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    let node = walker.nextNode();
+    while (node) {
+      if (node.shadowRoot) {
+        const found = this._findSvgDeep(node.shadowRoot);
+        if (found) return found;
+      }
+      node = walker.nextNode();
+    }
+    return null;
+  },
+
   async _rasterizeDisplayTemplatePreview(screen) {
     const layout = screen.querySelector(".template-device-layout");
     if (!layout) throw new Error("Náhled displeje není dostupný.");
@@ -985,7 +1006,7 @@ export const devicesMixin = {
     // asynchronously; give any that were just added a moment to finish so
     // the export doesn't have to fall back to leaving them empty.
     for (let attempt = 0; attempt < 40; attempt++) {
-      const pending = [...layout.querySelectorAll("ha-icon")].some((el) => !el.shadowRoot?.querySelector("svg"));
+      const pending = [...layout.querySelectorAll("ha-icon")].some((el) => !this._findSvgDeep(el.shadowRoot));
       if (!pending) break;
       await new Promise((resolve) => setTimeout(resolve, 75));
     }
@@ -994,7 +1015,7 @@ export const devicesMixin = {
     const sourceIcons = [...layout.querySelectorAll("ha-icon")];
     [...clone.querySelectorAll("ha-icon")].forEach((target, index) => {
       const source = sourceIcons[index];
-      const sourceSvg = source?.shadowRoot?.querySelector("svg");
+      const sourceSvg = this._findSvgDeep(source?.shadowRoot);
       if (!sourceSvg) {
         // Leave the (empty) element in place instead of removing it: templates
         // lay out their children with CSS grid in DOM order, so deleting an

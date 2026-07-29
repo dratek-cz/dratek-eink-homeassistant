@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.143] - 2026-07-29
+
+### Opraveno
+- **Skutečná příčina chybějících ikon v odeslaném obrázku.** Home Assistant vykresluje ikonu `ha-icon` přes vnořený prvek `ha-svg-icon`, který má vlastní, samostatný shadow root – skutečné `<svg>` je tak o úroveň hlouběji, než kam `shadowRoot.querySelector("svg")` dosáhne. Export proto ikonu nikdy nenašel, bez ohledu na to, jak dlouho se čekalo (oprava délky čekání v 0.1.142 tohle sama o sobě nemohla vyřešit). Export teď prochází libovolně vnořené shadow roots, dokud `<svg>` nenajde.
+
 ## [0.1.142] - 2026-07-29
 
 ### Opraveno
