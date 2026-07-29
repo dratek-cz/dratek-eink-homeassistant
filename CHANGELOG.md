@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.137] - 2026-07-29
+
+### Opraveno
+- Obrázek odeslaný do displeje neodpovídal náhledu – export šablony do PNG klonoval jen vnitřní vrstvu bez rodičovského elementu `.template-designer-screen`, takže se v exportu neuplatnilo správné rozvržení a místo něj se použil nesouvisející styl se stejným názvem třídy z katalogového dialogu. Vzhled obrázku odeslaného do displeje teď odpovídá náhledu.
+
 ## [0.1.136] - 2026-07-29
 
 ### Opraveno

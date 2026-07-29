@@ -1056,7 +1056,16 @@ export const devicesMixin = {
       .template-device-layout * {
         font-family: Arial, sans-serif !important;
       }`;
-    const markup = new XMLSerializer().serializeToString(clone);
+    // Cloning only .template-device-layout drops its .template-designer-screen
+    // parent, so every ".template-designer-screen .display-template-surface"
+    // rule (including sizing/positioning) fails to match in the exported markup
+    // and an unrelated same-named class from the catalog dialog wins instead.
+    // Re-wrap the clone so the scoped selectors still apply.
+    const screenWrapper = document.createElement("div");
+    screenWrapper.className = "template-designer-screen";
+    screenWrapper.style.cssText = "width:100%;height:100%";
+    screenWrapper.appendChild(clone);
+    const markup = new XMLSerializer().serializeToString(screenWrapper);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.max(1, bounds.width)}" height="${Math.max(1, bounds.height)}" viewBox="0 0 ${Math.max(1, bounds.width)} ${Math.max(1, bounds.height)}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;overflow:hidden;background:#fff"><style>${exportCss}</style>${markup}</div></foreignObject></svg>`;
     const bitmap = new Image();
     await new Promise((resolve, reject) => {

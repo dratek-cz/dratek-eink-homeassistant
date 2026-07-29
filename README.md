@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.137
+
+- opraven export šablony do obrázku odesílaného na displej – dřív se v exportu neuplatnilo správné rozvržení a použil se nesouvisející styl se stejným názvem třídy, takže odeslaný obrázek vůbec neodpovídal náhledu
+
 ## Novinky ve verzi 0.1.136
 
 - opraveno tlačítko **Odeslat do displeje**, které hlásilo „Unknown command“ a nikdy neodeslalo návrh – chyběla registrace příkazu při startu integrace
