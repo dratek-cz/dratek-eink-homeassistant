@@ -4,6 +4,15 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.135
+
+- šablona v ploše pro šablony se automaticky vyplní na celou plochu displeje nebo celou polovinu u velkého displeje, bez ručního posouvání a bez chybějících pixelů po okrajích
+- formát šablony (na výšku/na šířku) se nastavuje automaticky podle skutečného tvaru zobrazovací plochy
+- při přetahování šablony na velký displej se podle pozice kurzoru oranžově zvýrazní cílová polovina a šablona se umístí přesně tam, kam byla puštěna
+- zjednodušený informační blok aktuálního displeje na dva řádky se stejnými ikonami baterie a signálu jako na hlavní stránce
+- zvětšené náhledy displejů na hlavní stránce pro lepší čitelnost obsahu
+- náhled displeje v nastavení šablon nyní vždy odpovídá tvarem rámečku náhledu na hlavní stránce
+
 ## Novinky ve verzi 0.1.134
 
 - Katalog šablon má nové karty ve stylu karet displejů a podporuje přetažení šablony přímo na displej.
