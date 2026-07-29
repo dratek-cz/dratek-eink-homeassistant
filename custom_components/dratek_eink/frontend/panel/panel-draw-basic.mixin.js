@@ -44,6 +44,130 @@ export const drawBasicMixin = {
     return { minVal, maxVal, val };
   },
 
+  _customConditionMatches(value, operator, target) {
+    const current = String(value ?? "").trim().toLowerCase();
+    const expected = String(target ?? "").trim().toLowerCase();
+    const onValues = new Set(["on", "true", "1", "open", "home", "active", "heat", "heating", "playing", "unlocked"]);
+    const offValues = new Set(["off", "false", "0", "closed", "not_home", "idle", "unavailable", "unknown", "locked"]);
+    if (operator === "is_on") return onValues.has(current);
+    if (operator === "is_off") return offValues.has(current);
+    if (operator === "contains") return current.includes(expected);
+    if (operator === "time_between") {
+      const toMinutes = (input) => {
+        const match = String(input || "").match(/(?:^|[T\s])(\d{1,2}):(\d{2})(?::\d{2})?/);
+        if (!match) return null;
+        const hours = Number(match[1]);
+        const minutes = Number(match[2]);
+        return hours >= 0 && hours < 24 && minutes >= 0 && minutes < 60 ? hours * 60 + minutes : null;
+      };
+      const [startText, endText] = String(target || "").split("|");
+      const currentMinutes = toMinutes(current);
+      const startMinutes = toMinutes(startText);
+      const endMinutes = toMinutes(endText);
+      if (currentMinutes === null || startMinutes === null || endMinutes === null || startMinutes === endMinutes) return false;
+      return startMinutes < endMinutes
+        ? currentMinutes >= startMinutes && currentMinutes < endMinutes
+        : currentMinutes >= startMinutes || currentMinutes < endMinutes;
+    }
+    if (["greater", "greater_equal", "less", "less_equal"].includes(operator)) {
+      const currentNumber = Number(value);
+      const targetNumber = Number(target);
+      if (!Number.isFinite(currentNumber) || !Number.isFinite(targetNumber)) return false;
+      return operator === "greater"
+        ? currentNumber > targetNumber
+        : operator === "greater_equal"
+          ? currentNumber >= targetNumber
+          : operator === "less"
+            ? currentNumber < targetNumber
+            : currentNumber <= targetNumber;
+    }
+    const equal = current === expected;
+    return operator === "not_equals" ? !equal : equal;
+  },
+
+  _drawEmbeddedLayer(ctx, layer, width, height, sourceWidth, sourceHeight) {
+    const scaleX = width / Math.max(1, sourceWidth);
+    const scaleY = height / Math.max(1, sourceHeight);
+    ctx.save();
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.scale(scaleX, scaleY);
+    for (const object of layer?.objects || []) {
+      const x = Number(object.x || 0);
+      const y = Number(object.y || 0);
+      const w = Math.max(1, Number(object.w || 1));
+      const h = Math.max(1, Number(object.h || 1));
+      ctx.save();
+      if (object.rotation) {
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        ctx.translate(cx, cy);
+        ctx.rotate((Number(object.rotation) * Math.PI) / 180);
+        ctx.translate(-cx, -cy);
+      }
+      if (object.type === "rect") {
+        if (object.fill && object.fill !== "none") {
+          ctx.fillStyle = this._color(object.fill);
+          ctx.fillRect(x, y, w, h);
+        }
+        if (object.stroke && object.stroke !== "none") {
+          ctx.strokeStyle = this._color(object.stroke);
+          ctx.lineWidth = Math.max(1, Number(object.stroke_width || 2));
+          ctx.strokeRect(x, y, w, h);
+        }
+      } else if (object.type === "line") {
+        ctx.strokeStyle = this._color(object.color || "black");
+        ctx.lineWidth = Math.max(1, Number(object.stroke_width || 2));
+        ctx.beginPath();
+        ctx.moveTo(x, y + h / 2);
+        ctx.lineTo(x + w, y + h / 2);
+        ctx.stroke();
+      } else if (object.type === "barcode" || object.type === "qr") {
+        ctx.save();
+        ctx.translate(x, y);
+        if (object.type === "barcode") this._drawBarcode(ctx, object, { w, h });
+        else this._drawQr(ctx, object, { w, h });
+        ctx.restore();
+      } else if (object.type === "bar_gauge") {
+        this._drawBarGauge(ctx, object, x, y, w, h);
+      } else if (object.type === "pie") {
+        this._drawPieChart(ctx, object, x, y, w, h);
+      } else if (object.type === "slider") {
+        this._drawSliderWidget(ctx, object, x, y, w, h);
+      } else if (object.type === "potentiometer" || object.type === "gauge") {
+        this._drawPotentiometerWidget(ctx, object, x, y, w, h);
+      } else if (object.type === "image" && object.image) {
+        let image = this._embeddedLayerImageCache.get(object.image);
+        if (!image) {
+          image = new Image();
+          image.onload = () => this._paint();
+          image.src = object.image;
+          this._embeddedLayerImageCache.set(object.image, image);
+        }
+        if (image.complete && image.naturalWidth) this._drawTintedCanvasImage(ctx, image, x, y, w, h, object.tint || "original");
+      } else {
+        ctx.beginPath();
+        ctx.rect(x, y, w, h);
+        ctx.clip();
+        ctx.fillStyle = this._color(object.color || "black");
+        ctx.font = `${object.bold ? "700" : "600"} ${Math.max(8, Number(object.font_size || 24))}px "DRATEK eInk Sans",Arial,sans-serif`;
+        ctx.textAlign = object.align || "left";
+        ctx.textBaseline = "alphabetic";
+        const textX = object.align === "center" ? x + w / 2 : object.align === "right" ? x + w : x;
+        const lines = String(object.text || "Text").split("\n");
+        const lineHeight = Math.max(10, Number(object.font_size || 24) * 1.08);
+        const startY = y + Math.max(0, (h - lineHeight * lines.length) / 2);
+        lines.forEach((line, index) => {
+          const metrics = ctx.measureText(line || " ");
+          const baseline = startY + index * lineHeight + (Number(metrics.actualBoundingBoxAscent) || lineHeight * 0.8);
+          ctx.fillText(line, textX, baseline, w);
+        });
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  },
+
   _drawLayeredObject(ctx, object, box) {
     const master = object.customElementId ? (this._customElements || []).find((e) => e.id === object.customElementId) : null;
     const layers = this._storedRecordList(master?.layers || object.customLayers);
@@ -59,7 +183,7 @@ export const drawBasicMixin = {
     const rule = conditionRules.find((item) => this._customConditionMatches(rawValue, item.operator || "equals", item.value || ""));
     const layerId = rule?.symbol || defaultSymbol || layers[0]?.id;
     const layer = layers.find((item) => item.id === layerId) || layers[0];
-    this._drawCustomLayer(ctx, layer, box.w, box.h, canvasWidth, canvasHeight, "", false);
+    this._drawEmbeddedLayer(ctx, layer, box.w, box.h, canvasWidth, canvasHeight);
   },
 
   _textObjectValue(object) {

@@ -1,19 +1,15 @@
-import qrcode from "./qrcode-generator.js";
 import { storageMixin } from "./panel/panel-storage.mixin.js";
 import { queueMixin } from "./panel/panel-queue.mixin.js";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js";
 import { devicesMixin } from "./panel/panel-devices.mixin.js";
 import { projectsMixin } from "./panel/panel-projects.mixin.js";
-import { customElementsMixin } from "./panel/panel-custom-elements.mixin.js";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
 import { historyMixin } from "./panel/panel-history.mixin.js";
 import { templatesMixin } from "./panel/panel-templates.mixin.js";
 import { variablesMixin } from "./panel/panel-variables.mixin.js";
-import { sendMixin } from "./panel/panel-send.mixin.js";
 import { previewMixin } from "./panel/panel-preview.mixin.js";
 import { renderUiMixin } from "./panel/panel-render-ui.mixin.js";
 import { i18nMixin } from "./panel/panel-i18n.mixin.js";
-import { customLayersMixin } from "./panel/panel-custom-layers.mixin.js";
 import { inspectorMixin } from "./panel/panel-inspector.mixin.js";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js";
@@ -37,6 +33,30 @@ class DratekEinkPanel extends HTMLElement {
     this._identifyResult = null;
     this._rgbLed = { mode: "off", color: "#00a2a5", flashTime: 10 };
     this._selectedDeviceAddress = "";
+    this._displaySettingsView = "templates";
+    this._displayTemplateSearchQuery = "";
+    this._displayTemplateCategory = "all";
+    this._selectedDisplayTemplateId = "";
+    this._selectedDisplayTemplateSecondaryId = "";
+    this._displayTemplateOrientation = "portrait";
+    this._displayTemplateLargeLayout = "single";
+    this._displayTemplateBindings = {};
+    this._templateOrientationMenuOpen = false;
+    this._templateEditorElements = [];
+    this._selectedTemplateCanvasSlot = "";
+    this._templateCanvasPlacements = {
+      primary: { x: 9, y: 9 },
+      secondary: { x: 9, y: 9 },
+    };
+    this._displayTemplateFormats = {
+      primary: "narrow",
+      secondary: "narrow",
+    };
+    this._templateCanvasDrag = null;
+    this._displayTemplateAssignments = {};
+    this._templateSending = false;
+    this._templateSendResult = null;
+    this._displayDesignerReturnView = "overview";
     this._editingDeviceAddress = "";
     this._deviceNameDraft = "";
     this._objects = [];
@@ -49,18 +69,10 @@ class DratekEinkPanel extends HTMLElement {
     this._zoom = 1;
     this._snap = true;
     this._projects = [];
-    this._customElements = this._loadCachedCustomElements();
-    this._customElementForm = this._emptyCustomElementForm();
-    this._customElementFields = [];
-    this._customElementInspection = { collections: [] };
-    this._customElementBusy = false;
-    this._customElementResult = null;
-    this._customWorkspaceView = "library";
-    this._customLayerStep = "design";
-    this._customActiveLayerId = "";
-    this._customSelectedObjectId = "";
-    this._customLayerDrag = null;
-    this._customImageCache = new Map();
+    // Legacy layered objects keep their embedded customLayers data so existing
+    // display drafts remain renderable after removal of the HA element designer.
+    this._customElements = [];
+    this._embeddedLayerImageCache = new Map();
     this._selectedProjectId = "";
     this._projectName = "Novy navrh";
     this._fileMenuOpen = false;
@@ -126,19 +138,12 @@ class DratekEinkPanel extends HTMLElement {
     this._backendPreviewAddress = "";
     this._devicePreviewImages = new Map();
     this._devicePreviewRequests = new Map();
-    this._handleKeyDown = (event) => this._onKeyDown(event);
     this._handleLocationChanged = () => {
       if (String(window.location?.pathname || "").includes("dratek-eink")) this._scheduleAutomaticScan(0);
     };
-    this._stopTypingShortcut = (event) => {
-      if (this._isTypingEvent(event)) event.stopPropagation();
-    };
-    this.shadowRoot.addEventListener("keydown", this._stopTypingShortcut);
-    this.shadowRoot.addEventListener("keyup", this._stopTypingShortcut);
   }
 
   connectedCallback() {
-    window.addEventListener("keydown", this._handleKeyDown);
     window.addEventListener("location-changed", this._handleLocationChanged);
     this._render();
     this._paint();
@@ -146,7 +151,6 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
-    window.removeEventListener("keydown", this._handleKeyDown);
     window.removeEventListener("location-changed", this._handleLocationChanged);
     window.clearTimeout(this._propertyEditTimer);
     window.clearTimeout(this._flashPollTimer);
@@ -167,14 +171,11 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   set hass(hass) {
-    const previousSignature = this._entityStateSignature(this._hass);
     this._hass = hass;
     if (!this._rendered) {
       this._rendered = true;
       this._render();
       this._paint();
-      this._loadProjects();
-      this._loadCustomElements();
       this._loadGateways();
       this._loadQueue();
       this._loadSerialPorts();
@@ -185,25 +186,9 @@ class DratekEinkPanel extends HTMLElement {
         });
       }
       this._scheduleAutomaticScan(100);
-    } else if (previousSignature !== this._entityStateSignature(hass) && this._activeTab === "designer") {
-      const active = this.shadowRoot.activeElement;
-      const editing = active && ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName);
-      if (!editing) this._render();
-      this._paint();
     }
   }
 
-  _entityStateSignature(hass = this._hass) {
-    if (!hass || !hass.states) return "";
-    return this._objects
-      .filter((object) => object.entityId)
-      .map((object) => {
-        const state = hass.states[object.entityId];
-        const value = object.entityAttribute ? state?.attributes?.[object.entityAttribute] : state?.state;
-        return `${object.id}:${object.entityId}:${object.entityAttribute || ""}:${JSON.stringify(value)}`;
-      })
-      .join("|");
-  }
 }
 
 Object.assign(
@@ -213,16 +198,13 @@ Object.assign(
   gatewayMixin,
   devicesMixin,
   projectsMixin,
-  customElementsMixin,
   canvasInteractionMixin,
   historyMixin,
   templatesMixin,
   variablesMixin,
-  sendMixin,
   previewMixin,
   i18nMixin,
   renderUiMixin,
-  customLayersMixin,
   inspectorMixin,
   drawBasicMixin,
   drawChartsMixin

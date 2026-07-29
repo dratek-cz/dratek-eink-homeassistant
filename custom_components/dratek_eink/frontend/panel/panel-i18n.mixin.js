@@ -6,7 +6,6 @@ const EN_EXACT = new Map(Object.entries({
   "Mapa připojení": "Connection map",
   "Fronta zápisu": "Write queue",
   "Gatewaye": "Gateways",
-  "Designer HA prvků": "HA element designer",
   "Čeština": "Czech",
   "Angličtina": "English",
   "Jazyk rozhraní": "Interface language",
@@ -87,7 +86,6 @@ const EN_EXACT = new Map(Object.entries({
   "Displej nebyl zachycen v posledním krátkém skenu": "Display was not found in the latest quick scan",
   "Přejmenovat displej": "Rename display",
   "Pojmenovat displej": "Name display",
-  "Otevřít v designeru": "Open in designer",
   "Prázdný návrh": "Empty design",
   "Baterie": "Battery",
   "Signál": "Signal",
@@ -206,10 +204,6 @@ const EN_EXACT = new Map(Object.entries({
   "Grafy a hodnoty": "Charts and values",
   "Stavové prvky": "State elements",
   "Signalizace a ovládání": "Indicators and controls",
-  "Moje HA prvky": "My HA elements",
-  "Uložené prvky připravené k vložení": "Saved elements ready to insert",
-  "Vytvořit první prvek": "Create the first element",
-  "Otevře Designer HA prvků": "Opens the HA element designer",
   "Text": "Text",
   "Symbol": "Symbol",
   "Tvar": "Shape",
@@ -636,10 +630,6 @@ export const i18nMixin = {
         cs: ["Mapa připojení", "Ukazuje, přes kterou gateway nebo Bluetooth adaptér komunikuje každý displej. Přetažením displeje na gateway nastavíte a zamknete ruční trasu."],
         en: ["Connection map", "Shows which gateway or Bluetooth adapter communicates with each display. Drag a display onto a gateway to set and lock a manual route."],
       },
-      designer: {
-        cs: ["Designer displeje", "Pracovní plocha pro tvorbu výsledného eInk obrazu. Vkládejte texty, symboly, grafy, obrázky a HA prvky, upravujte je v inspectoru a hotový návrh odešlete do vybraného displeje."],
-        en: ["Display designer", "Workspace for creating the final eInk image. Insert text, symbols, charts, images and HA elements, edit them in the inspector, then send the design to the selected display."],
-      },
       queue: {
         cs: ["Fronta zápisu", "Zobrazuje čekající, probíhající a dokončené zápisy do displejů. Filtry pomáhají dohledat konkrétní zařízení, trasu, operaci nebo chybu."],
         en: ["Write queue", "Shows queued, active and completed display writes. Filters help locate a specific device, route, operation or error."],
@@ -647,10 +637,6 @@ export const i18nMixin = {
       gateways: {
         cs: ["Gatewaye", "Centrální správa síťových gatewayí. Můžete je vyhledat, přidat, přejmenovat, zkontrolovat jejich stav a aktualizovat firmware."],
         en: ["Gateways", "Central management for network gateways. Discover, add or rename them, check their status and update firmware."],
-      },
-      custom: {
-        cs: ["Designer HA prvků", "Vytváří opakovaně použitelné dynamické prvky napojené na entity Home Assistantu. Grafické vrstvy představují různé stavy a pravidla určují, kdy se která vrstva zobrazí."],
-        en: ["HA element designer", "Creates reusable dynamic elements connected to Home Assistant entities. Graphic layers represent states, and rules choose which layer is displayed."],
       },
     };
     const key = definitions[this._activeTab] ? this._activeTab : "devices";

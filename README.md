@@ -4,6 +4,15 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.131
+
+- karty displejů otevírají nové nastavení s informacemi o zařízení, galerií šablon a editorem
+- malý displej používá jednu šablonu, velký až dvě s výběrem konkrétní pozice při nahrazení
+- šablony lze přesouvat, přepínat mezi úzkým a širokým formátem a odeslat přímo do displeje
+- náhledy se přizpůsobují orientaci i velikosti panelu bez rozpadu rozložení
+- samostatný Designer HA prvků a původní Designer displeje byly odstraněny
+- starší uložené návrhy zůstávají zachované pro náhledy a automatické aktualizace
+
 ## Novinky ve verzi 0.1.130
 
 - návrhy lze přidávat do fronty i během probíhajícího zápisu

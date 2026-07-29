@@ -72,7 +72,6 @@ export const previewMixin = {
       this._drawSelection(selectionContext);
     }
     this._paintDevicePreviews();
-    this._paintCustomLayerCanvases();
     this._scheduleCanonicalDesignerPreview();
   },
 

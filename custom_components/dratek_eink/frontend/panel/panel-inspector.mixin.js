@@ -181,29 +181,6 @@ export const inspectorMixin = {
         await this._loadGateways(true);
       }
     }));
-    const openDeviceInDesigner = async (address) => {
-      if (!address) return;
-      await this._selectDevice(address, { render: false });
-      this._activeTab = "designer";
-      this._render();
-      this._paint();
-    };
-    this.shadowRoot.querySelectorAll("[data-select-device]").forEach((button) => button.addEventListener("click", async (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      await openDeviceInDesigner(button.dataset.selectDevice);
-    }));
-    this.shadowRoot.querySelectorAll("[data-device-card-open]").forEach((card) => {
-      card.addEventListener("click", async (event) => {
-        if (event.target.closest("button,input,select,textarea,a,details,summary")) return;
-        await openDeviceInDesigner(card.dataset.deviceCardOpen);
-      });
-      card.addEventListener("keydown", async (event) => {
-        if (event.target !== card || !["Enter", " "].includes(event.key)) return;
-        event.preventDefault();
-        await openDeviceInDesigner(card.dataset.deviceCardOpen);
-      });
-    });
     this.shadowRoot.querySelector("#closeDisplayCatalog")?.addEventListener("click", () => {
       this._displayCatalogOpen = false;
       this._render();
@@ -252,6 +229,217 @@ export const inspectorMixin = {
       const input = this.shadowRoot.querySelector(`[data-device-name-input="${address}"]`);
       this._saveDeviceName(address, input?.value ?? this._deviceNameDraft);
     }));
+    const openDisplaySettings = (address) => {
+      this._selectedDeviceAddress = address;
+      this._displaySettingsView = "templates";
+      this._activeTab = "display-settings";
+      this._render();
+      this._paint();
+      this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
+    };
+    this.shadowRoot.querySelectorAll("[data-device-settings]").forEach((button) => button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openDisplaySettings(button.dataset.deviceSettings);
+    }));
+    this.shadowRoot.querySelectorAll("[data-device-card-settings]").forEach((card) => {
+      card.addEventListener("click", (event) => {
+        if (event.target.closest("button,input,select,textarea,a,details,summary")) return;
+        openDisplaySettings(card.dataset.deviceCardSettings);
+      });
+      card.addEventListener("keydown", (event) => {
+        if (event.target !== card || !["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        openDisplaySettings(card.dataset.deviceCardSettings);
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-display-settings-section]").forEach((button) => button.addEventListener("click", () => {
+      const section = button.dataset.displaySettingsSection;
+      if (!["templates", "custom"].includes(section)) return;
+      if (section === "templates") {
+        this._displaySettingsView = "templates";
+      } else {
+        this._displayDesignerReturnView = "templates";
+        this._displaySettingsView = "designer";
+      }
+      this._render();
+      this._paint();
+      this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
+    }));
+    this.shadowRoot.querySelector("[data-display-template-search]")?.addEventListener("input", (event) => {
+      const cursor = event.target.selectionStart;
+      this._displayTemplateSearchQuery = event.target.value;
+      this._render();
+      this._paint();
+      window.requestAnimationFrame(() => {
+        const input = this.shadowRoot.querySelector("[data-display-template-search]");
+        input?.focus();
+        if (Number.isFinite(cursor)) input?.setSelectionRange(cursor, cursor);
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-display-template-category]").forEach((button) => button.addEventListener("click", () => {
+      this._displayTemplateCategory = button.dataset.displayTemplateCategory || "all";
+      this._render();
+      this._paint();
+    }));
+    const openDisplayTemplate = (templateId, replaceIndex = null) => {
+      const device = this._device();
+      const assigned = this._assignDisplayTemplate(device, templateId, replaceIndex);
+      const size = this._devicePreviewSize(device);
+      const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
+      this._selectedDisplayTemplateId = assigned[0] || templateId;
+      this._selectedDisplayTemplateSecondaryId = assigned[1] || "";
+      this._displayTemplateOrientation = "portrait";
+      this._displayTemplateLargeLayout = largeDisplay && assigned.length > 1 ? "side-by-side" : "single";
+      this._templateOrientationMenuOpen = false;
+      this._selectedTemplateCanvasSlot = assigned.indexOf(templateId) === 1 ? "secondary" : "primary";
+      this._displayDesignerReturnView = "templates";
+      this._displaySettingsView = "designer";
+      this._render();
+      this._paint();
+      this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
+    };
+    this.shadowRoot.querySelectorAll("[data-display-template-open]").forEach((button) => button.addEventListener("click", () => {
+      openDisplayTemplate(button.dataset.displayTemplateOpen || "");
+    }));
+    this.shadowRoot.querySelectorAll("[data-display-template-replace]").forEach((button) => button.addEventListener("click", () => {
+      const card = button.closest(".display-template-card-replace");
+      const target = Number(card?.querySelector("[data-template-replace-target]")?.value);
+      openDisplayTemplate(button.dataset.displayTemplateReplace || "", Number.isInteger(target) ? target : 0);
+    }));
+    this.shadowRoot.querySelectorAll("[data-template-orientation]").forEach((button) => button.addEventListener("click", () => {
+      this._displayTemplateOrientation = button.dataset.templateOrientation === "landscape" ? "landscape" : "portrait";
+      this._templateOrientationMenuOpen = false;
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelectorAll("[data-template-canvas-slot]").forEach((item) => {
+      item.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const slot = item.dataset.templateCanvasSlot || "primary";
+        if (this._selectedTemplateCanvasSlot === slot) return;
+        this._selectedTemplateCanvasSlot = slot;
+        this._render();
+        this._paint();
+      });
+      item.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const slot = item.dataset.templateCanvasSlot || "primary";
+        const host = item.closest("[data-template-display-slot]");
+        const bounds = host?.getBoundingClientRect();
+        const itemBounds = item.getBoundingClientRect();
+        if (!bounds?.width || !bounds?.height) return;
+        this._selectedTemplateCanvasSlot = slot;
+        const placement = this._templateCanvasPlacements?.[slot] || { x: 9, y: 9 };
+        this._templateCanvasDrag = {
+          slot,
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          originX: Number.isFinite(Number.parseFloat(item.style.getPropertyValue("--template-item-x"))) ? Number.parseFloat(item.style.getPropertyValue("--template-item-x")) : Number(placement.x || 0),
+          originY: Number.isFinite(Number.parseFloat(item.style.getPropertyValue("--template-item-y"))) ? Number.parseFloat(item.style.getPropertyValue("--template-item-y")) : Number(placement.y || 0),
+          width: bounds.width,
+          height: bounds.height,
+          itemWidth: (itemBounds.width / bounds.width) * 100,
+          itemHeight: (itemBounds.height / bounds.height) * 100,
+        };
+        item.setPointerCapture?.(event.pointerId);
+        item.classList.add("is-dragging");
+        item.classList.add("is-selected");
+      });
+      item.addEventListener("pointermove", (event) => {
+        const drag = this._templateCanvasDrag;
+        if (!drag || drag.pointerId !== event.pointerId || drag.slot !== item.dataset.templateCanvasSlot) return;
+        const x = Math.max(0, Math.min(100 - drag.itemWidth, drag.originX + ((event.clientX - drag.startX) / drag.width) * 100));
+        const y = Math.max(0, Math.min(100 - drag.itemHeight, drag.originY + ((event.clientY - drag.startY) / drag.height) * 100));
+        this._templateCanvasPlacements ||= {};
+        this._templateCanvasPlacements[drag.slot] = { x, y };
+        item.style.setProperty("--template-item-x", `${x}%`);
+        item.style.setProperty("--template-item-y", `${y}%`);
+      });
+      const finishTemplateDrag = (event) => {
+        if (!this._templateCanvasDrag || this._templateCanvasDrag.pointerId !== event.pointerId) return;
+        this._templateCanvasDrag = null;
+        item.classList.remove("is-dragging");
+        item.releasePointerCapture?.(event.pointerId);
+      };
+      item.addEventListener("pointerup", finishTemplateDrag);
+      item.addEventListener("pointercancel", finishTemplateDrag);
+    });
+    this.shadowRoot.querySelectorAll("[data-template-layout]").forEach((button) => button.addEventListener("click", () => {
+      this._displayTemplateLargeLayout = button.dataset.templateLayout || "single";
+      const address = String(this._device()?.address || "").toUpperCase();
+      if (address) {
+        const ids = this._displayTemplateLargeLayout === "single"
+          ? [this._selectedDisplayTemplateId]
+          : [this._selectedDisplayTemplateId, this._selectedDisplayTemplateSecondaryId].filter(Boolean);
+        this._displayTemplateAssignments[address] = [...new Set(ids)].slice(0, 2);
+      }
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelectorAll("[data-template-format]").forEach((button) => button.addEventListener("click", () => {
+      const slot = this._selectedTemplateCanvasSlot === "secondary" && this._displayTemplateLargeLayout !== "single"
+        ? "secondary"
+        : "primary";
+      const format = button.dataset.templateFormat === "wide" ? "wide" : "narrow";
+      this._displayTemplateFormats ||= {};
+      this._displayTemplateFormats[slot] = format;
+      const placement = this._templateCanvasPlacements?.[slot] || { x: 9, y: 9 };
+      const width = format === "wide" ? 82 : 46;
+      const height = format === "wide" ? 46 : 82;
+      this._templateCanvasPlacements[slot] = {
+        x: Math.max(0, Math.min(100 - width, Number(placement.x || 0))),
+        y: Math.max(0, Math.min(100 - height, Number(placement.y || 0))),
+      };
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelector("[data-template-secondary]")?.addEventListener("change", (event) => {
+      this._selectedDisplayTemplateSecondaryId = event.target.value || "";
+      const address = String(this._device()?.address || "").toUpperCase();
+      if (address) this._displayTemplateAssignments[address] = [...new Set([this._selectedDisplayTemplateId, this._selectedDisplayTemplateSecondaryId].filter(Boolean))].slice(0, 2);
+      this._render();
+      this._paint();
+    });
+    this.shadowRoot.querySelectorAll("[data-template-entity-picker]").forEach((picker) => {
+      const bindingKey = picker.dataset.templateEntityPicker;
+      picker.hass = this._hass;
+      picker.selector = { entity: {} };
+      picker.value = this._displayTemplateBindings?.[bindingKey]
+        || picker.dataset.templateDefaultEntity
+        || "";
+      picker.required = false;
+      picker.addEventListener("value-changed", (event) => {
+        this._displayTemplateBindings ||= {};
+        this._displayTemplateBindings[bindingKey] = String(event.detail?.value || "");
+        this._render();
+        this._paint();
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-template-editor-tool]").forEach((button) => button.addEventListener("click", () => {
+      this._addTemplateEditorElement(button.dataset.templateEditorTool, button.dataset.templateEditorIcon || "");
+    }));
+    this.shadowRoot.querySelector("#templateEditorImage")?.addEventListener("change", (event) => {
+      this._importTemplateEditorImage(event.target.files?.[0]);
+    });
+    this.shadowRoot.querySelector("[data-template-editor-import]")?.addEventListener("click", () => {
+      this.shadowRoot.querySelector("#templateEditorImage")?.click();
+    });
+    this.shadowRoot.querySelectorAll("[data-template-editor-remove]").forEach((button) => button.addEventListener("click", () => {
+      this._templateEditorElements = (this._templateEditorElements || []).filter((item) => item.id !== button.dataset.templateEditorRemove);
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelector("[data-template-send]")?.addEventListener("click", () => this._sendDisplayTemplatePreview());
+    this.shadowRoot.querySelector("#displaySettingsBack")?.addEventListener("click", () => {
+      this._displaySettingsView = "overview";
+      this._activeTab = "devices";
+      this._render();
+      this._paint();
+      this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
+    });
     this.shadowRoot.querySelectorAll("[data-topology-device]").forEach((card) => {
       card.addEventListener("dragstart", (event) => {
         const address = card.dataset.topologyDevice;
@@ -264,11 +452,6 @@ export const inspectorMixin = {
         this._topologyDraggingAddress = "";
         card.classList.remove("is-dragging");
         this.shadowRoot.querySelectorAll(".connection-group.is-drag-over").forEach((group) => group.classList.remove("is-drag-over"));
-      });
-      card.addEventListener("keydown", (event) => {
-        if (event.target !== card || !["Enter", " "].includes(event.key)) return;
-        event.preventDefault();
-        openDeviceInDesigner(card.dataset.topologyDevice);
       });
     });
     this.shadowRoot.querySelectorAll("[data-topology-gateway]").forEach((group) => {
@@ -358,7 +541,6 @@ export const inspectorMixin = {
     this.shadowRoot.querySelector("#projectName")?.addEventListener("input", (event) => { this._projectName = event.target.value; this._scheduleDraftSave(); });
     this.shadowRoot.querySelector("#projectSelect")?.addEventListener("change", (event) => { this._selectedProjectId = event.target.value; const project = this._projects.find((item) => item.id === this._selectedProjectId); if (project) this._projectName = project.name; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#openSymbols")?.addEventListener("click", () => { this._symbolPickerOpen = true; this._symbolSearch = ""; this._render(); this._paint(); });
-    this.shadowRoot.querySelector("#openCustomLayerSymbols")?.addEventListener("click", () => { this._symbolPickerOpen = true; this._symbolSearch = ""; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#closeSymbols")?.addEventListener("click", () => { this._symbolPickerOpen = false; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#symbolSearch")?.addEventListener("input", (event) => { this._symbolSearch = event.target.value; this._renderKeepingSearchFocus(); });
     this.shadowRoot.querySelectorAll("[data-symbol-category]").forEach((button) => button.addEventListener("click", () => { this._symbolCategory = button.dataset.symbolCategory; this._render(); this._paint(); }));
@@ -374,17 +556,16 @@ export const inspectorMixin = {
       this._paint();
     }));
     this.shadowRoot.querySelector("#addImage")?.addEventListener("click", () => this.shadowRoot.querySelector("#imageFile")?.click());
-    this.shadowRoot.querySelector("#openCustomElements")?.addEventListener("click", () => { this._activeTab = "custom"; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#imageFile")?.addEventListener("change", (event) => this._addImage(event.target.files[0]));
     this.shadowRoot.querySelectorAll("[data-add]").forEach((button) => button.addEventListener("click", () => this._addObject(button.dataset.add)));
     this.shadowRoot.querySelectorAll("[data-template]").forEach((button) => button.addEventListener("click", () => this._applyTemplate(button.dataset.template)));
-    this.shadowRoot.querySelector("#undoAction").addEventListener("click", () => this._undo());
-    this.shadowRoot.querySelector("#redoAction").addEventListener("click", () => this._redo());
-    this.shadowRoot.querySelector("#duplicateSelected").addEventListener("click", () => this._duplicateSelected());
-    this.shadowRoot.querySelector("#deleteSelected").addEventListener("click", () => this._deleteSelected());
-    this.shadowRoot.querySelector("#clearDesign").addEventListener("click", () => this._clearDesign());
-    this.shadowRoot.querySelector("#rotateSelected").addEventListener("click", () => this._rotateSelected());
-    this.shadowRoot.querySelector("#mirrorSelected").addEventListener("click", () => this._mirrorSelected());
+    this.shadowRoot.querySelector("#undoAction")?.addEventListener("click", () => this._undo());
+    this.shadowRoot.querySelector("#redoAction")?.addEventListener("click", () => this._redo());
+    this.shadowRoot.querySelector("#duplicateSelected")?.addEventListener("click", () => this._duplicateSelected());
+    this.shadowRoot.querySelector("#deleteSelected")?.addEventListener("click", () => this._deleteSelected());
+    this.shadowRoot.querySelector("#clearDesign")?.addEventListener("click", () => this._clearDesign());
+    this.shadowRoot.querySelector("#rotateSelected")?.addEventListener("click", () => this._rotateSelected());
+    this.shadowRoot.querySelector("#mirrorSelected")?.addEventListener("click", () => this._mirrorSelected());
     this.shadowRoot.querySelector("#alignLeft")?.addEventListener("click", () => this._alignSelected("left"));
     this.shadowRoot.querySelector("#alignCenter")?.addEventListener("click", () => this._alignSelected("center"));
     this.shadowRoot.querySelector("#alignRight")?.addEventListener("click", () => this._alignSelected("right"));
@@ -799,10 +980,10 @@ export const inspectorMixin = {
       if (element) this._applyCustomElementToAll(element);
     }));
     const canvas = this.shadowRoot.querySelector("#editor");
-    canvas.addEventListener("pointerdown", (event) => this._onPointerDown(event));
-    canvas.addEventListener("pointermove", (event) => this._onPointerMove(event));
-    canvas.addEventListener("pointerup", () => this._onPointerUp());
-    canvas.addEventListener("pointerleave", () => this._onPointerUp());
+    canvas?.addEventListener("pointerdown", (event) => this._onPointerDown(event));
+    canvas?.addEventListener("pointermove", (event) => this._onPointerMove(event));
+    canvas?.addEventListener("pointerup", () => this._onPointerUp());
+    canvas?.addEventListener("pointerleave", () => this._onPointerUp());
     this.shadowRoot.querySelectorAll("[data-prop]").forEach((input) => input.addEventListener("input", (event) => this._readProperties(event)));
     this.shadowRoot.querySelectorAll("[data-inspector-prop]").forEach((button) => button.addEventListener("click", () => {
       this._setInspectorProperty(button.dataset.inspectorProp, button.dataset.inspectorValue);

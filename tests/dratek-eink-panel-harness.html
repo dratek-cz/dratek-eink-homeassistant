@@ -16,10 +16,23 @@
     }
     body { margin:0; padding:0; background:var(--primary-background-color); font-family:Arial,sans-serif; }
     ha-icon { display:inline-flex; align-items:center; justify-content:center; width:1em; height:1em; }
+    #bootStatus { margin:24px; padding:14px 16px; border:1px solid #d8dfdf; border-radius:10px; background:#fff; color:#64727b; }
+    #bootStatus.error { color:#9d1c0f; border-color:#e7aaa3; background:#fff4f2; white-space:pre-wrap; }
   </style>
 </head>
 <body>
+  <div id="bootStatus">Načítám lokální náhled…</div>
   <dratek-eink-panel id="panel"></dratek-eink-panel>
+  <script>
+    const showBootError = (value) => {
+      const status = document.querySelector("#bootStatus");
+      if (!status) return;
+      status.className = "error";
+      status.textContent = `Lokální náhled se nepodařilo spustit:\n${String(value || "Neznámá chyba")}`;
+    };
+    window.addEventListener("error", (event) => showBootError(event.error?.stack || event.message));
+    window.addEventListener("unhandledrejection", (event) => showBootError(event.reason?.stack || event.reason));
+  </script>
   <script type="module">
     if (!customElements.get("ha-icon")) {
       customElements.define("ha-icon", class extends HTMLElement {
@@ -51,7 +64,6 @@
           return this.getAttribute("data-variable-entity-picker")
             || this.getAttribute("data-entity-picker")
             || this.getAttribute("data-layer-object-entity")
-            || (this.hasAttribute("data-custom-entity-picker") ? "custom-element-entity" : "")
             || this.id
             || "entity-picker";
         }
@@ -147,6 +159,8 @@
     ];
     const writingAddress = new URLSearchParams(window.location.search).get("writing") || "";
     const uploadedAddress = new URLSearchParams(window.location.search).get("uploaded") || "";
+    const settingsAddress = new URLSearchParams(window.location.search).get("settings") || "";
+    const settingsView = new URLSearchParams(window.location.search).get("settingsView") || "templates";
     const drafts = {
       "FF:FF:92:81:46:32": {
         width:296, height:128, background_color:"white", invert_colors:false,
@@ -269,8 +283,6 @@
           drafts[String(msg.address || "").toUpperCase()] = msg.draft;
           return { draft:msg.draft };
         }
-        if (type === "dratek_eink/projects/list") return { projects: [] };
-        if (type === "dratek_eink/custom_elements/list") return { elements: [] };
         if (type === "dratek_eink/render_preview") return renderCanonicalHarness(msg.automation);
         if (type === "dratek_eink/gateways/list" || type === "dratek_eink/gateways/refresh") return { gateways };
         if (type === "dratek_eink/gateways/serial_ports") return { ports: [] };
@@ -307,10 +319,17 @@
         }
         if (type === "dratek_eink/set_rgb_led") return { ok:true, address: msg.address, log: [] };
         if (type === "dratek_eink/flash_identify") return { ok:true, address: msg.address, log: [] };
-        if (type === "dratek_eink/send_partial_design") { window.__lastPartial = msg; return { ok:true, address: msg.address, log: [] }; }
         return {};
       },
     };
+    if (settingsAddress && devices.some((device) => device.address === settingsAddress)) {
+      panel._selectedDeviceAddress = settingsAddress;
+      panel._displaySettingsView = settingsView === "designer" ? "designer" : "templates";
+      panel._activeTab = "display-settings";
+      panel._render();
+      panel._paint();
+    }
+    document.querySelector("#bootStatus")?.remove();
   </script>
 </body>
 </html>

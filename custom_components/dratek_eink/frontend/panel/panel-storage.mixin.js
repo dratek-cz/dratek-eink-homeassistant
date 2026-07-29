@@ -59,28 +59,6 @@ export const storageMixin = {
     } catch (_err) { /* Large image drafts can exceed browser storage; server data remains authoritative. */ }
   },
 
-  _loadCachedCustomElements() {
-    try {
-      const cached = JSON.parse(window.localStorage.getItem("dratek-eink-custom-elements-cache") || "[]");
-      const records = Array.isArray(cached)
-        ? cached
-        : cached && typeof cached === "object"
-          ? Object.values(cached)
-          : [];
-      return records
-        .filter((item) => item && typeof item === "object" && !Array.isArray(item))
-        .map((item) => this._normalizeStoredCustomElement(item));
-    } catch (_err) {
-      return [];
-    }
-  },
-
-  _saveCachedCustomElements() {
-    try {
-      window.localStorage.setItem("dratek-eink-custom-elements-cache", JSON.stringify(this._customElements || []));
-    } catch (_err) { /* Browser storage can be disabled or full. */ }
-  },
-
   _mergeScanResult(nextResult, graceMs = 5 * 60 * 1000) {
     const now = Date.now();
     const previousDevices = new Map((this._result?.devices || []).map((device) => [String(device.address || "").toUpperCase(), device]));
@@ -117,55 +95,6 @@ export const storageMixin = {
     return `dratek-eink-gateway_${stamp}`;
   },
 
-  _emptyCustomElementForm() {
-    const english = this._uiLanguage?.() === "en";
-    const onLayer = {
-      id: `layer-${Date.now()}-on`, name: english ? "On" : "Zapnuto",
-      objects: [
-        { id: `item-${Date.now()}-on-icon`, type: "text", x: 88, y: 12, w: 120, h: 62, text: "●", color: "red", font_size: 52, bold: true, align: "center" },
-        { id: `item-${Date.now()}-on-text`, type: "text", x: 58, y: 78, w: 180, h: 36, text: english ? "ON" : "ZAPNUTO", color: "black", font_size: 28, bold: true, align: "center" },
-      ],
-    };
-    const offLayer = {
-      id: `layer-${Date.now()}-off`, name: english ? "Off" : "Vypnuto",
-      objects: [
-        { id: `item-${Date.now()}-off-icon`, type: "text", x: 88, y: 12, w: 120, h: 62, text: "○", color: "black", font_size: 52, bold: true, align: "center" },
-        { id: `item-${Date.now()}-off-text`, type: "text", x: 58, y: 78, w: 180, h: 36, text: english ? "OFF" : "VYPNUTO", color: "black", font_size: 28, bold: true, align: "center" },
-      ],
-    };
-    return {
-      id: "", name: "", element_type: "layered", source_type: "entity",
-      entity_id: "", entity_attribute: "", url: "", collection_path: "", value_field: "", label_field: "", json_path: "", label_json_path: "",
-      label: "", unit: "", color: "black", chart_type: "line",
-      history_mode: "rolling", history_points: 24,
-      condition_rules: [
-        { operator: "is_on", value: "", symbol: "●" },
-        { operator: "is_off", value: "", symbol: "○" },
-      ],
-      default_symbol: "?",
-      on_symbol: "●", off_symbol: "○", on_values: "on,true,1,open,home",
-      sample_data: "", sample_labels: "", icon_image: "", width_percent: 55, height_percent: 35,
-      canvas_width: 296, canvas_height: 128,
-      layers: [onLayer, offLayer],
-      condition_rules: [
-        { operator: "is_on", value: "", layer_id: onLayer.id },
-        { operator: "is_off", value: "", layer_id: offLayer.id },
-      ],
-      default_layer_id: offLayer.id,
-    };
-  },
-
-  _customElementFormValid() {
-    const form = this._customElementForm;
-    if (form.element_type === "layered") {
-      return Boolean(form.name.trim() && form.entity_id && Array.isArray(form.layers) && form.layers.length);
-    }
-    return Boolean(
-      form.name.trim()
-      && (form.element_type === "icon" ? form.icon_image : form.entity_id)
-    );
-  },
-
   _emptyDeviceDraft(device = this._device()) {
     const size = this._displaySize(device);
     const code = device && device.physical_code ? device.physical_code : "novy-displej";
@@ -191,21 +120,6 @@ export const storageMixin = {
     if (Array.isArray(value)) return value.filter((item) => item && typeof item === "object" && !Array.isArray(item));
     if (value && typeof value === "object") return Object.values(value).filter((item) => item && typeof item === "object" && !Array.isArray(item));
     return [];
-  },
-
-  _normalizeStoredCustomElement(element) {
-    if (!element || typeof element !== "object" || Array.isArray(element)) return {};
-    const normalized = { ...element };
-    normalized.condition_rules = this._storedRecordList(normalized.condition_rules);
-    if (normalized.element_type === "layered" || normalized.layers != null) {
-      normalized.layers = this._storedRecordList(normalized.layers).map((layer, index) => ({
-        ...layer,
-        id: String(layer.id || `layer-${index}`),
-        name: String(layer.name || `Vrstva ${index + 1}`),
-        objects: this._storedRecordList(layer.objects),
-      }));
-    }
-    return normalized;
   },
 
   _normalizeStoredDraft(draft) {

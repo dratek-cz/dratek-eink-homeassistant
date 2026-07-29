@@ -86,31 +86,6 @@ export const historyMixin = {
       return;
     }
     if (this._isTypingEvent(event)) return;
-    const customDesignerActive = this._activeTab === "custom"
-      && this._customWorkspaceView === "editor"
-      && this._customLayerStep === "design";
-    if (customDesignerActive) {
-      if ((event.key === "Delete" || event.key === "Backspace") && this._customSelectedObjectId) {
-        event.preventDefault();
-        this._deleteCustomLayerObject();
-      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !event.shiftKey) {
-        event.preventDefault();
-        this._undoCustomLayerChange();
-      } else if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z"))) {
-        event.preventDefault();
-        this._redoCustomLayerChange();
-      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d" && this._customSelectedObjectId) {
-        event.preventDefault();
-        this._duplicateCustomLayerObject();
-      } else if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key) && this._customSelectedObjectId) {
-        event.preventDefault();
-        const step = event.shiftKey ? 10 : 1;
-        const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
-        const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
-        this._moveCustomLayerObjectByKeyboard(dx, dy);
-      }
-      return;
-    }
     if (this._activeTab !== "designer" || !this._device()) return;
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key) && this._selectedIds.length) {
       event.preventDefault();

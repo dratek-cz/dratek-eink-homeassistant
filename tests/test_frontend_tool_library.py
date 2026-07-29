@@ -33,8 +33,9 @@ class FrontendToolLibraryTests(unittest.TestCase):
         cls.harness = HARNESS.read_text(encoding="utf-8")
 
     def test_library_exposes_all_categories_and_direct_widgets(self):
-        for category in ("basic", "data", "status", "custom"):
+        for category in ("basic", "data", "status"):
             self.assertIn(f'data-tool-category="{category}"', self.source)
+        self.assertNotIn('data-tool-category="custom"', self.source)
         for widget in ("chart", "bar_gauge", "pie", "slider", "gauge", "status"):
             self.assertIn(f'toolButton("{widget}"', self.source)
 
@@ -66,11 +67,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('placeholder="Hledat podle názvu, Entity ID nebo hodnoty…"', self.harness)
         self.assertNotIn('this.innerHTML = `<select', self.harness)
 
-    def test_designer_send_action_adds_transfers_to_the_queue(self):
-        self.assertIn("Odeslat do fronty", self.source)
-        self.assertIn("Přidávám do fronty...", self.source)
-        self.assertIn("Návrh byl přidán do fronty zápisu.", self.source)
-        self.assertIn("mdi:tray-arrow-down", self.source)
+    def test_manual_designer_send_module_is_removed(self):
+        self.assertNotIn('import { sendMixin }', self.source)
+        self.assertNotIn("sendMixin,", self.source)
+        self.assertFalse((PANEL_MODULES / "panel-send.mixin.js").exists())
 
     def test_gateway_workspace_uses_compact_management_layout(self):
         for marker in (
@@ -107,51 +107,15 @@ class FrontendToolLibraryTests(unittest.TestCase):
         # Metriky fronty zůstávají klikacím filtrem stavu.
         self.assertIn('data-queue-status="${status}"', self.source)
 
-    def test_ha_element_rules_support_time_intervals(self):
-        for marker in (
-            '"time_between"',
-            'data-condition-template="time"',
-            'data-condition-time-start',
-            'data-condition-time-end',
-            'id="addLayerTimeRule"',
-            'data-layer-rule-time-start',
-            'data-layer-rule-time-end',
-        ):
-            self.assertIn(marker, self.source)
-        self.assertIn('"sensor.time"', self.harness)
-
-    def test_ha_designer_shares_the_main_designer_toolset(self):
-        self.assertNotIn('<section class="ha-library-head">', self.source)
-        for element_type in (
-            "text",
-            "rect",
-            "line",
-            "barcode",
-            "qr",
-            "bar_gauge",
-            "pie",
-            "slider",
-            "potentiometer",
-        ):
-            self.assertIn(f'data-add-layer-object="{element_type}"', self.source)
-        for action in (
-            "undo",
-            "redo",
-            "duplicate",
-            "back",
-            "front",
-            "rotate-left",
-            "rotate-right",
-            "delete",
-            "clear",
-        ):
-            self.assertIn(f'data-custom-layer-action="{action}"', self.source)
-        for action in ("left", "center", "right", "top", "middle", "bottom"):
-            self.assertIn(f'["{action}",', self.source)
-        self.assertIn('id="openCustomLayerSymbols"', self.source)
-        self.assertIn('data-custom-layer-zoom="${zoom}"', self.source)
-        self.assertIn("_undoCustomLayerChange()", self.source)
-        self.assertIn("_redoCustomLayerChange()", self.source)
+    def test_ha_element_designer_is_removed(self):
+        self.assertNotIn('data-tab="custom"', self.source)
+        self.assertNotIn('data-tool-category="custom"', self.source)
+        self.assertNotIn('import { customElementsMixin }', self.source)
+        self.assertNotIn('import { customLayersMixin }', self.source)
+        self.assertNotIn("_loadCustomElements()", self.source)
+        self.assertFalse((PANEL_MODULES / "panel-custom-elements.mixin.js").exists())
+        self.assertFalse((PANEL_MODULES / "panel-custom-layers.mixin.js").exists())
+        self.assertFalse((ROOT / "tests" / "ha-layer-designer-harness.html").exists())
 
     def test_symbol_dialog_stays_above_the_sticky_header(self):
         self.assertIn('class="modal-backdrop symbol-modal-backdrop"', self.source)
@@ -163,18 +127,175 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('<details class="inspector-section"', self.source)
         self.assertIn('class="inspector-chevron"', self.source)
 
-    def test_delete_shortcut_covers_both_designers(self):
+    def test_delete_shortcut_covers_the_display_designer(self):
         self.assertIn('this._deleteSelected();', self.source)
-        self.assertIn('this._deleteCustomLayerObject();', self.source)
-        self.assertIn('this._activeTab === "custom"', self.source)
         self.assertIn('event.key === "Delete" || event.key === "Backspace"', self.source)
 
-    def test_device_preview_opens_the_selected_device_in_designer(self):
-        self.assertIn('const openDeviceInDesigner = async (address)', self.source)
-        self.assertIn('await this._selectDevice(address, { render: false });', self.source)
-        self.assertIn('this._activeTab = "designer";', self.source)
-        self.assertIn('querySelectorAll("[data-select-device]")', self.source)
-        self.assertIn('querySelectorAll("[data-device-card-open]")', self.source)
+    def test_display_designer_entry_points_are_removed(self):
+        self.assertNotIn('const openDeviceInDesigner = async (address)', self.source)
+        self.assertNotIn('this._activeTab = "designer";', self.source)
+        self.assertNotIn('data-select-device=', self.source)
+        self.assertNotIn('data-device-card-open=', self.source)
+        self.assertNotIn("Otevřít v designeru", self.source)
+        self.assertNotIn('<div class="designer-section', self.source)
+        self.assertNotIn('<canvas id="editor"', self.source)
+
+    def test_device_settings_landing_page_has_three_placeholder_choices(self):
+        self.assertIn('data-device-settings="${this._escape(device.address)}"', self.source)
+        self.assertIn('data-device-card-settings="${this._escape(device.address)}"', self.source)
+        self.assertIn('event.target.closest("button,input,select,textarea,a,details,summary")', self.source)
+        self.assertIn('!["Enter", " "].includes(event.key)', self.source)
+        self.assertIn("Upravit displej", self.source)
+        self.assertIn('this._activeTab = "display-settings";', self.source)
+        self.assertIn('id="displaySettingsBack"', self.source)
+        self.assertIn('class="card display-settings-device-summary"', self.source)
+        self.assertIn('class="display-settings-preview"', self.source)
+        self.assertIn('class="display-settings-physical-code"', self.source)
+        self.assertIn("border:0;border-radius:0;background:transparent", self.source)
+        self.assertIn("<small>Baterie</small>", self.source)
+        self.assertIn("<small>Signál</small>", self.source)
+        self.assertIn(".display-settings-device-summary{min-height:132px", self.source)
+        self.assertIn(".display-settings-health-item{min-width:92px", self.source)
+        self.assertIn("padding:4px;border:0;border-radius:0;background:transparent", self.source)
+        for label in ("Šablony", "Vlastní design", "Vlastní design HA prvku"):
+            self.assertIn(f'title: "{label}"', self.source)
+        self.assertIn('class="display-settings-actions"', self.source)
+        self.assertIn('class="display-settings-action ${activeMode === option.id ? "is-active" : ""}', self.source)
+        self.assertIn('aria-current="true"', self.source)
+        self.assertIn("Aktivní", self.source)
+        self.assertIn('{ id: "custom", icon: "mdi:palette-outline", title: "Vlastní design", ready: true }', self.source)
+        self.assertIn('_displayDesignMode(device = this._device())', self.source)
+        self.assertIn('aria-disabled="true"', self.source)
+
+    def test_templates_button_opens_outline_and_filled_icon_gallery(self):
+        self.assertIn('data-display-settings-section="${option.id}"', self.source)
+        self.assertIn('!["templates", "custom"].includes(section)', self.source)
+        self.assertIn('this._displaySettingsView = "templates";', self.source)
+        self.assertIn('if (!["templates", "designer"].includes(this._displaySettingsView)) this._displaySettingsView = "templates";', self.source)
+        self.assertIn('${this._displaySettingsView === "templates" ? this._renderDisplayTemplatesSection(device) : ""}', self.source)
+        self.assertNotIn('return this._renderDisplayTemplatesPage(device)', self.source)
+        self.assertIn('class="display-template-grid"', self.source)
+        self.assertEqual(self.source.count('number: "'), 20)
+        self.assertEqual(self.source.count("variables: [["), 20)
+        self.assertIn('class="display-template-variable-count"', self.source)
+        self.assertIn('class="display-template-variables"', self.source)
+        self.assertIn('aria-label="Požadované proměnné"', self.source)
+        self.assertIn("template.variables.map(([iconName, label])", self.source)
+        self.assertIn(".display-template-variables ha-icon{", self.source)
+        self.assertIn('data-display-template-search', self.source)
+        self.assertIn('data-display-template-category="${category.id}"', self.source)
+        self.assertIn('class="card devices-toolbar-card display-template-toolbar"', self.source)
+        self.assertIn('class="devices-toolbar"', self.source)
+        self.assertIn('class="device-search"', self.source)
+        self.assertIn('class="pill muted display-template-result-count"', self.source)
+        self.assertIn(".display-template-toolbar>.devices-toolbar{flex-wrap:nowrap}", self.source)
+        self.assertIn(".display-template-toolbar .device-search{flex:0 0 360px", self.source)
+        self.assertIn(".display-template-categories{display:flex;align-items:center", self.source)
+        self.assertIn('category: "nature"', self.source)
+        self.assertIn('category: "home"', self.source)
+        self.assertIn('category: "energy"', self.source)
+        self.assertIn('category: "information"', self.source)
+        self.assertIn('category: "technology"', self.source)
+        self.assertIn('this._displayTemplateCategory = button.dataset.displayTemplateCategory || "all";', self.source)
+        self.assertIn('this._displayTemplateSearchQuery = event.target.value;', self.source)
+        self.assertIn('WIFI:T:WPA;S:Home_Network;P:MyPassword123;;', self.source)
+        self.assertIn('class="tpl-wifi-qr"', self.source)
+        self.assertNotIn('icon("qrcode", "tpl-qr-icon")', self.source)
+        self.assertIn(".tpl-air>em{color:#e31b1b", self.source)
+        self.assertIn(".tpl-server footer{display:flex;align-items:center;justify-content:center;gap:4px;background:#e31b1b", self.source)
+        self.assertIn('data-display-template-open="${template.id}"', self.source)
+        self.assertIn('class="display-template-card ${used ? "is-used" : ""}"', self.source)
+        self.assertIn("Právě se používá", self.source)
+        self.assertIn("Přidat na displej", self.source)
+        self.assertIn("Nahradit stávající šablonu", self.source)
+        self.assertIn("_assignDisplayTemplate(device, templateId, replaceIndex)", self.source)
+        self.assertIn("data-template-replace-target", self.source)
+        self.assertIn("data-display-template-replace", self.source)
+        self.assertIn("Vybrat nahrazovanou šablonu", self.source)
+        self.assertIn(".display-template-card.is-used{border-color:#16803c", self.source)
+        self.assertIn('this._displaySettingsView === "designer" ? "custom" : storedMode', self.source)
+        self.assertIn('${this._displaySettingsView === "designer" ? this._renderDisplayTemplateEditor(device) : ""}', self.source)
+        self.assertIn("_renderDisplayTemplateEditor(device)", self.source)
+        self.assertIn('class="display-template-editor-layout"', self.source)
+        self.assertIn("_renderTemplatePhysicalDevicePreview(device, template, secondaryTemplate, orientation, layout)", self.source)
+        self.assertIn('data-template-orientation="portrait"', self.source)
+        self.assertIn('data-template-orientation="landscape"', self.source)
+        self.assertIn('data-template-format="narrow"', self.source)
+        self.assertIn('data-template-format="wide"', self.source)
+        self.assertIn('class="template-responsive-preview"', self.source)
+        self.assertIn(".display-template-surface.format-narrow{width:46%;height:82%}", self.source)
+        self.assertIn("100 - drag.itemWidth", self.source)
+        self.assertNotIn("display-template-orientation-popover", self.source)
+        self.assertIn('data-template-canvas-slot="${slot}"', self.source)
+        self.assertIn('data-template-display-slot="${slot}"', self.source)
+        self.assertIn('item.addEventListener("pointerdown"', self.source)
+        self.assertIn('item.addEventListener("pointermove"', self.source)
+        self.assertIn("--template-item-x", self.source)
+        self.assertIn('data-template-layout="side-by-side"', self.source)
+        self.assertIn('data-template-layout="stacked"', self.source)
+        self.assertIn('data-template-entity-picker=', self.source)
+        self.assertIn("Automaticky z Home Assistantu", self.source)
+        self.assertIn('class="display-template-send-button"', self.source)
+        self.assertIn("data-template-send", self.source)
+        self.assertIn("_sendDisplayTemplatePreview()", self.source)
+        self.assertIn('_hass.callWS({\n        type: "dratek_eink/send_design"', self.source)
+        self.assertIn("_rasterizeDisplayTemplatePreview(screen)", self.source)
+        self.assertIn(".display-template-editor-right-column{grid-column:3;grid-row:1/3", self.source)
+        self.assertIn("preview.replace('class=\"tpl ', 'class=\"tpl tpl-landscape ')", self.source)
+        self.assertNotIn('id="displayTemplateEditorBack"', self.source)
+        self.assertNotIn("Zavřít designer", self.source)
+        self.assertIn('class="template-editor-tools"', self.source)
+        self.assertIn("context.putImageData(pixels, 0, 0)", self.source)
+        self.assertIn('data-template-chart="energy"', self.source)
+        self.assertIn('data-template-chart="water"', self.source)
+        self.assertIn('this._displaySettingsView = "designer";', self.source)
+        self.assertIn('this._displayDesignerReturnView = "templates";', self.source)
+        self.assertIn('<small>Designer</small>', self.source)
+        self.assertIn(".display-template-editor-left{grid-column:1;grid-row:1/3}", self.source)
+        self.assertIn(".display-template-editor-bottom{grid-column:2;grid-row:2}", self.source)
+        self.assertIn(".display-template-card{grid-template-rows:auto 300px auto;align-content:start;justify-items:center;padding:0}", self.source)
+        self.assertIn(".display-template-caption{box-sizing:border-box;width:100%;margin:0", self.source)
+        for icon in (
+            "weather-partly-cloudy",
+            "lightning-bolt",
+            "home",
+            "trash-can-outline",
+            "solar-power",
+            "washing-machine",
+            "thermometer",
+            "account",
+            "calendar-blank",
+        ):
+            self.assertIn(f'icon("{icon}"', self.source)
+        self.assertIn(".display-settings-action.is-active{", self.source)
+        self.assertIn("_renderDisplayTemplatePreview(template)", self.source)
+        self.assertIn(".display-template-preview{box-sizing:border-box", self.source)
+        self.assertIn("border:2px solid #111", self.source)
+        self.assertIn('<span class="display-template-caption"><strong>${this._escape(template.title)}</strong>', self.source)
+        self.assertIn("grid-template-columns:repeat(6,minmax(0,1fr))", self.source)
+        for title in (
+            "Zabezpečení",
+            "Odjezdy",
+            "Nákupní seznam",
+            "Kvalita vzduchu",
+            "Topení",
+            "Spotřeba vody",
+            "Zásilka",
+            "Narozeniny",
+            "Stav serveru",
+            "Zahrada",
+        ):
+            self.assertIn(f'title: "{title}"', self.source)
+
+    def test_display_settings_supports_inline_rename_and_main_previews_have_no_shadow(self):
+        self.assertIn('class="display-settings-name-row"', self.source)
+        self.assertIn('data-device-rename="${this._escape(device.address)}"', self.source)
+        self.assertIn('class="display-settings-name-input"', self.source)
+        self.assertIn('data-device-name-save="${this._escape(device.address)}"', self.source)
+        self.assertIn(".display-settings-name-button{", self.source)
+        self.assertIn(".display-preview-slot .device-preview-wrap{background:transparent}", self.source)
+        self.assertIn(".display-preview-slot .device-preview-screen", self.source)
+        self.assertIn("box-shadow:none!important;filter:none!important", self.source)
 
     def test_layers_share_the_sticky_tool_sidebar(self):
         self.assertIn('data-designer-side="tools"', self.source)
@@ -209,11 +330,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('<div class="app-header">', self.source)
         self.assertIn(".app-header{position:sticky", self.source)
         self.assertIn("z-index:40;top:0", self.source)
-        self.assertIn(
-            ".tabbar .tab[data-tab=custom]{margin-left:0;border-left:0;"
-            "box-shadow:none;filter:none;transform:none}",
-            self.source,
-        )
+        self.assertNotIn('data-tab="custom"', self.source)
 
     def test_header_uses_the_combined_brand_image_without_duplicate_heading(self):
         self.assertIn("dratek-eink-header.png", self.source)
@@ -221,8 +338,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("border-radius:0;background:transparent;box-shadow:none;filter:none", self.source)
         self.assertIn(".topbar{padding:8px 18px 8px 0}", self.source)
         self.assertIn('class="brand-description"', self.source)
-        self.assertIn("<strong>Editor šablon</strong>", self.source)
-        self.assertIn("BLE diagnostika · správa displejů", self.source)
+        self.assertIn("<strong>Správa eInk displejů</strong>", self.source)
+        self.assertIn("BLE diagnostika · správa připojení", self.source)
         self.assertNotIn("<h1>DRATEK eInk</h1>", self.source)
 
     def test_header_language_switch_and_page_help_are_available_everywhere(self):
@@ -246,7 +363,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('"Discovered displays"', self.source)
         self.assertIn('"Connection map"', self.source)
         self.assertIn('"Write queue"', self.source)
-        self.assertIn('"HA element designer"', self.source)
+        self.assertNotIn('"HA element designer"', self.source)
 
     def test_symbol_catalog_labels_follow_the_selected_language(self):
         self.assertIn("const SYMBOL_LABEL_EN", self.source)
@@ -295,40 +412,6 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".connection-device.is-uploaded", self.source)
         self.assertIn('["queue", "devices", "topology"].includes(this._activeTab)', self.source)
 
-    def test_designer_device_summary_is_one_compact_row(self):
-        self.assertIn(".designer-device-strip{display:flex!important", self.source)
-        self.assertIn("min-height:44px", self.source)
-        self.assertIn("overflow-x:auto;overflow-y:hidden", self.source)
-        self.assertIn(
-            ".designer-device-strip>.designer-device-primary{flex:1 0 210px",
-            self.source,
-        )
-        self.assertIn("--designer-summary-icon-size:18px", self.source)
-        self.assertIn(".designer-device-strip ha-icon .mdi{display:block", self.source)
-        self.assertIn("width:27px;height:16px;min-width:27px;min-height:16px", self.source)
-        self.assertIn("width:22px;height:16px;min-width:22px;min-height:16px", self.source)
-        self.assertIn(".designer-device-strip .designer-device-meter .signal-bars span:nth-child(4){height:14px}", self.source)
-        self.assertEqual(self.source.count('class="designer-meter-value"'), 2)
-        self.assertIn(".designer-device-meter .designer-meter-value{display:block;margin:0;color:var(--primary-text-color)", self.source)
-
-    def test_designer_command_cards_match_the_page_visual_system(self):
-        for label in ("Soubor", "Proměnné"):
-            self.assertIn(f"<strong>{label}</strong>", self.source)
-        self.assertNotIn("<strong>Mapování</strong>", self.source)
-        self.assertNotIn("<strong>Zobrazení</strong>", self.source)
-        self.assertIn('class="designer-command-direct designer-command-orientation"', self.source)
-        self.assertIn('class="designer-command-direct designer-command-background"', self.source)
-        self.assertIn('data-orientation="landscape"', self.source)
-        for color in ("white", "black", "red"):
-            self.assertIn(f'data-background="{color}"', self.source)
-        self.assertIn('class="designer-command-card', self.source)
-        self.assertIn('class="designer-command-icon"', self.source)
-        self.assertIn('class="designer-command-copy"', self.source)
-        self.assertIn('class="designer-command-actions"', self.source)
-        self.assertIn('class="designer-menu-head"', self.source)
-        self.assertIn(".designer-commandbar .designer-command-group{display:grid", self.source)
-        self.assertIn(".designer-command-card.active", self.source)
-
     def test_400x300_display_uses_the_supplied_physical_frame(self):
         self.assertIn("_isLarge400Device", self.source)
         self.assertIn('class="designer-device-stage device-preview-designer-copy', self.source)
@@ -347,7 +430,6 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("1039 / 898", self.source)
         self.assertIn("width:calc(var(--designer-body-width) + 2px)", self.source)
         self.assertIn("--designer-body-width:${baseWidth}px", self.source)
-        self.assertIn("--designer-body-width:${designerBaseWidth * this._zoom}px", self.source)
         self.assertIn(".device-preview-large400:after,.designer-device-large400:after{display:none}", self.source)
         self.assertIn('class="device-large400-bottom-band"', self.source)
         self.assertIn('class="device-large400-mac"', self.source)
@@ -402,7 +484,6 @@ class FrontendToolLibraryTests(unittest.TestCase):
             "ctx.drawImage(nativeCanvas, 0, 0, canvas.width, canvas.height);",
             self.source,
         )
-        self.assertIn("Math.min(designerFrameWidth, designerFrameHeight) * 0.06", self.source)
         self.assertIn('class="device-preview-designer-svg"', self.source)
         self.assertIn("<foreignObject", self.source)
         self.assertIn("designer-device-stage device-preview-designer-copy", self.source)
@@ -412,16 +493,9 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".display-preview-slot .device-preview-designer-copy{box-shadow:none;filter:none}", self.source)
 
     def test_portrait_orientation_rotates_the_complete_physical_frame(self):
-        self.assertIn('class="designer-device-stage', self.source)
-        self.assertIn('--designer-frame-rotation:${this._orientation === "portrait" ? "90deg" : "0deg"}', self.source)
         self.assertIn('--designer-frame-rotation:${portraitLayout ? "90deg" : "0deg"}', self.source)
         self.assertIn("transform:translate(-50%,-50%) rotate(var(--designer-frame-rotation,0deg))", self.source)
         self.assertIn("const outerWidth = portraitLayout ? frameHeight : frameWidth", self.source)
-
-    def test_ha_designer_binds_every_entity_picker(self):
-        self.assertIn("data-custom-entity-picker", self.source)
-        self.assertIn('querySelectorAll("[data-custom-entity-picker]")', self.source)
-        self.assertNotIn('id="customElementEntity"', self.source)
 
     def test_designer_and_backend_share_the_bundled_display_font(self):
         self.assertIn('value="DRATEK eInk Sans" disabled', self.source)
@@ -486,12 +560,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
             self.assertIn(field, self.source)
         self.assertIn('chartType === "bar" ? (object.barColor', self.source)
 
-    def test_designer_and_manual_send_use_canonical_backend_preview(self):
+    def test_device_cards_use_canonical_backend_preview(self):
         self.assertIn('type: "dratek_eink/render_preview"', self.source)
-        self.assertIn("this._scheduleCanonicalDesignerPreview();", self.source)
         self.assertIn("await this._renderCanonicalPreview(automation, device.address)", self.source)
         self.assertIn("image,", self.source)
-        self.assertIn("fullContext.drawImage(image, 0, 0, full.width, full.height)", self.source)
 
     def test_cached_backend_preview_prevents_renderer_flicker(self):
         self.assertIn("this._backendPreviewImage = image;", self.source)

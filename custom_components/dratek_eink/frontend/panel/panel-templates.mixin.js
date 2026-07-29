@@ -269,10 +269,6 @@ export const templatesMixin = {
   },
 
   _addSymbol(symbol) {
-    if (this._activeTab === "custom" && this._customWorkspaceView === "editor") {
-      this._addCustomLayerSymbol(symbol);
-      return;
-    }
     this._pushHistory();
     const size = this._displaySize();
     const object = {

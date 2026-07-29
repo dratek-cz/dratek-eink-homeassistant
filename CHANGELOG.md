@@ -2,6 +2,28 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.131] - 2026-07-29
+
+### Nastavení displeje a šablony
+- Karty displejů otevírají nové nastavení s přehledem baterie, signálu, připojení a náhledu.
+- Galerie obsahuje dvacet kategorií šablon, vyhledávání, požadované proměnné a označení právě používaných návrhů.
+- Malý displej používá jednu šablonu, velký až dvě; při nahrazení lze vybrat konkrétní první nebo druhou šablonu.
+- Editor šablony podporuje přesouvání po ploše, úzký i široký formát, otočení displeje a dvě rozložení velkého panelu.
+- Náhledy šablon se při změně poměru stran škálují bez rozpadu rozložení a malé displeje využívají téměř celou obrazovku.
+- Aktuální tříbarevný náhled lze oranžovým tlačítkem odeslat do fronty zápisu displeje.
+
+### Odstranění Designeru HA prvků
+- Samostatná záložka Designer HA prvků, její knihovna, frontendové moduly a testovací náhled byly odstraněny.
+- Z běžného Designeru displeje byla odstraněna složka Moje a vstupy vedoucí do knihovny HA prvků.
+- Websocketové příkazy pro správu knihovny vlastních prvků se již neregistrují.
+- Vykreslení vrstvených prvků již uložených přímo v návrzích zůstává zachované kvůli zpětné kompatibilitě.
+
+### Nahrazení původního Designeru displeje
+- Původní samostatný designer byl nahrazen přehlednějším nastavením konkrétního displeje.
+- Mapa připojení už neotevírá starý editor klávesnicí ani kliknutím na zařízení.
+- Původní pracovní plocha, Inspector, projektové dialogy a samostatný modul ručního odesílání se již nevykreslují.
+- Uložené návrhy a jejich backendové vykreslování zůstávají zachované pro náhledy a automatické aktualizace.
+
 ## [0.1.130] - 2026-07-28
 
 ### Fronta zápisu a paralelní gatewaye
