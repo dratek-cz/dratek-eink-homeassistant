@@ -72,7 +72,49 @@ export const previewMixin = {
       this._drawSelection(selectionContext);
     }
     this._paintDevicePreviews();
+    this._paintDisplayTemplateDitheredPreviews();
     this._scheduleCanonicalDesignerPreview();
+  },
+
+  // Templates render as crisp HTML/SVG on screen, but the physical e-ink
+  // panel only shows a dithered, native-resolution 3-color bitmap - the same
+  // one _rasterizeDisplayTemplatePreview produces before sending. Paint that
+  // exact bitmap into the dropzone preview (pixelated, no smoothing) so what
+  // you see there matches 1:1 what actually gets sent to the display.
+  _paintDisplayTemplateDitheredPreviews() {
+    const canvases = [...this.shadowRoot.querySelectorAll("canvas[data-dithered-preview]")];
+    if (!canvases.length) return;
+    this._ditheredPreviewCache ||= {};
+    this._ditheredPreviewPending ||= {};
+    canvases.forEach((canvas) => {
+      const key = canvas.dataset.ditheredPreview || "";
+      const address = canvas.dataset.ditheredAddress || "";
+      if (!address) return;
+      const cached = this._ditheredPreviewCache[address];
+      if (cached?.key === key && cached.image?.complete) {
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        context.imageSmoothingEnabled = false;
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(cached.image, 0, 0, canvas.width, canvas.height);
+        return;
+      }
+      if (this._ditheredPreviewPending[address] === key) return;
+      this._ditheredPreviewPending[address] = key;
+      const screen = canvas.closest(".designer-device-screen");
+      if (!screen) return;
+      this._rasterizeDisplayTemplatePreview(screen).then((dataUrl) => {
+        if (this._ditheredPreviewPending[address] !== key) return;
+        const image = new Image();
+        image.onload = () => {
+          if (this._ditheredPreviewPending[address] !== key) return;
+          this._ditheredPreviewCache[address] = { key, image };
+          delete this._ditheredPreviewPending[address];
+          this._paintDisplayTemplateDitheredPreviews();
+        };
+        image.onerror = () => { delete this._ditheredPreviewPending[address]; };
+        image.src = dataUrl;
+      }).catch(() => { delete this._ditheredPreviewPending[address]; });
+    });
   },
 
   _paintCachedCanonicalPreview(canvas) {

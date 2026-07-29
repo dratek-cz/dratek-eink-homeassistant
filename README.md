@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.141
+
+- náhled v ploše pro šablony teď ukazuje stejný ditrovaný, pixelovaný obrázek v nativním rozlišení displeje, jaký se skutečně odesílá na fyzický displej, místo hladkého HTML náhledu – vidíš tak 1:1, jak bude displej opravdu vypadat
+
 ## Novinky ve verzi 0.1.140
 
 - zásadní oprava odesílání do displeje – export obrázku odstraňoval ikony, které se ještě nestihly vykreslit, což posunulo celé rozložení šablony a způsobilo, že odeslaný obrázek vůbec neodpovídal náhledu (text přes text, chybějící ikony); export teď na ikony počká a rozložení šablony už nikdy nenaruší

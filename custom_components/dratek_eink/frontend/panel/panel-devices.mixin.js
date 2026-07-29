@@ -1131,6 +1131,13 @@ export const devicesMixin = {
     const autoSlotWidth = layout === "side-by-side" ? sourceWidth / 2 : sourceWidth;
     const autoSlotHeight = layout === "stacked" ? sourceHeight / 2 : sourceHeight;
     const autoFormat = autoSlotWidth >= autoSlotHeight ? "wide" : "narrow";
+    const ditherKey = autoFit ? this._escape(JSON.stringify({
+      t: [template?.id || null, large400Layout && layout !== "single" ? (secondaryTemplate?.id || null) : null],
+      o: orientation,
+      l: layout,
+      z: Math.round(previewZoom * 100),
+      b: this._displayTemplateBindings?.[address] || null,
+    })) : "";
     return `<div class="template-physical-preview device-preview-wrap" style="--template-preview-zoom:${previewZoom}">
       <div class="device-preview-fit" style="--frame-ratio:${(outerWidth / outerHeight).toFixed(4)};--preview-width:${Math.min(620, Math.max(250, Math.round(470 * outerWidth / outerHeight)))}px">
         <svg class="device-preview-designer-svg" viewBox="0 0 ${outerWidth} ${outerHeight}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Náhled šablony v rámečku displeje">
@@ -1142,6 +1149,7 @@ export const devicesMixin = {
                   ${this._renderDisplayTemplateSurface(template, large400Layout ? (autoFit ? autoFormat : (this._displayTemplateFormats?.primary || "narrow")) : (orientation === "landscape" ? "wide" : "narrow"), true, "primary", autoFit || !large400Layout, large400Layout ? (this._displayTemplateSizes?.primary || "large") : "large", autoFit)}
                   ${large400Layout && layout !== "single" ? this._renderDisplayTemplateSurface(secondaryTemplate, autoFit ? autoFormat : (this._displayTemplateFormats?.secondary || "narrow"), false, "secondary", autoFit, "small", autoFit) : ""}
                 </div>
+                ${autoFit ? `<canvas class="template-dithered-preview" data-dithered-preview="${ditherKey}" data-dithered-address="${this._escape(address)}" width="${sourceWidth}" height="${sourceHeight}"></canvas>` : ""}
               </div>
             </div>
           </foreignObject>

@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.141] - 2026-07-29
+
+### Přidáno
+- Náhled šablony v ploše pro šablony teď ukazuje stejný ditrovaný (černá/bílá/červená), pixelovaný obrázek v nativním rozlišení displeje, jaký se skutečně odesílá na fyzický displej – ne už hladce vykreslené HTML/SVG. Náhled se tak zobrazuje 1:1 s tím, co reálně uvidíš na displeji, včetně toho, jak dobře (nebo špatně) se čitelně vykreslí drobný text a ikony po ditheringu na malé rozlišení.
+
 ## [0.1.140] - 2026-07-29
 
 ### Opraveno
