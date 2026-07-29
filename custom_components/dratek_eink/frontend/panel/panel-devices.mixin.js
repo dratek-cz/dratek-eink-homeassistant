@@ -564,7 +564,7 @@ export const devicesMixin = {
     const previews = {
       weather: `<div class="tpl tpl-weather">
         ${icon("weather-partly-cloudy", "tpl-weather-icon")}
-        <strong>${value(1, "Pátek")}</strong><span>${value(3, "23. května")}</span><i></i><b>${value(2, "12:45")}</b><i></i>
+        <strong>${value(1, "Polojasno")}</strong><span>${value(3, "23. května")}</span><i></i><b>${value(2, "12:45")}</b><i></i>
         <em>${value(0, "23 °C")}</em><small>${icon("thermometer")} ${value(1, "Polojasno")}<br>${value(4, "24° / 13°")}</small>
         <footer><span>SO<br>${icon("weather-partly-cloudy")}<br>${value(4, "22°")}</span><span>NE<br>${icon("weather-sunny")}<br>25°</span><span>PO<br>${icon("weather-rainy")}<br>18°</span><span>ÚT<br>${icon("weather-cloudy")}<br>20°</span></footer>
       </div>`,

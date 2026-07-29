@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.139] - 2026-07-29
+
+### Opraveno
+- Šablona Počasí používala proměnnou „Stav počasí" (index 1) na dvou různých místech (nadpis i popisek), ale nadpis měl zavádějící ukázkový text „Pátek" místo stavu počasí. Při napojení na reálnou HA entitu se dlouhý text stavu počasí mohl v úzkém řádku přetéct do sousedního řádku a vizuálně se překrýt s datem.
+- Texty proměnných v šabloně Počasí (stav počasí, datum, čas, teplota) se nyní při přetečení ořežou třemi tečkami místo přetečení do sousedního řádku.
+
 ## [0.1.138] - 2026-07-29
 
 ### Opraveno

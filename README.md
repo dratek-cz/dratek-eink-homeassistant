@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.139
+
+- opravena šablona Počasí – nadpis omylem ukazoval ukázkový text dne v týdnu místo stavu počasí, což při napojení na reálnou entitu způsobovalo zmatený/přetékající text
+- texty proměnných v šabloně Počasí se při přetečení teď ořežou třemi tečkami místo přetečení do sousedního řádku
+
 ## Novinky ve verzi 0.1.138
 
 - opravena verze zobrazená v hlavičce panelu, která zůstávala natvrdo na 0.1.134 – číslo verze bylo zdvojené na čtyřech místech a tři z nich se při minulých vydáních neaktualizovaly
