@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.151] - 2026-07-30
+
+### Opraveno
+- Ruční odeslání šablony nyní respektuje zvolenou přenosovou cestu displeje a použije jeho gateway místo chybného vynucení lokálního Bluetooth.
+- Aplikace zobrazí úspěšný zápis až po skutečném dokončení přenosu. Chyba na pozadí již není vydávána za úspěšné nahrání.
+- SDK typ `296` se správně zpracuje jako displej 800 × 480 a backend již nevytváří chybný obrazový buffer 296 × 128.
+- Ruční režim bez automatických aktualizací zůstává zachovaný.
+
 ## [0.1.150] - 2026-07-30
 
 ### Změněno

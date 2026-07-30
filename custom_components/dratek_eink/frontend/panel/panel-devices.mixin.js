@@ -927,8 +927,10 @@ export const devicesMixin = {
     }
     try {
       const image = await this._renderCurrentDisplayTemplateImage(device);
+      const gatewayId = String(this._selectedGatewayId || "");
       const result = await this._hass.callWS({
-        type: "dratek_eink/send_design",
+        type: gatewayId ? "dratek_eink/gateways/send_design" : "dratek_eink/send_design",
+        ...(gatewayId ? { gateway_id: gatewayId } : {}),
         address: device.address,
         sdk_type: Number(device.sdk_type),
         image,
@@ -939,9 +941,7 @@ export const devicesMixin = {
       this._rememberSentDisplayPreview(device, image);
       this._templateSendResult = {
         ok: true,
-        message: result?.queued || result?.queue_status === "queued"
-          ? "Náhled byl přidán do fronty. Displej zůstává v ručním režimu."
-          : "Náhled byl odeslán. Další zápis proběhne pouze po ručním odeslání.",
+        message: `Náhled byl úspěšně zapsán přes ${gatewayId ? "zvolenou gateway" : "Home Assistant Bluetooth"}. Další zápis proběhne pouze ručně.`,
       };
       this._loadQueue?.(true);
     } catch (err) {

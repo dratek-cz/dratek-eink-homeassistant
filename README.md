@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.151
+
+- opraveno ruční nahrávání návrhů do velkých displejů přes jejich zvolenou gateway
+- SDK typ `296` používá správné rozlišení 800 × 480 také v backendovém obrazovém bufferu
+- potvrzení úspěchu se zobrazí až po skutečně dokončeném zápisu; případná chyba přenosu se nyní zobrazí přímo v aplikaci
+- displeje zůstávají v čistě ručním režimu bez automatických aktualizací
+
 ## Novinky ve verzi 0.1.150
 
 - integrace je přepnuta do čistě ručního režimu bez automatických zápisů při změnách entit

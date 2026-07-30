@@ -2,7 +2,7 @@ DOMAIN = "dratek_eink"
 
 DRATEK_COMPANY_ID = 0x5053
 
-PANEL_VERSION = "0.1.150"
+PANEL_VERSION = "0.1.151"
 GATEWAY_FIRMWARE_VERSION = "0.1.42-gateway"
 
 CONTROL_CHARS = {
@@ -42,7 +42,7 @@ DEVICE_SIZES = {
     160: (250, 132),
     192: (196, 96),
     224: (640, 360),
-    296: (296, 128),
+    296: (800, 480),
     264: (250, 128),
     267: (250, 128),
     270: (250, 128),

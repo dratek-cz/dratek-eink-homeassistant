@@ -286,9 +286,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("await this._captureCurrentDisplayTemplatePreview();", self.source)
         self.assertIn("preview_image: image", self.source)
         self.assertIn("this._saveCachedDeviceDrafts?.();", self.source)
-        self.assertIn('_hass.callWS({\n        type: "dratek_eink/send_design"', self.source)
         self.assertIn(
-            "Displej zůstává v ručním režimu",
+            'type: gatewayId ? "dratek_eink/gateways/send_design" : "dratek_eink/send_design"',
+            self.source,
+        )
+        self.assertIn(
+            "Další zápis proběhne pouze ručně.",
             self.source,
         )
         self.assertIn("_rasterizeDisplayTemplatePreview(screen)", self.source)
