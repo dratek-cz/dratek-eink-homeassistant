@@ -4,6 +4,15 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.150
+
+- integrace je přepnuta do čistě ručního režimu bez automatických zápisů při změnách entit
+- při startu se odstraní staré uložené automatiky, takže hodiny ani dřívější šablona již nový obsah nepřepíšou
+- vypnuty jsou periodické BLE skeny, polling fronty, automatické obnovování přehledu a backendové náhledy při editaci
+- panel vykresluje pouze otevřenou záložku, zachovává statické styly a neduplikuje překreslení canvasu
+- data gatewayí, fronty a sériových portů se načtou až po ručním otevření příslušné stránky
+- lokální náhled používá SVG cesty ikon a nezobrazuje náhradní čtverce
+
 ## Novinky ve verzi 0.1.149
 
 - odeslání nového návrhu odstraní všechny staré automatické aktualizace daného displeje

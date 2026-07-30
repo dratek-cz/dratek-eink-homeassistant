@@ -59,10 +59,6 @@ export const queueMixin = {
     if (render) {
       this._renderQueueKeepingFocus();
     }
-    window.clearTimeout(this._queuePollTimer);
-    if (["queue", "devices", "topology"].includes(this._activeTab)) {
-      this._queuePollTimer = window.setTimeout(() => this._loadQueue(true), 1500);
-    }
   },
 
   // Vlastní rozbalovací filtr. Nativní <select> tu nešel použít: fronta se

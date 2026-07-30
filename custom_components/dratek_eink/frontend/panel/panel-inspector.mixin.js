@@ -161,14 +161,12 @@ export const inspectorMixin = {
         await this._captureCurrentDisplayTemplatePreview();
       }
       this._activeTab = button.dataset.tab;
-      window.clearTimeout(this._queuePollTimer);
       this._render();
       this._paint();
       // Nová záložka se otevře od začátku. Bez toho zůstane odrolovaná pozice
       // z předchozí stránky a lišta záložek působí, jako by uskočila.
       this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
       if (this._activeTab === "devices") {
-        this._scheduleAutomaticScan(60);
         await this._loadQueue(true);
       }
       if (this._activeTab === "queue") {
@@ -181,7 +179,10 @@ export const inspectorMixin = {
         ]);
       }
       if (this._activeTab === "gateways") {
-        await this._loadGateways(true);
+        await Promise.all([
+          this._loadGateways(true),
+          this._loadSerialPorts(),
+        ]);
       }
     }));
     this.shadowRoot.querySelector("#closeDisplayCatalog")?.addEventListener("click", () => {
@@ -1202,7 +1203,7 @@ export const inspectorMixin = {
       return `${geometry}${content}${appearance}${variable}${statusSource}`;
     }
 
-    if (object.type === "rect") return `${geometry}${this._inspectorSection("mdi:palette-outline", "Výplň a rámeček", `${this._inspectorColor("fill", object.fill, "Výplň", ["none", "black", "red", "white"])}${this._inspectorColor("stroke", object.stroke, "Rámeček", ["none", "black", "red"])}<div class="field"><label><ha-icon icon="mdi:border-width"></ha-icon>Síla rámečku</label><input data-prop="strokeWidth" type="number" min="0" value="${object.strokeWidth || 0}"></div>`)}`;
+    if (object.type === "rect") return `${geometry}${this._inspectorSection("mdi:palette-outline", "Výplň a rámeček", `${this._inspectorColor("fill", object.fill, "Výplň", ["none", "black", "red", "white"])}${this._inspectorColor("stroke", object.stroke, "Rámeček", ["none", "black", "red"])}<div class="field"><label><ha-icon icon="mdi:format-line-weight"></ha-icon>Síla rámečku</label><input data-prop="strokeWidth" type="number" min="0" value="${object.strokeWidth || 0}"></div>`)}`;
 
     if (object.type === "chart") {
       const chart = this._inspectorSection("mdi:chart-box-outline", "Graf", `

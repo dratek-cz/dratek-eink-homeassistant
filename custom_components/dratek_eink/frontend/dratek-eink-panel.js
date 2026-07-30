@@ -103,9 +103,6 @@ class DratekEinkPanel extends HTMLElement {
     this._displayCatalogOpen = false;
     this._topologyViewMode = this._loadUiPreference("topology-view-mode", "auto");
     this._queue = { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0 };
-    this._queuePollTimer = null;
-    this._automaticScanTimer = null;
-    this._lastAutomaticScanAt = 0;
     this._gateways = [];
     this._gatewayResult = null;
     this._gatewayBusy = false;
@@ -139,32 +136,19 @@ class DratekEinkPanel extends HTMLElement {
     this._propertyEditTimer = null;
     this._designerFontReady = false;
     this._designerFontLoading = null;
-    this._backendPreviewTimer = null;
-    this._backendPreviewRequestId = 0;
-    this._backendPreviewImage = null;
-    this._backendPreviewAddress = "";
     this._devicePreviewImages = new Map();
     this._devicePreviewRequests = new Map();
-    this._handleLocationChanged = () => {
-      if (String(window.location?.pathname || "").includes("dratek-eink")) this._scheduleAutomaticScan(0);
-    };
   }
 
   connectedCallback() {
-    window.addEventListener("location-changed", this._handleLocationChanged);
     this._render();
     this._paint();
-    this._scheduleAutomaticScan();
   }
 
   disconnectedCallback() {
-    window.removeEventListener("location-changed", this._handleLocationChanged);
     window.clearTimeout(this._propertyEditTimer);
     window.clearTimeout(this._flashPollTimer);
     window.clearTimeout(this._otaPollTimer);
-    window.clearTimeout(this._queuePollTimer);
-    window.clearTimeout(this._automaticScanTimer);
-    window.clearTimeout(this._backendPreviewTimer);
     // A draft save is debounced by 700 ms. Leaving the panel inside that window
     // used to drop the edit silently, so flush it instead of clearing it.
     if (this._draftSaveTimer) {
@@ -172,9 +156,6 @@ class DratekEinkPanel extends HTMLElement {
       this._draftSaveTimer = null;
       this._saveCurrentDeviceDraft();
     }
-    this._backendPreviewRequestId += 1;
-    this._backendPreviewImage = null;
-    this._backendPreviewAddress = "";
   }
 
   set hass(hass) {
@@ -183,16 +164,12 @@ class DratekEinkPanel extends HTMLElement {
       this._rendered = true;
       this._render();
       this._paint();
-      this._loadGateways();
-      this._loadQueue();
-      this._loadSerialPorts();
       if (this._result?.devices?.length) {
         this._loadDevicePreviewDrafts(this._result.devices).then(() => {
           this._render();
           this._paint();
         });
       }
-      this._scheduleAutomaticScan(100);
     }
   }
 

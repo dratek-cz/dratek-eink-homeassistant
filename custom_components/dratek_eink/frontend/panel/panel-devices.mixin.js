@@ -37,7 +37,6 @@ export const devicesMixin = {
         this._lastRenderedDeviceSignature = this._deviceAddressSignature(this._result);
         this._renderKeepingSearchFocus();
       }
-      if (this._activeTab === "devices") this._scheduleAutomaticScan(30 * 1000);
     }
   },
 
@@ -54,19 +53,6 @@ export const devicesMixin = {
       .map((device) => `${String(device.address || "").toUpperCase()}:${device.temporarily_unseen ? "stale" : "seen"}`)
       .sort()
       .join("|");
-  },
-
-  _scheduleAutomaticScan(delay = 180) {
-    if (!this._hass) return;
-    window.clearTimeout(this._automaticScanTimer);
-    this._automaticScanTimer = window.setTimeout(() => {
-      this._automaticScanTimer = null;
-      const now = Date.now();
-      if (now - this._lastAutomaticScanAt < 1000) return;
-      this._lastAutomaticScanAt = now;
-      this._lastRenderedDeviceSignature = this._deviceAddressSignature(this._result);
-      this._scan({ background: true });
-    }, delay);
   },
 
   _device() {
@@ -129,7 +115,6 @@ export const devicesMixin = {
       this._selectPreferredRoute(device);
       this._render();
       this._paint();
-      this._scan({ background: true });
     } catch (err) {
       this._error = this._message(err);
       this._render();
@@ -955,8 +940,8 @@ export const devicesMixin = {
       this._templateSendResult = {
         ok: true,
         message: result?.queued || result?.queue_status === "queued"
-          ? "Náhled byl přidán do fronty. Staré automatické aktualizace byly odstraněny; nové se aktivují po úspěšném zápisu."
-          : "Náhled byl odeslán. Staré automatické aktualizace byly nahrazeny pouze aktualizacemi nového návrhu.",
+          ? "Náhled byl přidán do fronty. Displej zůstává v ručním režimu."
+          : "Náhled byl odeslán. Další zápis proběhne pouze po ručním odeslání.",
       };
       this._loadQueue?.(true);
     } catch (err) {

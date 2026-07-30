@@ -2,6 +2,20 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.150] - 2026-07-30
+
+### Změněno
+- Integrace nyní pracuje v čistě ručním režimu. Staré uložené automatické aktualizace se při startu odstraní a změny entit již samy nespouštějí renderování ani zápis do displeje.
+- Odstraněny byly periodické BLE skeny, polling fronty, automatické obnovování přehledové karty a backendové generování náhledů během editace.
+- Panel vytváří pouze právě otevřenou záložku, zachovává statické styly mezi rendery a slučuje duplicitní překreslení canvasu.
+- Gatewaye, fronta a sériové porty se načítají až při ručním otevření příslušné stránky.
+- Projektové úložiště a úložiště historie přenosů se znovu používají z paměti místo opakovaného vytváření a čtení.
+- Lokální testovací panel vykresluje Material Design Icons přímo jako SVG cesty, takže nepoužívá chybějící ikonový font ani náhradní čtverce.
+
+### Opraveno
+- Starší frontend uložený v cache již nemůže znovu aktivovat automatický zápis odesláním původního automation payloadu.
+- Ručně odeslaný návrh zůstane na displeji, dokud uživatel neprovede další ruční upload.
+
 ## [0.1.149] - 2026-07-30
 
 ### Opraveno

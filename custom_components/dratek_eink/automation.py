@@ -134,7 +134,7 @@ def _source_value(state: Any, attribute: str) -> Any:
 
 
 class EntityAutoUpdateManager:
-    """Persist entity bindings and refresh displays after state changes."""
+    """Keep legacy automation data disabled while manual-only mode is active."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
@@ -154,15 +154,13 @@ class EntityAutoUpdateManager:
     async def async_initialize(self) -> None:
         if self._initialized:
             return
-        data = await self._store.async_load()
-        configs = data.get("configs", {}) if isinstance(data, dict) else {}
-        self._configs = {
-            str(address).upper(): config
-            for address, config in configs.items()
-            if isinstance(config, dict) and config.get("enabled")
-        }
+        # Automatic display refreshes used to survive Home Assistant restarts.
+        # Manual-only mode deliberately forgets that persisted state so an old
+        # clock or entity binding cannot wake up and overwrite a display.
+        await self._store.async_load()
+        self._configs = {}
         self._initialized = True
-        self._refresh_listener()
+        await self._store.async_save({"configs": {}})
 
     @staticmethod
     def _refresh_interval(config: dict[str, Any]) -> int:
@@ -175,22 +173,15 @@ class EntityAutoUpdateManager:
     async def async_set_config(self, address: str, config: dict[str, Any] | None) -> None:
         await self.async_initialize()
         normalized = address.upper()
-        if not config or not config.get("enabled") or not config.get("bindings"):
-            self._configs.pop(normalized, None)
-            self._last_refresh_at.pop(normalized, None)
-            self._pending_refreshes.discard(normalized)
-            cancel_timer = self._timers.pop(normalized, None)
-            if cancel_timer:
-                cancel_timer()
-        else:
-            stored = dict(config)
-            stored["address"] = normalized
-            stored["enabled"] = True
-            stored["refresh_interval_seconds"] = self._refresh_interval(stored)
-            self._configs[normalized] = stored
-            # The configuration is saved after a manual upload. Start the safety
-            # interval now so an entity change cannot immediately write again.
-            self._last_refresh_at[normalized] = time.monotonic()
+        self._configs.pop(normalized, None)
+        self._last_refresh_at.pop(normalized, None)
+        self._pending_refreshes.discard(normalized)
+        cancel_timer = self._timers.pop(normalized, None)
+        if cancel_timer:
+            cancel_timer()
+        refresh_task = getattr(self, "_refresh_tasks", {}).pop(normalized, None)
+        if refresh_task is not None and not refresh_task.done():
+            refresh_task.cancel()
         await self._store.async_save({"configs": self._configs})
         self._refresh_listener()
 
@@ -247,53 +238,14 @@ class EntityAutoUpdateManager:
         element: dict[str, Any],
         affected_object_ids: dict[str, set[str]],
     ) -> list[str]:
-        """Refresh saved bindings and queue displays that use an edited element."""
+        """Do not schedule display writes when a reusable element is edited."""
         await self.async_initialize()
-        element_id = str(element.get("id") or "")
-        affected_addresses: list[str] = []
-        for address, config in self._configs.items():
-            object_ids = affected_object_ids.get(address, set())
-            changed = False
-            bindings = config.get("bindings")
-            if not isinstance(bindings, list):
-                continue
-            for binding in bindings:
-                if not isinstance(binding, dict):
-                    continue
-                if (
-                    str(binding.get("custom_element_id") or "") != element_id
-                    and str(binding.get("id") or "") not in object_ids
-                ):
-                    continue
-                if _update_binding_from_custom_element(binding, element):
-                    binding["custom_element_id"] = element_id
-                    changed = True
-            if changed:
-                affected_addresses.append(address)
-        if not affected_addresses:
-            return []
-        await self._store.async_save({"configs": self._configs})
-        self._refresh_listener()
-        for address in affected_addresses:
-            self._schedule_refresh(address)
-        return affected_addresses
+        return []
 
     def _refresh_listener(self) -> None:
         if self._unsubscribe:
             self._unsubscribe()
             self._unsubscribe = None
-        entity_ids = sorted(
-            {
-                entity_id
-                for config in self._configs.values()
-                for binding in config.get("bindings", [])
-                for entity_id, _attribute in _binding_sources(binding)
-            }
-        )
-        if entity_ids:
-            self._unsubscribe = async_track_state_change_event(
-                self.hass, entity_ids, self._handle_state_change
-            )
 
     @staticmethod
     def _condition_matches(value: Any, operator: str, target: str) -> bool:
@@ -446,6 +398,8 @@ class EntityAutoUpdateManager:
 
     @callback
     def _handle_state_change(self, event: Any) -> None:
+        # Manual-only mode never reacts to Home Assistant state changes.
+        return
         entity_id = event.data.get("entity_id")
         old_state = event.data.get("old_state")
         new_state = event.data.get("new_state")
@@ -464,6 +418,8 @@ class EntityAutoUpdateManager:
 
     @callback
     def _schedule_refresh(self, address: str) -> None:
+        # Defense in depth for callbacks left behind by an older loaded module.
+        return
         self._pending_refreshes.add(address)
         active_task = self._refresh_tasks.get(address)
         if active_task is not None and not active_task.done():

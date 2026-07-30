@@ -34,6 +34,8 @@
     window.addEventListener("unhandledrejection", (event) => showBootError(event.reason?.stack || event.reason));
   </script>
   <script type="module">
+    import { mdiPaths } from "./vendor/mdi/paths.js";
+
     if (!customElements.get("ha-icon")) {
       customElements.define("ha-icon", class extends HTMLElement {
         static get observedAttributes() { return ["icon"]; }
@@ -47,20 +49,16 @@
           if (!this._shadow) return;
           const icon = String(this.getAttribute("icon") || "").replace(/^mdi:/, "");
           if (!icon) { this._shadow.innerHTML = ""; return; }
-          // Real ha-icon fetches mdi path data and renders it into its shadow
-          // root asynchronously; mimic that delay so the panel's own
-          // "wait for icons before exporting" logic gets exercised for real
-          // instead of racing against an instantly-available mock.
+          // Home Assistant renders MDI icons as SVG paths. Use the same shape
+          // data locally so serialized previews never depend on a webfont and
+          // therefore cannot turn into fallback squares.
           this._shadow.innerHTML = "";
-          const attempt = (tries) => {
+          const attempt = () => {
             if (String(this.getAttribute("icon") || "").replace(/^mdi:/, "") !== icon) return;
-            const codepoints = window.__mdiCodepoints;
-            if (!codepoints && tries < 20) { setTimeout(() => attempt(tries + 1), 50); return; }
-            const codepoint = codepoints?.[icon];
-            const glyph = codepoint ? String.fromCodePoint(codepoint) : "?";
-            this._shadow.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24"><text x="12" y="13" text-anchor="middle" dominant-baseline="central" font-family="Material Design Icons" font-size="21" fill="currentColor">${glyph}</text></svg>`;
+            const path = mdiPaths[icon] || mdiPaths.help-circle-outline;
+            this._shadow.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="${path}" fill="currentColor"></path></svg>`;
           };
-          setTimeout(() => attempt(0), 60);
+          setTimeout(attempt, 0);
         }
       });
     }
@@ -198,28 +196,6 @@
     };
 
     const panel = document.querySelector("#panel");
-    // ha-icon renders into panel's shadow root, and _render() replaces
-    // shadowRoot.innerHTML on every re-render, which would wipe out any
-    // <link>/<style> appended as normal children. adoptedStyleSheets lives on
-    // the ShadowRoot object itself, so it survives innerHTML reassignment.
-    // Font is self-hosted under tests/vendor/mdi/ (same-origin, no CORS games).
-    // @font-face rules inside a shadow root's adoptedStyleSheets don't reliably
-    // trigger font loading in this environment, so register the font directly
-    // via the FontFace API (document.fonts is document-global for rendering).
-    const mdiFont = new FontFace("Material Design Icons", "url(/tests/vendor/mdi/materialdesignicons-webfont.woff2) format('woff2')");
-    await mdiFont.load();
-    document.fonts.add(mdiFont);
-    const mdiCssText = await (await fetch("/tests/vendor/mdi/materialdesignicons.min.css")).text();
-    // Extract icon-name -> unicode codepoint map from the webfont CSS so the
-    // ha-icon mock below can render a real glyph via <text> instead of a
-    // placeholder shape, without needing a separate SVG path dataset.
-    window.__mdiCodepoints = {};
-    mdiCssText.replace(/\.mdi-([a-z0-9-]+)::?before\{content:"\\([0-9a-fA-F]+)"/g, (_, name, hex) => {
-      window.__mdiCodepoints[name] = parseInt(hex, 16);
-    });
-    const mdiSheet = new CSSStyleSheet();
-    await mdiSheet.replace(mdiCssText + "\nha-icon .mdi{font-size:1.35em;line-height:1;display:inline-block;}");
-    panel.shadowRoot.adoptedStyleSheets = [...panel.shadowRoot.adoptedStyleSheets, mdiSheet];
     const renderCanonicalHarness = async (automation) => {
       const image = new Image();
       image.src = automation.base_image;

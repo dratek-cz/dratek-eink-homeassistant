@@ -85,7 +85,7 @@ export const gatewayMixin = {
         <select id="flashPort" ${ports.length ? "" : "disabled"}>${ports.length
           ? ports.map((port) => `<option value="${this._escape(port.device)}" ${port.device === this._flashForm.port ? "selected" : ""}>${this._escape(port.device)} — ${this._escape(port.description || port.name || "")}</option>`).join("")
           : `<option value="">Žádný port nenalezen</option>`}</select>
-        <small class="port-picker-hint"><ha-icon icon="${ports.length ? "mdi:usb-port" : "mdi:usb-flash-drive-off-outline"}"></ha-icon>${hint}</small>
+        <small class="port-picker-hint"><ha-icon icon="${ports.length ? "mdi:usb-port" : "mdi:usb-flash-drive-outline"}"></ha-icon>${hint}</small>
       </div>
     </div>`;
   },

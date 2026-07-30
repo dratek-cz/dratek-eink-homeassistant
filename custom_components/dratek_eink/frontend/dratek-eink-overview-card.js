@@ -1,4 +1,4 @@
-const DRATEK_EINK_OVERVIEW_VERSION = "0.1.149";
+const DRATEK_EINK_OVERVIEW_VERSION = "0.1.150";
 const DRATEK_EINK_PANEL_PATH = "/dratek-eink";
 const overviewStore = {
   devices: [],
@@ -103,7 +103,6 @@ class DratekEinkOverviewCard extends HTMLElement {
       ...(config || {}),
     };
     this._render();
-    this._scheduleRefresh();
   }
 
   set hass(value) {
@@ -122,7 +121,6 @@ class DratekEinkOverviewCard extends HTMLElement {
     this._syncOverview();
     this._render();
     this._loadData();
-    this._scheduleRefresh();
   }
 
   disconnectedCallback() {
@@ -148,16 +146,6 @@ class DratekEinkOverviewCard extends HTMLElement {
 
   _refreshSeconds() {
     return Math.min(900, Math.max(30, Number(this._config.refresh_interval) || 60));
-  }
-
-  _scheduleRefresh() {
-    if (this._timer) window.clearTimeout(this._timer);
-    this._timer = null;
-    if (!this._connected) return;
-    this._timer = window.setTimeout(async () => {
-      await this._loadData(true);
-      this._scheduleRefresh();
-    }, this._refreshSeconds() * 1000);
   }
 
   async _loadData(force = false) {

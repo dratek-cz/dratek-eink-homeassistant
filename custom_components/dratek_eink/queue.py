@@ -33,6 +33,7 @@ class TransferQueue:
 
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
+        self._store = None
         self._jobs: list[dict[str, Any]] = []
         self._locks: dict[str, asyncio.Lock] = {}
         self._device_locks: dict[str, asyncio.Lock] = {}
@@ -44,13 +45,18 @@ class TransferQueue:
         self._save_lock = asyncio.Lock()
         self._loaded = False
 
+    def _history_store(self) -> Store:
+        if self._store is None:
+            self._store = Store(self.hass, QUEUE_STORE_VERSION, QUEUE_STORE_KEY)
+        return self._store
+
     async def _ensure_loaded(self) -> None:
         if self._loaded:
             return
         async with self._load_lock:
             if self._loaded:
                 return
-            data = await Store(self.hass, QUEUE_STORE_VERSION, QUEUE_STORE_KEY).async_load()
+            data = await self._history_store().async_load()
             jobs = data.get("jobs", []) if isinstance(data, dict) else []
             repaired_history = False
             self._jobs = []
@@ -291,7 +297,7 @@ class TransferQueue:
     async def _save_history(self) -> None:
         async with self._save_lock:
             completed = [job for job in self._jobs if job.get("status") not in {"queued", "writing"}]
-            await Store(self.hass, QUEUE_STORE_VERSION, QUEUE_STORE_KEY).async_save(
+            await self._history_store().async_save(
                 {"jobs": completed[-HISTORY_LIMIT:]}
             )
 

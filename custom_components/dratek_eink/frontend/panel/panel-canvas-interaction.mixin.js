@@ -415,8 +415,6 @@ export const canvasInteractionMixin = {
     } else if (finishedObjectDrag) {
       // Starý kanonický obrázek nesmí po puštění vrátit objekt na původní
       // pozici. Ponecháme živý lokální render a vyžádáme nový backendový.
-      this._backendPreviewImage = null;
-      this._backendPreviewAddress = "";
       this._paint();
     }
   },

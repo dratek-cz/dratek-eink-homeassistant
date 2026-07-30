@@ -234,7 +234,7 @@ class AutomationBindingTests(unittest.TestCase):
             automation._binding_sources(binding),
         )
 
-    def test_widget_attribute_change_schedules_display_refresh(self):
+    def test_widget_attribute_change_does_not_schedule_in_manual_mode(self):
         manager = automation.EntityAutoUpdateManager.__new__(
             automation.EntityAutoUpdateManager
         )
@@ -270,9 +270,9 @@ class AutomationBindingTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(["FF:FF:92:81:46:32"], scheduled)
+        self.assertEqual([], scheduled)
 
-    def test_custom_element_edit_updates_binding_and_schedules_display(self):
+    def test_custom_element_edit_does_not_schedule_display_in_manual_mode(self):
         manager = automation.EntityAutoUpdateManager.__new__(
             automation.EntityAutoUpdateManager
         )
@@ -326,13 +326,8 @@ class AutomationBindingTests(unittest.TestCase):
             )
         )
 
-        binding = manager._configs["FF:FF:92:81:46:32"]["bindings"][0]
-        self.assertEqual(["FF:FF:92:81:46:32"], affected)
-        self.assertEqual(["FF:FF:92:81:46:32"], scheduled)
-        self.assertEqual("element-1", binding["custom_element_id"])
-        self.assertEqual("switch.socket", binding["entity_id"])
-        self.assertEqual({"sensor.power", "switch.socket"}, set(binding["entity_ids"]))
-        self.assertEqual("Zapnuto", binding["layers"][0]["objects"][0]["text"])
+        self.assertEqual([], affected)
+        self.assertEqual([], scheduled)
 
     def test_preview_and_automatic_refresh_share_binding_value_collection(self):
         manager = automation.EntityAutoUpdateManager.__new__(

@@ -1,55 +1,12 @@
 export const previewMixin = {
 
 
-  async _renderCanonicalPreview(automation, address = this._device()?.address) {
-    if (!automation?.enabled || !address || !this._hass) return "";
-    const result = await this._hass.callWS({
-      type: "dratek_eink/render_preview",
-      address,
-      automation,
-    });
-    if (!result?.ok || !result.image) throw new Error("Backend nevytvořil náhled displeje.");
-    return result.image;
-  },
-
-  _scheduleCanonicalDesignerPreview() {
-    window.clearTimeout(this._backendPreviewTimer);
-    const requestId = ++this._backendPreviewRequestId;
-    if (this._drag && this._drag.mode !== "marquee") return;
-    if (this._activeTab !== "designer" || !this._device() || !this._hass) return;
-    this._backendPreviewTimer = window.setTimeout(async () => {
-      this._backendPreviewTimer = null;
-      const device = this._device();
-      const canvas = this.shadowRoot.querySelector("#editor");
-      if (!device || !canvas || requestId !== this._backendPreviewRequestId) return;
-      const automation = this._entityAutomationPayload();
-      if (!automation.enabled) return;
-      try {
-        const source = await this._renderCanonicalPreview(automation, device.address);
-        if (
-          requestId !== this._backendPreviewRequestId
-          || this._activeTab !== "designer"
-          || this._device()?.address !== device.address
-        ) return;
-        const image = new Image();
-        image.src = source;
-        await image.decode();
-        if (requestId !== this._backendPreviewRequestId) return;
-        this._backendPreviewImage = image;
-        this._backendPreviewAddress = device.address;
-        const context = canvas.getContext("2d", { willReadFrequently: true });
-        context.clearRect(0, 0, canvas.width, canvas.height);
-        context.imageSmoothingEnabled = false;
-        context.drawImage(image, 0, 0, canvas.width, canvas.height);
-      } catch (err) {
-        if (requestId === this._backendPreviewRequestId) {
-          console.warn("DRATEK eInk canonical preview failed:", err);
-        }
-      }
-    }, 120);
-  },
-
   _paint() {
+    if (this._paintedInCurrentTask) return;
+    this._paintedInCurrentTask = true;
+    queueMicrotask(() => {
+      this._paintedInCurrentTask = false;
+    });
     if (document.fonts && !this._designerFontReady) {
       this._ensureDesignerFont();
       return;
@@ -57,13 +14,6 @@ export const previewMixin = {
     const canvas = this.shadowRoot.querySelector("#editor");
     if (canvas) {
       this._drawScene(canvas.getContext("2d", { willReadFrequently: true }), canvas.width, canvas.height, false);
-      const hasCanonicalObjects = this._canonicalRenderObjects().length > 0;
-      if (hasCanonicalObjects && !this._drag) {
-        this._paintCachedCanonicalPreview(canvas);
-      } else if (!hasCanonicalObjects) {
-        this._backendPreviewImage = null;
-        this._backendPreviewAddress = "";
-      }
     }
     const selectionCanvas = this.shadowRoot.querySelector("#editorSelection");
     if (selectionCanvas) {
@@ -73,7 +23,6 @@ export const previewMixin = {
     }
     this._paintDevicePreviews();
     this._paintDisplayTemplateDitheredPreviews();
-    this._scheduleCanonicalDesignerPreview();
   },
 
   // The physical e-ink panel shows a 3-color bitmap at its own native
@@ -116,20 +65,9 @@ export const previewMixin = {
     });
   },
 
-  _paintCachedCanonicalPreview(canvas) {
-    const image = this._backendPreviewImage;
-    const address = this._device()?.address || "";
-    if (!image || this._backendPreviewAddress !== address || !image.complete) return;
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    context.imageSmoothingEnabled = false;
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  },
-
   _paintDevicePreviews() {
     const canvases = this.shadowRoot.querySelectorAll("canvas[data-device-preview]");
     if (!canvases.length) return;
-    const canonicalRequests = [];
     const previous = {
       objects: this._objects,
       variables: this._variables,
@@ -160,19 +98,6 @@ export const previewMixin = {
         nativeCanvas.height = sourceHeight;
         this._drawScene(nativeCanvas.getContext("2d", { willReadFrequently: true }), sourceWidth, sourceHeight, false);
         ctx.drawImage(nativeCanvas, 0, 0, canvas.width, canvas.height);
-        const device = (this._result?.devices || []).find((item) => String(item.address || "").toUpperCase() === address);
-        const automation = this._entityAutomationPayload(device, { width: sourceWidth, height: sourceHeight });
-        if (automation.enabled) {
-          const keySource = `${automation.base_image}|${JSON.stringify(automation.bindings)}`;
-          const key = `${keySource.length}:${this._hash(keySource)}`;
-          const cached = this._devicePreviewImages.get(address);
-          if (cached?.key === key && cached.image?.complete) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(cached.image, 0, 0, canvas.width, canvas.height);
-          } else {
-            canonicalRequests.push({ address, automation, key });
-          }
-        }
       });
     } finally {
       this._objects = previous.objects;
@@ -180,7 +105,6 @@ export const previewMixin = {
       this._backgroundColor = previous.backgroundColor;
       this._invertColors = previous.invertColors;
     }
-    canonicalRequests.forEach((request) => this._requestCanonicalDevicePreview(request));
   },
 
   _paintStoredDevicePreview(canvas, address, draft) {
@@ -214,33 +138,6 @@ export const previewMixin = {
     };
     image.src = source;
     return true;
-  },
-
-  async _requestCanonicalDevicePreview({ address, automation, key }) {
-    if (this._devicePreviewRequests.get(address) === key) return;
-    this._devicePreviewRequests.set(address, key);
-    try {
-      const source = await this._renderCanonicalPreview(automation, address);
-      if (this._devicePreviewRequests.get(address) !== key) return;
-      const image = new Image();
-      image.src = source;
-      await image.decode();
-      if (this._devicePreviewRequests.get(address) !== key) return;
-      this._devicePreviewImages.set(address, { key, image });
-      const canvas = [...this.shadowRoot.querySelectorAll("canvas[data-device-preview]")]
-        .find((item) => String(item.dataset.devicePreview || "").toUpperCase() === address);
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-    } catch (_err) {
-      // Lokální canvas zůstává záloha, když Home Assistant backend není dostupný.
-    } finally {
-      if (this._devicePreviewRequests.get(address) === key) {
-        this._devicePreviewRequests.delete(address);
-      }
-    }
   },
 
   _drawScene(ctx, width, height, withSelection, excludedIds = null) {

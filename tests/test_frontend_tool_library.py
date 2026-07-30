@@ -39,13 +39,16 @@ class FrontendToolLibraryTests(unittest.TestCase):
         for widget in ("chart", "bar_gauge", "pie", "slider", "gauge", "status"):
             self.assertIn(f'toolButton("{widget}"', self.source)
 
-    def test_direct_widgets_participate_in_automatic_refresh(self):
+    def test_entity_widgets_are_manual_only(self):
         start = self.source.rindex("  _automaticTextBindings()")
         end = self.source.index("  _canonicalRenderObjects()", start)
         automatic_filter = self.source[start:end]
-        for widget in ("bar_gauge", "pie", "slider", "gauge", "potentiometer"):
-            self.assertIn(f'"{widget}"', automatic_filter)
-        self.assertIn('type: "layered"', self.source)
+        self.assertIn("return [];", automatic_filter)
+        self.assertIn("return { enabled: false };", self.source)
+        self.assertIn(
+            "na displej se odešle jen ručně",
+            self.source,
+        )
 
     def test_chart_and_status_have_reliable_entity_inputs(self):
         self.assertIn('data-entity-input=', self.source)
@@ -53,6 +56,30 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('"Vstup signalizace"', self.source)
         self.assertIn('placeholder="sensor.teplota nebo input_number.hodnota"', self.source)
         self.assertIn('customElements.define("ha-selector"', self.harness)
+
+    def test_panel_render_keeps_static_styles_and_builds_only_active_tab(self):
+        self.assertIn("if (!this._staticStylesReady)", self.source)
+        self.assertIn("currentPage.replaceWith(nextPage)", self.source)
+        self.assertIn(
+            'this._activeTab === "devices" ? `<div class="tab-panel">',
+            self.source,
+        )
+        self.assertIn(
+            'this._activeTab === "display-settings" ? `<div class="tab-panel">',
+            self.source,
+        )
+        self.assertIn("if (this._paintedInCurrentTask) return;", self.source)
+        self.assertIn("queueMicrotask(() => {", self.source)
+
+    def test_manual_entity_input_does_not_duplicate_every_ha_entity(self):
+        self.assertNotIn("Object.keys(this._hass?.states || {}).sort()", self.source)
+        self.assertNotIn("<datalist", self.source)
+
+    def test_local_harness_uses_svg_mdi_paths_instead_of_font_glyphs(self):
+        self.assertIn('import { mdiPaths } from "./vendor/mdi/paths.js";', self.harness)
+        self.assertIn('<path d="${path}" fill="currentColor"></path>', self.harness)
+        self.assertNotIn("window.__mdiCodepoints", self.harness)
+        self.assertNotIn('font-family="Material Design Icons"', self.harness)
         self.assertIn('"sensor.spot_prices"', self.harness)
         self.assertIn('"binary_sensor.dvere_dilna"', self.harness)
 
@@ -261,7 +288,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("this._saveCachedDeviceDrafts?.();", self.source)
         self.assertIn('_hass.callWS({\n        type: "dratek_eink/send_design"', self.source)
         self.assertIn(
-            "Staré automatické aktualizace byly odstraněny",
+            "Displej zůstává v ručním režimu",
             self.source,
         )
         self.assertIn("_rasterizeDisplayTemplatePreview(screen)", self.source)
@@ -459,13 +486,16 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("box-shadow:inset 3px 0 0 #2563eb", self.source)
         self.assertIn("Přetažení displeje na gateway ho tam rovnou zamkne", self.source)
 
-    def test_connection_map_shows_live_upload_and_rendering_status(self):
+    def test_connection_map_shows_upload_status_without_background_polling(self):
         self.assertIn('class="connection-transfer-state writing"', self.source)
         self.assertIn('class="connection-transfer-state uploaded"', self.source)
         self.assertIn("Úspěšně nahráno · displej se vykresluje", self.source)
         self.assertIn(".connection-device.is-writing", self.source)
         self.assertIn(".connection-device.is-uploaded", self.source)
-        self.assertIn('["queue", "devices", "topology"].includes(this._activeTab)', self.source)
+        self.assertNotIn(
+            '["queue", "devices", "topology"].includes(this._activeTab)',
+            self.source,
+        )
 
     def test_400x300_display_uses_the_supplied_physical_frame(self):
         self.assertIn("_isLarge400Device", self.source)
@@ -561,13 +591,14 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("if (document.fonts && !this._designerFontReady)", self.source)
         self.assertIn("this._ensureDesignerFont();", self.source)
         self.assertIn('object.type === "text" || automaticIds.has(object.id)', self.source)
-        self.assertIn("fallback: this._textObjectValue(object)", self.source)
-        self.assertIn("const hasCanonicalObjects = this._canonicalRenderObjects().length > 0", self.source)
+        self.assertIn("return { enabled: false };", self.source)
+        self.assertNotIn(
+            "const hasCanonicalObjects = this._canonicalRenderObjects().length > 0",
+            self.source,
+        )
 
-    def test_device_cards_use_the_same_canonical_backend_preview(self):
+    def test_device_cards_use_the_last_manually_sent_preview(self):
         self.assertIn("this._devicePreviewImages = new Map()", self.source)
-        self.assertIn("this._requestCanonicalDevicePreview(request)", self.source)
-        self.assertIn("await this._renderCanonicalPreview(automation, address)", self.source)
         self.assertIn("this._paintStoredDevicePreview(canvas, address, draft)", self.source)
         self.assertIn("_paintStoredDevicePreview(canvas, address, draft)", self.source)
         self.assertIn("Number(draft?.preview_updated_at || 0)", self.source)
@@ -603,7 +634,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".symbol-search{display:grid;grid-template-columns:minmax(390px,1fr) auto", self.source)
         self.assertIn('<input type="search" id="symbolSearch"', self.source)
 
-    def test_chart_automation_preserves_the_complete_layout(self):
+    def test_manual_chart_preserves_the_complete_layout(self):
         for field in (
             "chartLabels",
             "xLabel",
@@ -618,23 +649,24 @@ class FrontendToolLibraryTests(unittest.TestCase):
             "graphColor",
         ):
             self.assertIn(field, self.source)
-        self.assertIn('chartType === "bar" ? (object.barColor', self.source)
+        self.assertIn("return { enabled: false };", self.source)
 
-    def test_device_cards_use_canonical_backend_preview(self):
-        self.assertIn('type: "dratek_eink/render_preview"', self.source)
-        self.assertIn("await this._renderCanonicalPreview(automation, device.address)", self.source)
-        self.assertIn("image,", self.source)
+    def test_device_cards_do_not_request_background_backend_previews(self):
+        self.assertNotIn('type: "dratek_eink/render_preview"', self.source)
+        self.assertNotIn(
+            "await this._renderCanonicalPreview(automation, device.address)",
+            self.source,
+        )
+        self.assertIn("return { enabled: false };", self.source)
 
-    def test_cached_backend_preview_prevents_renderer_flicker(self):
-        self.assertIn("this._backendPreviewImage = image;", self.source)
-        self.assertIn("this._paintCachedCanonicalPreview(canvas);", self.source)
-        self.assertIn("this._backendPreviewAddress !== address", self.source)
+    def test_designer_does_not_schedule_background_backend_previews(self):
+        self.assertNotIn("this._backendPreviewImage = image;", self.source)
+        self.assertNotIn("this._paintCachedCanonicalPreview(canvas);", self.source)
         self.assertIn("context.imageSmoothingEnabled = false;", self.source)
-        self.assertIn("if (hasCanonicalObjects && !this._drag)", self.source)
-        self.assertIn('if (this._drag && this._drag.mode !== "marquee") return;', self.source)
+        self.assertNotIn("_scheduleCanonicalDesignerPreview", self.source)
         self.assertIn("const finishedObjectDrag = !!this._drag && !marquee", self.source)
 
-    def test_writing_device_card_has_live_orange_status(self):
+    def test_writing_device_card_has_manual_refresh_status(self):
         self.assertIn('job.status === "writing"', self.source)
         self.assertIn('"is-writing"', self.source)
         self.assertIn("Právě se nahrává", self.source)
@@ -643,7 +675,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".display-writing-state", self.source)
         self.assertIn(".display-preview-slot>.display-writing-state", self.source)
         self.assertIn("position:absolute", self.source)
-        self.assertIn('["queue", "devices", "topology"].includes(this._activeTab)', self.source)
+        self.assertNotIn(
+            '["queue", "devices", "topology"].includes(this._activeTab)',
+            self.source,
+        )
 
     def test_recently_uploaded_device_card_has_non_blocking_green_status(self):
         self.assertIn('job.status === "succeeded"', self.source)

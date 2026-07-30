@@ -49,6 +49,8 @@ from .transfer import DratekTransfer
 
 PROJECT_STORE_KEY = "dratek_eink.projects"
 PROJECT_STORE_VERSION = 1
+PROJECT_STORE_DATA_KEY = "project_store"
+PROJECT_DATA_CACHE_KEY = "project_data_cache"
 DISCOVERY_CACHE_KEY = "dratek_eink.discovery_cache"
 DISCOVERY_GRACE_SECONDS = 5 * 60
 
@@ -79,38 +81,9 @@ async def _save_entity_automation(
     gateway_id: str = "",
     transport_name: str = "",
 ) -> None:
-    if "automation" not in msg:
-        # A full manual upload without new entity bindings replaces the
-        # currently scheduled design. Forget the previous automation so an
-        # older clock/template cannot overwrite this image on its next update.
-        await _clear_previous_entity_automation(hass, msg["address"])
-        return
-    config = dict(msg.get("automation") or {})
-    if config.get("enabled") and not config.get("base_image"):
-        # Compatibility with an older cached panel: the current upload is still
-        # a usable fallback for opaque chart and layered bindings.
-        config["base_image"] = str(msg.get("image") or "")
-    project_data = await _load_project_data(hass)
-    manual_gateway_id = str(
-        project_data.get("device_gateway_preferences", {}).get(
-            _normalize_address(msg["address"]),
-            "",
-        )
-        or ""
-    )
-    config.update(
-        {
-            "sdk_type": int(msg["sdk_type"]),
-            "orientation": msg.get("orientation", "landscape"),
-            "transform": msg.get("transform"),
-            "route_type": route_type,
-            "gateway_id": gateway_id,
-            "transport_name": transport_name,
-            "gateway_selection": "manual" if manual_gateway_id else "auto",
-            "manual_gateway_id": manual_gateway_id,
-        }
-    )
-    await get_entity_auto_update_manager(hass).async_set_config(msg["address"], config)
+    # Uploads are intentionally one-shot. Ignore automation payloads from an
+    # older cached frontend and remove any legacy schedule for this display.
+    await _clear_previous_entity_automation(hass, msg["address"])
 
 
 @callback
@@ -493,11 +466,22 @@ async def websocket_scan(
 
 
 def _project_store(hass: HomeAssistant) -> Store:
-    return Store(hass, PROJECT_STORE_VERSION, PROJECT_STORE_KEY)
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    store = domain_data.get(PROJECT_STORE_DATA_KEY)
+    if store is None:
+        store = Store(hass, PROJECT_STORE_VERSION, PROJECT_STORE_KEY)
+        domain_data[PROJECT_STORE_DATA_KEY] = store
+    return store
 
 
 async def _load_project_data(hass: HomeAssistant) -> dict[str, Any]:
-    return normalize_project_data(await _project_store(hass).async_load())
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    cached = domain_data.get(PROJECT_DATA_CACHE_KEY)
+    if isinstance(cached, dict):
+        return cached
+    normalized = normalize_project_data(await _project_store(hass).async_load())
+    domain_data[PROJECT_DATA_CACHE_KEY] = normalized
+    return normalized
 
 
 def _normalize_address(address: str) -> str:

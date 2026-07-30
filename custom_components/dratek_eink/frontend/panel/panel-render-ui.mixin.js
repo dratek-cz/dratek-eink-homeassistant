@@ -11,9 +11,9 @@ export const renderUiMixin = {
 
   _render() {
     const result = this._result || { scanner_count: 0, ble_count: 0, devices: [], ble_devices: [], debug: [] };
-    const topologyGroups = this._topologyGroups(result.devices);
+    const topologyGroups = this._activeTab === "topology" ? this._topologyGroups(result.devices) : [];
     const topologyGatewayCount = topologyGroups.filter((group) => group.path?.type === "gateway").length;
-    this.shadowRoot.innerHTML = `
+    const markup = `
       <style>
         .device-card-details{display:grid;gap:13px}
         @font-face{font-family:"DRATEK eInk Sans";src:url("${this._frontendAssetUrl("fonts/Arimo-wght.ttf")}") format("truetype");font-style:normal;font-weight:400 700;font-display:block}
@@ -645,7 +645,7 @@ export const renderUiMixin = {
           </div>
           ${this._activeTab === "display-settings" ? "" : `<div class="tabbar"><button class="tab ${this._activeTab === "devices" ? "active" : ""}" data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Nalezené displeje</button><button class="tab ${this._activeTab === "topology" ? "active" : ""}" data-tab="topology"><ha-icon icon="mdi:lan"></ha-icon>Mapa připojení</button><button class="tab ${this._activeTab === "queue" ? "active" : ""}" data-tab="queue"><ha-icon icon="mdi:tray-full"></ha-icon>Fronta zápisu${this._queue.queued || this._queue.writing ? `<span class="pill warn">${this._queue.queued + this._queue.writing}</span>` : ""}</button><button class="tab ${this._activeTab === "gateways" ? "active" : ""}" data-tab="gateways"><ha-icon icon="mdi:router-wireless"></ha-icon>Gatewaye</button></div>`}
         </div>
-        <div class="tab-panel" style="${this._activeTab === "devices" ? "" : "display:none"}">
+        ${this._activeTab === "devices" ? `<div class="tab-panel">
           <div class="card devices-toolbar-card"><div class="devices-toolbar">
             <div class="device-search"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" id="deviceSearch" placeholder="Hledat podle názvu, adresy, velikosti..." value="${this._escape(this._deviceSearchQuery || "")}"></div>
             <button id="resetDevicesView" class="reset-icon-btn ${this._loading ? "spinning" : ""}" ${this._loading ? "disabled" : ""} title="Resetovat hledání a obnovit"><ha-icon icon="mdi:refresh"></ha-icon></button>
@@ -654,17 +654,17 @@ export const renderUiMixin = {
           </div></div>
           ${this._identifyResult ? `<div class="card"><span class="led-result ${this._identifyResult.ok ? "good" : "bad"}"><ha-icon icon="${this._identifyResult.ok ? "mdi:check-circle-outline" : "mdi:alert-circle-outline"}"></ha-icon>${this._identifyResult.ok ? "Displej by měl bliknout." : this._escape(this._identifyResult.error || "Nepodařilo se displej rozblikat.")}</span></div>` : ""}
           <div class="card devices-list-card">${this._renderDeviceCards(result.devices)}</div>
-        </div>
-        <div class="tab-panel" style="${this._activeTab === "topology" ? "" : "display:none"}">
+        </div>` : ""}
+        ${this._activeTab === "topology" ? `<div class="tab-panel">
           <div class="card connection-map-card"><div class="section-title"><div><h2>Mapa připojení</h2><small>Zámek u každého displeje přepíná mezi automatickým výběrem nejsilnější gateway a ručním zamčením. Přetažení displeje na gateway ho tam rovnou zamkne.</small></div><span class="pill muted">${topologyGatewayCount} ${topologyGatewayCount === 1 ? "gateway" : "gatewayů"} · ${result.devices.length} ${result.devices.length === 1 ? "displej" : "displejů"}</span></div>${this._renderTopology(result.devices, topologyGroups)}</div>
-        </div>
-        <div class="tab-panel" style="${this._activeTab === "display-settings" ? "" : "display:none"}">
+        </div>` : ""}
+        ${this._activeTab === "display-settings" ? `<div class="tab-panel">
           ${this._renderDisplaySettingsPage()}
-        </div>
-        <div class="tab-panel" style="${this._activeTab === "queue" ? "" : "display:none"}">
+        </div>` : ""}
+        ${this._activeTab === "queue" ? `<div class="tab-panel">
           ${this._renderQueue()}
-        </div>
-        <div class="tab-panel gateways-panel" style="${this._activeTab === "gateways" ? "" : "display:none"}">
+        </div>` : ""}
+        ${this._activeTab === "gateways" ? `<div class="tab-panel gateways-panel">
           <header class="page-heading"><span><ha-icon icon="mdi:router-network"></ha-icon></span><div><h1>Gatewaye</h1><p>Centrální správa připojení mezi Home Assistantem a eInk displeji</p></div></header>
           <div class="stat-tiles">
             <div class="stat-tile"><span class="stat-tile-icon"><ha-icon icon="mdi:router-wireless"></ha-icon></span><span class="stat-tile-copy"><strong>${this._gateways.length}</strong><small>Celkem</small></span></div>
@@ -672,9 +672,21 @@ export const renderUiMixin = {
             <div class="stat-tile"><span class="stat-tile-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></span><span class="stat-tile-copy"><strong>${this._gateways.reduce((count, gateway) => count + this._gatewayConnectedDisplays(gateway).length, 0)}</strong><small>Displejů</small></span></div>
           </div>
           ${this._renderGatewayWorkspace()}
-        </div>
+        </div>` : ""}
       </div>
       `;
+    if (!this._staticStylesReady) {
+      this.shadowRoot.innerHTML = markup;
+      this._staticStylesReady = true;
+    } else {
+      const pageStart = markup.indexOf('<div class="page">');
+      const template = document.createElement("template");
+      template.innerHTML = markup.slice(pageStart);
+      const nextPage = template.content.firstElementChild;
+      const currentPage = this.shadowRoot.querySelector(".page");
+      if (currentPage && nextPage) currentPage.replaceWith(nextPage);
+      else this.shadowRoot.innerHTML = markup;
+    }
     this._applyUiLanguage();
     this._bind();
     this._ensureDesignerFont();
