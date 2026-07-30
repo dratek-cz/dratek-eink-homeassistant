@@ -10,3 +10,5 @@ accesstoken.txt
 .env
 .env.*
 dratek_eink.zip
+.claude/
+.vscode/
