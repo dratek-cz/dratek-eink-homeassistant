@@ -1,0 +1,76 @@
+name: Publish HACS release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository and tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read integration version
+        id: version
+        shell: bash
+        run: |
+          version="$(python -c 'import json; print(json.load(open("custom_components/dratek_eink/manifest.json", encoding="utf-8"))["version"])')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Verify matching tag
+        shell: bash
+        run: git rev-parse --verify "refs/tags/${{ steps.version.outputs.tag }}"
+
+      - name: Build HACS archive
+        shell: bash
+        run: |
+          cd custom_components/dratek_eink
+          zip -q -r ../../../dratek_eink.zip .
+          cd ../../..
+          unzip -p dratek_eink.zip manifest.json | python -c 'import json,sys; data=json.load(sys.stdin); assert data["version"] == "${{ steps.version.outputs.version }}"'
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          version = "${{ steps.version.outputs.version }}"
+          readme = Path("README.md").read_text(encoding="utf-8")
+          match = re.search(
+              rf"(?s)## Novinky ve verzi {re.escape(version)}\s*\n\n(.*?)(?=\n## |\Z)",
+              readme,
+          )
+          notes = match.group(1).strip() if match else f"DRATEK eInk v{version}"
+          Path("release-notes.md").write_text(notes + "\n", encoding="utf-8")
+          PY
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "DRATEK eInk $TAG" \
+              --notes-file release-notes.md \
+              --latest
+            gh release upload "$TAG" dratek_eink.zip --clobber
+          else
+            gh release create "$TAG" dratek_eink.zip \
+              --title "DRATEK eInk $TAG" \
+              --notes-file release-notes.md \
+              --latest \
+              --verify-tag
+          fi
