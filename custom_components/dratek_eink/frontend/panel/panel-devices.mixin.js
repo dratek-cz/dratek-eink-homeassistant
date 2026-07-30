@@ -1143,12 +1143,7 @@ export const devicesMixin = {
       const red = pixels.data[index];
       const green = pixels.data[index + 1];
       const blue = pixels.data[index + 2];
-      const blackDistance = red * red + green * green + blue * blue;
-      const whiteDistance = (255 - red) ** 2 + (255 - green) ** 2 + (255 - blue) ** 2;
-      const redDistance = (227 - red) ** 2 + (27 - green) ** 2 + (27 - blue) ** 2;
-      const color = redDistance < blackDistance && redDistance < whiteDistance
-        ? [227, 27, 27]
-        : blackDistance < whiteDistance ? [0, 0, 0] : [255, 255, 255];
+      const color = this._quantizeEinkPixel(red, green, blue);
       pixels.data[index] = color[0];
       pixels.data[index + 1] = color[1];
       pixels.data[index + 2] = color[2];

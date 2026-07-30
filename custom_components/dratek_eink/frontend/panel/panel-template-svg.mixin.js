@@ -496,6 +496,21 @@ export const templateSvgMixin = {
 
   // Rasterizes the SVG at exactly the panel's resolution and quantizes it to the
   // three colors the hardware can actually show.
+  _quantizeEinkPixel(red, green, blue) {
+    // Subpixel font antialiasing can produce reddish edge pixels even for text
+    // whose requested fill is pure black. Only preserve red when it is strongly
+    // dominant; all neutral and weakly tinted edge pixels are classified solely
+    // by luminance, so black glyphs cannot acquire a red halo.
+    const redDominance = red - Math.max(green, blue);
+    const intentionalRed = red >= 105
+      && redDominance >= 52
+      && green <= 145
+      && blue <= 145;
+    if (intentionalRed) return [227, 27, 27];
+    const luminance = (red * 299 + green * 587 + blue * 114) / 1000;
+    return luminance < 168 ? [0, 0, 0] : [255, 255, 255];
+  },
+
   async _rasterizeDisplayTemplateSvg(templates, width, height, layout = "single") {
     const svg = await this._buildDisplayTemplateSvg(templates, width, height, layout);
     const bitmap = new Image();
@@ -518,12 +533,7 @@ export const templateSvgMixin = {
       const red = pixels.data[index];
       const green = pixels.data[index + 1];
       const blue = pixels.data[index + 2];
-      const blackDistance = red * red + green * green + blue * blue;
-      const whiteDistance = (255 - red) ** 2 + (255 - green) ** 2 + (255 - blue) ** 2;
-      const redDistance = (227 - red) ** 2 + (27 - green) ** 2 + (27 - blue) ** 2;
-      const color = redDistance < blackDistance && redDistance < whiteDistance
-        ? [227, 27, 27]
-        : blackDistance < whiteDistance ? [0, 0, 0] : [255, 255, 255];
+      const color = this._quantizeEinkPixel(red, green, blue);
       pixels.data[index] = color[0];
       pixels.data[index + 1] = color[1];
       pixels.data[index + 2] = color[2];

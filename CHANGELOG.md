@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.145] - 2026-07-30
+
+### Opraveno
+- Převod černého textu do tříbarevné palety již nevytváří červené okraje z barevných pixelů vyhlazování fontu.
+- Červená barva se zachová pouze u pixelů s dostatečně silnou převahou červeného kanálu; neutrální a slabě zabarvené hrany se rozhodují podle jasu mezi černou a bílou.
+- Nativní SVG renderer i záložní exportní cesta používají stejný způsob kvantizace.
+
 ## [0.1.144] - 2026-07-29
 
 ### Změněno

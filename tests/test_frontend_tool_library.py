@@ -151,14 +151,13 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn('class="card display-settings-device-summary"', self.source)
         self.assertNotIn('class="display-settings-preview"', self.source)
         self.assertIn('class="display-template-device-info"', self.source)
-        self.assertIn('class="display-template-device-info-stats"', self.source)
-        self.assertIn('icon="mdi:identifier"', self.source)
-        self.assertIn('icon="mdi:battery-medium"', self.source)
-        self.assertIn('icon="mdi:signal"', self.source)
-        self.assertIn("<small>Baterie</small>", self.source)
-        self.assertIn("<small>Signál</small>", self.source)
+        self.assertIn('class="display-template-device-info-identity"', self.source)
+        self.assertIn('class="display-template-device-info-health"', self.source)
+        self.assertIn('icon="mdi:tablet-dashboard"', self.source)
+        self.assertIn('class="display-health-item display-battery-item"', self.source)
+        self.assertIn('class="display-health-item display-signal-item"', self.source)
         self.assertIn(".display-template-device-info{display:grid", self.source)
-        self.assertIn(".display-template-device-info-stats{grid-column:1/-1", self.source)
+        self.assertIn(".display-template-device-info-health{display:flex", self.source)
         self.assertNotIn('class="display-settings-actions"', self.source)
         self.assertNotIn('class="display-settings-action ${activeMode === option.id ? "is-active" : ""}', self.source)
         self.assertIn('class="display-template-workspace"', self.source)
@@ -331,8 +330,16 @@ class FrontendToolLibraryTests(unittest.TestCase):
         ):
             self.assertIn(f'title: "{title}"', self.source)
 
+    def test_template_quantization_does_not_create_red_text_halos(self):
+        self.assertIn("_quantizeEinkPixel(red, green, blue)", self.source)
+        self.assertIn("const redDominance = red - Math.max(green, blue);", self.source)
+        self.assertIn("redDominance >= 52", self.source)
+        self.assertIn("const luminance = (red * 299 + green * 587 + blue * 114) / 1000;", self.source)
+        self.assertIn("return luminance < 168 ? [0, 0, 0] : [255, 255, 255];", self.source)
+        self.assertNotIn("redDistance < blackDistance && redDistance < whiteDistance", self.source)
+
     def test_display_settings_supports_inline_rename_and_main_previews_have_no_shadow(self):
-        self.assertIn('class="display-settings-name-row"', self.source)
+        self.assertIn('class="display-template-device-info-name-row"', self.source)
         self.assertIn('data-device-rename="${this._escape(device.address)}"', self.source)
         self.assertIn('class="display-settings-name-input"', self.source)
         self.assertIn('data-device-name-save="${this._escape(device.address)}"', self.source)

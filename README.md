@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.145
+
+- opraven převod černého textu do tříbarevného obrazu bez červeného obrysu kolem vyhlazených hran
+- červená se zachová pouze u skutečně červeně dominantních pixelů; neutrální okraje textu se převedou jen na černou nebo bílou
+- stejná opravená kvantizace se používá v nativním SVG rendereru i záložní exportní cestě
+
 ## Novinky ve verzi 0.1.144
 
 - šablony se nově generují přímo jako nativní SVG v rozlišení displeje, s dosazenými hodnotami z Home Assistantu a ikonami jako skutečnými vektory
