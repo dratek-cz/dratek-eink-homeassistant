@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.148] - 2026-07-30
+
+### Změněno
+- Vydán ověřený stav integrace jako verze `0.1.148` pro HACS.
+- Verze backendu, hlavního panelu a přehledové karty byly sjednoceny.
+- Funkční obsah odpovídá verzi `0.1.146`, včetně opravy registrace statických souborů panelu.
+
 ## [0.1.146] - 2026-07-30
 
 ### Opraveno

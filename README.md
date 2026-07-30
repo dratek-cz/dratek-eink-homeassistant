@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.148
+
+- technické vydání ověřeného stavu integrace pro HACS
+- sjednocena verze backendu, panelu a přehledové karty na `0.1.148`
+- zachovány opravy registrace statických souborů a načítání panelu z verze `0.1.146`
+
 ## Novinky ve verzi 0.1.146
 
 - opravena registrace statických souborů panelu po aktualizaci nebo opětovném načtení integrace
