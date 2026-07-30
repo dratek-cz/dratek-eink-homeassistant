@@ -955,8 +955,8 @@ export const devicesMixin = {
       this._templateSendResult = {
         ok: true,
         message: result?.queued || result?.queue_status === "queued"
-          ? "Náhled byl přidán do fronty zápisu."
-          : "Náhled byl odeslán do displeje.",
+          ? "Náhled byl přidán do fronty. Staré automatické aktualizace byly odstraněny; nové se aktivují po úspěšném zápisu."
+          : "Náhled byl odeslán. Staré automatické aktualizace byly nahrazeny pouze aktualizacemi nového návrhu.",
       };
       this._loadQueue?.(true);
     } catch (err) {

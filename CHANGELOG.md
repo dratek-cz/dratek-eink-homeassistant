@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.149] - 2026-07-30
+
+### Opraveno
+- Nový ručně odeslaný návrh nyní okamžitě odstraní všechny automatické aktualizace předchozího návrhu pro stejný displej.
+- Zruší se také čekající časovače a naplánované obnovení, takže staré hodiny nebo šablona již nový obsah nepřepíší.
+- Po úspěšném zápisu se uloží pouze automatizace obsažené v novém návrhu; statický návrh zůstane bez automatických aktualizací.
+- Stejné chování platí pro lokální Bluetooth i přenos přes gateway.
+
 ## [0.1.148] - 2026-07-30
 
 ### Změněno

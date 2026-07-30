@@ -260,6 +260,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("preview_image: image", self.source)
         self.assertIn("this._saveCachedDeviceDrafts?.();", self.source)
         self.assertIn('_hass.callWS({\n        type: "dratek_eink/send_design"', self.source)
+        self.assertIn(
+            "Staré automatické aktualizace byly odstraněny",
+            self.source,
+        )
         self.assertIn("_rasterizeDisplayTemplatePreview(screen)", self.source)
         self.assertIn('.replace(/@font-face\\s*\\{[^}]*\\}/gi, "")', self.source)
         self.assertIn('if (!source.startsWith("data:image/")) image.remove();', self.source)

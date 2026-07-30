@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.149
+
+- odeslání nového návrhu odstraní všechny staré automatické aktualizace daného displeje
+- čekající časovače a naplánované aktualizace předchozího návrhu se zruší
+- po úspěšném zápisu zůstanou aktivní pouze automatizace obsažené v novém návrhu
+- návrh bez automatizací již nemůže být později přepsán starými hodinami nebo jinou dřívější šablonou
+
 ## Novinky ve verzi 0.1.148
 
 - technické vydání ověřeného stavu integrace pro HACS

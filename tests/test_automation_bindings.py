@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 from pathlib import Path
 import asyncio
@@ -102,6 +103,102 @@ class _States:
 
 
 class AutomationBindingTests(unittest.TestCase):
+    def test_starting_manual_upload_removes_all_previous_automation(self):
+        source = (COMPONENT / "websocket.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        clear_function = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.AsyncFunctionDef)
+            and node.name == "_clear_previous_entity_automation"
+        )
+        isolated_module = ast.Module(body=[clear_function], type_ignores=[])
+        ast.fix_missing_locations(isolated_module)
+        calls = []
+
+        class Manager:
+            async def async_set_config(self, address, config):
+                calls.append((address, config))
+
+        namespace = {
+            "HomeAssistant": object,
+            "get_entity_auto_update_manager": lambda _hass: Manager(),
+        }
+        exec(compile(isolated_module, "websocket.py", "exec"), namespace)
+
+        asyncio.run(
+            namespace["_clear_previous_entity_automation"](
+                object(), "FF:FF:92:81:46:32"
+            )
+        )
+
+        self.assertEqual([("FF:FF:92:81:46:32", None)], calls)
+
+    def test_manual_upload_without_new_bindings_disables_previous_automation(self):
+        source = (COMPONENT / "websocket.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        save_function = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.AsyncFunctionDef)
+            and node.name == "_save_entity_automation"
+        )
+        isolated_module = ast.Module(body=[save_function], type_ignores=[])
+        ast.fix_missing_locations(isolated_module)
+        calls = []
+
+        class Manager:
+            async def async_set_config(self, address, config):
+                calls.append((address, config))
+
+        namespace = {
+            "Any": object,
+            "HomeAssistant": object,
+            "get_entity_auto_update_manager": lambda _hass: Manager(),
+            "_clear_previous_entity_automation": (
+                lambda _hass, address: Manager().async_set_config(address, None)
+            ),
+        }
+        exec(compile(isolated_module, "websocket.py", "exec"), namespace)
+
+        asyncio.run(
+            namespace["_save_entity_automation"](
+                object(),
+                {"address": "ff:ff:92:81:46:32"},
+                route_type="local",
+            )
+        )
+
+        self.assertEqual([("ff:ff:92:81:46:32", None)], calls)
+
+    def test_disabling_automation_clears_pending_refresh_and_timer(self):
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager._initialized = True
+        manager._configs = {
+            address: {
+                "enabled": True,
+                "bindings": [{"type": "text", "entity_id": "sensor.time"}],
+            }
+        }
+        manager._last_refresh_at = {address: 123.0}
+        manager._pending_refreshes = {address}
+        timer_cancelled = []
+        manager._timers = {address: lambda: timer_cancelled.append(address)}
+        manager._store = _Store()
+        manager._refresh_listener = lambda: None
+
+        asyncio.run(manager.async_set_config(address.lower(), None))
+
+        self.assertNotIn(address, manager._configs)
+        self.assertNotIn(address, manager._last_refresh_at)
+        self.assertNotIn(address, manager._pending_refreshes)
+        self.assertNotIn(address, manager._timers)
+        self.assertEqual([address], timer_cancelled)
+        self.assertEqual({"configs": {}}, manager._store.saved)
+
     def test_time_condition_supports_daytime_and_overnight_intervals(self):
         matches = automation.EntityAutoUpdateManager._condition_matches
 

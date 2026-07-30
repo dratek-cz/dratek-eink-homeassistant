@@ -53,6 +53,13 @@ DISCOVERY_CACHE_KEY = "dratek_eink.discovery_cache"
 DISCOVERY_GRACE_SECONDS = 5 * 60
 
 
+async def _clear_previous_entity_automation(
+    hass: HomeAssistant, address: str
+) -> None:
+    """Remove every scheduled update before accepting a replacement design."""
+    await get_entity_auto_update_manager(hass).async_set_config(address, None)
+
+
 def _battery_payload(device: Any) -> dict[str, Any]:
     """Expose raw voltage data and the CR2450 capacity estimate."""
     return {
@@ -73,6 +80,10 @@ async def _save_entity_automation(
     transport_name: str = "",
 ) -> None:
     if "automation" not in msg:
+        # A full manual upload without new entity bindings replaces the
+        # currently scheduled design. Forget the previous automation so an
+        # older clock/template cannot overwrite this image on its next update.
+        await _clear_previous_entity_automation(hass, msg["address"])
         return
     config = dict(msg.get("automation") or {})
     if config.get("enabled") and not config.get("base_image"):
@@ -731,6 +742,7 @@ async def websocket_send_gateway_design(
                 {"ok": False, "error": "Gateway nebyla nalezena.", "log": log_lines},
             )
             return
+        await _clear_previous_entity_automation(hass, msg["address"])
 
         async def run_transfer(add_log) -> dict[str, Any]:
             add_log(f"Zapis pres gateway {gateway.get('name') or gateway.get('host')} zarazen do zpracovani.")
@@ -1728,6 +1740,8 @@ async def websocket_send_design(
             image_data = image_data.split(",", 1)[1]
         raw = base64.b64decode(image_data)
         image = Image.open(io.BytesIO(raw)).convert("RGB")
+        await _clear_previous_entity_automation(hass, address)
+
         async def run_transfer(add_log) -> dict[str, Any]:
             add_log(f"Sending editor design {image.width}x{image.height} to SDK type {sdk_type}.")
             if transform:

@@ -178,6 +178,10 @@ class EntityAutoUpdateManager:
         if not config or not config.get("enabled") or not config.get("bindings"):
             self._configs.pop(normalized, None)
             self._last_refresh_at.pop(normalized, None)
+            self._pending_refreshes.discard(normalized)
+            cancel_timer = self._timers.pop(normalized, None)
+            if cancel_timer:
+                cancel_timer()
         else:
             stored = dict(config)
             stored["address"] = normalized
