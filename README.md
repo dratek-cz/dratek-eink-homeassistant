@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.146
+
+- opravena registrace statických souborů panelu po aktualizaci nebo opětovném načtení integrace
+- URL `/dratek_eink_panel/dratek-eink-panel.js` již nezůstane bez obsluhy, pokud Home Assistant panel zná z předchozí registrace
+- odstraněna chyba `Unable to load custom panel` způsobená odpovědí HTTP 404
+
 ## Novinky ve verzi 0.1.145
 
 - opraven převod černého textu do tříbarevného obrazu bez červeného obrysu kolem vyhlazených hran

@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.146] - 2026-07-30
+
+### Opraveno
+- Statická cesta `/dratek_eink_panel/` se nyní zaregistruje ještě před kontrolou již existujícího panelu.
+- Panel po aktualizaci nebo opětovném načtení integrace již nekončí chybou `Unable to load custom panel` kvůli odpovědi HTTP 404.
+- Opakovaná registrace statických cest je chráněna samostatným příznakem.
+
 ## [0.1.145] - 2026-07-30
 
 ### Opraveno

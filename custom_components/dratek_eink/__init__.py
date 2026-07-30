@@ -85,21 +85,26 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_register_panel(hass: HomeAssistant) -> None:
+    if not hass.data[DOMAIN].get("static_paths_registered"):
+        frontend_path = Path(__file__).parent / "frontend"
+        brand_path = Path(__file__).parent / "brand"
+        static_configs = [
+            StaticPathConfig(PANEL_STATIC_PATH, str(frontend_path), cache_headers=False)
+        ]
+        if brand_path.exists():
+            static_configs.append(
+                StaticPathConfig(f"/{DOMAIN}_brand", str(brand_path), cache_headers=True)
+            )
+        await hass.http.async_register_static_paths(static_configs)
+        hass.data[DOMAIN]["static_paths_registered"] = True
+
+    frontend.add_extra_js_url(hass, OVERVIEW_CARD_MODULE_URL)
+
     if hass.data[DOMAIN].get("panel_registered"):
-        frontend.add_extra_js_url(hass, OVERVIEW_CARD_MODULE_URL)
         return
     if PANEL_URL_PATH in hass.data.get("frontend_panels", {}):
-        frontend.add_extra_js_url(hass, OVERVIEW_CARD_MODULE_URL)
         hass.data[DOMAIN]["panel_registered"] = True
         return
-
-    frontend_path = Path(__file__).parent / "frontend"
-    brand_path = Path(__file__).parent / "brand"
-    static_configs = [StaticPathConfig(PANEL_STATIC_PATH, str(frontend_path), cache_headers=False)]
-    if brand_path.exists():
-        static_configs.append(StaticPathConfig(f"/{DOMAIN}_brand", str(brand_path), cache_headers=True))
-    await hass.http.async_register_static_paths(static_configs)
-    frontend.add_extra_js_url(hass, OVERVIEW_CARD_MODULE_URL)
 
     await panel_custom.async_register_panel(
         hass,
