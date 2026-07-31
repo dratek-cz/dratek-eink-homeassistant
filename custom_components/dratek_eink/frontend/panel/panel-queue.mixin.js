@@ -51,6 +51,7 @@ export const queueMixin = {
 
   async _loadQueue(render = true) {
     if (!this._hass) return;
+    window.clearTimeout(this._queuePollTimer);
     try {
       this._queue = await this._hass.callWS({ type: "dratek_eink/queue/list" });
     } catch (err) {
@@ -61,6 +62,12 @@ export const queueMixin = {
     }
     if (render) {
       this._renderQueueKeepingFocus();
+    }
+    if (Number(this._queue?.queued || 0) + Number(this._queue?.writing || 0) > 0) {
+      this._queuePollTimer = window.setTimeout(() => {
+        const visible = ["queue", "devices", "topology"].includes(this._activeTab);
+        this._loadQueue(visible);
+      }, 1000);
     }
   },
 
@@ -104,13 +111,20 @@ export const queueMixin = {
     this._paint();
   },
 
-  // Fronta se překresluje každou 1,5 s. _render() vymění celý shadow strom,
+  // Fronta se překresluje každou sekundu. _render() vymění celý shadow strom,
   // takže bez tohohle by psaní do hledání po pár znacích ztratilo fokus.
   _renderQueueKeepingFocus() {
     // Otevřenou nabídku by pravidelné překreslení zavřelo pod rukama. Data už
     // jsou uložená, seznam se dorovná při prvním dalším překreslení.
     if (this._queueOpenMenu) return;
+    const openLogs = new Set(
+      [...this.shadowRoot.querySelectorAll("details[data-queue-log][open]")]
+        .map((details) => details.dataset.queueLog)
+    );
     this._renderKeepingSearchFocus();
+    this.shadowRoot.querySelectorAll("details[data-queue-log]").forEach((details) => {
+      details.open = openLogs.has(details.dataset.queueLog);
+    });
   },
 
   _renderKeepingSearchFocus() {
@@ -293,7 +307,7 @@ export const queueMixin = {
       </div>
       <span class="pill ${STATUS_PILLS[status] || "muted"}">${STATUS_LABELS[status] || this._escape(status)}</span>
       ${(job.error || logText) ? `<div class="queue-row-log">${this._escape(job.error || logText)}</div>` : ""}
-      ${logLines.length ? `<details class="queue-row-details">
+      ${logLines.length ? `<details class="queue-row-details" data-queue-log="${this._escape(job.id || "")}">
         <summary><ha-icon icon="mdi:text-box-search-outline"></ha-icon>Zobrazit celý protokol (${logLines.length} řádků)</summary>
         <pre>${this._escape(logLines.join("\n"))}</pre>
       </details>` : ""}

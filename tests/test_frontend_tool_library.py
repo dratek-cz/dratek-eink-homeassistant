@@ -502,16 +502,18 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("box-shadow:inset 3px 0 0 #2563eb", self.source)
         self.assertIn("Přetažení displeje na gateway ho tam rovnou zamkne", self.source)
 
-    def test_connection_map_shows_upload_status_without_background_polling(self):
+    def test_connection_map_and_queue_auto_refresh_active_upload_status(self):
         self.assertIn('class="connection-transfer-state writing"', self.source)
         self.assertIn('class="connection-transfer-state uploaded"', self.source)
         self.assertIn("Úspěšně nahráno · displej se vykresluje", self.source)
         self.assertIn(".connection-device.is-writing", self.source)
         self.assertIn(".connection-device.is-uploaded", self.source)
-        self.assertNotIn(
-            '["queue", "devices", "topology"].includes(this._activeTab)',
-            self.source,
-        )
+        self.assertIn('["queue", "devices", "topology"].includes(this._activeTab)', self.source)
+        self.assertIn("this._queuePollTimer = window.setTimeout", self.source)
+        self.assertIn("Number(this._queue?.queued || 0) + Number(this._queue?.writing || 0) > 0", self.source)
+        self.assertIn("window.clearTimeout(this._queuePollTimer)", self.source)
+        self.assertIn('details[data-queue-log][open]', self.source)
+        self.assertIn("details.open = openLogs.has", self.source)
 
     def test_400x300_display_uses_the_supplied_physical_frame(self):
         self.assertIn("_isLarge400Device", self.source)
@@ -691,7 +693,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".display-writing-state", self.source)
         self.assertIn(".display-preview-slot>.display-writing-state", self.source)
         self.assertIn("position:absolute", self.source)
-        self.assertNotIn(
+        self.assertIn(
             '["queue", "devices", "topology"].includes(this._activeTab)',
             self.source,
         )

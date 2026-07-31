@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.162
+
+- fronta se během stavu `Ve frontě` nebo `Zapisuje` automaticky obnovuje každou sekundu a po dokončení sama zastaví dotazování
+- aktuální stav a poslední blok se průběžně promítají na kartu fronty, displejů i mapu připojení bez ručního tlačítka pro obnovení
+- časovač se bezpečně ruší při zavření panelu a při otevření panelu se fronta načte automaticky
+- po skutečně potvrzeném GATT zápisu byla odstraněna dodatečná pevná prodleva; ATT odpověď sama zajišťuje potřebné řízení toku a velké displeje tak neztrácejí další čas navíc
+- firmware gatewaye zůstává `0.1.47-gateway`
+
 ## Novinky ve verzi 0.1.161
 
 - přenos byl přímo porovnán se starší funkční integrací `0.1.126` z `D:\\28.7`; pro SDK typ `51` je obnovena její hardwarově ověřená výjimka vyžadující GATT odpověď u každého obrazového bloku

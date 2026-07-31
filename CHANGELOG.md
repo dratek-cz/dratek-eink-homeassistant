@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.162] - 2026-07-31
+
+### Změněno
+- Panel po dobu aktivní úlohy načítá `queue/list` každou sekundu. Viditelná fronta, karty displejů a mapa připojení se průběžně překreslují; v editoru se stav aktualizuje na pozadí bez narušení práce.
+- Po přechodu poslední úlohy do koncového stavu se polling automaticky zastaví a časovač se vždy ruší při odpojení webové komponenty.
+- U potvrzovaných bloků typu SDK `51` byla odstraněna nadbytečná 5ms prodleva po ATT odpovědi. Povinné potvrzení a spolehlivost přenosu zůstávají zachované.
+
+### Firmware gatewaye
+- Firmware zůstává ve verzi `0.1.47-gateway`; změny se týkají panelu a přímého Bluetooth přenosu Home Assistantu.
+
 ## [0.1.161] - 2026-07-31
 
 ### Opraveno

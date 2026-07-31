@@ -107,6 +107,7 @@ class DratekEinkPanel extends HTMLElement {
     this._displayCatalogOpen = false;
     this._topologyViewMode = this._loadUiPreference("topology-view-mode", "auto");
     this._queue = { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0 };
+    this._queuePollTimer = null;
     this._gateways = [];
     this._gatewayResult = null;
     this._gatewayBusy = false;
@@ -153,6 +154,7 @@ class DratekEinkPanel extends HTMLElement {
     window.clearTimeout(this._propertyEditTimer);
     window.clearTimeout(this._flashPollTimer);
     window.clearTimeout(this._otaPollTimer);
+    window.clearTimeout(this._queuePollTimer);
     // A draft save is debounced by 700 ms. Leaving the panel inside that window
     // used to drop the edit silently, so flush it instead of clearing it.
     if (this._draftSaveTimer) {
@@ -168,6 +170,7 @@ class DratekEinkPanel extends HTMLElement {
       this._rendered = true;
       this._render();
       this._paint();
+      this._loadQueue(false);
       if (this._result?.devices?.length) {
         this._loadDevicePreviewDrafts(this._result.devices).then(() => {
           this._render();

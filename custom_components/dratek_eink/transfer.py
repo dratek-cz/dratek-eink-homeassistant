@@ -30,7 +30,6 @@ OPTIONAL_COMPLETION_TIMEOUT = 2
 UNCONFIRMED_WRITE_DRAIN_TIMEOUT = 10
 MAX_BLOCK_REQUEST_RETRIES = 5
 GATT_OPERATION_TIMEOUT = 8
-GATT_ACK_WRITE_DELAY = 0.005
 STREAM_WRITE_DELAY = 0.04
 
 
@@ -576,9 +575,10 @@ class DratekTransfer:
                     f"block {block_number}",
                     response=require_response,
                 )
-                await asyncio.sleep(
-                    GATT_ACK_WRITE_DELAY if require_response else STREAM_WRITE_DELAY
-                )
+                # A successful ATT response is already the flow-control gate;
+                # adding another delay only slows large displays down.
+                if not require_response:
+                    await asyncio.sleep(STREAM_WRITE_DELAY)
                 return
             except Exception as exc:  # noqa: BLE stacks expose platform-specific write errors
                 if attempt >= max_attempts:
