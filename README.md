@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.164
+
+- opraven timeout kontrolních bloků `7`, `15`, `23`, `31` a posledního bloku: před potvrzovaným blokem se nyní vyprázdní předchozí dávka BlueZ
+- rychlé dávky s potvrzovací bariérou se používají také pro velké streamující displeje; pouhé lokální `Bluetooth queued 100 %` se už nepovažuje za dostatečné řízení toku
+- timeoutovaný potvrzovaný blok se neopakuje a nemůže tak vložit stejná obrazová data dvakrát nebo poškodit buffer displeje
+- pokud rychlý první pokus selže, nový přenos od začátku automaticky použije bezpečný potvrzovaný zápis každého bloku
+- automatické obnovování fronty zůstává aktivní; firmware gatewaye zůstává `0.1.47-gateway`
+
 ## Novinky ve verzi 0.1.163
 
 - přímý Bluetooth přenos SDK typu `51` používá rychlé dávky po osmi blocích místo pomalého ATT round-tripu po každém bloku

@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 WRITE_ACK_SDK_TYPES = {51}
 ACK_CHECKPOINT_INTERVAL = 8
+ACK_CHECKPOINT_DRAIN_DELAY = 0.8
 RGB_LED_COMMAND = 0x30
 FLASH_IDENTIFY_COMMAND = 0x22
 FULL_REFRESH_MODE = 0x01
@@ -253,6 +254,7 @@ class DratekTransfer:
                     partial,
                     orientation,
                     software_version,
+                    force_confirmed_writes=attempt > 1,
                 )
                 self.log("Transfer completed.")
                 return
@@ -277,6 +279,7 @@ class DratekTransfer:
         partial: tuple[int, int, int, int, int] | None = None,
         orientation: str | None = None,
         software_version: int | None = None,
+        force_confirmed_writes: bool = False,
     ) -> None:
         payload = pack_bwr_image(sdk_type, image, transform, orientation)
         software_version = self._resolve_software_version(address, software_version)
@@ -350,17 +353,19 @@ class DratekTransfer:
             # after the initial request.
             streaming_mode = bool(int(software_version or 0) & 0x80)
             # SDK type 51 is a hardware-verified exception from the older
-            # working integration: it requires an ATT response for every block
+            # working integration: its reliable path requires ATT responses
             # even when the characteristic also advertises write-without-response.
             require_gatt_response = (
-                int(sdk_type) in WRITE_ACK_SDK_TYPES
+                force_confirmed_writes
+                or int(sdk_type) in WRITE_ACK_SDK_TYPES
                 or (
                     "write" in write_char.properties
                     and "write-without-response" not in write_char.properties
                 )
             )
             checkpointed_writes = (
-                int(sdk_type) in WRITE_ACK_SDK_TYPES
+                not force_confirmed_writes
+                and streaming_mode
                 and "write" in write_char.properties
                 and "write-without-response" in write_char.properties
             )
@@ -375,6 +380,10 @@ class DratekTransfer:
                 f"Transfer mode: {'streaming' if streaming_mode else 'notification-paced legacy'}, "
                 f"block writes: {write_mode} (software version {int(software_version or 0)})."
             )
+            if force_confirmed_writes:
+                self.log(
+                    "Reliable retry enabled: every image block must receive a GATT response."
+                )
             if len(response) < 6 or response[0] != 5 or response[1] != 0:
                 raise RuntimeError(f"Invalid first image-block request: {response.hex(' ').upper()}")
             next_block = int.from_bytes(response[2:6], "little")
@@ -391,12 +400,20 @@ class DratekTransfer:
 
                 end_block = total_blocks if streaming_mode else next_block + 1
                 for block_number in range(next_block, end_block):
-                    block_requires_response = require_gatt_response and (
-                        not checkpointed_writes
-                        or block_number == next_block
-                        or (block_number + 1) % ACK_CHECKPOINT_INTERVAL == 0
-                        or block_number == total_blocks - 1
-                    )
+                    block_requires_response = (
+                        checkpointed_writes
+                        and (
+                            block_number == next_block
+                            or (block_number + 1) % ACK_CHECKPOINT_INTERVAL == 0
+                            or block_number == total_blocks - 1
+                        )
+                    ) or (require_gatt_response and not checkpointed_writes)
+                    if (
+                        checkpointed_writes
+                        and block_requires_response
+                        and block_number != next_block
+                    ):
+                        await asyncio.sleep(ACK_CHECKPOINT_DRAIN_DELAY)
                     await self._write_image_block(
                         client,
                         write_char,
@@ -423,7 +440,7 @@ class DratekTransfer:
                             responses,
                             timeout=(
                                 OPTIONAL_COMPLETION_TIMEOUT
-                                if require_gatt_response
+                                if require_gatt_response or checkpointed_writes
                                 else UNCONFIRMED_WRITE_DRAIN_TIMEOUT
                             ),
                         )
@@ -603,6 +620,11 @@ class DratekTransfer:
                     await asyncio.sleep(STREAM_WRITE_DELAY)
                 return
             except Exception as exc:  # noqa: BLE stacks expose platform-specific write errors
+                # A timed-out ATT request may already have reached the display.
+                # Repeating the same raw image block would shift/corrupt the
+                # display buffer, so restart the whole prepared transfer instead.
+                if isinstance(exc, TimeoutError):
+                    raise
                 if attempt >= max_attempts:
                     raise
                 self.log(

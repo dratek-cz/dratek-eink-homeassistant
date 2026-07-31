@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.164] - 2026-07-31
+
+### Opraveno
+- Rychlá dávka před každým potvrzovaným kontrolním blokem čeká na odtečení fronty BlueZ. Potvrzení se už neposílá do stále plné fronty, kde končilo osmivteřinovým timeoutem.
+- Kontrolní GATT zápisy se používají pro všechny streamující displeje, které nabízejí oba režimy zápisu. Ochranu tak dostává i velký 400 × 300 displej, u něhož samotné `Bluetooth queued 100 %` nespouštělo překreslení.
+- Nejednoznačně timeoutovaný ATT blok se nikdy neopakuje uvnitř stejného obrazového proudu, protože mohl být displejem přijat a jeho duplikace by posunula obrazový buffer. Následující pokus začne novým `prepare update` a přepne celý přenos na potvrzované bloky.
+- Druhý a třetí pokus jsou záměrně spolehlivý fallback: každý blok musí obdržet GATT odpověď. Fronta se proto nemůže označit jako dokončená jen na základě lokálního zařazení dat do Bluetooth zásobníku.
+
+### Firmware gatewaye
+- Firmware zůstává ve verzi `0.1.47-gateway`; oprava se týká přímého Bluetooth přenosu z Home Assistantu.
+
 ## [0.1.163] - 2026-07-31
 
 ### Změněno
