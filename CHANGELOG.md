@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.160] - 2026-07-31
+
+### Opraveno
+- Příkaz `prepare update` má nyní přesně osm bajtů jako v originálním Picksmart SDK: `02 + uint32 délka + režim + 00 00`. Chybějící dva rezervované bajty dovolovaly BLE přenos bloků, ale u firmwaru `0x80+` nemusely aktivovat následnou obnovu eInk řadiče.
+- Přímý zápis bez GATT odpovědi ponechá spojení po posledním bloku deset sekund otevřené, aby BlueZ a řadič stihly vyprázdnit frontu před odpojením.
+- Diagnostika rozlišuje `Display acknowledged` a `Bluetooth queued`; úspěšné vložení do lokální BLE fronty se již nevydává za potvrzení displejem.
+
+### Firmware gatewaye
+- Verze `0.1.46-gateway` posílá stejný úplný osmibajtový příkaz `prepare update`.
+
 ## [0.1.159] - 2026-07-31
 
 ### Opraveno

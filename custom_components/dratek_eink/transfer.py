@@ -26,6 +26,7 @@ FLASH_IDENTIFY_COMMAND = 0x22
 FULL_REFRESH_MODE = 0x01
 BLOCK_REQUEST_TIMEOUT = 12
 OPTIONAL_COMPLETION_TIMEOUT = 2
+UNCONFIRMED_WRITE_DRAIN_TIMEOUT = 10
 MAX_BLOCK_REQUEST_RETRIES = 5
 GATT_OPERATION_TIMEOUT = 8
 STREAM_WRITE_DELAY = 0.04
@@ -316,7 +317,14 @@ class DratekTransfer:
             # Refresh mode 0 in the vendor API maps to command byte 1 and causes
             # a full-screen refresh. Partial refreshes use a separate 0x60 area
             # command before this packet.
-            command = bytes([2]) + len(payload).to_bytes(4, "little") + bytes([FULL_REFRESH_MODE])
+            # The vendor packet is always eight bytes. The two trailing zero
+            # bytes are reserved, but firmware 0x80+ still requires them before
+            # it will commit the received frame to the eInk controller.
+            command = (
+                bytes([2])
+                + len(payload).to_bytes(4, "little")
+                + bytes([FULL_REFRESH_MODE, 0, 0])
+            )
             await self._write_char(client, control_char, command, "prepare update")
             await self._wait_for_response(responses, 2, ok_values={0}, label="screen update prepare")
 
@@ -351,9 +359,10 @@ class DratekTransfer:
                 "write" in write_char.properties
                 and "write-without-response" not in write_char.properties
             )
+            write_mode = "GATT response" if require_gatt_response else "paced write without response"
             self.log(
-                f"Transfer mode: {'GATT-confirmed stream' if streaming_mode else 'notification-paced legacy'} "
-                f"(software version {int(software_version or 0)})."
+                f"Transfer mode: {'streaming' if streaming_mode else 'notification-paced legacy'}, "
+                f"block writes: {write_mode} (software version {int(software_version or 0)})."
             )
             if len(response) < 6 or response[0] != 5 or response[1] != 0:
                 raise RuntimeError(f"Invalid first image-block request: {response.hex(' ').upper()}")
@@ -381,8 +390,9 @@ class DratekTransfer:
                     sent_blocks.add(block_number)
                     if block_number == 0 or block_number % 10 == 0 or len(sent_blocks) == total_blocks:
                         percent = int((len(sent_blocks) / total_blocks) * 100)
+                        delivery = "Display acknowledged" if require_gatt_response else "Bluetooth queued"
                         self.log(
-                            f"Display accepted block {block_number + 1}/{total_blocks} "
+                            f"{delivery} block {block_number + 1}/{total_blocks} "
                             f"({percent}%)."
                         )
 
@@ -390,12 +400,17 @@ class DratekTransfer:
                     try:
                         response = await self._wait_for_next_transfer_response(
                             responses,
-                            timeout=OPTIONAL_COMPLETION_TIMEOUT,
+                            timeout=(
+                                OPTIONAL_COMPLETION_TIMEOUT
+                                if require_gatt_response
+                                else UNCONFIRMED_WRITE_DRAIN_TIMEOUT
+                            ),
                         )
                     except TimeoutError:
                         self.log(
-                            "All image blocks were delivered; the display started "
-                            "refreshing without the optional 05 08 confirmation."
+                            "All image blocks were queued and the Bluetooth connection "
+                            "was kept open for the controller to drain them; no optional "
+                            "05 08 confirmation was sent."
                         )
                         break
                     if len(response) >= 2 and response[1] == 8:

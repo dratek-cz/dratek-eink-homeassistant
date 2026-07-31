@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.160
+
+- opraven řídicí příkaz `prepare update`: podle originálního Picksmart SDK musí mít osm bajtů včetně dvou koncových rezervovaných nul, zatímco integrace i gateway dosud posílaly jen šest bajtů
+- displej s firmwarem `0x80+` nyní dostane úplné parametry aktualizace a po přenosu bloků může skutečně spustit fyzické překreslení eInk panelu
+- u zápisu bez GATT odpovědi zůstává Bluetooth připojení po posledním bloku déle otevřené, aby řadič bezpečně vyprázdnil frontu
+- protokol nově rozlišuje blok potvrzený displejem od bloku pouze zařazeného Bluetooth stackem
+- přiložen opravený firmware gatewaye `0.1.46-gateway` pro ESP32 a ESP32-S3
+
 ## Novinky ve verzi 0.1.159
 
 - velký náhled se už neposílá Home Assistantu v jediné websocketové zprávě, ale v potvrzovaných 64KB částech
