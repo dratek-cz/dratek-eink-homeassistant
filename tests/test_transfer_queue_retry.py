@@ -61,6 +61,43 @@ class FakeHass:
 
 
 class TransferQueueRetryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_empty_platform_exception_is_returned_with_its_type(self):
+        queue = queue_module.TransferQueue(object())
+        queue._loaded = True
+        queue._jobs = []
+
+        async def save_history():
+            return None
+
+        queue._save_history = save_history
+        job = {
+            "id": "empty-error",
+            "resource": "local",
+            "transport_type": "local",
+            "transport_name": "Bluetooth",
+            "address": "FF:FF:94:20:10:78",
+            "operation": "design",
+            "status": "queued",
+            "created_at": 0,
+            "started_at": None,
+            "finished_at": None,
+            "error": "",
+            "log": [],
+        }
+        queue._jobs.append(job)
+
+        async def runner(_add_log):
+            raise RuntimeError()
+
+        result = await queue._execute(job, runner)
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(
+            result["error"],
+            "RuntimeError: Bluetooth transfer failed without a platform error message.",
+        )
+        self.assertEqual(job["error"], result["error"])
+
     async def test_automatic_update_retries_after_connection_slot_error(self):
         queue = queue_module.TransferQueue(object())
         queue_module.AUTOMATIC_BLUETOOTH_RETRY_DELAY_SECONDS = 0

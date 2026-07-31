@@ -708,8 +708,13 @@ class FrontendToolLibraryTests(unittest.TestCase):
     def test_websocket_errors_prefer_specific_backend_details(self):
         self.assertIn("err?.body?.message", self.source)
         self.assertIn("err?.body?.error", self.source)
-        self.assertIn('value.toLowerCase() !== "unknown error"', self.source)
-        self.assertIn("Neznámá chyba komunikace s Home Assistantem", self.source)
+        self.assertIn('"unknown_error"', self.source)
+        self.assertIn("!generic.has(value.toLowerCase())", self.source)
+        self.assertIn("Home Assistant ukončil požadavek bez podrobností", self.source)
+        self.assertIn("await this._loadQueue?.(false)", self.source)
+        self.assertIn('latestJob?.status === "succeeded"', self.source)
+        self.assertIn('latestJob?.status === "writing"', self.source)
+        self.assertIn("latestJob?.error", self.source)
 
 
 if __name__ == "__main__":

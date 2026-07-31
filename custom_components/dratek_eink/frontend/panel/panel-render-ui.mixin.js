@@ -995,14 +995,20 @@ export const renderUiMixin = {
       err?.body?.error,
       err?.error?.message,
       typeof err?.error === "string" ? err.error : "",
-      err?.code,
       err?.message,
+      err?.code,
     ].map((value) => String(value || "").trim()).filter(Boolean);
-    const specific = candidates.find((value) => value.toLowerCase() !== "unknown error");
+    const generic = new Set([
+      "unknown error",
+      "unknown_error",
+      "unknown-error",
+      "error",
+    ]);
+    const specific = candidates.find((value) => !generic.has(value.toLowerCase()));
     if (specific) return specific;
-    if (candidates.length) return candidates[0];
     const fallback = String(err || "").trim();
-    return fallback && fallback !== "[object Object]" ? fallback : "Neznámá chyba komunikace s Home Assistantem";
+    if (fallback && fallback !== "[object Object]" && !generic.has(fallback.toLowerCase())) return fallback;
+    return "Home Assistant ukončil požadavek bez podrobností. Zkontrolujte poslední přenos ve frontě a protokol integrace.";
   },
 
   _escape(value) {

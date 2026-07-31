@@ -1027,7 +1027,32 @@ export const devicesMixin = {
       };
       this._loadQueue?.(true);
     } catch (err) {
-      this._templateSendResult = { ok: false, message: `Odeslání selhalo: ${this._message(err)}` };
+      const websocketMessage = this._message(err);
+      await this._loadQueue?.(false);
+      const address = String(device.address || "").toUpperCase();
+      const latestJob = (this._queue?.jobs || []).find((job) =>
+        String(job.address || "").toUpperCase() === address
+        && ["design", "partial_design"].includes(job.operation)
+      );
+      if (latestJob?.status === "succeeded") {
+        this._rememberSentDisplayPreview(device, image);
+        this._templateSendResult = {
+          ok: true,
+          message: "Přenos byl dokončen. Home Assistant pouze ztratil odpověď websocketu.",
+        };
+      } else if (latestJob?.status === "writing" || latestJob?.status === "queued") {
+        this._templateSendResult = {
+          ok: true,
+          message: "Přenos pokračuje ve frontě Home Assistantu. Stav najdete na kartě Fronta.",
+        };
+      } else {
+        const transferMessage = String(
+          latestJob?.error
+          || [...(latestJob?.log || [])].reverse().find((line) => String(line || "").trim())
+          || websocketMessage
+        ).trim();
+        this._templateSendResult = { ok: false, message: `Odeslání selhalo: ${transferMessage}` };
+      }
     } finally {
       this._templateSending = false;
       this._render();

@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.155
+
+- opraveno zobrazení websocketové chyby `unknown_error`, která ve verzi 0.1.154 překryla podrobnější zprávu Home Assistantu
+- pokud odpověď websocketu vypadne během přenosu, panel nyní ověří skutečný stav úlohy ve frontě a rozliší dokončený, pokračující a neúspěšný přenos
+- prázdná výjimka Bluetooth vrstvy se uloží s názvem svého typu, takže už nikdy nezmizí za obecným textem bez diagnostiky
+
 ## Novinky ve verzi 0.1.154
 
 - opraveno chybné ukončení přenosu hláškou `Unknown error` u displejů, které po posledním vyžádaném bloku neposílají volitelné potvrzení `05 08`

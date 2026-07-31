@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.155] - 2026-07-31
+
+### Opraveno
+- Panel považuje `unknown_error`, `unknown error` a `unknown-error` za obecné zástupné kódy a přednostně zobrazí konkrétní zprávu backendu.
+- Po ztrátě websocketové odpovědi panel načte poslední úlohu daného displeje z fronty. Dokončený zápis již neoznačí jako selhání a u neúspěšného zápisu zobrazí uloženou chybu nebo poslední řádek přenosového protokolu.
+- Výjimky Bluetooth platformy bez textu se vracejí alespoň s názvem typu výjimky a jednoznačným popisem.
+
 ## [0.1.152] - 2026-07-31
 
 ### Opraveno
