@@ -26,6 +26,7 @@ export const projectsMixin = {
     const size = this._displaySize(device);
     this._objects = structuredClone(source.objects);
     this._variables = structuredClone(source.variables);
+    this._restoreDisplayTemplateConfig?.(source.template_config);
     const led = source.rgb_led || {};
     this._rgbLed = {
       mode: ["off", "on", "flash"].includes(led.mode) ? led.mode : "off",
@@ -214,6 +215,7 @@ export const projectsMixin = {
         flash_time: this._rgbLed.flashTime,
       },
       objects: this._objects.map(({ _img, ...object }) => object),
+      template_config: this._displayTemplateDraftPayload?.(device),
     };
   },
 

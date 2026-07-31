@@ -405,13 +405,11 @@ export const devicesMixin = {
     const device = this._device();
     if (!device) {
       return `<section class="display-settings-page">
-        <button id="displaySettingsBack" class="display-settings-back"><ha-icon icon="mdi:arrow-left"></ha-icon>Zpět</button>
         <div class="card display-settings-panel"><h1>Displej nebyl nalezen</h1><p>Vraťte se na hlavní stránku a vyberte dostupný displej.</p></div>
       </section>`;
     }
     if (!["templates", "designer"].includes(this._displaySettingsView)) this._displaySettingsView = "templates";
     return `<section class="display-settings-page">
-      <button id="displaySettingsBack" class="display-settings-back"><ha-icon icon="mdi:arrow-left"></ha-icon>Zpět</button>
       ${this._displaySettingsView === "templates" ? this._renderDisplayTemplatesSection(device) : ""}
       ${this._displaySettingsView === "designer" ? this._renderDisplayTemplateEditor(device) : ""}
       ${this._renderDisplayTemplateConflictDialog(device)}
@@ -528,6 +526,7 @@ export const devicesMixin = {
   _renderDisplayTemplatePreview(template) {
     const icon = (name, className = "") => `<ha-icon class="${className}" icon="mdi:${name}"></ha-icon>`;
     const value = (index, fallback) => this._escape(this._templateDisplayValue(template, index, fallback));
+    const percent = (index, fallback) => this._templatePercent(template, index, fallback);
     const energySeries = this._templateSeries(template, 2, [4, 2, 5, 8, 7, 11, 15, 13, 18, 14, 10, 12, 6, 9]);
     const energyMin = Math.min(...energySeries);
     const energyMax = Math.max(...energySeries);
@@ -621,7 +620,7 @@ export const devicesMixin = {
       </div>`,
       thermostat: `<div class="tpl tpl-thermostat">
         <h3>Topení</h3>${icon("radiator", "tpl-thermostat-icon")}<label>Obývací pokoj</label><em>${value(0, "22,5 °C")}</em><span>Cílová teplota ${value(1, "23 °C")}</span>
-        <div class="tpl-heat-scale"><i></i><b></b></div>
+        <div class="tpl-heat-scale"><i style="width:${percent(2, 48)}%"></i><b style="left:${percent(2, 48)}%"></b></div>
         <section><span>${icon("fire")} Topení aktivní</span><strong>${value(2, "48 %")}</strong></section>
         <footer>Další změna v ${value(3, "22:00")}</footer>
       </div>`,
@@ -643,19 +642,26 @@ export const devicesMixin = {
       </div>`,
       server: `<div class="tpl tpl-server">
         <h3>Stav serveru</h3><header>${icon("server-network")}<span><strong>Home server</strong><small>192.168.1.10</small></span><b>${value(0, "ONLINE")}</b></header>
-        <section><span>CPU<b>${value(1, "24 %")}</b><i style="width:24%"></i></span><span>RAM<b>${value(2, "61 %")}</b><i style="width:61%"></i></span><span>Disk<b>${value(3, "73 %")}</b><i style="width:73%"></i></span></section>
+        <section><span>CPU<b>${value(1, "24 %")}</b><i style="width:${percent(1, 24)}%"></i></span><span>RAM<b>${value(2, "61 %")}</b><i style="width:${percent(2, 61)}%"></i></span><span>Disk<b>${value(3, "73 %")}</b><i style="width:${percent(3, 73)}%"></i></span></section>
         <ul><li>${icon("thermometer")}<span>Teplota</span><b>${value(4, "48 °C")}</b></li><li>${icon("clock-outline")}<span>Provoz</span><b>${value(5, "18 dní")}</b></li></ul>
         <footer>${icon("check-network-outline")} Všechny služby běží</footer>
       </div>`,
       garden: `<div class="tpl tpl-garden">
         <h3>Zahrada</h3><header>${icon("flower")}<span><strong>${value(0, "Záhon rajčat")}</strong><small>Automatická závlaha</small></span></header>
-        <em>Vlhkost ${value(1, "36 %")}</em><div class="tpl-moisture"><i></i></div>
+        <em>Vlhkost ${value(1, "36 %")}</em><div class="tpl-moisture"><i style="width:${percent(1, 36)}%"></i></div>
         <section><span>${icon("weather-sunny")} ${value(2, "24 °C")}</span><span>${icon("water-percent")} ${value(1, "36 %")}</span><span>${icon("weather-windy")} ${value(3, "8 km/h")}</span></section>
         <i></i><strong>Další zalévání</strong><b>${value(4, "18:30 · 12 minut")}</b>
         <footer>${icon("sprinkler-variant")} Závlaha připravena</footer>
       </div>`,
     };
     return previews[template.id] || "";
+  },
+
+  _renderDisplayTemplateCatalogPreview(template, orientation) {
+    const preview = this._renderDisplayTemplatePreview(template);
+    return orientation === "landscape"
+      ? preview.replace('class="tpl ', 'class="tpl tpl-landscape ')
+      : preview;
   },
 
   _renderDisplayTemplatesSection(device) {
@@ -701,11 +707,9 @@ export const devicesMixin = {
                 <span class="display-health-item display-signal-item" title="Síla signálu${Number.isFinite(rssi) ? ` ${rssi} dBm` : ""}">${this._renderSignalBars(rssi)}<strong class="health-value signal-value level-${this._signalLevel(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></span>
               </div>
             </div>
+            <span class="display-template-device-info-workspace"><small>Váš displej</small><strong>Plocha pro šablony</strong></span>
+            <span class="pill muted display-template-device-info-resolution">${size.width} × ${size.height} px</span>
           </div>
-          <header>
-            <span><small>Váš displej</small><strong>Plocha pro šablony</strong></span>
-            <span class="pill muted">${size.width} × ${size.height} px</span>
-          </header>
           <div class="display-template-dropzone ${assignedTemplates.length ? "has-template" : ""}" data-display-template-dropzone tabindex="0" aria-label="Přetáhněte sem šablonu">
             ${primaryTemplate
               ? this._renderTemplatePhysicalDevicePreview(device, primaryTemplate, secondaryTemplate, orientation, layout, true)
@@ -757,9 +761,9 @@ export const devicesMixin = {
                   <span class="display-template-guide" role="tooltip"><strong>Jak nastavit ${this._escape(template.title)}</strong><ol>${guide.map((step) => `<li>${this._escape(step)}</li>`).join("")}</ol></span>
                 </span>
               </header>
-              <div class="display-template-tile-preview" data-display-template-open="${template.id}" role="button" tabindex="0" aria-label="Umístit šablonu ${this._escape(template.title)} na displej">
+              <div class="display-template-tile-preview is-${orientation}" data-display-template-open="${template.id}" role="button" tabindex="0" aria-label="Umístit šablonu ${this._escape(template.title)} na displej">
                 <span class="display-template-drag-handle"><ha-icon icon="mdi:drag"></ha-icon>Přetáhnout na displej</span>
-                <span class="display-template-preview">${this._renderDisplayTemplatePreview(template)}</span>
+                <span class="display-template-preview">${this._renderDisplayTemplateCatalogPreview(template, orientation)}</span>
               </div>
               <div class="display-template-tile-meta">
                 <span class="display-template-variables" aria-label="Použité údaje">${template.variables.map(([iconName, label]) => `<span><ha-icon icon="mdi:${iconName}"></ha-icon>${this._escape(label)}</span>`).join("")}</span>
@@ -803,6 +807,73 @@ export const devicesMixin = {
     this._displayTemplateAssignments ||= {};
     this._displayTemplateAssignments[address] = next;
     return next;
+  },
+
+  _displayTemplateDraftPayload(device = this._device()) {
+    const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
+    return {
+      assignments: address ? [...(this._displayTemplateAssignments?.[address] || [])] : [],
+      selected_primary: this._selectedDisplayTemplateId || "",
+      selected_secondary: this._selectedDisplayTemplateSecondaryId || "",
+      orientation: this._displayTemplateOrientation === "landscape" ? "landscape" : "portrait",
+      layout: this._displayTemplateLargeLayout || "single",
+      bindings: structuredClone(this._displayTemplateBindings || {}),
+      editor_elements: structuredClone(this._templateEditorElements || []),
+      element_adjustments: structuredClone(this._templateElementAdjustments || {}),
+      formats: structuredClone(this._displayTemplateFormats || {}),
+      sizes: structuredClone(this._displayTemplateSizes || {}),
+      placements: structuredClone(this._templateCanvasPlacements || {}),
+    };
+  },
+
+  _restoreDisplayTemplateConfig(config) {
+    const address = String(this._selectedDeviceAddress || "").toUpperCase();
+    if (!config || typeof config !== "object") {
+      if (address) {
+        this._displayTemplateAssignments ||= {};
+        this._displayTemplateAssignments[address] = [];
+      }
+      this._selectedDisplayTemplateId = "";
+      this._selectedDisplayTemplateSecondaryId = "";
+      this._displayTemplateBindings = {};
+      this._templateEditorElements = [];
+      this._templateElementAdjustments = {};
+      this._selectedTemplatePart = "";
+      return;
+    }
+    const assignments = Array.isArray(config.assignments) ? config.assignments.filter((item) => typeof item === "string") : [];
+    this._displayTemplateAssignments ||= {};
+    if (address) this._displayTemplateAssignments[address] = assignments.slice(0, 2);
+    this._selectedDisplayTemplateId = String(config.selected_primary || assignments[0] || "");
+    this._selectedDisplayTemplateSecondaryId = String(config.selected_secondary || assignments[1] || "");
+    this._displayTemplateOrientation = config.orientation === "landscape" ? "landscape" : "portrait";
+    this._displayTemplateLargeLayout = ["single", "side-by-side", "stacked"].includes(config.layout) ? config.layout : "single";
+    this._displayTemplateBindings = structuredClone(config.bindings || {});
+    this._templateEditorElements = Array.isArray(config.editor_elements) ? structuredClone(config.editor_elements) : [];
+    this._templateElementAdjustments = structuredClone(config.element_adjustments || {});
+    this._displayTemplateFormats = { primary: "narrow", secondary: "narrow", ...(config.formats || {}) };
+    this._displayTemplateSizes = { primary: "large", secondary: "small", ...(config.sizes || {}) };
+    this._templateCanvasPlacements = {
+      primary: { x: 9, y: 9 },
+      secondary: { x: 9, y: 9 },
+      ...(config.placements || {}),
+    };
+    this._selectedTemplatePart = "";
+  },
+
+  async _saveDisplayTemplateDraft() {
+    const device = this._device();
+    if (!device || !this._hass) return false;
+    const payload = this._projectPayload(device);
+    const result = await this._hass.callWS({
+      type: "dratek_eink/device_drafts/save",
+      address: device.address,
+      draft: payload,
+    });
+    const address = String(device.address || "").toUpperCase();
+    this._deviceDrafts[address] = result?.draft || payload;
+    this._saveCachedDeviceDrafts?.();
+    return true;
   },
 
   _renderDisplayTemplateEditor(device) {
@@ -855,11 +926,16 @@ export const devicesMixin = {
           </div>
         </main>
         <div class="display-template-editor-right-column">
+          <button type="button" class="display-template-save-button" data-template-save>
+            <ha-icon icon="mdi:content-save-outline"></ha-icon>
+            <span><strong>Uložit šablonu</strong><small>Zachová rozložení, velikosti a vybrané entity</small></span>
+          </button>
           <button type="button" class="display-template-send-button" data-template-send ${this._templateSending ? "disabled" : ""}>
             <ha-icon icon="mdi:${this._templateSending ? "loading" : "send"}" ${this._templateSending ? 'class="spin"' : ""}></ha-icon>
             <span><strong>${this._templateSending ? "Odesílám náhled…" : "Odeslat do displeje"}</strong><small>Zapíše aktuálně nastavený náhled</small></span>
           </button>
           ${this._templateSendResult ? `<div class="template-send-result ${this._templateSendResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSendResult.ok ? "check-circle-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSendResult.message)}</span></div>` : ""}
+          ${this._templateSaveResult ? `<div class="template-send-result ${this._templateSaveResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSaveResult.ok ? "content-save-check-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSaveResult.message)}</span></div>` : ""}
           <aside class="card display-template-editor-panel display-template-editor-right" aria-label="Nastavení šablony">
             <div class="template-editor-panel-heading"><ha-icon icon="mdi:tune-variant"></ha-icon><span><strong>Nastavení šablony</strong><small>${this._escape(activeTemplate.title)}</small></span></div>
             <div class="template-editor-panel-heading template-layout-heading"><ha-icon icon="mdi:resize"></ha-icon><span><strong>Velikost šablony</strong><small>${selectedSlot === "secondary" ? "Nastavujete druhou šablonu" : "Nastavujete první šablonu"}</small></span></div>
@@ -867,6 +943,7 @@ export const devicesMixin = {
               <button type="button" class="${selectedSize === "large" ? "is-active" : ""}" data-template-size="large" ${largeDisplay ? "" : "disabled"}><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon>Velká</button>
               <button type="button" class="${selectedSize === "small" ? "is-active" : ""}" data-template-size="small" ${largeDisplay ? "" : "disabled"}><ha-icon icon="mdi:arrow-collapse-all"></ha-icon>Malá</button>
             </div>
+            ${this._renderTemplatePartControls(activeTemplate)}
             <p class="template-size-help">${largeDisplay
               ? selectedSize === "large"
                 ? "Velká šablona zabírá celý displej a uzamkne přidání druhé."
@@ -885,9 +962,8 @@ export const devicesMixin = {
     </section>`;
   },
 
-  // Resolves everything the native-SVG renderer needs for the currently
-  // selected display: which templates sit on it, the panel's exact pixel
-  // resolution in the active orientation, and how two templates are split.
+  // Resolves the fallback SVG renderer request. The normal send path captures
+  // the visible HTML template so the editor and physical display stay WYSIWYG.
   _currentDisplayTemplateSvgRequest(device = this._device()) {
     if (!device) return null;
     const cards = this._displayTemplateCards();
@@ -909,6 +985,11 @@ export const devicesMixin = {
   async _renderCurrentDisplayTemplateImage(device = this._device()) {
     const request = this._currentDisplayTemplateSvgRequest(device);
     if (!request) throw new Error("Není vybrána žádná šablona.");
+    const screen = this.shadowRoot.querySelector(".display-template-editor-stage .template-designer-screen")
+      || this.shadowRoot.querySelector(".display-template-dropzone .template-designer-screen");
+    if (screen && screen.getBoundingClientRect().width > 0) {
+      return this._rasterizeDisplayTemplatePreview(screen);
+    }
     return this._rasterizeDisplayTemplateSvg(request.templates, request.width, request.height, request.layout);
   },
 
@@ -926,6 +1007,7 @@ export const devicesMixin = {
       if (label) label.textContent = "Odesílám náhled…";
     }
     try {
+      await this._saveDisplayTemplateDraft();
       const image = await this._renderCurrentDisplayTemplateImage(device);
       const gatewayId = String(this._selectedGatewayId || "");
       const result = await this._hass.callWS({
@@ -1163,7 +1245,9 @@ export const devicesMixin = {
       o: orientation,
       l: layout,
       z: Math.round(previewZoom * 100),
-      b: this._displayTemplateBindings?.[address] || null,
+      b: this._displayTemplateBindings || null,
+      a: this._templateElementAdjustments || null,
+      e: this._templateEditorElements || null,
     })) : "";
     return `<div class="template-physical-preview device-preview-wrap" style="--template-preview-zoom:${previewZoom}">
       <div class="device-preview-fit" style="--frame-ratio:${(outerWidth / outerHeight).toFixed(4)};--preview-width:${Math.min(620, Math.max(250, Math.round(470 * outerWidth / outerHeight)))}px">
@@ -1197,6 +1281,93 @@ export const devicesMixin = {
       <div class="template-editor-tool-group"><small>Přednastavené ikony</small><div class="template-editor-icon-grid">${icons.map(([icon, title]) => `<button type="button" title="${title}" data-template-editor-tool="icon" data-template-editor-icon="${icon}"><ha-icon icon="mdi:${icon}"></ha-icon></button>`).join("")}</div></div>
       ${(this._templateEditorElements || []).length ? `<div class="template-editor-layers"><small>Přidané prvky</small>${this._templateEditorElements.map((item) => `<div><ha-icon icon="mdi:${item.type === "image" ? "image-outline" : item.icon || "shape-outline"}"></ha-icon><span>${this._escape(item.label)}</span><button type="button" data-template-editor-remove="${item.id}" title="Odstranit"><ha-icon icon="mdi:close"></ha-icon></button></div>`).join("")}</div>` : ""}
     </div>`;
+  },
+
+  _renderTemplatePartControls(activeTemplate) {
+    const key = String(this._selectedTemplatePart || "");
+    const adjustment = this._templateElementAdjustments?.[key];
+    if (!key || !adjustment) {
+      return `<div class="template-part-controls is-empty">
+        <ha-icon icon="mdi:cursor-move"></ha-icon>
+        <span><strong>Upravte části šablony</strong><small>Klikněte na text, ikonu, graf nebo jiný prvek v náhledu a tažením jej přesuňte.</small></span>
+      </div>`;
+    }
+    const partNumber = Number(key.split(":").at(-1)) + 1;
+    const scale = Math.round(Math.max(0.5, Math.min(2, Number(adjustment.scale || 1))) * 100);
+    return `<div class="template-part-controls">
+      <div class="template-part-controls-head"><ha-icon icon="mdi:cursor-move"></ha-icon><span><strong>${this._escape(activeTemplate.title)} · prvek ${partNumber}</strong><small>Tažením v náhledu změníte polohu</small></span></div>
+      <label><span>Velikost prvku <strong data-template-part-scale-value>${scale} %</strong></span><input type="range" min="50" max="200" step="5" value="${scale}" data-template-part-scale="${this._escape(key)}"></label>
+      <button type="button" data-template-part-reset="${this._escape(key)}"><ha-icon icon="mdi:restore"></ha-icon>Obnovit polohu a velikost</button>
+    </div>`;
+  },
+
+  _applyTemplatePartAdjustment(element, surface, adjustment) {
+    const elementWidth = Math.max(1, element.getBoundingClientRect().width);
+    const elementHeight = Math.max(1, element.getBoundingClientRect().height);
+    const surfaceWidth = Math.max(1, surface.getBoundingClientRect().width);
+    const surfaceHeight = Math.max(1, surface.getBoundingClientRect().height);
+    const translateX = (Number(adjustment.x || 0) * surfaceWidth) / elementWidth;
+    const translateY = (Number(adjustment.y || 0) * surfaceHeight) / elementHeight;
+    const scale = Math.max(0.5, Math.min(2, Number(adjustment.scale || 1)));
+    element.style.transform = `translate(${translateX}%,${translateY}%) scale(${scale})`;
+    element.style.transformOrigin = "center";
+  },
+
+  _bindTemplatePartEditor() {
+    if (this._activeTab !== "display-settings" || this._displaySettingsView !== "designer") return;
+    this._templateElementAdjustments ||= {};
+    this.shadowRoot.querySelectorAll(".display-template-editor-stage .display-template-surface").forEach((surface) => {
+      const templateId = surface.dataset.previewTemplate || "";
+      const slot = surface.dataset.templateCanvasSlot || "primary";
+      const templateRoot = surface.querySelector(".tpl");
+      if (!templateRoot) return;
+      [...templateRoot.children].forEach((element, index) => {
+        const key = `${slot}:${templateId}:${index}`;
+        const adjustment = this._templateElementAdjustments[key] || { x: 0, y: 0, scale: 1 };
+        this._templateElementAdjustments[key] = adjustment;
+        element.dataset.templateEditablePart = key;
+        element.classList.add("template-editable-part");
+        element.classList.toggle("is-selected", this._selectedTemplatePart === key);
+        this._applyTemplatePartAdjustment(element, surface, adjustment);
+        element.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          event.stopPropagation();
+          this._selectedTemplatePart = key;
+          this.shadowRoot.querySelectorAll(".template-editable-part.is-selected").forEach((item) => item.classList.remove("is-selected"));
+          element.classList.add("is-selected");
+          this._templatePartDrag = {
+            key,
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            originX: Number(adjustment.x || 0),
+            originY: Number(adjustment.y || 0),
+            width: Math.max(1, surface.getBoundingClientRect().width),
+            height: Math.max(1, surface.getBoundingClientRect().height),
+          };
+          element.setPointerCapture?.(event.pointerId);
+        });
+        element.addEventListener("pointermove", (event) => {
+          const drag = this._templatePartDrag;
+          if (!drag || drag.key !== key || drag.pointerId !== event.pointerId) return;
+          adjustment.x = Math.max(-50, Math.min(50, drag.originX + ((event.clientX - drag.startX) / drag.width) * 100));
+          adjustment.y = Math.max(-50, Math.min(50, drag.originY + ((event.clientY - drag.startY) / drag.height) * 100));
+          this._applyTemplatePartAdjustment(element, surface, adjustment);
+        });
+        const finish = (event) => {
+          const drag = this._templatePartDrag;
+          if (!drag || drag.key !== key || drag.pointerId !== event.pointerId) return;
+          this._templatePartDrag = null;
+          element.releasePointerCapture?.(event.pointerId);
+          this._templateSaveResult = null;
+          this._render();
+          this._paint();
+        };
+        element.addEventListener("pointerup", finish);
+        element.addEventListener("pointercancel", finish);
+      });
+    });
   },
 
   _addTemplateEditorElement(type, icon = "") {
@@ -1325,6 +1496,13 @@ export const devicesMixin = {
       if (numbers.length > 1) return numbers.slice(-48);
     }
     return fallback;
+  },
+
+  _templatePercent(template, variableIndex, fallback = 0) {
+    const raw = String(this._templateDisplayValue(template, variableIndex, fallback)).replace(",", ".");
+    const match = raw.match(/-?\d+(?:\.\d+)?/);
+    const numeric = match ? Number(match[0]) : Number(fallback);
+    return Math.max(0, Math.min(100, Number.isFinite(numeric) ? numeric : Number(fallback) || 0));
   },
 
   _templateVariableMeta(variable, index = 0) {

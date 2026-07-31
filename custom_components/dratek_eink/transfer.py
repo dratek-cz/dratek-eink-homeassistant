@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
-import queue
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -17,9 +16,12 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
-WRITE_ACK_SDK_TYPES = {51}
 RGB_LED_COMMAND = 0x30
 FLASH_IDENTIFY_COMMAND = 0x22
+FULL_REFRESH_MODE = 0x01
+BLOCK_REQUEST_TIMEOUT = 12
+TRANSFER_COMPLETE_TIMEOUT = 30
+MAX_BLOCK_REQUEST_RETRIES = 5
 
 
 def _next_block(data: bytes, block_size: int, block_number: int) -> bytes:
@@ -133,12 +135,13 @@ class DratekTransfer:
         raise last_error or RuntimeError("RGB LED setting failed.")
 
     async def _set_rgb_led_once(self, address: str, packet: bytes) -> None:
-        responses: queue.Queue[bytes] = queue.Queue()
+        responses: asyncio.Queue[bytes] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
 
         def notify_handler(_sender, data) -> None:
             response = bytes(data)
             self.log(f"Notification: {response.hex(' ').upper()}")
-            responses.put(response)
+            loop.call_soon_threadsafe(responses.put_nowait, response)
 
         connection_target = self._connection_target(address)
         self.log(f"Connecting to {address} for RGB LED control...")
@@ -179,12 +182,13 @@ class DratekTransfer:
         raise last_error or RuntimeError("Find me command failed.")
 
     async def _flash_identify_once(self, address: str, packet: bytes) -> None:
-        responses: queue.Queue[bytes] = queue.Queue()
+        responses: asyncio.Queue[bytes] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
 
         def notify_handler(_sender, data) -> None:
             response = bytes(data)
             self.log(f"Notification: {response.hex(' ').upper()}")
-            responses.put(response)
+            loop.call_soon_threadsafe(responses.put_nowait, response)
 
         connection_target = self._connection_target(address)
         self.log(f"Connecting to {address} for find-me flash...")
@@ -246,12 +250,13 @@ class DratekTransfer:
         orientation: str | None = None,
     ) -> None:
         payload = pack_bwr_image(sdk_type, image, transform, orientation)
-        responses: queue.Queue[bytes] = queue.Queue()
+        responses: asyncio.Queue[bytes] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
 
         def notify_handler(_sender, data) -> None:
             packet = bytes(data)
             self.log(f"Notification: {packet.hex(' ').upper()}")
-            responses.put(packet)
+            loop.call_soon_threadsafe(responses.put_nowait, packet)
 
         connection_target = self._connection_target(address)
         self.log(f"Connecting to {address}...")
@@ -281,58 +286,89 @@ class DratekTransfer:
             if partial is not None:
                 await self._write_partial_position(client, control_char, responses, partial)
 
-            command = bytes([2]) + len(payload).to_bytes(4, "little") + bytes([1])
+            # Refresh mode 0 in the vendor API maps to command byte 1 and causes
+            # a full-screen refresh. Partial refreshes use a separate 0x60 area
+            # command before this packet.
+            command = bytes([2]) + len(payload).to_bytes(4, "little") + bytes([FULL_REFRESH_MODE])
             await self._write_char(client, control_char, command, "prepare update")
             await self._wait_for_response(responses, 2, ok_values={0}, label="screen update prepare")
 
+            self._clear_queue(responses)
             await self._write_char(client, control_char, bytes([3]), "start process")
-            response = await self._wait_for_next_transfer_response(responses, 0, total_blocks)
-            if len(response) < 6 or response[0] != 5 or response[1] != 0:
-                raise RuntimeError(f"Display did not request first block: {response.hex(' ').upper()}")
-
-            first_block = int.from_bytes(response[2:6], "little")
-            if first_block >= total_blocks:
-                raise RuntimeError(f"Display requested invalid block {first_block}/{total_blocks}")
-
-            # A successful write-without-response only means that the local BLE
-            # stack queued the packet.  Large bitmaps can overrun that queue and
-            # lose blocks while the UI still reports a completed transfer.  Use
-            # GATT write acknowledgements whenever the display advertises them.
-            # SDK 51 is kept as a hardware-confirmed fallback because some BLE
-            # stacks have exposed its characteristic properties incompletely.
-            require_block_ack = (
-                "write" in write_char.properties
-                or int(sdk_type) in WRITE_ACK_SDK_TYPES
+            response = await self._wait_for_next_transfer_response(
+                responses,
+                timeout=BLOCK_REQUEST_TIMEOUT,
             )
-            if require_block_ack:
-                self.log(
-                    f"Using a GATT acknowledgement for every image block on SDK type {sdk_type}."
-                )
-            for block_number in range(first_block, total_blocks):
+            request_counts: dict[int, int] = {}
+            sent_blocks: set[int] = set()
+            if len(response) >= 6 and response[0] == 5 and response[1] == 0:
+                resume_block = int.from_bytes(response[2:6], "little")
+                sent_blocks.update(range(min(resume_block, total_blocks)))
+                if resume_block:
+                    self.log(
+                        f"Display is resuming the prepared transfer at block "
+                        f"{resume_block + 1}/{total_blocks}."
+                    )
+            require_gatt_response = (
+                "write-without-response" not in write_char.properties
+                and "write" in write_char.properties
+            )
+
+            # The display is the flow-control authority. It requests one exact
+            # block with [05 00 <uint32-le>] and only then is that block sent.
+            # A repeated request retransmits the block instead of advancing.
+            # [05 08] is the vendor-defined transfer-complete confirmation.
+            while True:
+                if len(response) >= 2 and response[0] == 5 and response[1] == 8:
+                    self.log("Display confirmed that the complete image was received.")
+                    break
+                if len(response) < 6 or response[0] != 5 or response[1] != 0:
+                    raise RuntimeError(f"Invalid image-block request: {response.hex(' ').upper()}")
+
+                block_number = int.from_bytes(response[2:6], "little")
+                if block_number >= total_blocks:
+                    raise RuntimeError(f"Display requested invalid block {block_number}/{total_blocks}")
+                request_counts[block_number] = request_counts.get(block_number, 0) + 1
+                if request_counts[block_number] > MAX_BLOCK_REQUEST_RETRIES:
+                    raise RuntimeError(
+                        f"Display requested block {block_number} more than "
+                        f"{MAX_BLOCK_REQUEST_RETRIES} times."
+                    )
+                if request_counts[block_number] > 1:
+                    self.log(
+                        f"Display requested retransmission of block {block_number + 1}/"
+                        f"{total_blocks}."
+                    )
+
                 await self._write_image_block(
                     client,
                     write_char,
                     _next_block(payload, block_size, block_number),
                     block_number,
-                    require_response=require_block_ack,
+                    require_response=require_gatt_response,
                 )
-                await asyncio.sleep(0.005 if require_block_ack else 0.02)
-                if block_number == first_block or block_number % 10 == 0 or block_number == total_blocks - 1:
-                    sent = block_number - first_block + 1
-                    percent = int((sent / total_blocks) * 100)
-                    verb = "Acknowledged" if require_block_ack else "Sent"
-                    self.log(f"{verb} block {block_number + 1}/{total_blocks} ({percent}%).")
+                sent_blocks.add(block_number)
+                if block_number == 0 or block_number % 10 == 0 or len(sent_blocks) == total_blocks:
+                    percent = int((len(sent_blocks) / total_blocks) * 100)
+                    self.log(
+                        f"Display accepted block {block_number + 1}/{total_blocks} "
+                        f"({percent}%)."
+                    )
 
-            if require_block_ack:
-                self.log(
-                    "All image blocks were acknowledged by the display. Releasing Bluetooth "
-                    "while the eInk panel renders the image."
+                response = await self._wait_for_next_transfer_response(
+                    responses,
+                    timeout=(
+                        TRANSFER_COMPLETE_TIMEOUT
+                        if len(sent_blocks) == total_blocks
+                        else BLOCK_REQUEST_TIMEOUT
+                    ),
                 )
-            else:
-                self.log(
-                    "All image blocks were handed to the display without per-block GATT "
-                    "acknowledgements. Releasing Bluetooth while the eInk panel renders the image."
+
+            if len(sent_blocks) != total_blocks:
+                raise RuntimeError(
+                    f"Display ended transfer after only {len(sent_blocks)}/{total_blocks} blocks."
                 )
+            self.log("Full-screen image transfer confirmed; releasing Bluetooth.")
 
             if write_notify_enabled:
                 await client.stop_notify(write_char)
@@ -440,7 +476,7 @@ class DratekTransfer:
                 )
                 await asyncio.sleep(0.1)
 
-    async def _request_block_size(self, client, control_char, responses: queue.Queue[bytes]) -> int:
+    async def _request_block_size(self, client, control_char, responses: asyncio.Queue[bytes]) -> int:
         attempts: list[bool] = []
         if "write" in control_char.properties:
             attempts.append(True)
@@ -465,7 +501,7 @@ class DratekTransfer:
         self,
         client,
         control_char,
-        responses: queue.Queue[bytes],
+        responses: asyncio.Queue[bytes],
         partial: tuple[int, int, int, int, int],
     ) -> None:
         x, y, width, height, clear_screen = partial
@@ -482,20 +518,21 @@ class DratekTransfer:
         await self._write_char(client, control_char, payload, "partial update area")
         await self._wait_for_response(responses, 0x60, ok_values={0}, label="partial update area")
 
-    async def _wait_for_block_size(self, responses: queue.Queue[bytes], timeout: int = 10) -> int:
+    async def _wait_for_block_size(self, responses: asyncio.Queue[bytes], timeout: int = 10) -> int:
         deadline = asyncio.get_running_loop().time() + timeout
         while asyncio.get_running_loop().time() < deadline:
             try:
-                data = await asyncio.to_thread(responses.get, True, 1)
-            except queue.Empty:
-                continue
+                remaining = max(0, deadline - asyncio.get_running_loop().time())
+                data = await asyncio.wait_for(responses.get(), remaining)
+            except TimeoutError:
+                break
             if len(data) >= 3 and data[0] == 1:
-                return int(data[1]) or int(data[2])
+                return int.from_bytes(data[1:3], "little")
         raise TimeoutError("Timed out waiting for block size response.")
 
     async def _wait_for_response(
         self,
-        responses: queue.Queue[bytes],
+        responses: asyncio.Queue[bytes],
         prefix: int,
         ok_values: set[int] | None = None,
         label: str = "response",
@@ -504,9 +541,10 @@ class DratekTransfer:
         deadline = asyncio.get_running_loop().time() + timeout
         while asyncio.get_running_loop().time() < deadline:
             try:
-                data = await asyncio.to_thread(responses.get, True, 1)
-            except queue.Empty:
-                continue
+                remaining = max(0, deadline - asyncio.get_running_loop().time())
+                data = await asyncio.wait_for(responses.get(), remaining)
+            except TimeoutError:
+                break
             if data and data[0] == prefix:
                 if ok_values is None or (len(data) > 1 and data[1] in ok_values):
                     return data
@@ -515,31 +553,28 @@ class DratekTransfer:
 
     async def _wait_for_next_transfer_response(
         self,
-        responses: queue.Queue[bytes],
-        after_block: int,
-        total_blocks: int,
+        responses: asyncio.Queue[bytes],
         timeout: int = 20,
     ) -> bytes:
         deadline = asyncio.get_running_loop().time() + timeout
         while asyncio.get_running_loop().time() < deadline:
             try:
-                data = await asyncio.to_thread(responses.get, True, 1)
-            except queue.Empty:
-                continue
+                remaining = max(0, deadline - asyncio.get_running_loop().time())
+                data = await asyncio.wait_for(responses.get(), remaining)
+            except TimeoutError:
+                break
             if not data or data[0] != 5:
                 continue
             if len(data) > 1 and data[1] == 8:
                 return data
             if len(data) >= 6 and data[1] == 0:
-                requested = int.from_bytes(data[2:6], "little")
-                if requested >= after_block or requested >= total_blocks:
-                    return data
+                return data
         raise TimeoutError("Timed out waiting for transfer response.")
 
     @staticmethod
-    def _clear_queue(responses: queue.Queue[bytes]) -> None:
+    def _clear_queue(responses: asyncio.Queue[bytes]) -> None:
         while not responses.empty():
             try:
                 responses.get_nowait()
-            except queue.Empty:
+            except asyncio.QueueEmpty:
                 break

@@ -44,6 +44,10 @@ class DratekEinkPanel extends HTMLElement {
     this._displayTemplateBindings = {};
     this._templateOrientationMenuOpen = false;
     this._templateEditorElements = [];
+    this._templateElementAdjustments = {};
+    this._selectedTemplatePart = "";
+    this._templatePartDrag = null;
+    this._templateSaveResult = null;
     this._selectedTemplateCanvasSlot = "";
     this._templateCanvasPlacements = {
       primary: { x: 9, y: 9 },

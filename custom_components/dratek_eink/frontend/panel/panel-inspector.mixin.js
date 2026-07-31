@@ -240,6 +240,8 @@ export const inspectorMixin = {
       const openedDevice = this._device();
       if (openedDevice) {
         this._displayTemplateOrientation = this._deviceFrameGeometry(openedDevice).portraitLayout ? "portrait" : "landscape";
+        const storedDraft = this._deviceDrafts?.[String(openedDevice.address || "").toUpperCase()];
+        this._restoreDisplayTemplateConfig?.(storedDraft?.template_config);
       }
       this._render();
       this._paint();
@@ -581,17 +583,36 @@ export const inspectorMixin = {
       this._render();
       this._paint();
     }));
-    this.shadowRoot.querySelector("[data-template-send]")?.addEventListener("click", () => this._sendDisplayTemplatePreview());
-    this.shadowRoot.querySelector("#displaySettingsBack")?.addEventListener("click", async () => {
-      if (this._displaySettingsView === "designer") {
-        await this._captureCurrentDisplayTemplatePreview();
-      }
-      this._displaySettingsView = "overview";
-      this._activeTab = "devices";
+    this._bindTemplatePartEditor?.();
+    this.shadowRoot.querySelectorAll("[data-template-part-scale]").forEach((input) => input.addEventListener("input", () => {
+      const key = input.dataset.templatePartScale || "";
+      const adjustment = this._templateElementAdjustments?.[key];
+      if (!adjustment) return;
+      adjustment.scale = Math.max(0.5, Math.min(2, Number(input.value) / 100));
+      const selected = this.shadowRoot.querySelector(`[data-template-editable-part="${CSS.escape(key)}"]`);
+      const surface = selected?.closest(".display-template-surface");
+      if (selected && surface) this._applyTemplatePartAdjustment(selected, surface, adjustment);
+      const label = this.shadowRoot.querySelector("[data-template-part-scale-value]");
+      if (label) label.textContent = `${Math.round(adjustment.scale * 100)} %`;
+      this._templateSaveResult = null;
+    }));
+    this.shadowRoot.querySelectorAll("[data-template-part-reset]").forEach((button) => button.addEventListener("click", () => {
+      const key = button.dataset.templatePartReset || "";
+      this._templateElementAdjustments[key] = { x: 0, y: 0, scale: 1 };
       this._render();
       this._paint();
-      this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
+    }));
+    this.shadowRoot.querySelector("[data-template-save]")?.addEventListener("click", async () => {
+      try {
+        await this._saveDisplayTemplateDraft();
+        this._templateSaveResult = { ok: true, message: "Šablona a její úpravy byly uloženy pro tento displej." };
+      } catch (err) {
+        this._templateSaveResult = { ok: false, message: `Uložení selhalo: ${this._message(err)}` };
+      }
+      this._render();
+      this._paint();
     });
+    this.shadowRoot.querySelector("[data-template-send]")?.addEventListener("click", () => this._sendDisplayTemplatePreview());
     this.shadowRoot.querySelectorAll("[data-topology-device]").forEach((card) => {
       card.addEventListener("dragstart", (event) => {
         const address = card.dataset.topologyDevice;

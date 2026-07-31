@@ -4,6 +4,16 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.153
+
+- BLE přenos nyní posílá vždy jen blok, který si displej výslovně vyžádá, takže velké obrazy nepřetékají frontu kolem bloků 11–13
+- ztracený blok se na požádání displeje automaticky odešle znovu a přenos skončí až po potvrzení `05 08`, že displej přijal celý obraz
+- plná aktualizace už není označena jako hotová po pouhém lokálním GATT zápisu; tím se předchází nedokončenému obrazu, oříznutí a překrytí staré a nové šablony
+- stejný opravený protokol používá přímý Bluetooth Home Assistantu i firmware gatewaye `0.1.43-gateway`
+- velikost BLE bloku se správně čte jako 16bitová little-endian hodnota pro všechny podporované modely
+- hlavní lišta zůstává dostupná také v nastavení displeje a informace o displeji jsou sjednocené do jednoho kompaktního panelu
+- náhledy šablon respektují skutečný formát displeje, živé hodnoty a umožňují přesouvat i měnit velikost částí šablony před uložením a odesláním
+
 ## Novinky ve verzi 0.1.152
 
 - lokální Bluetooth přenos používá potvrzení GATT pro každý blok, kdykoli je displej podporuje, takže se při odesílání velkých obrázků neztrácejí bloky ve frontě BLE

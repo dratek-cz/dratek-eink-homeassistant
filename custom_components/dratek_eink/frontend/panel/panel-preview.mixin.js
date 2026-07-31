@@ -26,9 +26,9 @@ export const previewMixin = {
   },
 
   // The physical e-ink panel shows a 3-color bitmap at its own native
-  // resolution, so paint the very same bitmap that gets sent (built by the
-  // native-SVG renderer) into the dropzone preview, pixelated and unsmoothed.
-  // Preview and sent image are then identical by construction.
+  // resolution, so paint the very same WYSIWYG bitmap that gets sent into the
+  // dropzone preview, pixelated and unsmoothed. Preview and sent image are
+  // then identical by construction.
   _paintDisplayTemplateDitheredPreviews() {
     const canvases = [...this.shadowRoot.querySelectorAll("canvas[data-dithered-preview]")];
     if (!canvases.length) return;

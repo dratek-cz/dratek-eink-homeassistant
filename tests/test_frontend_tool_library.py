@@ -176,17 +176,21 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('!["Enter", " "].includes(event.key)', self.source)
         self.assertIn("Upravit displej", self.source)
         self.assertIn('this._activeTab = "display-settings";', self.source)
-        self.assertIn('id="displaySettingsBack"', self.source)
+        self.assertNotIn('id="displaySettingsBack"', self.source)
+        self.assertIn('["devices", "display-settings"].includes(this._activeTab)', self.source)
         self.assertNotIn('class="card display-settings-device-summary"', self.source)
         self.assertNotIn('class="display-settings-preview"', self.source)
         self.assertIn('class="display-template-device-info"', self.source)
         self.assertIn('class="display-template-device-info-identity"', self.source)
         self.assertIn('class="display-template-device-info-health"', self.source)
+        self.assertIn('class="display-template-device-info-workspace"', self.source)
+        self.assertIn('class="pill muted display-template-device-info-resolution"', self.source)
         self.assertIn('icon="mdi:tablet-dashboard"', self.source)
         self.assertIn('class="display-health-item display-battery-item"', self.source)
         self.assertIn('class="display-health-item display-signal-item"', self.source)
-        self.assertIn(".display-template-device-info{display:grid", self.source)
+        self.assertIn(".display-template-device-info{display:flex", self.source)
         self.assertIn(".display-template-device-info-health{display:flex", self.source)
+        self.assertNotIn("<header>\n            <span><small>Váš displej</small>", self.source)
         self.assertNotIn('class="display-settings-actions"', self.source)
         self.assertNotIn('class="display-settings-action ${activeMode === option.id ? "is-active" : ""}', self.source)
         self.assertIn('class="display-template-workspace"', self.source)
@@ -350,7 +354,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("border:2px solid #111", self.source)
         self.assertIn('<span class="display-template-tile-identity"><strong>${this._escape(template.title)}</strong>', self.source)
         self.assertIn("grid-template-columns:repeat(auto-fill,minmax(240px,1fr))", self.source)
-        self.assertIn('class="display-template-tile-preview"', self.source)
+        self.assertIn('class="display-template-tile-preview is-${orientation}"', self.source)
+        self.assertIn("_renderDisplayTemplateCatalogPreview(template, orientation)", self.source)
         self.assertIn('class="display-template-tile-actions"', self.source)
         for title in (
             "Zabezpečení",
@@ -365,6 +370,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
             "Zahrada",
         ):
             self.assertIn(f'title: "{title}"', self.source)
+        self.assertIn("_templatePercent(template, variableIndex", self.source)
+        self.assertIn('style="width:${percent(1, 24)}%"', self.source)
+        self.assertIn("return this._rasterizeDisplayTemplatePreview(screen);", self.source)
+        self.assertIn('data-template-save', self.source)
+        self.assertIn('data-template-editable-part', self.source)
+        self.assertIn('template_config: this._displayTemplateDraftPayload?.(device)', self.source)
 
     def test_template_quantization_does_not_create_red_text_halos(self):
         self.assertIn("_quantizeEinkPixel(red, green, blue)", self.source)

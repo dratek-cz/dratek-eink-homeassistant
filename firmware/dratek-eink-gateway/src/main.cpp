@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.42-gateway";
+static const char* FIRMWARE_VERSION = "0.1.43-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -55,6 +55,7 @@ String uploadJobId;
 String uploadError;
 bool uploadDuplicate = false;
 SemaphoreHandle_t transferMutex = nullptr;
+SemaphoreHandle_t notificationMutex = nullptr;
 bool transferTaskActive = false;
 uint32_t transferSequence = 0;
 bool mdnsStarted = false;
@@ -251,12 +252,18 @@ void handleScan() {
 
 void notifyCallback(NimBLERemoteCharacteristic* characteristic, uint8_t* data, size_t length, bool isNotify) {
   std::vector<uint8_t> packet(data, data + length);
+  if (!notificationMutex) return;
+  xSemaphoreTake(notificationMutex, portMAX_DELAY);
   notifications.push_back(packet);
   if (notifications.size() > 30) notifications.erase(notifications.begin());
+  xSemaphoreGive(notificationMutex);
 }
 
 void clearNotifications() {
+  if (!notificationMutex) return;
+  xSemaphoreTake(notificationMutex, portMAX_DELAY);
   notifications.clear();
+  xSemaphoreGive(notificationMutex);
 }
 
 String hexPacket(const std::vector<uint8_t>& packet) {
@@ -273,9 +280,18 @@ String hexPacket(const std::vector<uint8_t>& packet) {
 bool waitForPacket(uint8_t prefix, std::vector<uint8_t>& out, uint32_t timeoutMs, int minBlock = -1) {
   uint32_t start = millis();
   while (millis() - start < timeoutMs) {
-    for (size_t i = 0; i < notifications.size(); i++) {
-      std::vector<uint8_t> packet = notifications[i];
-      notifications.erase(notifications.begin() + i);
+    std::vector<uint8_t> packet;
+    bool hasPacket = false;
+    if (notificationMutex) {
+      xSemaphoreTake(notificationMutex, portMAX_DELAY);
+      if (!notifications.empty()) {
+        packet = notifications.front();
+        notifications.erase(notifications.begin());
+        hasPacket = true;
+      }
+      xSemaphoreGive(notificationMutex);
+    }
+    if (hasPacket) {
       if (packet.empty() || packet[0] != prefix) continue;
       if (prefix == 0x05 && minBlock >= 0 && packet.size() >= 6 && packet[1] == 0) {
         int requested = (int)packet[2] | ((int)packet[3] << 8) | ((int)packet[4] << 16) | ((int)packet[5] << 24);
@@ -386,7 +402,7 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
       return false;
     }
   }
-  int blockSize = packet.size() >= 3 ? ((int)packet[1] ? (int)packet[1] : (int)packet[2]) : 0;
+  int blockSize = packet.size() >= 3 ? ((int)packet[1] | ((int)packet[2] << 8)) : 0;
   if (blockSize < 8) {
     client->disconnect();
     NimBLEDevice::deleteClient(client);
@@ -423,16 +439,56 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
     addLog(log, "Display did not request first block.");
     return false;
   }
-  int firstBlock = 0;
-  if (packet.size() >= 6 && packet[1] == 0) {
-    firstBlock = (int)packet[2] | ((int)packet[3] << 8) | ((int)packet[4] << 16) | ((int)packet[5] << 24);
-  }
-  addLog(log, "Starting at block " + String(firstBlock) + ".");
 
-  // SDK type 51 (SW bit 0x80) advances on the GATT write-complete callback.
-  // It does not send a control-point notification after every image block.
+  // The display controls the transfer window. A [05 00 <uint32-le>] packet
+  // requests one exact block; [05 08] is the vendor-defined confirmation that
+  // the complete image has arrived. GATT write success alone only confirms that
+  // the ESP32 BLE stack queued the packet and must not advance the block index.
   std::vector<uint8_t> block(blockSize);
-  for (int blockNumber = firstBlock; blockNumber < totalBlocks; blockNumber++) {
+  std::vector<uint8_t> requestCounts(totalBlocks, 0);
+  std::vector<bool> sentBlocks(totalBlocks, false);
+  int uniqueSent = 0;
+  if (packet.size() >= 6 && packet[0] == 0x05 && packet[1] == 0x00) {
+    int resumeBlock = (int)packet[2] | ((int)packet[3] << 8) | ((int)packet[4] << 16) | ((int)packet[5] << 24);
+    for (int acknowledged = 0; acknowledged < min(resumeBlock, totalBlocks); acknowledged++) {
+      sentBlocks[acknowledged] = true;
+      uniqueSent++;
+    }
+    if (resumeBlock > 0 && resumeBlock < totalBlocks) {
+      addLog(log, "Display is resuming at block " + String(resumeBlock + 1) + "/" + String(totalBlocks) + ".");
+    }
+  }
+  bool blockWriteWithResponse = !writeChar->canWriteNoResponse();
+  while (true) {
+    if (packet.size() >= 2 && packet[0] == 0x05 && packet[1] == 0x08) {
+      addLog(log, "Display confirmed that the complete image was received.");
+      break;
+    }
+    if (packet.size() < 6 || packet[0] != 0x05 || packet[1] != 0x00) {
+      client->disconnect();
+      NimBLEDevice::deleteClient(client);
+      addLog(log, "Invalid image-block request: " + hexPacket(packet));
+      return false;
+    }
+
+    int blockNumber = (int)packet[2] | ((int)packet[3] << 8) | ((int)packet[4] << 16) | ((int)packet[5] << 24);
+    if (blockNumber < 0 || blockNumber >= totalBlocks) {
+      client->disconnect();
+      NimBLEDevice::deleteClient(client);
+      addLog(log, "Display requested invalid block " + String(blockNumber) + "/" + String(totalBlocks) + ".");
+      return false;
+    }
+    requestCounts[blockNumber]++;
+    if (requestCounts[blockNumber] > 5) {
+      client->disconnect();
+      NimBLEDevice::deleteClient(client);
+      addLog(log, "Display repeatedly rejected block " + String(blockNumber) + ".");
+      return false;
+    }
+    if (requestCounts[blockNumber] > 1) {
+      addLog(log, "Retransmitting requested block " + String(blockNumber + 1) + "/" + String(totalBlocks) + ".");
+    }
+
     int startOffset = blockNumber * chunkSize;
     int dataLen = min(chunkSize, (int)payload.size() - startOffset);
     block[0] = blockNumber & 0xFF;
@@ -443,8 +499,9 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
 
     bool written = false;
     for (int writeAttempt = 1; writeAttempt <= 3; writeAttempt++) {
-      // response=true waits for the same GATT acknowledgement used by the Android SDK.
-      written = writeChar->writeValue(block.data(), dataLen + 4, true);
+      // The next control-point request is the application-level acknowledgement
+      // and provides backpressure for large displays.
+      written = writeChar->writeValue(block.data(), dataLen + 4, blockWriteWithResponse);
       if (written) break;
       addLog(log, "BLE write failed for block " + String(blockNumber) + ", retry " + String(writeAttempt) + "/3.");
       delay(100);
@@ -456,17 +513,37 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
       return false;
     }
 
-    if (blockNumber == firstBlock || blockNumber % 10 == 0 || blockNumber == totalBlocks - 1) {
-      int percent = ((blockNumber + 1) * 100) / max(1, totalBlocks);
-      addLog(log, "Acknowledged block " + String(blockNumber + 1) + "/" + String(totalBlocks) + " (" + String(percent) + "%).");
+    if (!sentBlocks[blockNumber]) {
+      sentBlocks[blockNumber] = true;
+      uniqueSent++;
     }
-    delay(5);
+    if (blockNumber == 0 || blockNumber % 10 == 0 || uniqueSent == totalBlocks) {
+      int percent = (uniqueSent * 100) / max(1, totalBlocks);
+      addLog(log, "Display accepted block " + String(blockNumber + 1) + "/" + String(totalBlocks) + " (" + String(percent) + "%).");
+    }
+
+    uint32_t nextTimeout = uniqueSent == totalBlocks ? 30000 : 12000;
+    if (!waitForPacket(0x05, packet, nextTimeout)) {
+      client->disconnect();
+      NimBLEDevice::deleteClient(client);
+      addLog(log, uniqueSent == totalBlocks
+        ? "Timed out waiting for the display's transfer-complete confirmation."
+        : "Timed out waiting for the display to request the next image block.");
+      return false;
+    }
   }
 
-  addLog(log, "All image blocks were acknowledged by BLE.");
+  if (uniqueSent != totalBlocks) {
+    client->disconnect();
+    NimBLEDevice::deleteClient(client);
+    addLog(log, "Display ended transfer after only " + String(uniqueSent) + "/" + String(totalBlocks) + " blocks.");
+    return false;
+  }
+
+  addLog(log, "Full-screen image transfer confirmed.");
   client->disconnect();
   NimBLEDevice::deleteClient(client);
-  addLog(log, "Bluetooth released; the eInk panel is rendering the uploaded image.");
+  addLog(log, "Bluetooth released after display confirmation.");
   return true;
 }
 
@@ -1048,8 +1125,9 @@ void setup() {
   gatewayId = "dratek-eink-gateway-" + macId();
   hostname = gatewayId;
   transferMutex = xSemaphoreCreateMutex();
-  if (!transferMutex) {
-    Serial.println("Unable to create transfer mutex.");
+  notificationMutex = xSemaphoreCreateMutex();
+  if (!transferMutex || !notificationMutex) {
+    Serial.println("Unable to create synchronization mutexes.");
     delay(1000);
     ESP.restart();
   }
