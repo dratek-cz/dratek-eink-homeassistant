@@ -55,7 +55,7 @@
           this._shadow.innerHTML = "";
           const attempt = () => {
             if (String(this.getAttribute("icon") || "").replace(/^mdi:/, "") !== icon) return;
-            const path = mdiPaths[icon] || mdiPaths.help-circle-outline;
+            const path = mdiPaths[icon] || mdiPaths["help-circle-outline"];
             this._shadow.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="${path}" fill="currentColor"></path></svg>`;
           };
           setTimeout(attempt, 0);
@@ -324,6 +324,7 @@
         return {};
       },
     };
+    await panel._scan();
     if (settingsAddress && devices.some((device) => device.address === settingsAddress)) {
       panel._selectedDeviceAddress = settingsAddress;
       panel._displaySettingsView = settingsView === "designer" ? "designer" : "templates";

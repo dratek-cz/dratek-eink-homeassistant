@@ -77,6 +77,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
 
     def test_local_harness_uses_svg_mdi_paths_instead_of_font_glyphs(self):
         self.assertIn('import { mdiPaths } from "./vendor/mdi/paths.js";', self.harness)
+        self.assertIn('mdiPaths["help-circle-outline"]', self.harness)
+        self.assertNotIn("mdiPaths.help-circle-outline", self.harness)
         self.assertIn('<path d="${path}" fill="currentColor"></path>', self.harness)
         self.assertNotIn("window.__mdiCodepoints", self.harness)
         self.assertNotIn('font-family="Material Design Icons"', self.harness)

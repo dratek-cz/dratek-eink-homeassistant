@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.152] - 2026-07-31
+
+### Opraveno
+- Lokální Bluetooth přenos nyní používá GATT zápis s odpovědí pro každý obrazový blok, kdykoli jej zapisovací charakteristika displeje podporuje. Velké bitmapy tak nemohou tiše přetéct frontu lokálního BLE stacku a skončit neúplným obrazem.
+- SDK typ `51` zůstává hardwarově ověřenou záložní výjimkou pro BLE stacky, které vlastnosti zapisovací charakteristiky hlásí neúplně.
+- Záznam průběhu přenosu rozlišuje bloky potvrzené displejem od bloků pouze předaných bez jednotlivých GATT potvrzení.
+- Lokální testovací panel používá platný přístup k náhradní SVG ikoně a po inicializaci provede první ruční načtení displejů.
+
 ## [0.1.151] - 2026-07-30
 
 ### Opraveno

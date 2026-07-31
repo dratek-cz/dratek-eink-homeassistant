@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.152
+
+- lokální Bluetooth přenos používá potvrzení GATT pro každý blok, kdykoli je displej podporuje, takže se při odesílání velkých obrázků neztrácejí bloky ve frontě BLE
+- průběh přenosu nyní přesně rozlišuje bloky potvrzené displejem od bloků pouze předaných lokálnímu Bluetooth stacku
+- opraven lokální testovací panel: bezpečně vykreslí náhradní ikonu a po spuštění načte aktuální seznam displejů
+
 ## Novinky ve verzi 0.1.151
 
 - opraveno ruční nahrávání návrhů do velkých displejů přes jejich zvolenou gateway

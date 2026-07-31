@@ -18,6 +18,16 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertIn("Releasing Bluetooth while", source)
         self.assertNotIn("while True:\n                try:\n                    response", source)
 
+    def test_local_transfer_acknowledges_every_block_when_characteristic_supports_it(self):
+        source = (ROOT / "custom_components" / "dratek_eink" / "transfer.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('"write" in write_char.properties', source)
+        self.assertIn("or int(sdk_type) in WRITE_ACK_SDK_TYPES", source)
+        self.assertIn("All image blocks were acknowledged by the display.", source)
+        self.assertIn("max_attempts = 3 if require_response else 1", source)
+
     def test_gateway_releases_ble_after_the_last_acknowledged_block(self):
         source = (
             ROOT / "firmware" / "dratek-eink-gateway" / "src" / "main.cpp"

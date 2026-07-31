@@ -294,9 +294,20 @@ class DratekTransfer:
             if first_block >= total_blocks:
                 raise RuntimeError(f"Display requested invalid block {first_block}/{total_blocks}")
 
-            require_block_ack = int(sdk_type) in WRITE_ACK_SDK_TYPES
+            # A successful write-without-response only means that the local BLE
+            # stack queued the packet.  Large bitmaps can overrun that queue and
+            # lose blocks while the UI still reports a completed transfer.  Use
+            # GATT write acknowledgements whenever the display advertises them.
+            # SDK 51 is kept as a hardware-confirmed fallback because some BLE
+            # stacks have exposed its characteristic properties incompletely.
+            require_block_ack = (
+                "write" in write_char.properties
+                or int(sdk_type) in WRITE_ACK_SDK_TYPES
+            )
             if require_block_ack:
-                self.log(f"SDK type {sdk_type} requires a GATT acknowledgement for every image block.")
+                self.log(
+                    f"Using a GATT acknowledgement for every image block on SDK type {sdk_type}."
+                )
             for block_number in range(first_block, total_blocks):
                 await self._write_image_block(
                     client,
@@ -312,10 +323,16 @@ class DratekTransfer:
                     verb = "Acknowledged" if require_block_ack else "Sent"
                     self.log(f"{verb} block {block_number + 1}/{total_blocks} ({percent}%).")
 
-            self.log(
-                "All image blocks were handed to the display. Releasing Bluetooth while "
-                "the eInk panel renders the image."
-            )
+            if require_block_ack:
+                self.log(
+                    "All image blocks were acknowledged by the display. Releasing Bluetooth "
+                    "while the eInk panel renders the image."
+                )
+            else:
+                self.log(
+                    "All image blocks were handed to the display without per-block GATT "
+                    "acknowledgements. Releasing Bluetooth while the eInk panel renders the image."
+                )
 
             if write_notify_enabled:
                 await client.stop_notify(write_char)
