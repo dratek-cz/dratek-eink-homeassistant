@@ -2,6 +2,18 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.166] - 2026-07-31
+
+### Opraveno a zrychleno
+- Přenos je znovu řízen skutečným dokončením každého GATT zápisu. Odpovídá tím dekompilovanému oficiálnímu Picksmart klientu, který u firmwaru s bitem `0x80` posílá další blok až z callbacku `onCharacteristicWrite`.
+- Před aktivací notifikací se na BlueZ explicitně vyjedná velké ATT MTU stejným postupem, který doporučuje Bleak pro Linux. Displej tak může používat plný 244bajtový blok bez zbytečné fragmentace; při nedostupnosti privátního hooku se bezpečně použije MTU zvolená BlueZ.
+- Timeout posledního bloku se smí považovat za ztracenou odpověď pouze tehdy, když všech 39 předchozích bloků skutečně obdrželo GATT potvrzení. Rychle lokálně zařazený, ale nedoručený proud už nemůže skončit falešným úspěchem bez vykreslení.
+- Z horké smyčky bylo odstraněno ukládání diagnostického řádku pro každý jednotlivý blok. Stav se dál zapisuje po deseti blocích a při chybě, ale fronta, historie a panel během přenosu nezpracovávají desítky zbytečných aktualizací.
+- Poslední blok má nadále zkrácený dvousekundový timeout, protože některé řadiče po jeho přijetí okamžitě zahájí eInk obnovu a ATT odpověď už nevrátí.
+
+### Firmware gatewaye
+- Firmware zůstává ve verzi `0.1.47-gateway`; změny se týkají přímého BlueZ přenosu Home Assistantu.
+
 ## [0.1.165] - 2026-07-31
 
 ### Opraveno

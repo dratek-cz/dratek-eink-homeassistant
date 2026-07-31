@@ -4,6 +4,15 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.166
+
+- přenos nyní přesně kopíruje řízení toku oficiálního Picksmart klienta: další blok následuje po skutečném dokončení předchozího GATT zápisu
+- Home Assistant na BlueZ před přenosem explicitně vyjedná velké ATT MTU; v logu se zobrazí řádek `Negotiated ATT MTU`
+- falešný úspěch bez vykreslení je odstraněn: timeout posledního bloku lze přijmout jen po potvrzení všech předchozích bloků
+- diagnostika už neukládá samostatný řádek pro každý blok, takže fronta a panel nezpomalují horkou přenosovou smyčku; průběh zůstává viditelný po deseti blocích
+- poslední odpověď má stále pouze dvousekundový timeout, aby přijatý a vykreslený obraz zbytečně nečekal
+- firmware gatewaye zůstává `0.1.47-gateway`
+
 ## Novinky ve verzi 0.1.165
 
 - SDK typ `51` už nekončí chybou, když displej přijme poslední blok a začne vykreslovat, ale BlueZ ztratí pouze jeho ATT odpověď

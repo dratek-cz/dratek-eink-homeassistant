@@ -22,8 +22,8 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 WRITE_ACK_SDK_TYPES = {51}
-FINAL_BLOCK_DRAIN_DELAY = 1.0
 FINAL_BLOCK_RESPONSE_TIMEOUT = 2
+MTU_NEGOTIATION_TIMEOUT = 4
 RGB_LED_COMMAND = 0x30
 FLASH_IDENTIFY_COMMAND = 0x22
 FULL_REFRESH_MODE = 0x01
@@ -254,7 +254,6 @@ class DratekTransfer:
                     partial,
                     orientation,
                     software_version,
-                    force_confirmed_writes=attempt > 1,
                 )
                 self.log("Transfer completed.")
                 return
@@ -279,7 +278,6 @@ class DratekTransfer:
         partial: tuple[int, int, int, int, int] | None = None,
         orientation: str | None = None,
         software_version: int | None = None,
-        force_confirmed_writes: bool = False,
     ) -> None:
         payload = pack_bwr_image(sdk_type, image, transform, orientation)
         software_version = self._resolve_software_version(address, software_version)
@@ -302,6 +300,7 @@ class DratekTransfer:
                 raise RuntimeError("DRATEK eInk transfer characteristics were not found.")
 
             self.log(f"Using service {service_uuid}")
+            await self._negotiate_mtu(client)
             await client.start_notify(control_char, notify_handler)
             write_notify_enabled = False
             if "notify" in write_char.properties or "indicate" in write_char.properties:
@@ -337,9 +336,11 @@ class DratekTransfer:
             )
             request_counts: dict[int, int] = {}
             sent_blocks: set[int] = set()
+            confirmed_blocks: set[int] = set()
             if len(response) >= 6 and response[0] == 5 and response[1] == 0:
                 resume_block = int.from_bytes(response[2:6], "little")
                 sent_blocks.update(range(min(resume_block, total_blocks)))
+                confirmed_blocks.update(range(min(resume_block, total_blocks)))
                 if resume_block:
                     self.log(
                         f"Display is resuming the prepared transfer at block "
@@ -352,27 +353,19 @@ class DratekTransfer:
             # after each control-point notification and ignores its block index
             # after the initial request.
             streaming_mode = bool(int(software_version or 0) & 0x80)
-            # SDK type 51 is a hardware-verified exception from the older
-            # working integration: the fallback path uses ATT responses even
-            # when the characteristic also advertises write-without-response.
+            # The official Picksmart client advances streaming firmware from
+            # the GATT write-complete callback. Use ATT-confirmed writes whenever
+            # the characteristic permits them; local no-response queueing is not
+            # proof that the display consumed a block.
             require_gatt_response = (
-                force_confirmed_writes
-                or int(sdk_type) in WRITE_ACK_SDK_TYPES
+                int(sdk_type) in WRITE_ACK_SDK_TYPES
                 or (
-                    "write" in write_char.properties
-                    and "write-without-response" not in write_char.properties
+                    streaming_mode and "write" in write_char.properties
                 )
-            )
-            terminal_barrier_writes = (
-                not force_confirmed_writes
-                and streaming_mode
-                and "write" in write_char.properties
-                and "write-without-response" in write_char.properties
+                or "write-without-response" not in write_char.properties
             )
             write_mode = (
-                "paced burst with final GATT barrier"
-                if terminal_barrier_writes
-                else "GATT response"
+                "vendor write-complete flow control"
                 if require_gatt_response
                 else "paced write without response"
             )
@@ -380,10 +373,6 @@ class DratekTransfer:
                 f"Transfer mode: {'streaming' if streaming_mode else 'notification-paced legacy'}, "
                 f"block writes: {write_mode} (software version {int(software_version or 0)})."
             )
-            if force_confirmed_writes:
-                self.log(
-                    "Reliable retry enabled: every image block must receive a GATT response."
-                )
             if len(response) < 6 or response[0] != 5 or response[1] != 0:
                 raise RuntimeError(f"Invalid first image-block request: {response.hex(' ').upper()}")
             next_block = int.from_bytes(response[2:6], "little")
@@ -400,19 +389,7 @@ class DratekTransfer:
 
                 end_block = total_blocks if streaming_mode else next_block + 1
                 for block_number in range(next_block, end_block):
-                    block_requires_response = (
-                        terminal_barrier_writes
-                        and (
-                            block_number == next_block
-                            or block_number == total_blocks - 1
-                        )
-                    ) or (require_gatt_response and not terminal_barrier_writes)
-                    if (
-                        terminal_barrier_writes
-                        and block_requires_response
-                        and block_number != next_block
-                    ):
-                        await asyncio.sleep(FINAL_BLOCK_DRAIN_DELAY)
+                    block_requires_response = require_gatt_response
                     final_response_missing = False
                     try:
                         await self._write_image_block(
@@ -428,7 +405,11 @@ class DratekTransfer:
                             ),
                         )
                     except TimeoutError:
-                        if not streaming_mode or block_number != total_blocks - 1:
+                        if (
+                            not streaming_mode
+                            or block_number != total_blocks - 1
+                            or len(confirmed_blocks) != total_blocks - 1
+                        ):
                             raise
                         # Several Picksmart controllers consume the final block
                         # and start refreshing but fail to return the ATT response.
@@ -441,6 +422,9 @@ class DratekTransfer:
                             "but the complete payload was handed to the controller; "
                             "waiting for the optional refresh confirmation."
                         )
+                    else:
+                        if block_requires_response:
+                            confirmed_blocks.add(block_number)
                     sent_blocks.add(block_number)
                     if block_number == 0 or block_number % 10 == 0 or len(sent_blocks) == total_blocks:
                         percent = int((len(sent_blocks) / total_blocks) * 100)
@@ -461,7 +445,7 @@ class DratekTransfer:
                             responses,
                             timeout=(
                                 OPTIONAL_COMPLETION_TIMEOUT
-                                if require_gatt_response or terminal_barrier_writes
+                                if require_gatt_response
                                 else UNCONFIRMED_WRITE_DRAIN_TIMEOUT
                             ),
                         )
@@ -600,6 +584,23 @@ class DratekTransfer:
                 return service.uuid, control_char, write_char
         return "-", fallback_control, fallback_write
 
+    async def _negotiate_mtu(self, client) -> None:
+        """Request the large MTU used by the official Picksmart client on BlueZ."""
+        backend = getattr(client, "_backend", None)
+        acquire_mtu = getattr(backend, "_acquire_mtu", None)
+        if callable(acquire_mtu):
+            try:
+                async with asyncio.timeout(MTU_NEGOTIATION_TIMEOUT):
+                    await acquire_mtu()
+            except Exception as exc:  # noqa: private BlueZ hook differs by Bleak version
+                self.log(
+                    f"Explicit MTU negotiation was unavailable ({exc}); "
+                    "continuing with the MTU selected by BlueZ."
+                )
+
+        mtu_size = int(getattr(client, "mtu_size", 0) or 0)
+        self.log(f"Negotiated ATT MTU: {mtu_size or 'unknown'} bytes.")
+
     async def _write_char(
         self,
         client,
@@ -611,9 +612,9 @@ class DratekTransfer:
     ) -> None:
         if response is None:
             response = "write" in char.properties
-        if label.startswith("block "):
-            self.log(f"Write {label}: {len(data)} bytes")
-        else:
+        # Per-block logging forces needless queue/history and frontend work in
+        # the hottest transfer loop. Progress is reported every ten blocks.
+        if not label.startswith("block "):
             self.log(f"Write {label}: {_format_bytes(data)}")
         try:
             async with asyncio.timeout(operation_timeout):
