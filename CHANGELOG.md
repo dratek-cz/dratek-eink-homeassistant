@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.161] - 2026-07-31
+
+### Opraveno
+- Porovnání se známou funkční verzí `0.1.126` odhalilo odstraněnou množinu `WRITE_ACK_SDK_TYPES = {51}`. SDK typ `51` znovu vynucuje ATT/GATT odpověď pro každý blok bez ohledu na současně inzerovanou vlastnost `write-without-response`.
+- Po potvrzeném zápisu se zachovává 5ms odstup funkční starší implementace; postup bloků tak řídí skutečné dokončení GATT zápisu, nikoli jen lokální fronta BlueZ.
+- Příkaz `prepare update` je vrácen na šestibajtový tvar používaný funkční integrací a potvrzovaný testovaným displejem.
+
+### Firmware gatewaye
+- Verze `0.1.47-gateway` používá stejný šestibajtový přípravný paket; blokové zápisy přes NimBLE zůstávají potvrzované.
+
 ## [0.1.160] - 2026-07-31
 
 ### Opraveno

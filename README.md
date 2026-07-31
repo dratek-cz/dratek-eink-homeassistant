@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.161
+
+- přenos byl přímo porovnán se starší funkční integrací `0.1.126` z `D:\\28.7`; pro SDK typ `51` je obnovena její hardwarově ověřená výjimka vyžadující GATT odpověď u každého obrazového bloku
+- charakteristika typu `51` už nepoužívá nepotvrzovaný zápis jen proto, že jej současně inzeruje; další blok se odešle až po potvrzení předchozího Bluetooth zápisu
+- obnoven přesný šestibajtový příkaz `prepare update`, který používala funkční starší integrace
+- po potvrzeném bloku zůstává zachována krátká 5ms prodleva ze staré implementace
+- přiložen firmware gatewaye `0.1.47-gateway` pro ESP32 a ESP32-S3
+
 ## Novinky ve verzi 0.1.160
 
 - opraven řídicí příkaz `prepare update`: podle originálního Picksmart SDK musí mít osm bajtů včetně dvou koncových rezervovaných nul, zatímco integrace i gateway dosud posílaly jen šest bajtů

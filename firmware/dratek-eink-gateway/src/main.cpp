@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.46-gateway";
+static const char* FIRMWARE_VERSION = "0.1.47-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -415,7 +415,7 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
   int totalBlocks = (payload.size() + chunkSize - 1) / chunkSize;
   addLog(log, "Block size " + String(blockSize) + ", payload " + String(payload.size()) + " bytes, blocks " + String(totalBlocks) + ".");
 
-  uint8_t prepare[8] = {0};
+  uint8_t prepare[6];
   prepare[0] = 0x02;
   uint32_t payloadSize = payload.size();
   prepare[1] = payloadSize & 0xFF;

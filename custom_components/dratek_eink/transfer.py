@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
+WRITE_ACK_SDK_TYPES = {51}
 RGB_LED_COMMAND = 0x30
 FLASH_IDENTIFY_COMMAND = 0x22
 FULL_REFRESH_MODE = 0x01
@@ -29,6 +30,7 @@ OPTIONAL_COMPLETION_TIMEOUT = 2
 UNCONFIRMED_WRITE_DRAIN_TIMEOUT = 10
 MAX_BLOCK_REQUEST_RETRIES = 5
 GATT_OPERATION_TIMEOUT = 8
+GATT_ACK_WRITE_DELAY = 0.005
 STREAM_WRITE_DELAY = 0.04
 
 
@@ -317,14 +319,10 @@ class DratekTransfer:
             # Refresh mode 0 in the vendor API maps to command byte 1 and causes
             # a full-screen refresh. Partial refreshes use a separate 0x60 area
             # command before this packet.
-            # The vendor packet is always eight bytes. The two trailing zero
-            # bytes are reserved, but firmware 0x80+ still requires them before
-            # it will commit the received frame to the eInk controller.
-            command = (
-                bytes([2])
-                + len(payload).to_bytes(4, "little")
-                + bytes([FULL_REFRESH_MODE, 0, 0])
-            )
+            # Keep the six-byte packet used by the known-good integration.
+            # These displays acknowledge it directly and SDK type 51 then
+            # requires every image block to use an ATT write response.
+            command = bytes([2]) + len(payload).to_bytes(4, "little") + bytes([FULL_REFRESH_MODE])
             await self._write_char(client, control_char, command, "prepare update")
             await self._wait_for_response(responses, 2, ok_values={0}, label="screen update prepare")
 
@@ -351,13 +349,15 @@ class DratekTransfer:
             # after each control-point notification and ignores its block index
             # after the initial request.
             streaming_mode = bool(int(software_version or 0) & 0x80)
-            # BlueZ can hang indefinitely when response=True is used against
-            # displays that advertise both write modes but only reliably
-            # implement write-without-response. Pace that mode at one BLE
-            # connection interval so the controller queue cannot overflow.
+            # SDK type 51 is a hardware-verified exception from the older
+            # working integration: it requires an ATT response for every block
+            # even when the characteristic also advertises write-without-response.
             require_gatt_response = (
-                "write" in write_char.properties
-                and "write-without-response" not in write_char.properties
+                int(sdk_type) in WRITE_ACK_SDK_TYPES
+                or (
+                    "write" in write_char.properties
+                    and "write-without-response" not in write_char.properties
+                )
             )
             write_mode = "GATT response" if require_gatt_response else "paced write without response"
             self.log(
@@ -576,8 +576,9 @@ class DratekTransfer:
                     f"block {block_number}",
                     response=require_response,
                 )
-                if not require_response:
-                    await asyncio.sleep(STREAM_WRITE_DELAY)
+                await asyncio.sleep(
+                    GATT_ACK_WRITE_DELAY if require_response else STREAM_WRITE_DELAY
+                )
                 return
             except Exception as exc:  # noqa: BLE stacks expose platform-specific write errors
                 if attempt >= max_attempts:

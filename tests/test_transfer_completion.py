@@ -27,10 +27,13 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertIn("await self._wait_for_next_transfer_response(", section)
         self.assertIn("Display requested retransmission from block", section)
         self.assertIn('"write-without-response" not in write_char.properties', source)
+        self.assertIn("WRITE_ACK_SDK_TYPES = {51}", source)
+        self.assertIn("int(sdk_type) in WRITE_ACK_SDK_TYPES", source)
         self.assertIn("GATT_OPERATION_TIMEOUT = 8", source)
+        self.assertIn("GATT_ACK_WRITE_DELAY = 0.005", source)
         self.assertIn("STREAM_WRITE_DELAY = 0.04", source)
         self.assertIn("asyncio.timeout(GATT_OPERATION_TIMEOUT)", source)
-        self.assertIn("await asyncio.sleep(STREAM_WRITE_DELAY)", source)
+        self.assertIn("GATT_ACK_WRITE_DELAY if require_response else STREAM_WRITE_DELAY", source)
         self.assertIn("async_last_service_info", source)
         self.assertIn("manufacturer_data.get(DRATEK_COMPANY_ID)", source)
 
@@ -47,9 +50,8 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertLess(optional, disconnect_log)
         self.assertIn("OPTIONAL_COMPLETION_TIMEOUT = 2", source)
         self.assertIn("UNCONFIRMED_WRITE_DRAIN_TIMEOUT = 10", source)
-        self.assertIn("bytes([FULL_REFRESH_MODE, 0, 0])", source)
+        self.assertIn("+ bytes([FULL_REFRESH_MODE])", source)
         self.assertIn("if len(sent_blocks) != total_blocks:", source)
-        self.assertNotIn("WRITE_ACK_SDK_TYPES", source)
 
     def test_block_size_is_decoded_as_little_endian_uint16(self):
         source = (ROOT / "custom_components" / "dratek_eink" / "transfer.py").read_text(
@@ -73,7 +75,7 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertIn("nextBlock++", section)
         self.assertIn("no optional 05 08 confirmation", section)
         self.assertIn("uniqueSent != totalBlocks", section)
-        self.assertIn("uint8_t prepare[8] = {0};", source)
+        self.assertIn("uint8_t prepare[6];", source)
 
     def test_gateway_decodes_uint16_block_size(self):
         source = (
