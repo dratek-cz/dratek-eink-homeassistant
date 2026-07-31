@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.163] - 2026-07-31
+
+### Změněno
+- SDK typ `51` s charakteristikou podporující oba režimy používá dávky po osmi blocích. První, každý osmý a poslední blok jsou ATT-confirmed; mezilehlé bloky používají tempovaný `write-without-response`.
+- Poslední blok je bez výjimky zapisován s odpovědí, takže funguje jako pořadová a doručovací bariéra před odpojením a fyzickou obnovou displeje.
+- Pro 40 bloků se počet sekvenčních GATT round-tripů snižuje ze 40 na přibližně 6. Charakteristiky bez obou režimů nadále používají svůj původní bezpečný způsob zápisu.
+
+### Firmware gatewaye
+- Firmware zůstává ve verzi `0.1.47-gateway`; optimalizace řeší pomalé potvrzované zápisy přes BlueZ v Home Assistantu.
+
 ## [0.1.162] - 2026-07-31
 
 ### Změněno

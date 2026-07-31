@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.163
+
+- přímý Bluetooth přenos SDK typu `51` používá rychlé dávky po osmi blocích místo pomalého ATT round-tripu po každém bloku
+- první blok, každý osmý blok a vždy poslední blok se zapisují s GATT odpovědí; potvrzený poslední blok tvoří bariéru, před kterou musí Bluetooth zachovat pořadí celé dávky
+- nepotvrzované bloky uvnitř dávky zůstávají krátce tempované, aby se nepřeplnila fronta BlueZ
+- u 40blokového displeje klesá počet pomalých potvrzení ze 40 přibližně na 6, přičemž závěrečné potvrzení potřebné pro spolehlivé překreslení zůstává zachované
+- automatické sekundové obnovování fronty z verze 0.1.162 zůstává aktivní; firmware gatewaye zůstává `0.1.47-gateway`
+
 ## Novinky ve verzi 0.1.162
 
 - fronta se během stavu `Ve frontě` nebo `Zapisuje` automaticky obnovuje každou sekundu a po dokončení sama zastaví dotazování

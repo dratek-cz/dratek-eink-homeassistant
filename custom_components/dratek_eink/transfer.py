@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 WRITE_ACK_SDK_TYPES = {51}
+ACK_CHECKPOINT_INTERVAL = 8
 RGB_LED_COMMAND = 0x30
 FLASH_IDENTIFY_COMMAND = 0x22
 FULL_REFRESH_MODE = 0x01
@@ -358,7 +359,18 @@ class DratekTransfer:
                     and "write-without-response" not in write_char.properties
                 )
             )
-            write_mode = "GATT response" if require_gatt_response else "paced write without response"
+            checkpointed_writes = (
+                int(sdk_type) in WRITE_ACK_SDK_TYPES
+                and "write" in write_char.properties
+                and "write-without-response" in write_char.properties
+            )
+            write_mode = (
+                f"checkpointed burst (GATT response every {ACK_CHECKPOINT_INTERVAL} blocks)"
+                if checkpointed_writes
+                else "GATT response"
+                if require_gatt_response
+                else "paced write without response"
+            )
             self.log(
                 f"Transfer mode: {'streaming' if streaming_mode else 'notification-paced legacy'}, "
                 f"block writes: {write_mode} (software version {int(software_version or 0)})."
@@ -379,17 +391,27 @@ class DratekTransfer:
 
                 end_block = total_blocks if streaming_mode else next_block + 1
                 for block_number in range(next_block, end_block):
+                    block_requires_response = require_gatt_response and (
+                        not checkpointed_writes
+                        or block_number == next_block
+                        or (block_number + 1) % ACK_CHECKPOINT_INTERVAL == 0
+                        or block_number == total_blocks - 1
+                    )
                     await self._write_image_block(
                         client,
                         write_char,
                         _next_block(payload, block_size, block_number),
                         block_number,
-                        require_response=require_gatt_response,
+                        require_response=block_requires_response,
                     )
                     sent_blocks.add(block_number)
                     if block_number == 0 or block_number % 10 == 0 or len(sent_blocks) == total_blocks:
                         percent = int((len(sent_blocks) / total_blocks) * 100)
-                        delivery = "Display acknowledged" if require_gatt_response else "Bluetooth queued"
+                        delivery = (
+                            "Display acknowledged"
+                            if block_requires_response
+                            else "Bluetooth queued"
+                        )
                         self.log(
                             f"{delivery} block {block_number + 1}/{total_blocks} "
                             f"({percent}%)."
