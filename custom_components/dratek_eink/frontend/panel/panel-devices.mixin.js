@@ -998,6 +998,7 @@ export const devicesMixin = {
     if (!device || !this._hass || this._templateSending) return;
     this._templateSending = true;
     this._templateSendResult = null;
+    let image = "";
     const sendButton = this.shadowRoot.querySelector("[data-template-send]");
     if (sendButton) {
       sendButton.disabled = true;
@@ -1008,7 +1009,7 @@ export const devicesMixin = {
     }
     try {
       await this._saveDisplayTemplateDraft();
-      const image = await this._renderCurrentDisplayTemplateImage(device);
+      image = await this._renderCurrentDisplayTemplateImage(device);
       const gatewayId = String(this._selectedGatewayId || "");
       const result = await this._hass.callWS({
         type: gatewayId ? "dratek_eink/gateways/send_design" : "dratek_eink/send_design",
@@ -1021,12 +1022,19 @@ export const devicesMixin = {
         transform: this._displayTransform || "rotate_cw",
       });
       if (result?.ok === false) throw new Error(result.error || "Odeslání se nezdařilo.");
-      this._rememberSentDisplayPreview(device, image);
-      this._templateSendResult = {
-        ok: true,
-        message: `Náhled byl úspěšně zapsán přes ${gatewayId ? "zvolenou gateway" : "Home Assistant Bluetooth"}. Další zápis proběhne pouze ručně.`,
-      };
-      this._loadQueue?.(true);
+      if (result?.queued) {
+        this._templateSendResult = {
+          ok: true,
+          message: `Náhled byl zařazen do fronty přes ${gatewayId ? "zvolenou gateway" : "Home Assistant Bluetooth"}. Průběh a případnou chybu uvidíte na kartě Fronta zápisu.`,
+        };
+      } else {
+        this._rememberSentDisplayPreview(device, image);
+        this._templateSendResult = {
+          ok: true,
+          message: `Náhled byl úspěšně zapsán přes ${gatewayId ? "zvolenou gateway" : "Home Assistant Bluetooth"}. Další zápis proběhne pouze ručně.`,
+        };
+      }
+      await this._loadQueue?.(true);
     } catch (err) {
       const websocketMessage = this._message(err);
       await this._loadQueue?.(false);

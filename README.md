@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.158
+
+- ruční odeslání návrhu přes Home Assistant Bluetooth i gateway se nyní okamžitě zařadí do fronty a websocket nečeká několik minut na dokončení BLE přenosu
+- panel proto vždy dostane identifikátor úlohy a zobrazí ji ve frontě ještě před zahájením zápisu
+- dočasná chyba při načítání fronty už nesmaže dříve načtené záznamy a nezobrazí falešně prázdnou historii
+- úspěšné zařazení se už nevydává za dokončený zápis; panel jasně odlišuje čekající úlohu od skutečně zapsaného obrazu
+
 ## Novinky ve verzi 0.1.157
 
 - opraveno zaseknutí přímého Bluetooth přenosu v Home Assistantu na 240sekundové pojistce: zapisovací charakteristika podporující oba GATT režimy nyní používá řízený zápis bez odpovědi, který je na Linuxu/BlueZ spolehlivější

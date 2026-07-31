@@ -758,6 +758,7 @@ async def websocket_send_gateway_design(
             address=msg["address"],
             operation="design",
             runner=run_transfer,
+            wait_for_completion=False,
         )
         if result is None:
             connection.send_result(
@@ -1757,6 +1758,7 @@ async def websocket_send_design(
             address=address,
             operation="design",
             runner=run_transfer,
+            wait_for_completion=False,
         )
     except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
         log(f"Send failed: {exc}")

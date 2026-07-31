@@ -54,7 +54,10 @@ export const queueMixin = {
     try {
       this._queue = await this._hass.callWS({ type: "dratek_eink/queue/list" });
     } catch (err) {
-      this._queue = { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0, error: this._message(err) };
+      this._queue = {
+        ...(this._queue || { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0 }),
+        error: this._message(err),
+      };
     }
     if (render) {
       this._renderQueueKeepingFocus();

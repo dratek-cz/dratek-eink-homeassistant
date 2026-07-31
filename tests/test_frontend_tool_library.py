@@ -721,6 +721,9 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('class="queue-row-details"', self.source)
         self.assertIn("Zobrazit celý protokol", self.source)
         self.assertIn('logLines.join("\\n")', self.source)
+        self.assertIn("...(this._queue ||", self.source)
+        self.assertIn("Náhled byl zařazen do fronty", self.source)
+        self.assertIn('let image = "";', self.source)
 
 
 if __name__ == "__main__":

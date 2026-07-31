@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.158] - 2026-07-31
+
+### Opraveno
+- Websocketové endpointy pro celý návrh přes přímé Bluetooth i gateway nyní vrátí odpověď ihned po bezpečném zařazení úlohy do fronty. Dlouhý BLE přenos už nemůže způsobit ukončení websocketového požadavku bez výsledku.
+- Frontend po přijetí odpovědi okamžitě načte frontu a rozlišuje stav „zařazeno“ od skutečně dokončeného zápisu.
+- Při přechodném selhání příkazu `queue/list` zůstávají poslední známé záznamy zachované a panel k nim pouze doplní chybu načtení.
+
 ## [0.1.157] - 2026-07-31
 
 ### Opraveno

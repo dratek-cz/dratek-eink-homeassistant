@@ -42,7 +42,7 @@ class LargeDisplayUploadTests(unittest.TestCase):
         self.assertIn("...(gatewayId ? { gateway_id: gatewayId } : {})", upload)
         self.assertIn("software_version: Number(device.sw || 0)", upload)
 
-    def test_manual_design_endpoints_wait_for_the_real_transfer_result(self) -> None:
+    def test_manual_design_endpoints_return_after_the_job_is_queued(self) -> None:
         tree = ast.parse((COMPONENT / "websocket.py").read_text(encoding="utf-8"))
         handlers = {
             node.name: node
@@ -69,7 +69,9 @@ class LargeDisplayUploadTests(unittest.TestCase):
                 for keyword in submit_calls[0].keywords
                 if keyword.arg == "wait_for_completion"
             ]
-            self.assertFalse(wait_keywords, name)
+            self.assertEqual(1, len(wait_keywords), name)
+            self.assertIsInstance(wait_keywords[0].value, ast.Constant)
+            self.assertIs(wait_keywords[0].value.value, False)
 
 
 if __name__ == "__main__":
