@@ -37,6 +37,7 @@ def _load_queue_module():
 
     const = types.ModuleType(f"{PACKAGE}.const")
     const.DOMAIN = "dratek_eink"
+    const.PANEL_VERSION = "test"
     sys.modules[const.__name__] = const
 
     spec = importlib.util.spec_from_file_location(f"{PACKAGE}.queue", COMPONENT / "queue.py")
@@ -222,6 +223,7 @@ class TransferQueueRetryTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(first_result["queue_job_id"], second_result["queue_job_id"])
         self.assertEqual(snapshot["writing"], 1)
         self.assertEqual(snapshot["queued"], 1)
+        self.assertEqual(snapshot["backend_version"], "test")
 
         release_first.set()
         await asyncio.gather(*hass.tasks)

@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.157
+
+- opraveno zaseknutí přímého Bluetooth přenosu v Home Assistantu na 240sekundové pojistce: zapisovací charakteristika podporující oba GATT režimy nyní používá řízený zápis bez odpovědi, který je na Linuxu/BlueZ spolehlivější
+- obrazové bloky se odesílají s krátkým odstupem, takže se nezaplní fronta Bluetooth adaptéru a displej dostane celý obraz
+- každá GATT operace má vlastní osmivteřinový timeout s konkrétním názvem kroku místo čekání na obecný čtyřminutový timeout
+- fronta zobrazuje skutečnou verzi backendu a nabízí rozbalení celého protokolu přenosu
+- pro tuto opravu není potřeba aktualizovat firmware gatewaye
+
 ## Novinky ve verzi 0.1.156
 
 - opraven skutečný důvod 240sekundového timeoutu: přenos nyní rozlišuje dva protokoly výrobce podle bitu `0x80` softwarové verze displeje

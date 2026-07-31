@@ -27,6 +27,8 @@ FULL_REFRESH_MODE = 0x01
 BLOCK_REQUEST_TIMEOUT = 12
 OPTIONAL_COMPLETION_TIMEOUT = 2
 MAX_BLOCK_REQUEST_RETRIES = 5
+GATT_OPERATION_TIMEOUT = 8
+STREAM_WRITE_DELAY = 0.04
 
 
 def _next_block(data: bytes, block_size: int, block_number: int) -> bytes:
@@ -341,7 +343,14 @@ class DratekTransfer:
             # after each control-point notification and ignores its block index
             # after the initial request.
             streaming_mode = bool(int(software_version or 0) & 0x80)
-            require_gatt_response = "write" in write_char.properties
+            # BlueZ can hang indefinitely when response=True is used against
+            # displays that advertise both write modes but only reliably
+            # implement write-without-response. Pace that mode at one BLE
+            # connection interval so the controller queue cannot overflow.
+            require_gatt_response = (
+                "write" in write_char.properties
+                and "write-without-response" not in write_char.properties
+            )
             self.log(
                 f"Transfer mode: {'GATT-confirmed stream' if streaming_mode else 'notification-paced legacy'} "
                 f"(software version {int(software_version or 0)})."
@@ -524,7 +533,14 @@ class DratekTransfer:
             self.log(f"Write {label}: {len(data)} bytes")
         else:
             self.log(f"Write {label}: {_format_bytes(data)}")
-        await client.write_gatt_char(char, data, response=response)
+        try:
+            async with asyncio.timeout(GATT_OPERATION_TIMEOUT):
+                await client.write_gatt_char(char, data, response=response)
+        except TimeoutError as exc:
+            raise TimeoutError(
+                f"GATT write timed out during {label} "
+                f"(response={'yes' if response else 'no'})."
+            ) from exc
 
     async def _write_image_block(
         self,
@@ -545,6 +561,8 @@ class DratekTransfer:
                     f"block {block_number}",
                     response=require_response,
                 )
+                if not require_response:
+                    await asyncio.sleep(STREAM_WRITE_DELAY)
                 return
             except Exception as exc:  # noqa: BLE stacks expose platform-specific write errors
                 if attempt >= max_attempts:

@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.157] - 2026-07-31
+
+### Opraveno
+- Přímý Bluetooth přenos přes Home Assistant používá u charakteristik nabízejících `write` i `write-without-response` řízený zápis bez odpovědi. Tím se obchází případ, kdy BlueZ čeká na GATT write response až do globální 240sekundové pojistky.
+- Zápisy bez odpovědi jsou tempovány krátkým odstupem, aby obrazové bloky nepřetekly frontu Bluetooth adaptéru.
+- Každý GATT zápis má vlastní osmivteřinový timeout a chyba uvádí konkrétní operaci i použitý režim zápisu.
+- Fronta zápisů vrací a zobrazuje verzi běžícího backendu a umožňuje rozbalit celý protokol úlohy.
+
+### Firmware gatewaye
+- Firmware zůstává ve verzi `0.1.45-gateway`; změna se týká přímého Bluetooth přenosu z Home Assistantu.
+
 ## [0.1.156] - 2026-07-31
 
 ### Opraveno

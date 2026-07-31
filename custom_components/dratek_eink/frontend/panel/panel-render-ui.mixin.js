@@ -568,6 +568,10 @@ export const renderUiMixin = {
         .queue-row.skipped .queue-icon{color:#b45309}
         .queue-row.succeeded .queue-icon{color:#16803c}
         .queue-row-log{grid-column:1/-1;max-height:80px;margin-top:2px;padding:6px 9px;border-radius:7px;background:var(--secondary-background-color);color:var(--secondary-text-color);font-family:ui-monospace,Consolas,monospace;font-size:9px;overflow-y:auto;white-space:normal}
+        .queue-row-details{grid-column:1/-1;width:100%;border:1px solid var(--divider-color);border-radius:7px;background:var(--secondary-background-color)}
+        .queue-row-details summary{display:flex;align-items:center;gap:6px;padding:7px 9px;cursor:pointer;color:var(--primary-text-color);font-size:10px;font-weight:800}
+        .queue-row-details summary ha-icon{--mdc-icon-size:15px}
+        .queue-row-details pre{max-height:260px;margin:0;border-radius:0 0 7px 7px;font-size:10px}
         .queue-skip-warning{padding:14px;border:1px solid rgba(217,119,6,.4);border-radius:12px;background:rgba(217,119,6,.07)}
         .warning-header{display:flex;align-items:center;gap:10px;margin-bottom:8px;color:#b45309}
         .warning-header ha-icon{--mdc-icon-size:28px}

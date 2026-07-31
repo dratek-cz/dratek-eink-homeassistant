@@ -716,6 +716,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('latestJob?.status === "writing"', self.source)
         self.assertIn("latestJob?.error", self.source)
 
+    def test_queue_exposes_backend_version_and_complete_transfer_log(self):
+        self.assertIn("queue.backend_version", self.source)
+        self.assertIn('class="queue-row-details"', self.source)
+        self.assertIn("Zobrazit celý protokol", self.source)
+        self.assertIn('logLines.join("\\n")', self.source)
+
 
 if __name__ == "__main__":
     unittest.main()

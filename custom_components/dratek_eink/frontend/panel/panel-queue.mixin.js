@@ -244,7 +244,7 @@ export const queueMixin = {
         <div class="section-title">
           <div>
             <h2>Fronta a historie zápisů</h2>
-            <small>Zobrazeno ${displayedJobs.length} z ${filteredJobs.length} odpovídajících záznamů · ${allJobs.length} celkem v paměti</small>
+            <small>Zobrazeno ${displayedJobs.length} z ${filteredJobs.length} odpovídajících záznamů · ${allJobs.length} celkem v paměti · backend v${this._escape(queue.backend_version || "starší")}</small>
           </div>
           ${filtersActive ? `<button id="clearQueueFilters" class="secondary"><ha-icon icon="mdi:filter-remove-outline"></ha-icon>Zrušit filtry</button>` : ""}
         </div>
@@ -272,7 +272,8 @@ export const queueMixin = {
     const device = (this._result?.devices || []).find((item) => String(item.address || "").toUpperCase() === address);
     const operation = OPERATION_LABELS[job.operation] || job.operation;
     const gateway = job.transport_type === "gateway";
-    const logText = Array.isArray(job.log) && job.log.length ? job.log.slice(-3).join(" | ") : "";
+    const logLines = Array.isArray(job.log) ? job.log : [];
+    const logText = logLines.length ? logLines.slice(-3).join(" | ") : "";
     return `<article class="queue-row ${this._escape(status)}">
       <span class="queue-icon"><ha-icon icon="${STATUS_ICONS[status] || "mdi:help"}"></ha-icon></span>
       <div class="queue-main">
@@ -289,6 +290,10 @@ export const queueMixin = {
       </div>
       <span class="pill ${STATUS_PILLS[status] || "muted"}">${STATUS_LABELS[status] || this._escape(status)}</span>
       ${(job.error || logText) ? `<div class="queue-row-log">${this._escape(job.error || logText)}</div>` : ""}
+      ${logLines.length ? `<details class="queue-row-details">
+        <summary><ha-icon icon="mdi:text-box-search-outline"></ha-icon>Zobrazit celý protokol (${logLines.length} řádků)</summary>
+        <pre>${this._escape(logLines.join("\n"))}</pre>
+      </details>` : ""}
     </article>`;
   },
 };

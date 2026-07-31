@@ -9,7 +9,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN
+from .const import DOMAIN, PANEL_VERSION
 
 QUEUE_STORE_KEY = "dratek_eink.transfer_queue"
 QUEUE_STORE_VERSION = 1
@@ -328,6 +328,7 @@ class TransferQueue:
         skipped_reasons = list({job["log"][0] for job in skipped_jobs if job.get("log")})
         skipped_devices = list({job.get("address", "") for job in skipped_jobs if job.get("address")})
         return {
+            "backend_version": PANEL_VERSION,
             "jobs": jobs,
             "queued": sum(job.get("status") == "queued" for job in jobs),
             "writing": sum(job.get("status") == "writing" for job in jobs),

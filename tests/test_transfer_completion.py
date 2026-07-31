@@ -26,7 +26,11 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertIn("_next_block(payload, block_size, block_number)", section)
         self.assertIn("await self._wait_for_next_transfer_response(", section)
         self.assertIn("Display requested retransmission from block", section)
-        self.assertIn('require_gatt_response = "write" in write_char.properties', source)
+        self.assertIn('"write-without-response" not in write_char.properties', source)
+        self.assertIn("GATT_OPERATION_TIMEOUT = 8", source)
+        self.assertIn("STREAM_WRITE_DELAY = 0.04", source)
+        self.assertIn("asyncio.timeout(GATT_OPERATION_TIMEOUT)", source)
+        self.assertIn("await asyncio.sleep(STREAM_WRITE_DELAY)", source)
         self.assertIn("async_last_service_info", source)
         self.assertIn("manufacturer_data.get(DRATEK_COMPANY_ID)", source)
 
