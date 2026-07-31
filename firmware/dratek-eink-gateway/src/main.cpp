@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.44-gateway";
+static const char* FIRMWARE_VERSION = "0.1.45-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -52,6 +52,8 @@ std::vector<uint8_t> queuedPayload;
 std::vector<uint8_t> uploadPayload;
 String uploadAddress;
 String uploadJobId;
+uint8_t uploadSoftwareVersion = 0;
+uint8_t queuedSoftwareVersion = 0;
 String uploadError;
 bool uploadDuplicate = false;
 SemaphoreHandle_t transferMutex = nullptr;
@@ -362,7 +364,7 @@ bool connectToDisplay(NimBLEClient*& client, const String& address, TransferLogS
   return false;
 }
 
-bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& payload, TransferLogSink& log) {
+bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& payload, uint8_t softwareVersion, TransferLogSink& log) {
   NimBLEClient* client = NimBLEDevice::createClient();
   client->setConnectTimeout(18);
   addLog(log, "Connecting to display " + address + ".");
@@ -440,101 +442,111 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
     return false;
   }
 
-  // The display controls the transfer window. A [05 00 <uint32-le>] packet
-  // requests one exact block; [05 08] is the vendor-defined confirmation that
-  // the complete image has arrived. GATT write success alone only confirms that
-  // the ESP32 BLE stack queued the packet and must not advance the block index.
+  // Picksmart selects one of two protocols using software-version bit 0x80.
+  // New firmware streams all remaining blocks after the initial [05 00]
+  // request, advancing on each acknowledged GATT write. Legacy firmware emits
+  // a notification per block but ignores its index after the first request.
   std::vector<uint8_t> block(blockSize);
   std::vector<uint8_t> requestCounts(totalBlocks, 0);
   std::vector<bool> sentBlocks(totalBlocks, false);
   int uniqueSent = 0;
-  if (packet.size() >= 6 && packet[0] == 0x05 && packet[1] == 0x00) {
-    int resumeBlock = (int)packet[2] | ((int)packet[3] << 8) | ((int)packet[4] << 16) | ((int)packet[5] << 24);
-    for (int acknowledged = 0; acknowledged < min(resumeBlock, totalBlocks); acknowledged++) {
-      sentBlocks[acknowledged] = true;
-      uniqueSent++;
-    }
-    if (resumeBlock > 0 && resumeBlock < totalBlocks) {
-      addLog(log, "Display is resuming at block " + String(resumeBlock + 1) + "/" + String(totalBlocks) + ".");
-    }
+  if (packet.size() < 6 || packet[0] != 0x05 || packet[1] != 0x00) {
+    client->disconnect();
+    NimBLEDevice::deleteClient(client);
+    addLog(log, "Invalid first image-block request: " + hexPacket(packet));
+    return false;
   }
-  bool blockWriteWithResponse = !writeChar->canWriteNoResponse();
+  int nextBlock = (int)packet[2] | ((int)packet[3] << 8) | ((int)packet[4] << 16) | ((int)packet[5] << 24);
+  for (int acknowledged = 0; acknowledged < min(nextBlock, totalBlocks); acknowledged++) {
+    sentBlocks[acknowledged] = true;
+    uniqueSent++;
+  }
+  bool streamingMode = (softwareVersion & 0x80) == 0x80;
+  bool blockWriteWithResponse = writeChar->canWrite();
+  addLog(
+    log,
+    "Transfer mode: " + String(streamingMode ? "GATT-confirmed stream" : "notification-paced legacy") +
+      " (software version " + String(softwareVersion) + ")."
+  );
+
   while (true) {
-    if (packet.size() >= 2 && packet[0] == 0x05 && packet[1] == 0x08) {
-      addLog(log, "Display confirmed that the complete image was received.");
-      break;
-    }
-    if (packet.size() < 6 || packet[0] != 0x05 || packet[1] != 0x00) {
+    if (nextBlock < 0 || nextBlock >= totalBlocks) {
       client->disconnect();
       NimBLEDevice::deleteClient(client);
-      addLog(log, "Invalid image-block request: " + hexPacket(packet));
+      addLog(log, "Display requested invalid block " + String(nextBlock) + "/" + String(totalBlocks) + ".");
       return false;
     }
-
-    int blockNumber = (int)packet[2] | ((int)packet[3] << 8) | ((int)packet[4] << 16) | ((int)packet[5] << 24);
-    if (blockNumber < 0 || blockNumber >= totalBlocks) {
+    requestCounts[nextBlock]++;
+    if (requestCounts[nextBlock] > 5) {
       client->disconnect();
       NimBLEDevice::deleteClient(client);
-      addLog(log, "Display requested invalid block " + String(blockNumber) + "/" + String(totalBlocks) + ".");
+      addLog(log, "Display repeatedly rejected block " + String(nextBlock) + ".");
       return false;
     }
-    requestCounts[blockNumber]++;
-    if (requestCounts[blockNumber] > 5) {
-      client->disconnect();
-      NimBLEDevice::deleteClient(client);
-      addLog(log, "Display repeatedly rejected block " + String(blockNumber) + ".");
-      return false;
-    }
-    if (requestCounts[blockNumber] > 1) {
-      addLog(log, "Retransmitting requested block " + String(blockNumber + 1) + "/" + String(totalBlocks) + ".");
+    int endBlock = streamingMode ? totalBlocks : nextBlock + 1;
+    for (int blockNumber = nextBlock; blockNumber < endBlock; blockNumber++) {
+      int startOffset = blockNumber * chunkSize;
+      int dataLen = min(chunkSize, (int)payload.size() - startOffset);
+      block[0] = blockNumber & 0xFF;
+      block[1] = (blockNumber >> 8) & 0xFF;
+      block[2] = (blockNumber >> 16) & 0xFF;
+      block[3] = (blockNumber >> 24) & 0xFF;
+      memcpy(block.data() + 4, payload.data() + startOffset, dataLen);
+
+      bool written = false;
+      for (int writeAttempt = 1; writeAttempt <= 3; writeAttempt++) {
+        written = writeChar->writeValue(block.data(), dataLen + 4, blockWriteWithResponse);
+        if (written) break;
+        addLog(log, "BLE write failed for block " + String(blockNumber) + ", retry " + String(writeAttempt) + "/3.");
+        delay(100);
+      }
+      if (!written) {
+        client->disconnect();
+        NimBLEDevice::deleteClient(client);
+        addLog(log, "Display did not acknowledge image block " + String(blockNumber) + ".");
+        return false;
+      }
+      if (!sentBlocks[blockNumber]) {
+        sentBlocks[blockNumber] = true;
+        uniqueSent++;
+      }
+      if (blockNumber == 0 || blockNumber % 10 == 0 || uniqueSent == totalBlocks) {
+        int percent = (uniqueSent * 100) / max(1, totalBlocks);
+        addLog(log, "Display accepted block " + String(blockNumber + 1) + "/" + String(totalBlocks) + " (" + String(percent) + "%).");
+      }
     }
 
-    int startOffset = blockNumber * chunkSize;
-    int dataLen = min(chunkSize, (int)payload.size() - startOffset);
-    block[0] = blockNumber & 0xFF;
-    block[1] = (blockNumber >> 8) & 0xFF;
-    block[2] = (blockNumber >> 16) & 0xFF;
-    block[3] = (blockNumber >> 24) & 0xFF;
-    memcpy(block.data() + 4, payload.data() + startOffset, dataLen);
-
-    bool written = false;
-    for (int writeAttempt = 1; writeAttempt <= 3; writeAttempt++) {
-      // The next control-point request is the application-level acknowledgement
-      // and provides backpressure for large displays.
-      written = writeChar->writeValue(block.data(), dataLen + 4, blockWriteWithResponse);
-      if (written) break;
-      addLog(log, "BLE write failed for block " + String(blockNumber) + ", retry " + String(writeAttempt) + "/3.");
-      delay(100);
-    }
-    if (!written) {
-      client->disconnect();
-      NimBLEDevice::deleteClient(client);
-      addLog(log, "Display did not acknowledge image block " + String(blockNumber) + ".");
-      return false;
-    }
-
-    if (!sentBlocks[blockNumber]) {
-      sentBlocks[blockNumber] = true;
-      uniqueSent++;
-    }
-    if (blockNumber == 0 || blockNumber % 10 == 0 || uniqueSent == totalBlocks) {
-      int percent = (uniqueSent * 100) / max(1, totalBlocks);
-      addLog(log, "Display accepted block " + String(blockNumber + 1) + "/" + String(totalBlocks) + " (" + String(percent) + "%).");
-    }
-
-    uint32_t nextTimeout = uniqueSent == totalBlocks ? 2000 : 12000;
-    if (!waitForPacket(0x05, packet, nextTimeout)) {
-      if (uniqueSent == totalBlocks) {
-        // The vendor client also completes immediately after the last
-        // requested block. [05 08] is optional on older display firmware.
-        addLog(log, "All requested blocks were delivered; no optional 05 08 confirmation.");
+    if (uniqueSent == totalBlocks) {
+      if (!waitForPacket(0x05, packet, 2000)) {
+        addLog(log, "All image blocks were delivered; no optional 05 08 confirmation.");
         break;
       }
+      if (packet.size() >= 2 && packet[1] == 0x08) {
+        addLog(log, "Display confirmed that the complete image was received.");
+        break;
+      }
+      if (packet.size() >= 6 && packet[1] == 0x00) {
+        nextBlock = (int)packet[2] | ((int)packet[3] << 8) | ((int)packet[4] << 16) | ((int)packet[5] << 24);
+        addLog(log, "Display requested retransmission from block " + String(nextBlock + 1) + "/" + String(totalBlocks) + ".");
+        continue;
+      }
+      addLog(log, "Ignoring optional completion packet: " + hexPacket(packet));
+      break;
+    }
+
+    if (!waitForPacket(0x05, packet, 12000)) {
       client->disconnect();
       NimBLEDevice::deleteClient(client);
       addLog(log, "Timed out waiting for the display to request the next image block.");
       return false;
     }
+    if (packet.size() >= 2 && packet[1] == 0x08) {
+      client->disconnect();
+      NimBLEDevice::deleteClient(client);
+      addLog(log, "Display ended transfer before every image block was delivered.");
+      return false;
+    }
+    nextBlock++;
   }
 
   if (uniqueSent != totalBlocks) {
@@ -650,6 +662,7 @@ void handleTransferUploadChunk() {
     uploadPayload.shrink_to_fit();
     uploadAddress = server.arg("address");
     uploadJobId = server.arg("id");
+    uploadSoftwareVersion = (uint8_t)server.arg("software_version").toInt();
     uploadError = "";
     uploadDuplicate = false;
 
@@ -725,6 +738,7 @@ void handleTransferUploadComplete() {
   size_t payloadBytes = uploadPayload.size();
   xSemaphoreTake(transferMutex, portMAX_DELAY);
   queuedPayload.swap(uploadPayload);
+  queuedSoftwareVersion = uploadSoftwareVersion;
   transferJob.id = jobId;
   transferJob.address = uploadAddress;
   transferJob.status = "queued";
@@ -774,10 +788,12 @@ void handleTransferStatus() {
 void transferTask(void*) {
   String jobId;
   String address;
+  uint8_t softwareVersion;
   std::vector<uint8_t> payload;
   xSemaphoreTake(transferMutex, portMAX_DELAY);
   jobId = transferJob.id;
   address = transferJob.address;
+  softwareVersion = queuedSoftwareVersion;
   payload.swap(queuedPayload);
   transferJob.status = "running";
   transferJob.updatedMs = millis();
@@ -788,7 +804,7 @@ void transferTask(void*) {
   addLog(log, "Transfer job " + jobId + " started.");
   addLog(log, "Payload " + String(payload.size()) + " bytes loaded; free heap " + String(ESP.getFreeHeap()) + ".");
   addLog(log, "Largest free memory block " + String(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)) + " bytes.");
-  bool ok = sendPayloadToDisplay(address, payload, log);
+  bool ok = sendPayloadToDisplay(address, payload, softwareVersion, log);
   payload.clear();
   payload.shrink_to_fit();
   addLog(log, "Payload released; free heap " + String(ESP.getFreeHeap()) + ".");

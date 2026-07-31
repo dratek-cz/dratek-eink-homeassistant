@@ -10,20 +10,25 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class TransferCompletionTests(unittest.TestCase):
-    def test_local_transfer_obeys_each_requested_block(self):
+    def test_local_transfer_selects_the_vendor_protocol_from_software_version(self):
         source = (ROOT / "custom_components" / "dratek_eink" / "transfer.py").read_text(
             encoding="utf-8"
         )
 
-        transfer_loop = source.index("while True:", source.index("The display is the flow-control authority"))
+        transfer_loop = source.index("while True:", source.index("Picksmart has two transfer implementations"))
         completion = source.index("Full-screen image transfer completed", transfer_loop)
         section = source[transfer_loop:completion]
 
-        self.assertIn('response[1] == 8', section)
+        self.assertIn("streaming_mode = bool(int(software_version or 0) & 0x80)", source)
+        self.assertIn("end_block = total_blocks if streaming_mode else next_block + 1", section)
+        self.assertIn("next_block += 1", section)
         self.assertIn('int.from_bytes(response[2:6], "little")', section)
         self.assertIn("_next_block(payload, block_size, block_number)", section)
         self.assertIn("await self._wait_for_next_transfer_response(", section)
-        self.assertIn("Display requested retransmission", section)
+        self.assertIn("Display requested retransmission from block", section)
+        self.assertIn('require_gatt_response = "write" in write_char.properties', source)
+        self.assertIn("async_last_service_info", source)
+        self.assertIn("manufacturer_data.get(DRATEK_COMPANY_ID)", source)
 
     def test_local_transfer_accepts_models_without_optional_completion_confirmation(self):
         source = (ROOT / "custom_components" / "dratek_eink" / "transfer.py").read_text(
@@ -31,7 +36,7 @@ class TransferCompletionTests(unittest.TestCase):
         )
 
         confirmed = source.index("Display confirmed that the complete image was received.")
-        optional = source.index("this model does not send the optional 05 08 confirmation")
+        optional = source.index("the display started")
         disconnect_log = source.index("Full-screen image transfer completed; releasing Bluetooth.")
 
         self.assertLess(confirmed, disconnect_log)
@@ -47,18 +52,19 @@ class TransferCompletionTests(unittest.TestCase):
 
         self.assertIn('int.from_bytes(data[1:3], "little")', source)
 
-    def test_gateway_waits_for_each_request_and_accepts_optional_confirmation(self):
+    def test_gateway_supports_streaming_and_legacy_vendor_protocols(self):
         source = (
             ROOT / "firmware" / "dratek-eink-gateway" / "src" / "main.cpp"
         ).read_text(encoding="utf-8")
 
-        transfer_loop = source.index("while (true)", source.index("The display controls the transfer window"))
+        transfer_loop = source.index("while (true)", source.index("Picksmart selects one of two protocols"))
         completion = source.index('addLog(log, "Full-screen image transfer completed.");')
         section = source[transfer_loop:completion]
 
-        self.assertIn("packet[1] == 0x08", section)
-        self.assertIn("waitForPacket(0x05, packet, nextTimeout)", section)
-        self.assertIn("Retransmitting requested block", section)
+        self.assertIn("streamingMode = (softwareVersion & 0x80) == 0x80", source)
+        self.assertIn("endBlock = streamingMode ? totalBlocks : nextBlock + 1", section)
+        self.assertIn("blockWriteWithResponse = writeChar->canWrite()", source)
+        self.assertIn("nextBlock++", section)
         self.assertIn("no optional 05 08 confirmation", section)
         self.assertIn("uniqueSent != totalBlocks", section)
 

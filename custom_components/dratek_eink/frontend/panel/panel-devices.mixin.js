@@ -1015,6 +1015,7 @@ export const devicesMixin = {
         ...(gatewayId ? { gateway_id: gatewayId } : {}),
         address: device.address,
         sdk_type: Number(device.sdk_type),
+        software_version: Number(device.sw || 0),
         image,
         orientation: this._displayTemplateOrientation === "portrait" ? "portrait" : "landscape",
         transform: this._displayTransform || "rotate_cw",

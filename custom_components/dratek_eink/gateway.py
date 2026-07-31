@@ -355,6 +355,7 @@ async def async_send_gateway_payload(
     image: Image.Image,
     transform: str | None = None,
     orientation: str | None = None,
+    software_version: int | None = None,
 ) -> dict[str, Any] | None:
     gateways = await async_load_gateways(hass)
     gateway = next((item for item in gateways if item.get("id") == gateway_id), None)
@@ -376,6 +377,7 @@ async def async_send_gateway_payload(
         start_url = (
             f"{base_url}/api/transfer/upload?address={quote(address, safe='')}"
             f"&id={request_id}"
+            f"&software_version={int(software_version or 0)}"
         )
         add_log(f"Streaming binary transfer job to gateway {base_url.removeprefix('http://')}.")
         data: dict[str, Any] = {}

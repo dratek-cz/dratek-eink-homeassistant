@@ -9,7 +9,12 @@ from typing import TYPE_CHECKING, Any
 from bleak import BleakClient
 from PIL import Image
 
-from .const import CONTROL_CHARS, PARTIAL_UPDATE_CONFIRMED_SDK_TYPES, WRITE_CHARS
+from .const import (
+    CONTROL_CHARS,
+    DRATEK_COMPANY_ID,
+    PARTIAL_UPDATE_CONFIRMED_SDK_TYPES,
+    WRITE_CHARS,
+)
 from .render import pack_bwr_image
 
 if TYPE_CHECKING:
@@ -57,8 +62,17 @@ class DratekTransfer:
         image: Image.Image,
         transform: str | None = None,
         orientation: str | None = None,
+        software_version: int | None = None,
     ) -> None:
-        await self._send_with_retries(address, sdk_type, image, transform, partial=None, orientation=orientation)
+        await self._send_with_retries(
+            address,
+            sdk_type,
+            image,
+            transform,
+            partial=None,
+            orientation=orientation,
+            software_version=software_version,
+        )
 
     async def send_partial_image(
         self,
@@ -219,22 +233,31 @@ class DratekTransfer:
         transform: str | None = None,
         partial: tuple[int, int, int, int, int] | None = None,
         orientation: str | None = None,
+        software_version: int | None = None,
     ) -> None:
         last_error: Exception | None = None
-        max_attempts = 5
+        max_attempts = 3
         for attempt in range(1, max_attempts + 1):
             self.log(f"Transfer attempt {attempt}/{max_attempts}.")
             try:
-                await self._send_once(address, sdk_type, image, transform, partial, orientation)
+                await self._send_once(
+                    address,
+                    sdk_type,
+                    image,
+                    transform,
+                    partial,
+                    orientation,
+                    software_version,
+                )
                 self.log("Transfer completed.")
                 return
             except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
                 last_error = exc
                 self.log(f"Transfer attempt {attempt}/{max_attempts} failed: {exc}")
                 transient = self._is_transient_connection_error(exc)
-                if attempt >= max_attempts or (attempt >= 3 and not transient):
+                if attempt >= max_attempts or (attempt >= 2 and not transient):
                     break
-                delay = (2, 3, 5, 8)[attempt - 1]
+                delay = (2, 4)[attempt - 1]
                 if transient:
                     self.log(f"Bluetooth connection is temporarily unavailable; retrying in {delay}s.")
                 await asyncio.sleep(delay)
@@ -248,8 +271,10 @@ class DratekTransfer:
         transform: str | None = None,
         partial: tuple[int, int, int, int, int] | None = None,
         orientation: str | None = None,
+        software_version: int | None = None,
     ) -> None:
         payload = pack_bwr_image(sdk_type, image, transform, orientation)
+        software_version = self._resolve_software_version(address, software_version)
         responses: asyncio.Queue[bytes] = asyncio.Queue()
         loop = asyncio.get_running_loop()
 
@@ -309,73 +334,85 @@ class DratekTransfer:
                         f"Display is resuming the prepared transfer at block "
                         f"{resume_block + 1}/{total_blocks}."
                     )
-            require_gatt_response = (
-                "write-without-response" not in write_char.properties
-                and "write" in write_char.properties
+            # Picksmart has two transfer implementations selected by bit 0x80
+            # of the software-version byte in manufacturer data. New firmware
+            # streams the remaining blocks after the first [05 00] request and
+            # advances on each GATT write callback. Legacy firmware advances
+            # after each control-point notification and ignores its block index
+            # after the initial request.
+            streaming_mode = bool(int(software_version or 0) & 0x80)
+            require_gatt_response = "write" in write_char.properties
+            self.log(
+                f"Transfer mode: {'GATT-confirmed stream' if streaming_mode else 'notification-paced legacy'} "
+                f"(software version {int(software_version or 0)})."
             )
+            if len(response) < 6 or response[0] != 5 or response[1] != 0:
+                raise RuntimeError(f"Invalid first image-block request: {response.hex(' ').upper()}")
+            next_block = int.from_bytes(response[2:6], "little")
 
-            # The display is the flow-control authority. It requests one exact
-            # block with [05 00 <uint32-le>] and only then is that block sent.
-            # A repeated request retransmits the block instead of advancing.
-            # [05 08] is the vendor-defined transfer-complete confirmation.
             while True:
-                if len(response) >= 2 and response[0] == 5 and response[1] == 8:
-                    self.log("Display confirmed that the complete image was received.")
-                    break
-                if len(response) < 6 or response[0] != 5 or response[1] != 0:
-                    raise RuntimeError(f"Invalid image-block request: {response.hex(' ').upper()}")
-
-                block_number = int.from_bytes(response[2:6], "little")
-                if block_number >= total_blocks:
-                    raise RuntimeError(f"Display requested invalid block {block_number}/{total_blocks}")
-                request_counts[block_number] = request_counts.get(block_number, 0) + 1
-                if request_counts[block_number] > MAX_BLOCK_REQUEST_RETRIES:
+                if next_block >= total_blocks:
+                    raise RuntimeError(f"Display requested invalid block {next_block}/{total_blocks}")
+                request_counts[next_block] = request_counts.get(next_block, 0) + 1
+                if request_counts[next_block] > MAX_BLOCK_REQUEST_RETRIES:
                     raise RuntimeError(
-                        f"Display requested block {block_number} more than "
+                        f"Display requested block {next_block} more than "
                         f"{MAX_BLOCK_REQUEST_RETRIES} times."
                     )
-                if request_counts[block_number] > 1:
-                    self.log(
-                        f"Display requested retransmission of block {block_number + 1}/"
-                        f"{total_blocks}."
-                    )
 
-                await self._write_image_block(
-                    client,
-                    write_char,
-                    _next_block(payload, block_size, block_number),
-                    block_number,
-                    require_response=require_gatt_response,
+                end_block = total_blocks if streaming_mode else next_block + 1
+                for block_number in range(next_block, end_block):
+                    await self._write_image_block(
+                        client,
+                        write_char,
+                        _next_block(payload, block_size, block_number),
+                        block_number,
+                        require_response=require_gatt_response,
+                    )
+                    sent_blocks.add(block_number)
+                    if block_number == 0 or block_number % 10 == 0 or len(sent_blocks) == total_blocks:
+                        percent = int((len(sent_blocks) / total_blocks) * 100)
+                        self.log(
+                            f"Display accepted block {block_number + 1}/{total_blocks} "
+                            f"({percent}%)."
+                        )
+
+                if len(sent_blocks) == total_blocks:
+                    try:
+                        response = await self._wait_for_next_transfer_response(
+                            responses,
+                            timeout=OPTIONAL_COMPLETION_TIMEOUT,
+                        )
+                    except TimeoutError:
+                        self.log(
+                            "All image blocks were delivered; the display started "
+                            "refreshing without the optional 05 08 confirmation."
+                        )
+                        break
+                    if len(response) >= 2 and response[1] == 8:
+                        self.log("Display confirmed that the complete image was received.")
+                        break
+                    # A late explicit request is a retransmission request. New
+                    # firmware streams forward again, matching the vendor SDK.
+                    next_block = int.from_bytes(response[2:6], "little")
+                    self.log(
+                        f"Display requested retransmission from block "
+                        f"{next_block + 1}/{total_blocks}."
+                    )
+                    continue
+
+                response = await self._wait_for_next_transfer_response(
+                    responses,
+                    timeout=BLOCK_REQUEST_TIMEOUT,
                 )
-                sent_blocks.add(block_number)
-                if block_number == 0 or block_number % 10 == 0 or len(sent_blocks) == total_blocks:
-                    percent = int((len(sent_blocks) / total_blocks) * 100)
-                    self.log(
-                        f"Display accepted block {block_number + 1}/{total_blocks} "
-                        f"({percent}%)."
+                if len(response) >= 2 and response[1] == 8:
+                    raise RuntimeError(
+                        f"Display ended transfer after only {len(sent_blocks)}/{total_blocks} blocks."
                     )
-
-                try:
-                    response = await self._wait_for_next_transfer_response(
-                        responses,
-                        timeout=(
-                            OPTIONAL_COMPLETION_TIMEOUT
-                            if len(sent_blocks) == total_blocks
-                            else BLOCK_REQUEST_TIMEOUT
-                        ),
-                    )
-                except TimeoutError:
-                    if len(sent_blocks) != total_blocks:
-                        raise
-                    # The vendor client transitions to ClientImageTransferOK
-                    # immediately after writing the last requested block.
-                    # Some display firmwares additionally send [05 08], while
-                    # others remain silent and start refreshing the panel.
-                    self.log(
-                        "All display-requested image blocks were delivered; "
-                        "this model does not send the optional 05 08 confirmation."
-                    )
-                    break
+                # The legacy vendor client uses the requested index only for
+                # the first block. Every later notification advances exactly
+                # one block, even when its payload repeats index zero.
+                next_block += 1
 
             if len(sent_blocks) != total_blocks:
                 raise RuntimeError(
@@ -386,6 +423,35 @@ class DratekTransfer:
             if write_notify_enabled:
                 await client.stop_notify(write_char)
             await client.stop_notify(control_char)
+
+    def _resolve_software_version(
+        self,
+        address: str,
+        supplied_version: int | None,
+    ) -> int:
+        """Use the advertised SW byte even for service calls without a panel payload."""
+        if supplied_version:
+            return int(supplied_version)
+        if self._hass is None:
+            return int(supplied_version or 0)
+        try:
+            from homeassistant.components import bluetooth
+
+            get_service_info = getattr(bluetooth, "async_last_service_info", None)
+            if get_service_info is None:
+                return int(supplied_version or 0)
+            service_info = get_service_info(
+                self._hass,
+                address,
+                connectable=True,
+            )
+            manufacturer_data = getattr(service_info, "manufacturer_data", {}) or {}
+            data = manufacturer_data.get(DRATEK_COMPANY_ID)
+            if data and len(data) > 2:
+                return int(data[2])
+        except Exception:  # noqa: HA Bluetooth compatibility varies by core version
+            pass
+        return int(supplied_version or 0)
 
     def _connection_target(self, address: str) -> Any:
         if self._hass is None:

@@ -40,6 +40,7 @@ class LargeDisplayUploadTests(unittest.TestCase):
             upload,
         )
         self.assertIn("...(gatewayId ? { gateway_id: gatewayId } : {})", upload)
+        self.assertIn("software_version: Number(device.sw || 0)", upload)
 
     def test_manual_design_endpoints_wait_for_the_real_transfer_result(self) -> None:
         tree = ast.parse((COMPONENT / "websocket.py").read_text(encoding="utf-8"))

@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.156
+
+- opraven skutečný důvod 240sekundového timeoutu: přenos nyní rozlišuje dva protokoly výrobce podle bitu `0x80` softwarové verze displeje
+- novější displeje po prvním požadavku dostanou souvislý proud bloků potvrzovaných GATT zápisem; starší displeje zůstávají v režimu řízeném notifikací po každém bloku
+- softwarová verze z BLE reklamy se předává přímému Bluetooth i gatewayi, takže velké displeje už nezůstanou po prvním bloku čekat
+- počet úplných opakování přenosu byl omezen a bezpečnostní timeout nyní vypíše poslední dosažený krok
+- přiložen firmware gatewaye `0.1.45-gateway` pro ESP32 a ESP32-S3
+
 ## Novinky ve verzi 0.1.155
 
 - opraveno zobrazení websocketové chyby `unknown_error`, která ve verzi 0.1.154 překryla podrobnější zprávu Home Assistantu

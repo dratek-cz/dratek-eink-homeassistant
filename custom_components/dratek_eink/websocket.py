@@ -702,6 +702,7 @@ async def websocket_scan_gateway(
         "image": str,
         "orientation": str,
         "transform": str,
+        vol.Optional("software_version"): int,
         vol.Optional("automation"): dict,
     }
 )
@@ -738,6 +739,7 @@ async def websocket_send_gateway_design(
                 image,
                 msg.get("transform"),
                 msg.get("orientation"),
+                msg.get("software_version"),
             )
             if transfer_result and transfer_result.get("ok") is not False:
                 await _save_entity_automation(
@@ -1699,6 +1701,7 @@ async def websocket_fetch_custom_element_url(
         "image": str,
         "orientation": str,
         "transform": str,
+        vol.Optional("software_version"): int,
         vol.Optional("automation"): dict,
     }
 )
@@ -1730,7 +1733,14 @@ async def websocket_send_design(
             if transform:
                 add_log(f"Using display transform: {transform}.")
             transfer = DratekTransfer(log=add_log, hass=hass)
-            await transfer.send_image(address, sdk_type, image, transform, orientation)
+            await transfer.send_image(
+                address,
+                sdk_type,
+                image,
+                transform,
+                orientation,
+                msg.get("software_version"),
+            )
             add_log("Design sent.")
             await _save_entity_automation(
                 hass,

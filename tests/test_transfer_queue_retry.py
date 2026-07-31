@@ -61,6 +61,39 @@ class FakeHass:
 
 
 class TransferQueueRetryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_safety_timeout_reports_the_last_transfer_step(self):
+        queue = queue_module.TransferQueue(object())
+        queue._loaded = True
+
+        async def save_history():
+            return None
+
+        queue._save_history = save_history
+        job = {
+            "id": "timeout",
+            "resource": "local",
+            "transport_type": "local",
+            "transport_name": "Bluetooth",
+            "address": "FF:FF:94:20:10:78",
+            "operation": "design",
+            "status": "queued",
+            "created_at": 0,
+            "started_at": None,
+            "finished_at": None,
+            "error": "",
+            "log": [],
+        }
+        queue._jobs = [job]
+
+        async def runner(add_log):
+            add_log("Display accepted block 11/124 (8%).")
+            raise TimeoutError()
+
+        result = await queue._execute(job, runner)
+
+        self.assertIn("exceeded the 240s safety timeout", result["error"])
+        self.assertIn("Last step: Display accepted block 11/124 (8%).", result["error"])
+
     async def test_empty_platform_exception_is_returned_with_its_type(self):
         queue = queue_module.TransferQueue(object())
         queue._loaded = True

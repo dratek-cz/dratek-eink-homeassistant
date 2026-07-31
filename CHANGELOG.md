@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.156] - 2026-07-31
+
+### Opraveno
+- Přenos implementuje oba režimy originálního Picksmart SDK. Firmware displeje s bitem softwarové verze `0x80` používá GATT potvrzovaný proud bloků, zatímco starší firmware postupuje po jednotlivých notifikacích.
+- Softwarová verze displeje se předává z BLE reklamy přes panel a websocket až do přímého Bluetooth přenosu i gatewaye.
+- GATT zápis s odpovědí se použije vždy, když jej zapisovací charakteristika podporuje, i když současně nabízí zápis bez odpovědi.
+- Celý neúspěšný přenos se neopakuje pětkrát; diagnostika 240sekundové pojistky obsahuje poslední zaznamenaný krok.
+
+### Firmware gatewaye
+- Verze `0.1.45-gateway` používá stejnou volbu protokolu podle softwarové verze displeje.
+
 ## [0.1.155] - 2026-07-31
 
 ### Opraveno

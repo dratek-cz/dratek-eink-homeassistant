@@ -207,7 +207,17 @@ class TransferQueue:
             else:
                 job["status"] = "succeeded"
         except Exception as exc:  # noqa: BLE and network stacks expose platform errors
-            error = str(exc).strip()
+            if isinstance(exc, TimeoutError):
+                last_step = next(
+                    (line for line in reversed(job["log"]) if not line.startswith("Transfer failed:")),
+                    "no transfer progress was recorded",
+                )
+                error = (
+                    f"Transfer exceeded the {TRANSFER_JOB_TIMEOUT_SECONDS}s safety timeout. "
+                    f"Last step: {last_step}"
+                )
+            else:
+                error = str(exc).strip()
             if not error:
                 error = (
                     f"{type(exc).__name__}: Bluetooth transfer failed without "
