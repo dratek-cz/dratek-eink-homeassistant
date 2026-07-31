@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.159] - 2026-07-31
+
+### Opraveno
+- Přímé odeslání celého návrhu nepřenáší velký Base64 obrázek v jediném websocketovém rámci. Frontend jej rozdělí na potvrzované 64KB části a samostatným malým požadavkem provede závěrečné zařazení do fronty.
+- Backend kontroluje pořadí, úplnost, celkovou velikost, životnost nahrávání a platnost Base64 dat před dekódováním obrázku.
+- Chyba před vytvořením úlohy nyní obsahuje číslo části, kterou Home Assistant nepřijal, nebo výslovně označí selhání závěrečného zařazení.
+
 ## [0.1.158] - 2026-07-31
 
 ### Opraveno

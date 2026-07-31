@@ -18,6 +18,7 @@ import voluptuous as vol
 
 from .automation import get_entity_auto_update_manager
 from .const import (
+    DOMAIN,
     GATEWAY_FIRMWARE_VERSION,
     LOCAL_ROUTE_ID,
     PARTIAL_UPDATE_CONFIRMED_SDK_TYPES,
@@ -53,6 +54,11 @@ PROJECT_STORE_DATA_KEY = "project_store"
 PROJECT_DATA_CACHE_KEY = "project_data_cache"
 DISCOVERY_CACHE_KEY = "dratek_eink.discovery_cache"
 DISCOVERY_GRACE_SECONDS = 5 * 60
+DESIGN_UPLOADS_KEY = "design_uploads"
+DESIGN_UPLOAD_CHUNK_BYTES = 64 * 1024
+DESIGN_UPLOAD_MAX_CHUNKS = 128
+DESIGN_UPLOAD_MAX_BYTES = 8 * 1024 * 1024
+DESIGN_UPLOAD_TTL_SECONDS = 10 * 60
 
 
 async def _clear_previous_entity_automation(
@@ -114,6 +120,8 @@ def async_setup(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_gateway_ota_job)
     websocket_api.async_register_command(hass, websocket_transfer_queue)
     websocket_api.async_register_command(hass, websocket_clear_queue)
+    websocket_api.async_register_command(hass, websocket_upload_design_chunk)
+    websocket_api.async_register_command(hass, websocket_commit_design_upload)
     websocket_api.async_register_command(hass, websocket_send_design)
 
 
@@ -1692,6 +1700,156 @@ async def websocket_fetch_custom_element_url(
         })
     except Exception as exc:
         connection.send_error(msg["id"], "fetch_failed", str(exc))
+
+
+def _design_uploads(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
+    """Return temporary chunked design uploads and discard abandoned sessions."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    uploads = domain_data.setdefault(DESIGN_UPLOADS_KEY, {})
+    cutoff = time.time() - DESIGN_UPLOAD_TTL_SECONDS
+    for upload_id, upload in list(uploads.items()):
+        if float(upload.get("created_at", 0)) < cutoff:
+            uploads.pop(upload_id, None)
+    return uploads
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/upload_design_chunk",
+        "upload_id": str,
+        "index": vol.All(int, vol.Range(min=0, max=DESIGN_UPLOAD_MAX_CHUNKS - 1)),
+        "total": vol.All(int, vol.Range(min=1, max=DESIGN_UPLOAD_MAX_CHUNKS)),
+        "data": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_upload_design_chunk(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Receive one bounded part of a rendered design without a huge WS frame."""
+    data = msg["data"]
+    if len(data) > DESIGN_UPLOAD_CHUNK_BYTES:
+        connection.send_error(msg["id"], "chunk_too_large", "Část obrázku překročila povolenou velikost.")
+        return
+    if msg["index"] >= msg["total"]:
+        connection.send_error(msg["id"], "invalid_chunk", "Číslo části je mimo deklarovaný počet.")
+        return
+
+    uploads = _design_uploads(hass)
+    upload = uploads.setdefault(
+        msg["upload_id"],
+        {"created_at": time.time(), "total": msg["total"], "chunks": {}},
+    )
+    if upload["total"] != msg["total"]:
+        uploads.pop(msg["upload_id"], None)
+        connection.send_error(msg["id"], "invalid_upload", "Počet částí se během nahrávání změnil.")
+        return
+    upload["chunks"][msg["index"]] = data
+    received_bytes = sum(len(chunk) for chunk in upload["chunks"].values())
+    if received_bytes > DESIGN_UPLOAD_MAX_BYTES:
+        uploads.pop(msg["upload_id"], None)
+        connection.send_error(msg["id"], "upload_too_large", "Obrázek překročil maximální velikost přenosu.")
+        return
+    connection.send_result(
+        msg["id"],
+        {
+            "ok": True,
+            "upload_id": msg["upload_id"],
+            "received": len(upload["chunks"]),
+            "total": upload["total"],
+        },
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/commit_design_upload",
+        "upload_id": str,
+        "address": str,
+        "sdk_type": int,
+        "orientation": str,
+        "transform": str,
+        vol.Optional("software_version"): int,
+        vol.Optional("automation"): dict,
+    }
+)
+@websocket_api.async_response
+async def websocket_commit_design_upload(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Reassemble a confirmed upload and enqueue its BLE transfer."""
+    uploads = _design_uploads(hass)
+    upload = uploads.pop(msg["upload_id"], None)
+    if upload is None:
+        connection.send_error(msg["id"], "upload_not_found", "Nahraný obrázek nebyl nalezen nebo vypršel.")
+        return
+    chunks = upload["chunks"]
+    total = upload["total"]
+    missing = [index for index in range(total) if index not in chunks]
+    if missing:
+        connection.send_error(
+            msg["id"],
+            "upload_incomplete",
+            f"Chybí části obrázku: {', '.join(str(index + 1) for index in missing[:8])}.",
+        )
+        return
+
+    try:
+        image_data = "".join(chunks[index] for index in range(total))
+        raw = base64.b64decode(image_data, validate=True)
+        image = Image.open(io.BytesIO(raw)).convert("RGB")
+        address = msg["address"]
+        sdk_type = msg["sdk_type"]
+        await _clear_previous_entity_automation(hass, address)
+
+        async def run_transfer(add_log) -> dict[str, Any]:
+            add_log(
+                f"Chunked editor design {image.width}x{image.height} "
+                f"({total} parts) received for SDK type {sdk_type}."
+            )
+            transfer = DratekTransfer(log=add_log, hass=hass)
+            await transfer.send_image(
+                address,
+                sdk_type,
+                image,
+                msg.get("transform"),
+                msg.get("orientation", "landscape"),
+                msg.get("software_version"),
+            )
+            add_log("Design sent.")
+            await _save_entity_automation(
+                hass,
+                msg,
+                route_type="local",
+                transport_name="Home Assistant Bluetooth",
+            )
+            return {"ok": True, "address": address, "log": []}
+
+        result = await get_transfer_queue(hass).async_submit(
+            resource="local",
+            transport_type="local",
+            transport_name="Home Assistant Bluetooth",
+            address=address,
+            operation="design",
+            runner=run_transfer,
+            wait_for_completion=False,
+        )
+    except Exception as exc:
+        connection.send_result(
+            msg["id"],
+            {
+                "ok": False,
+                "address": msg["address"],
+                "error": str(exc).strip() or type(exc).__name__,
+                "log": [f"Chunked design commit failed: {type(exc).__name__}: {exc}"],
+            },
+        )
+        return
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.websocket_command(

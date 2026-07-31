@@ -293,7 +293,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("preview_image: image", self.source)
         self.assertIn("this._saveCachedDeviceDrafts?.();", self.source)
         self.assertIn(
-            'type: gatewayId ? "dratek_eink/gateways/send_design" : "dratek_eink/send_design"',
+            'type: "dratek_eink/gateways/send_design"',
             self.source,
         )
         self.assertIn(

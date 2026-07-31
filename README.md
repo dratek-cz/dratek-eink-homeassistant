@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.159
+
+- velký náhled se už neposílá Home Assistantu v jediné websocketové zprávě, ale v potvrzovaných 64KB částech
+- backend části bezpečně složí, ověří úplnost a Base64 obsah a teprve potom vytvoří úlohu Bluetooth ve frontě
+- rozpracovaná nahrávání mají omezenou velikost, počet částí i životnost, aby nezůstávala v paměti
+- pokud Home Assistant odmítne data ještě před vytvořením úlohy, panel nově uvede přesné číslo odmítnuté části nebo chybu závěrečného zařazení
+
 ## Novinky ve verzi 0.1.158
 
 - ruční odeslání návrhu přes Home Assistant Bluetooth i gateway se nyní okamžitě zařadí do fronty a websocket nečeká několik minut na dokončení BLE přenosu

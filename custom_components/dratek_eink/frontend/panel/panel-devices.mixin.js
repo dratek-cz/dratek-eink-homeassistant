@@ -993,6 +993,43 @@ export const devicesMixin = {
     return this._rasterizeDisplayTemplateSvg(request.templates, request.width, request.height, request.layout);
   },
 
+  async _sendLocalDisplayDesignChunked(payload) {
+    const encoded = String(payload.image || "").replace(/^data:[^,]*,/, "");
+    if (!encoded) throw new Error("Vykreslený obrázek je prázdný.");
+    const chunkSize = 64 * 1024;
+    const total = Math.ceil(encoded.length / chunkSize);
+    const uploadId = globalThis.crypto?.randomUUID?.()
+      || `dratek-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    for (let index = 0; index < total; index += 1) {
+      try {
+        await this._hass.callWS({
+          type: "dratek_eink/upload_design_chunk",
+          upload_id: uploadId,
+          index,
+          total,
+          data: encoded.slice(index * chunkSize, (index + 1) * chunkSize),
+        });
+      } catch (err) {
+        throw new Error(
+          `Home Assistant nepřijal část obrázku ${index + 1}/${total}: ${this._message(err)}`
+        );
+      }
+    }
+    try {
+      return await this._hass.callWS({
+        type: "dratek_eink/commit_design_upload",
+        upload_id: uploadId,
+        address: payload.address,
+        sdk_type: payload.sdk_type,
+        software_version: payload.software_version,
+        orientation: payload.orientation,
+        transform: payload.transform,
+      });
+    } catch (err) {
+      throw new Error(`Home Assistant nezařadil přijatý obrázek do fronty: ${this._message(err)}`);
+    }
+  },
+
   async _sendDisplayTemplatePreview() {
     const device = this._device();
     if (!device || !this._hass || this._templateSending) return;
@@ -1011,16 +1048,21 @@ export const devicesMixin = {
       await this._saveDisplayTemplateDraft();
       image = await this._renderCurrentDisplayTemplateImage(device);
       const gatewayId = String(this._selectedGatewayId || "");
-      const result = await this._hass.callWS({
-        type: gatewayId ? "dratek_eink/gateways/send_design" : "dratek_eink/send_design",
-        ...(gatewayId ? { gateway_id: gatewayId } : {}),
+      const payload = {
         address: device.address,
         sdk_type: Number(device.sdk_type),
         software_version: Number(device.sw || 0),
         image,
         orientation: this._displayTemplateOrientation === "portrait" ? "portrait" : "landscape",
         transform: this._displayTransform || "rotate_cw",
-      });
+      };
+      const result = gatewayId
+        ? await this._hass.callWS({
+          type: "dratek_eink/gateways/send_design",
+          gateway_id: gatewayId,
+          ...payload,
+        })
+        : await this._sendLocalDisplayDesignChunked(payload);
       if (result?.ok === false) throw new Error(result.error || "Odeslání se nezdařilo.");
       if (result?.queued) {
         this._templateSendResult = {

@@ -35,12 +35,21 @@ class LargeDisplayUploadTests(unittest.TestCase):
         upload = source[start:end]
 
         self.assertIn('const gatewayId = String(this._selectedGatewayId || "");', upload)
-        self.assertIn(
-            'type: gatewayId ? "dratek_eink/gateways/send_design" : "dratek_eink/send_design"',
-            upload,
-        )
-        self.assertIn("...(gatewayId ? { gateway_id: gatewayId } : {})", upload)
+        self.assertIn('type: "dratek_eink/gateways/send_design"', upload)
+        self.assertIn("await this._sendLocalDisplayDesignChunked(payload)", upload)
         self.assertIn("software_version: Number(device.sw || 0)", upload)
+
+    def test_local_design_image_is_split_into_bounded_websocket_messages(self) -> None:
+        source = FRONTEND.read_text(encoding="utf-8")
+        self.assertIn("const chunkSize = 64 * 1024", source)
+        self.assertIn('type: "dratek_eink/upload_design_chunk"', source)
+        self.assertIn('type: "dratek_eink/commit_design_upload"', source)
+
+        backend = (COMPONENT / "websocket.py").read_text(encoding="utf-8")
+        self.assertIn("DESIGN_UPLOAD_CHUNK_BYTES = 64 * 1024", backend)
+        self.assertIn("websocket_upload_design_chunk", backend)
+        self.assertIn("websocket_commit_design_upload", backend)
+        self.assertIn("base64.b64decode(image_data, validate=True)", backend)
 
     def test_manual_design_endpoints_return_after_the_job_is_queued(self) -> None:
         tree = ast.parse((COMPONENT / "websocket.py").read_text(encoding="utf-8"))
