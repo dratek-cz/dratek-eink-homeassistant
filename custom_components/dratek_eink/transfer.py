@@ -22,8 +22,8 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 WRITE_ACK_SDK_TYPES = {51}
-ACK_CHECKPOINT_INTERVAL = 8
-ACK_CHECKPOINT_DRAIN_DELAY = 0.8
+FINAL_BLOCK_DRAIN_DELAY = 1.0
+FINAL_BLOCK_RESPONSE_TIMEOUT = 2
 RGB_LED_COMMAND = 0x30
 FLASH_IDENTIFY_COMMAND = 0x22
 FULL_REFRESH_MODE = 0x01
@@ -353,8 +353,8 @@ class DratekTransfer:
             # after the initial request.
             streaming_mode = bool(int(software_version or 0) & 0x80)
             # SDK type 51 is a hardware-verified exception from the older
-            # working integration: its reliable path requires ATT responses
-            # even when the characteristic also advertises write-without-response.
+            # working integration: the fallback path uses ATT responses even
+            # when the characteristic also advertises write-without-response.
             require_gatt_response = (
                 force_confirmed_writes
                 or int(sdk_type) in WRITE_ACK_SDK_TYPES
@@ -363,15 +363,15 @@ class DratekTransfer:
                     and "write-without-response" not in write_char.properties
                 )
             )
-            checkpointed_writes = (
+            terminal_barrier_writes = (
                 not force_confirmed_writes
                 and streaming_mode
                 and "write" in write_char.properties
                 and "write-without-response" in write_char.properties
             )
             write_mode = (
-                f"checkpointed burst (GATT response every {ACK_CHECKPOINT_INTERVAL} blocks)"
-                if checkpointed_writes
+                "paced burst with final GATT barrier"
+                if terminal_barrier_writes
                 else "GATT response"
                 if require_gatt_response
                 else "paced write without response"
@@ -401,34 +401,55 @@ class DratekTransfer:
                 end_block = total_blocks if streaming_mode else next_block + 1
                 for block_number in range(next_block, end_block):
                     block_requires_response = (
-                        checkpointed_writes
+                        terminal_barrier_writes
                         and (
                             block_number == next_block
-                            or (block_number + 1) % ACK_CHECKPOINT_INTERVAL == 0
                             or block_number == total_blocks - 1
                         )
-                    ) or (require_gatt_response and not checkpointed_writes)
+                    ) or (require_gatt_response and not terminal_barrier_writes)
                     if (
-                        checkpointed_writes
+                        terminal_barrier_writes
                         and block_requires_response
                         and block_number != next_block
                     ):
-                        await asyncio.sleep(ACK_CHECKPOINT_DRAIN_DELAY)
-                    await self._write_image_block(
-                        client,
-                        write_char,
-                        _next_block(payload, block_size, block_number),
-                        block_number,
-                        require_response=block_requires_response,
-                    )
+                        await asyncio.sleep(FINAL_BLOCK_DRAIN_DELAY)
+                    final_response_missing = False
+                    try:
+                        await self._write_image_block(
+                            client,
+                            write_char,
+                            _next_block(payload, block_size, block_number),
+                            block_number,
+                            require_response=block_requires_response,
+                            operation_timeout=(
+                                FINAL_BLOCK_RESPONSE_TIMEOUT
+                                if streaming_mode and block_number == total_blocks - 1
+                                else GATT_OPERATION_TIMEOUT
+                            ),
+                        )
+                    except TimeoutError:
+                        if not streaming_mode or block_number != total_blocks - 1:
+                            raise
+                        # Several Picksmart controllers consume the final block
+                        # and start refreshing but fail to return the ATT response.
+                        # Repeating it would append duplicate image bytes. Treat
+                        # only this terminal ambiguity as delivered, then still
+                        # wait below for the optional vendor completion packet.
+                        final_response_missing = True
+                        self.log(
+                            "The display did not return the final GATT response, "
+                            "but the complete payload was handed to the controller; "
+                            "waiting for the optional refresh confirmation."
+                        )
                     sent_blocks.add(block_number)
                     if block_number == 0 or block_number % 10 == 0 or len(sent_blocks) == total_blocks:
                         percent = int((len(sent_blocks) / total_blocks) * 100)
-                        delivery = (
-                            "Display acknowledged"
-                            if block_requires_response
-                            else "Bluetooth queued"
-                        )
+                        if final_response_missing:
+                            delivery = "Final block handed off"
+                        elif block_requires_response:
+                            delivery = "Display acknowledged"
+                        else:
+                            delivery = "Bluetooth queued"
                         self.log(
                             f"{delivery} block {block_number + 1}/{total_blocks} "
                             f"({percent}%)."
@@ -440,15 +461,15 @@ class DratekTransfer:
                             responses,
                             timeout=(
                                 OPTIONAL_COMPLETION_TIMEOUT
-                                if require_gatt_response or checkpointed_writes
+                                if require_gatt_response or terminal_barrier_writes
                                 else UNCONFIRMED_WRITE_DRAIN_TIMEOUT
                             ),
                         )
                     except TimeoutError:
                         self.log(
-                            "All image blocks were queued and the Bluetooth connection "
-                            "was kept open for the controller to drain them; no optional "
-                            "05 08 confirmation was sent."
+                            "All image blocks were handed off and the Bluetooth connection "
+                            "was kept open for the controller; no optional 05 08 "
+                            "confirmation was sent."
                         )
                         break
                     if len(response) >= 2 and response[1] == 8:
@@ -579,7 +600,15 @@ class DratekTransfer:
                 return service.uuid, control_char, write_char
         return "-", fallback_control, fallback_write
 
-    async def _write_char(self, client, char, data: bytes, label: str, response: bool | None = None) -> None:
+    async def _write_char(
+        self,
+        client,
+        char,
+        data: bytes,
+        label: str,
+        response: bool | None = None,
+        operation_timeout: float = GATT_OPERATION_TIMEOUT,
+    ) -> None:
         if response is None:
             response = "write" in char.properties
         if label.startswith("block "):
@@ -587,7 +616,7 @@ class DratekTransfer:
         else:
             self.log(f"Write {label}: {_format_bytes(data)}")
         try:
-            async with asyncio.timeout(GATT_OPERATION_TIMEOUT):
+            async with asyncio.timeout(operation_timeout):
                 await client.write_gatt_char(char, data, response=response)
         except TimeoutError as exc:
             raise TimeoutError(
@@ -603,6 +632,7 @@ class DratekTransfer:
         block_number: int,
         *,
         require_response: bool,
+        operation_timeout: float = GATT_OPERATION_TIMEOUT,
     ) -> None:
         max_attempts = 3 if require_response else 1
         for attempt in range(1, max_attempts + 1):
@@ -613,6 +643,7 @@ class DratekTransfer:
                     data,
                     f"block {block_number}",
                     response=require_response,
+                    operation_timeout=operation_timeout,
                 )
                 # A successful ATT response is already the flow-control gate;
                 # adding another delay only slows large displays down.

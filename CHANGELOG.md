@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.165] - 2026-07-31
+
+### Opraveno
+- Log ze skutečného SDK typu `51` potvrdil, že displej poslední blok přijme a začne vykreslovat, i když BlueZ nedoručí ATT odpověď. Tento přesně vymezený timeout posledního bloku už nezmění fyzicky úspěšný přenos na chybu a blok se neposílá znovu.
+- Rychlý stream už nevkládá potvrzovaný blok po každých osmi blocích. Používá potvrzený první blok, tempovaný proud mezilehlých bloků a jedinou závěrečnou GATT bariéru po vyprázdnění fronty.
+- Závěrečná odpověď má samostatnou dvousekundovou lhůtu. Po její ztrátě integrace ještě přijme volitelné potvrzení `05 08`, ale nespouští zbytečný kompletní druhý přenos, který dříve doběhl až k 240sekundové pojistce.
+- Diagnostika rozlišuje skutečné potvrzení od bezpečného předání posledního bloku řadiči (`Final block handed off`).
+
+### Firmware gatewaye
+- Firmware zůstává ve verzi `0.1.47-gateway`; změna opravuje chování BlueZ při přímém přenosu z Home Assistantu.
+
 ## [0.1.164] - 2026-07-31
 
 ### Opraveno

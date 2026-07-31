@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.165
+
+- SDK typ `51` už nekončí chybou, když displej přijme poslední blok a začne vykreslovat, ale BlueZ ztratí pouze jeho ATT odpověď
+- rychlý přenos používá potvrzený první blok, tempované mezilehlé bloky a jednu závěrečnou GATT bariéru místo problematických bariér po osmi blocích
+- závěrečná odpověď čeká maximálně dvě sekundy; její ztráta nezpůsobí opakování posledního bloku ani celého již přijatého obrazu
+- po závěrečném předání se stále krátce čeká na volitelné potvrzení displeje `05 08`
+- firmware gatewaye zůstává `0.1.47-gateway`
+
 ## Novinky ve verzi 0.1.164
 
 - opraven timeout kontrolních bloků `7`, `15`, `23`, `31` a posledního bloku: před potvrzovaným blokem se nyní vyprázdní předchozí dávka BlueZ
