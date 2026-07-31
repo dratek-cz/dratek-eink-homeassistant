@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.154
+
+- opraveno chybné ukončení přenosu hláškou `Unknown error` u displejů, které po posledním vyžádaném bloku neposílají volitelné potvrzení `05 08`
+- řízení toku po jednotlivých požadavcích displeje zůstává zachované, takže se bloky neztrácejí ani u velkých obrazů
+- přímý Bluetooth i firmware gatewaye nyní dokončí přenos po doručení všech bloků a krátce přijmou případné dodatečné potvrzení nebo požadavek na retransmisi
+- panel zobrazuje konkrétní chybový kód a zprávu Home Assistantu místo obecného textu `Unknown error`
+- přiložen nový firmware gatewaye `0.1.44-gateway` pro ESP32 a ESP32-S3
+
 ## Novinky ve verzi 0.1.153
 
 - BLE přenos nyní posílá vždy jen blok, který si displej výslovně vyžádá, takže velké obrazy nepřetékají frontu kolem bloků 11–13

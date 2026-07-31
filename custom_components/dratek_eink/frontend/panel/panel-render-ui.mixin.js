@@ -990,7 +990,19 @@ export const renderUiMixin = {
   },
 
   _message(err) {
-    return err && err.message ? err.message : String(err);
+    const candidates = [
+      err?.body?.message,
+      err?.body?.error,
+      err?.error?.message,
+      typeof err?.error === "string" ? err.error : "",
+      err?.code,
+      err?.message,
+    ].map((value) => String(value || "").trim()).filter(Boolean);
+    const specific = candidates.find((value) => value.toLowerCase() !== "unknown error");
+    if (specific) return specific;
+    if (candidates.length) return candidates[0];
+    const fallback = String(err || "").trim();
+    return fallback && fallback !== "[object Object]" ? fallback : "Neznámá chyba komunikace s Home Assistantem";
   },
 
   _escape(value) {

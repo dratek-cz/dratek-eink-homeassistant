@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.43-gateway";
+static const char* FIRMWARE_VERSION = "0.1.44-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -522,13 +522,17 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
       addLog(log, "Display accepted block " + String(blockNumber + 1) + "/" + String(totalBlocks) + " (" + String(percent) + "%).");
     }
 
-    uint32_t nextTimeout = uniqueSent == totalBlocks ? 30000 : 12000;
+    uint32_t nextTimeout = uniqueSent == totalBlocks ? 2000 : 12000;
     if (!waitForPacket(0x05, packet, nextTimeout)) {
+      if (uniqueSent == totalBlocks) {
+        // The vendor client also completes immediately after the last
+        // requested block. [05 08] is optional on older display firmware.
+        addLog(log, "All requested blocks were delivered; no optional 05 08 confirmation.");
+        break;
+      }
       client->disconnect();
       NimBLEDevice::deleteClient(client);
-      addLog(log, uniqueSent == totalBlocks
-        ? "Timed out waiting for the display's transfer-complete confirmation."
-        : "Timed out waiting for the display to request the next image block.");
+      addLog(log, "Timed out waiting for the display to request the next image block.");
       return false;
     }
   }
@@ -540,7 +544,7 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
     return false;
   }
 
-  addLog(log, "Full-screen image transfer confirmed.");
+  addLog(log, "Full-screen image transfer completed.");
   client->disconnect();
   NimBLEDevice::deleteClient(client);
   addLog(log, "Bluetooth released after display confirmation.");

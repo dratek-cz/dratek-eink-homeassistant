@@ -20,7 +20,7 @@ RGB_LED_COMMAND = 0x30
 FLASH_IDENTIFY_COMMAND = 0x22
 FULL_REFRESH_MODE = 0x01
 BLOCK_REQUEST_TIMEOUT = 12
-TRANSFER_COMPLETE_TIMEOUT = 30
+OPTIONAL_COMPLETION_TIMEOUT = 2
 MAX_BLOCK_REQUEST_RETRIES = 5
 
 
@@ -355,20 +355,33 @@ class DratekTransfer:
                         f"({percent}%)."
                     )
 
-                response = await self._wait_for_next_transfer_response(
-                    responses,
-                    timeout=(
-                        TRANSFER_COMPLETE_TIMEOUT
-                        if len(sent_blocks) == total_blocks
-                        else BLOCK_REQUEST_TIMEOUT
-                    ),
-                )
+                try:
+                    response = await self._wait_for_next_transfer_response(
+                        responses,
+                        timeout=(
+                            OPTIONAL_COMPLETION_TIMEOUT
+                            if len(sent_blocks) == total_blocks
+                            else BLOCK_REQUEST_TIMEOUT
+                        ),
+                    )
+                except TimeoutError:
+                    if len(sent_blocks) != total_blocks:
+                        raise
+                    # The vendor client transitions to ClientImageTransferOK
+                    # immediately after writing the last requested block.
+                    # Some display firmwares additionally send [05 08], while
+                    # others remain silent and start refreshing the panel.
+                    self.log(
+                        "All display-requested image blocks were delivered; "
+                        "this model does not send the optional 05 08 confirmation."
+                    )
+                    break
 
             if len(sent_blocks) != total_blocks:
                 raise RuntimeError(
                     f"Display ended transfer after only {len(sent_blocks)}/{total_blocks} blocks."
                 )
-            self.log("Full-screen image transfer confirmed; releasing Bluetooth.")
+            self.log("Full-screen image transfer completed; releasing Bluetooth.")
 
             if write_notify_enabled:
                 await client.stop_notify(write_char)

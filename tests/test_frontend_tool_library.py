@@ -705,6 +705,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".display-tile.is-uploaded", self.source)
         self.assertIn(".display-uploaded-state", self.source)
 
+    def test_websocket_errors_prefer_specific_backend_details(self):
+        self.assertIn("err?.body?.message", self.source)
+        self.assertIn("err?.body?.error", self.source)
+        self.assertIn('value.toLowerCase() !== "unknown error"', self.source)
+        self.assertIn("Neznámá chyba komunikace s Home Assistantem", self.source)
+
 
 if __name__ == "__main__":
     unittest.main()
