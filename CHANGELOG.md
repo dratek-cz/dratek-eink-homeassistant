@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.169] - 2026-08-01
+
+### Opraveno
+- **Logo v hlavičce panelu a přibalené písmo se nenačítaly.** Adresy obrázků a fontu se skládaly ručně na kořen `/dratek_eink_panel`, jenže od verze 0.1.168 se tento adresář servíruje pod cestou obsahující verzi (`/dratek_eink_panel/<verze>/`). Chyběl jediný segment cesty, takže každý statický soubor pod ním vracel 404 – logo DRATEK.CZ v hlavičce, obrázek v prázdném stavu i písmo Arimo. Samotný panel přitom fungoval dál, takže na příčinu nic neukazovalo. Adresy se nyní odvozují z umístění samotného modulu a nemohou se rozejít s tím, kam backend adresář skutečně připojil. Nový test hlídá, aby žádný soubor panelu kořen cesty nezapisoval natvrdo.
+- **Ikony v náhledu displeje se načítaly pomalu.** Sešly se čtyři příčiny: jediný příznak „probíhá načítání“ serializoval sloty náhledu, takže druhý slot začal až po dokončení prvního – dvě kola načítání a dvě překreslení na jedno vykreslení; souběžné požadavky na stejnou ikonu se neslučovaly a spouštěly dvě čekací smyčky; čekalo se v pevných padesátimilisekundových krocích místo na nejbližší vykreslovací snímek; a mezipaměť si pamatovala i neúspěch, takže ikona, kterou Home Assistant nestihl dodat včas, zmizela z rozvržení natrvalo. Mezipaměť je nyní společná pro celý modul, takže přežije znovuvytvoření panelu, a po prvním náhledu se na pozadí předehřeje sada ikon všech šablon – přepnutí šablony v designeru je má hned na prvním snímku.
+- **Odhad šířky textu byl plošná konstanta a mýlil se o −22 % až +21 %.** Verzálky podceňoval, takže zmenšování textu na šířku panelu ve skutečnosti nefungovalo a nápis „ZAPNUTO“ přetekl přes okraj 272pixelového displeje; naopak řetězce s číslicemi zmenšoval, přestože se vešly. Nahradil jej model po třídách znaků, změřený proti skutečným metrikám písma, přesný na ±5 %. Verzálky se rozpoznávají porovnáním velikosti písmen, takže Á, Č, Ř a Ž se neberou jako malá písmena.
+
+### Změněno
+- **Šablony se přizpůsobují tvaru displeje.** Byly psané jako svislý sloupec, jehož výšky řádků i velikosti písma jsou zlomky výšky panelu – což platí jen pro panel podobně vysoký a úzký, jako byl ten, pro který vznikly. Podporovaná rozlišení jdou od 168×384 po 1360×480, takže na širokém tagu se stejný sloupec mačkal deseti řádky do 128 pixelů: písmo na spodní hranici 6 px a dvě třetiny šířky prázdné. Panely výrazně širší než vysoké se nyní skládají do dvou sloupců – vlevo ikona, název a hlavní údaj, vpravo obsah, patka přes celou šířku. Medián velikosti písma na širokých displejích vzrostl přibližně dvojnásobně (na 1360×480 hlavní údaj ze 45 na 118 px); u panelů na výšku zůstává rozvržení beze změny.
+- **Každá z dvaceti šablon displeje má vlastní podobu.** Renderer uměl jen šest druhů řádků – ikona, titulek, linka, hodnota, seznam, patka – a nic jiného tedy šablona být nemohla: dvacet šablon mělo dohromady jen sedm různých staveb. Fotovoltaika, Obývák, Zabezpečení, Topení a Stav serveru byly rozvržené naprosto stejně a lišily se pouze texty. Přibylo čtrnáct stavebních bloků (sloupcový graf, trendová křivka, vodorovné ukazatele, mezikruží, půlkruhový budík, dlaždice, časová osa, zaškrtávací seznam, sloupcový pruh, dělené poloviny, kalendářní dlaždice, tabule odjezdů, invertovaný pruh a velký údaj s jednotkou) a každá šablona je z nich poskládaná jinak. Indexy proměnných se nemění, takže existující navázání entit fungují dál. Nový test hlídá, aby žádné dvě šablony nesdílely stejnou stavbu.
+
 ## [0.1.168] - 2026-08-01
 
 ### Opraveno

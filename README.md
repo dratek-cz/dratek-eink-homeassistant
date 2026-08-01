@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.169
+
+- každá z dvaceti šablon displeje má vlastní rozvržení – dosud jich dvacet sdílelo jen sedm opakujících se staveb a lišily se pouze texty
+- šablony se přizpůsobují tvaru displeje: široké panely se skládají do dvou sloupců a písmo je na nich zhruba dvakrát větší
+- opraveno logo v hlavičce panelu a přibalené písmo, které se od verze 0.1.168 nenačítaly
+- ikony v náhledu displeje se načítají výrazně rychleji a už nemizí, když je Home Assistant nestihne dodat včas
+
 ## Novinky ve verzi 0.1.168
 
 - opraven červený lem kolem černého textu na červené ploše, který se objevil ve verzi 0.1.167
