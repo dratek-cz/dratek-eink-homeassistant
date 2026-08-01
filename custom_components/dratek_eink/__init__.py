@@ -17,10 +17,14 @@ from .transfer import DratekTransfer
 
 _LOGGER = logging.getLogger(__name__)
 PANEL_URL_PATH = "dratek-eink"
-PANEL_STATIC_PATH = f"/{DOMAIN}_panel"
-OVERVIEW_CARD_MODULE_URL = (
-    f"{PANEL_STATIC_PATH}/dratek-eink-overview-card.js?v={PANEL_VERSION}"
-)
+# The version belongs in the path, not in a ?v= query on the entry file alone.
+# dratek-eink-panel.js imports its mixins with plain relative specifiers, and those
+# requests carry no query, so a browser could keep serving mixins from an earlier
+# release while the entry file was fresh - the panel then reported an old version
+# in its header and ran old code against a new backend. A versioned prefix makes
+# every URL below it new on each release, at any import depth.
+PANEL_STATIC_PATH = f"/{DOMAIN}_panel/{PANEL_VERSION}"
+OVERVIEW_CARD_MODULE_URL = f"{PANEL_STATIC_PATH}/dratek-eink-overview-card.js"
 
 SEND_TEXT_SCHEMA = vol.Schema(
     {
@@ -117,7 +121,7 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
         frontend_url_path=PANEL_URL_PATH,
         sidebar_title="DRATEK eInk",
         sidebar_icon="mdi:tag-multiple-outline",
-        module_url=f"{PANEL_STATIC_PATH}/dratek-eink-panel.js?v={PANEL_VERSION}",
+        module_url=f"{PANEL_STATIC_PATH}/dratek-eink-panel.js",
         embed_iframe=False,
         require_admin=False,
     )

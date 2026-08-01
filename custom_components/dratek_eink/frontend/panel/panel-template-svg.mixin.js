@@ -536,20 +536,18 @@ export const templateSvgMixin = {
   // Rasterizes the SVG at exactly the panel's resolution and quantizes it to the
   // three colors the hardware can actually show.
   _quantizeEinkPixel(red, green, blue) {
-    // Subpixel font antialiasing can produce reddish edge pixels even for text
-    // whose requested fill is pure black. Only preserve red when it is strongly
-    // dominant; all neutral and weakly tinted edge pixels are classified solely
-    // by luminance, so black glyphs cannot acquire a red halo.
-    const redDominance = red - Math.max(green, blue);
-    const intentionalRed = red >= 105
-      && redDominance >= 52
-      && green <= 145
-      && blue <= 145;
-    // Must stay equal to BWR_RED in render.py, otherwise a backend rendered
-    // automatic update and a panel rendered manual send show different reds.
-    if (intentionalRed) return [220, 20, 12];
-    const luminance = (red * 299 + green * 587 + blue * 114) / 1000;
-    return luminance < 168 ? [0, 0, 0] : [255, 255, 255];
+    // Bright pixels are white; among the dark ones, a bright red channel means
+    // red. Antialiasing between a black glyph and a red area lands on dark warm
+    // pixels such as rgb(150, 20, 15) - those stay black here, which is what
+    // keeps black text from picking up a red rim.
+    //
+    // Must stay identical to bwr_masks in render.py, thresholds included, or a
+    // panel-rendered manual send and a backend-rendered automatic update put
+    // different pixels on the same display.
+    const luminance = (red * 38 + green * 75 + blue * 15) >> 7;
+    if (luminance >= 161) return [255, 255, 255];
+    // BWR_RED in render.py.
+    return red >= 161 ? [220, 20, 12] : [0, 0, 0];
   },
 
   async _rasterizeDisplayTemplateSvg(templates, width, height, layout = "single") {

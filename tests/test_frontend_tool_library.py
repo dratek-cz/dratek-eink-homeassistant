@@ -394,11 +394,15 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('template_config: this._displayTemplateDraftPayload?.(device)', self.source)
 
     def test_template_quantization_does_not_create_red_text_halos(self):
+        # A pixel is red only when its red channel is bright and the pixel is too
+        # dark to be white. Any rule that instead asks whether red *dominates*
+        # green and blue also accepts the antialiased edge of a black glyph on
+        # red, which is what put a red rim around black text in 0.1.167.
         self.assertIn("_quantizeEinkPixel(red, green, blue)", self.source)
-        self.assertIn("const redDominance = red - Math.max(green, blue);", self.source)
-        self.assertIn("redDominance >= 52", self.source)
-        self.assertIn("const luminance = (red * 299 + green * 587 + blue * 114) / 1000;", self.source)
-        self.assertIn("return luminance < 168 ? [0, 0, 0] : [255, 255, 255];", self.source)
+        self.assertIn("const luminance = (red * 38 + green * 75 + blue * 15) >> 7;", self.source)
+        self.assertIn("if (luminance >= 161) return [255, 255, 255];", self.source)
+        self.assertIn("return red >= 161 ? [220, 20, 12] : [0, 0, 0];", self.source)
+        self.assertNotIn("redDominance", self.source)
         self.assertNotIn("redDistance < blackDistance && redDistance < whiteDistance", self.source)
 
     def test_display_settings_supports_inline_rename_and_main_previews_have_no_shadow(self):

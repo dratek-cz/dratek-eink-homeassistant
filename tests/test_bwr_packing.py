@@ -16,7 +16,7 @@ import sys
 import types
 import unittest
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,11 +49,10 @@ def reference_classify(r: int, g: int, b: int) -> str:
     this rule, so the backend has to agree pixel for pixel. Keeping the JS logic
     transcribed here means a change on either side shows up as a failure.
     """
-    red_dominance = r - max(g, b)
-    if r >= 105 and red_dominance >= 52 and g <= 145 and b <= 145:
-        return "red"
-    luminance = (r * 299 + g * 587 + b * 114) / 1000
-    return "black" if luminance < 168 else "white"
+    luminance = (r * 38 + g * 75 + b * 15) >> 7
+    if luminance >= 161:
+        return "white"
+    return "red" if r >= 161 else "black"
 
 
 def reference_quantize(image: Image.Image) -> Image.Image:
@@ -151,6 +150,59 @@ class BwrClassificationTests(unittest.TestCase):
             )
         ]
         self.assertFalse(any(overlap))
+
+    def test_antialiased_black_glyphs_on_red_keep_a_black_edge(self):
+        # 0.1.167 classified a pixel as red whenever red dominated green and blue,
+        # which is exactly what the antialiased edge of a black glyph over a red
+        # area looks like. Every glyph on red came back with a red rim around it.
+        for pixel in ((150, 20, 15), (110, 15, 10), (150, 90, 70), (160, 40, 30)):
+            with self.subTest(pixel=pixel):
+                self.assertEqual("black", reference_classify(*pixel))
+
+        def dominance_rule(r: int, g: int, b: int) -> str:
+            """The 0.1.167 rule this test exists to keep out."""
+            if r >= 105 and (r - max(g, b)) >= 52 and g <= 145 and b <= 145:
+                return "red"
+            return "black" if (r * 299 + g * 587 + b * 114) / 1000 < 168 else "white"
+
+        image = Image.new("RGB", (296, 128), (220, 20, 12))
+        draw = ImageDraw.Draw(image)
+        draw.text((10, 40), "Teplota 21,5", font=render.load_font(30, True), fill=(0, 0, 0))
+        quantised = render.quantize_bwr_preview(image)
+        colours = {quantised.getpixel((x, y)) for y in range(128) for x in range(296)}
+        self.assertLessEqual(colours, {(220, 20, 12), (0, 0, 0), (255, 255, 255)})
+
+        # Antialiased glyph edges are the only pixels the two rules disagree on,
+        # and every one of them is a pixel that traces a letter. Under the shipped
+        # rule they must be black; the dominance rule turned them all red, which
+        # is the rim users reported.
+        source = image.convert("RGB").load()
+        edge_pixels = [
+            source[x, y]
+            for y in range(128)
+            for x in range(296)
+            if dominance_rule(*source[x, y]) == "red"
+            and reference_classify(*source[x, y]) != "red"
+        ]
+        self.assertGreater(
+            len(edge_pixels), 100, "the fixture stopped producing antialiased edges"
+        )
+        for pixel in edge_pixels[:50]:
+            self.assertEqual("black", reference_classify(*pixel), pixel)
+
+    def test_the_panel_and_the_backend_share_one_rule(self):
+        # The panel quantises what it sends; the backend quantises automatic
+        # updates. A drift between them puts different pixels on one display.
+        source = (
+            COMPONENT / "frontend" / "panel" / "panel-template-svg.mixin.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("const luminance = (red * 38 + green * 75 + blue * 15) >> 7;", source)
+        self.assertIn("if (luminance >= 161) return [255, 255, 255];", source)
+        self.assertIn("return red >= 161 ? [220, 20, 12] : [0, 0, 0];", source)
+        self.assertEqual((38, 75, 15), render.BWR_LUMA_WEIGHTS)
+        self.assertEqual(128, render.BWR_LUMA_SCALE)
+        self.assertEqual(161, render.BWR_WHITE_THRESHOLD)
+        self.assertEqual(161, render.BWR_RED_MIN)
 
     def test_unaligned_widths_do_not_take_the_row_padded_path(self):
         # 212 is not a multiple of 8, so mode "1" row padding would corrupt the

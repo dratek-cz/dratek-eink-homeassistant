@@ -15,15 +15,19 @@ from .const import DEVICE_SIZES
 # classify a pixel identically; when the two rules drifted apart they disagreed on
 # 16.6 % of the RGB cube, which is why a preview could never match the panel.
 #
-# Subpixel font antialiasing tints the edge of black glyphs reddish, so a pixel
-# only counts as red when red is strongly dominant. Everything else is decided by
-# luminance alone and therefore cannot pick up a red halo.
-BWR_LUMA_WEIGHTS = (299, 587, 114)  # per mille, so the divisor below is 1000
-BWR_LUMA_SCALE = 1000
-BWR_WHITE_THRESHOLD = 168
-BWR_RED_MIN = 105
-BWR_RED_DOMINANCE = 52
-BWR_RED_MAX_OTHER = 145
+# A pixel is red only when the red channel is bright AND the pixel is too dark to
+# be white. That second half is what keeps glyph edges black: antialiasing between
+# a black glyph and a red area lands on dark warm pixels like rgb(150, 20, 15),
+# and those stay black because their red channel never clears the threshold.
+#
+# 0.1.167 briefly replaced this with a "red is dominant over green and blue" test,
+# which reclassified 2.5 % of the RGB cube as red and drew a red rim around every
+# black glyph sitting on red. The dominance test is not usable here: it accepts
+# any dark warm pixel, and antialiasing produces those by the thousand.
+BWR_LUMA_WEIGHTS = (38, 75, 15)  # summing to 128, so the divisor below is a shift
+BWR_LUMA_SCALE = 128
+BWR_WHITE_THRESHOLD = 161  # ">= 161" is the old "> 160"
+BWR_RED_MIN = 161  # ">= 161" is the old "> 160"
 BWR_WHITE = (255, 255, 255)
 BWR_RED = (220, 20, 12)
 BWR_BLACK = (0, 0, 0)
@@ -130,9 +134,9 @@ def _luma_plane(red: Image.Image, green: Image.Image, blue: Image.Image) -> Imag
 def bwr_masks(image: Image.Image) -> tuple[Image.Image, Image.Image]:
     """Return the bilevel (white, red) masks shared by preview and packing.
 
-    Mirrors _quantizeEinkPixel in panel-template-svg.mixin.js exactly: a pixel is
-    red only when red is strongly dominant over both other channels, otherwise it
-    is decided by luminance alone. Red wins over white, so the masks never overlap.
+    Mirrors _quantizeEinkPixel in panel-template-svg.mixin.js exactly: a bright
+    pixel is white, and among the remaining dark pixels the ones with a bright red
+    channel are red. White wins over red, so the masks never overlap.
 
     Doing this with whole-image operations instead of a Python pixel loop keeps the
     result identical while running roughly an order of magnitude faster, which
@@ -140,26 +144,15 @@ def bwr_masks(image: Image.Image) -> tuple[Image.Image, Image.Image]:
     """
     rgb = image.convert("RGB")
     red_band, green_band, blue_band = rgb.split()
-    # ImageChops.lighter is a per-pixel max; subtract clamps at 0, which is fine
-    # because the dominance test only accepts positive differences anyway.
-    dominance = ImageChops.subtract(
-        red_band, ImageChops.lighter(green_band, blue_band)
-    )
-    red = ImageChops.logical_and(
-        ImageChops.logical_and(
-            red_band.point(lambda v: 255 if v >= BWR_RED_MIN else 0, mode="1"),
-            dominance.point(lambda v: 255 if v >= BWR_RED_DOMINANCE else 0, mode="1"),
-        ),
-        ImageChops.logical_and(
-            green_band.point(lambda v: 255 if v <= BWR_RED_MAX_OTHER else 0, mode="1"),
-            blue_band.point(lambda v: 255 if v <= BWR_RED_MAX_OTHER else 0, mode="1"),
-        ),
-    )
-    # floor(x / 1000) >= 168 is exactly x >= 168000, so the integer divide above
-    # loses nothing against the panel's floating point comparison.
     luma = _luma_plane(red_band, green_band, blue_band).convert("L")
     bright = luma.point(lambda v: 255 if v >= BWR_WHITE_THRESHOLD else 0, mode="1")
-    return ImageChops.logical_and(bright, ImageChops.invert(red)), red
+    # White wins the overlap, exactly as the old per-pixel loop did by clearing
+    # red_bit whenever white_bit was already set.
+    red = ImageChops.logical_and(
+        red_band.point(lambda v: 255 if v >= BWR_RED_MIN else 0, mode="1"),
+        ImageChops.invert(bright),
+    )
+    return bright, red
 
 
 def quantize_bwr_preview(image: Image.Image) -> Image.Image:
