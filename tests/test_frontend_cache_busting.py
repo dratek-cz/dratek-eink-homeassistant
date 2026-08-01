@@ -25,6 +25,15 @@ INIT_SOURCE = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
 FRONTEND = COMPONENT / "frontend"
 
 
+def _without_comment_lines(source: str) -> str:
+    # Only whole-line comments are dropped. Trimming to the first "//" anywhere
+    # would cut into the panel's CSS template literals, which are full of https://
+    # URLs, and could hide the very string this scan looks for.
+    return "\n".join(
+        line for line in source.splitlines() if not line.lstrip().startswith("//")
+    )
+
+
 def _assigned_value(name: str) -> ast.AST:
     tree = ast.parse(INIT_SOURCE)
     for node in tree.body:
@@ -50,6 +59,23 @@ class FrontendCacheBustingTests(unittest.TestCase):
         self.assertIsNotNone(module_url, "module_url is not passed to the panel")
         self.assertNotIn("?v=", module_url.group(1))
         self.assertIn("PANEL_STATIC_PATH", module_url.group(1))
+
+    def test_images_and_fonts_are_resolved_relative_to_the_module(self) -> None:
+        # _frontendAssetUrl used to build "/dratek_eink_panel/<file>" by hand,
+        # which is exactly one segment short of where the files are served once
+        # the version moved into the prefix. Every image and font below it 404'd -
+        # the header logo disappeared and the bundled Arimo font never loaded -
+        # while the panel itself kept working, so nothing pointed at the cause.
+        # Resolving against import.meta.url cannot drift from the real mount.
+        for path in sorted(FRONTEND.rglob("*.js")):
+            with self.subTest(file=path.name):
+                self.assertNotIn(
+                    "/dratek_eink_panel",
+                    _without_comment_lines(path.read_text(encoding="utf-8")),
+                    "an asset URL hard-codes the panel root instead of resolving one",
+                )
+        source = (FRONTEND / "panel" / "panel-render-ui.mixin.js").read_text(encoding="utf-8")
+        self.assertIn("import.meta.url", source)
 
     def test_panel_modules_use_relative_imports_below_that_path(self) -> None:
         # The versioned prefix only helps while every import stays relative to it.

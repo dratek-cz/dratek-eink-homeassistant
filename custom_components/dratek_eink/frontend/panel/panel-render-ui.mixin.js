@@ -2,11 +2,17 @@ import { DRATEK_EINK_VERSION } from "./panel-constants.js";
 
 export const renderUiMixin = {
 
+  // The frontend directory is served under a versioned prefix
+  // (/dratek_eink_panel/<version>/), so the hard-coded "/dratek_eink_panel" root
+  // this used to build dropped the version segment and every asset below it 404'd
+  // - which is why the header logo stopped appearing and the bundled Arimo font
+  // never loaded. Resolving against this module's own URL cannot drift from
+  // wherever the backend actually mounted the directory, at any version, and it
+  // keeps working in the test harness where the files are served from the repo.
   _frontendAssetUrl(path) {
-    const root = window.location.pathname.startsWith("/tests/")
-      ? "/custom_components/dratek_eink/frontend"
-      : "/dratek_eink_panel";
-    return `${root}/${String(path || "").replace(/^\/+/, "")}?v=${DRATEK_EINK_VERSION}`;
+    const asset = new URL(`../${String(path || "").replace(/^\/+/, "")}`, import.meta.url);
+    asset.searchParams.set("v", DRATEK_EINK_VERSION);
+    return asset.href;
   },
 
   _render() {
