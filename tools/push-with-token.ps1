@@ -57,6 +57,14 @@ $tempDir = (Get-Item -LiteralPath $tempDir).FullName
 $targetFolder = Join-Path $tempDir "dratek_eink"
 New-Item -ItemType Directory -Path $targetFolder | Out-Null
 Copy-Item -Recurse -Path (Join-Path $repoRoot "custom_components\dratek_eink\*") -Destination $targetFolder
+# Bytecode from the developer machine is useless to users - Home Assistant
+# recompiles for its own interpreter - and a stale .pyc only adds weight to
+# every download. Copy-Item has no reliable recursive -Exclude, so prune after.
+Get-ChildItem -LiteralPath $targetFolder -Recurse -Directory -Filter "__pycache__" |
+    Sort-Object { $_.FullName.Length } -Descending |
+    Remove-Item -Recurse -Force
+Get-ChildItem -LiteralPath $targetFolder -Recurse -File -Include "*.pyc", "*.pyo" |
+    Remove-Item -Force
 
 $zipPath = Join-Path $repoRoot "dratek_eink.zip"
 if (Test-Path $zipPath) { Remove-Item -Force $zipPath }

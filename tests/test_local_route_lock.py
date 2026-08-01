@@ -9,13 +9,19 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+import sys
 import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from websocket_sources import websocket_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENT = ROOT / "custom_components" / "dratek_eink"
 CONST_SOURCE = (COMPONENT / "const.py").read_text(encoding="utf-8")
-WEBSOCKET_SOURCE = (COMPONENT / "websocket.py").read_text(encoding="utf-8")
+# The handlers are spread across ws_*.py, so check the whole websocket layer.
+WEBSOCKET_SOURCE = websocket_source()
 AUTOMATION_SOURCE = (COMPONENT / "automation.py").read_text(encoding="utf-8")
 STORAGE_SOURCE = (COMPONENT / "project_storage.py").read_text(encoding="utf-8")
 PANEL_SOURCE = (

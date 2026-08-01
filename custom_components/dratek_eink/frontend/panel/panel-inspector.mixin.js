@@ -263,15 +263,8 @@ export const inspectorMixin = {
       });
     });
     this.shadowRoot.querySelector("[data-display-template-search]")?.addEventListener("input", (event) => {
-      const cursor = event.target.selectionStart;
       this._displayTemplateSearchQuery = event.target.value;
-      this._render();
-      this._paint();
-      window.requestAnimationFrame(() => {
-        const input = this.shadowRoot.querySelector("[data-display-template-search]");
-        input?.focus();
-        if (Number.isFinite(cursor)) input?.setSelectionRange(cursor, cursor);
-      });
+      this._renderKeepingSearchFocus();
     });
     this.shadowRoot.querySelectorAll("[data-display-template-category]").forEach((button) => button.addEventListener("click", () => {
       this._displayTemplateCategory = button.dataset.displayTemplateCategory || "prepared";
@@ -312,7 +305,25 @@ export const inspectorMixin = {
       this._displaySettingsView = stayInCatalog ? "templates" : "designer";
       this._render();
       this._paint();
-      this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
+      // Assigning a template while staying in the catalog - the preview's
+      // quick-send, or a drag-and-drop drop onto the device preview - keeps the
+      // user on the same page, so their scroll position must not move. Only
+      // switching into the designer is a real page change worth resetting.
+      if (!stayInCatalog) {
+        this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
+      }
+    };
+    // A large display already carrying one full-size template has no room for a
+    // second without the user choosing to shrink it or replace it outright, so
+    // both the "configure" button and the preview's quick-send have to detect
+    // that and defer to the conflict dialog instead of silently overwriting.
+    const hasTemplateSlotConflict = (templateId) => {
+      const device = this._device();
+      const size = this._devicePreviewSize(device);
+      const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
+      const assigned = this._assignedDisplayTemplates(device);
+      const primaryIsLarge = this._displayTemplateSizes?.primary !== "small";
+      return largeDisplay && assigned.length === 1 && primaryIsLarge && !assigned.includes(templateId);
     };
     this.shadowRoot.querySelectorAll("[data-display-template-open]").forEach((button) => {
       button.addEventListener("keydown", (event) => {
@@ -322,18 +333,36 @@ export const inspectorMixin = {
       });
       button.addEventListener("click", () => {
       const templateId = button.dataset.displayTemplateOpen || "";
-      const device = this._device();
-      const size = this._devicePreviewSize(device);
-      const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
-      const assigned = this._assignedDisplayTemplates(device);
-      const primaryIsLarge = this._displayTemplateSizes?.primary !== "small";
-      if (largeDisplay && assigned.length === 1 && primaryIsLarge && !assigned.includes(templateId)) {
+      if (hasTemplateSlotConflict(templateId)) {
         this._pendingDisplayTemplateConflict = { templateId };
         this._render();
         this._paint();
         return;
       }
       openDisplayTemplate(templateId);
+      });
+    });
+    // Clicking a template's preview thumbnail puts that template on the display
+    // right away instead of opening the designer - the designer stays reachable
+    // through the "Nastavit šablonu" button next to it for anyone who wants to
+    // adjust bindings first.
+    this.shadowRoot.querySelectorAll("[data-display-template-quick-send]").forEach((tile) => {
+      tile.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        tile.click();
+      });
+      tile.addEventListener("click", async () => {
+        const templateId = tile.dataset.displayTemplateQuickSend || "";
+        if (!templateId) return;
+        if (hasTemplateSlotConflict(templateId)) {
+          this._pendingDisplayTemplateConflict = { templateId, stayInCatalog: true, autoSend: true };
+          this._render();
+          this._paint();
+          return;
+        }
+        openDisplayTemplate(templateId, null, true);
+        await this._sendDisplayTemplatePreview();
       });
     });
     this.shadowRoot.querySelectorAll("[data-display-template-drag]").forEach((card) => {
@@ -408,7 +437,7 @@ export const inspectorMixin = {
       const target = Number(card?.querySelector("[data-template-replace-target]")?.value);
       openDisplayTemplate(button.dataset.displayTemplateReplace || "", Number.isInteger(target) ? target : 0);
     }));
-    this.shadowRoot.querySelectorAll("[data-template-conflict-action]").forEach((button) => button.addEventListener("click", () => {
+    this.shadowRoot.querySelectorAll("[data-template-conflict-action]").forEach((button) => button.addEventListener("click", async () => {
       const pendingTemplateId = this._pendingDisplayTemplateConflict?.templateId || "";
       const action = button.dataset.templateConflictAction;
       if (!pendingTemplateId || action === "cancel") {
@@ -417,17 +446,24 @@ export const inspectorMixin = {
         this._paint();
         return;
       }
+      // The quick-send preview click still has to send once the user resolves
+      // the conflict, otherwise choosing "shrink" or "replace" here would leave
+      // the template assigned but never actually written to the display.
+      const stayInCatalog = this._pendingDisplayTemplateConflict?.stayInCatalog === true;
+      const autoSend = this._pendingDisplayTemplateConflict?.autoSend === true;
       this._displayTemplateSizes ||= { primary: "large", secondary: "small" };
       if (action === "shrink") {
         this._displayTemplateSizes.primary = "small";
         this._displayTemplateSizes.secondary = "small";
-        openDisplayTemplate(pendingTemplateId, null, this._pendingDisplayTemplateConflict?.stayInCatalog === true);
+        openDisplayTemplate(pendingTemplateId, null, stayInCatalog);
+        if (autoSend) await this._sendDisplayTemplatePreview();
         return;
       }
       if (action === "replace") {
         this._displayTemplateSizes.primary = "large";
         this._displayTemplateSizes.secondary = "small";
-        openDisplayTemplate(pendingTemplateId, 0, this._pendingDisplayTemplateConflict?.stayInCatalog === true);
+        openDisplayTemplate(pendingTemplateId, 0, stayInCatalog);
+        if (autoSend) await this._sendDisplayTemplatePreview();
       }
     }));
     this.shadowRoot.querySelectorAll("[data-template-orientation]").forEach((button) => button.addEventListener("click", () => {

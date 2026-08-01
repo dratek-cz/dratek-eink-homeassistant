@@ -2,6 +2,23 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.167] - 2026-08-01
+
+### Opraveno
+- **Registrace osmi websocket příkazů, ztracená od verze 0.1.131, je obnovena.** Odeslání šablony přes gateway, ukládání a načítání projektů a vlastní prvky byly po třicet vydání nedostupné, aniž by to bylo v UI vidět. Příkazy jsou nyní registrované a pokryté regresním testem, který stejný typ výpadku odhalí, kdyby se opakoval.
+- Kvantizace na černou/bílou/červenou byla mezi náhledem v panelu a zápisem prováděným na pozadí (backend) nesourodá – lišila se až na 16,6 % barevného prostoru. Obě strany nyní používají stejné pravidlo, ověřené na celé 24bitové barevné krychli.
+- Náhled šablony v editoru se skládal jako samostatné HTML vykreslení, takže se mohl od skutečně odeslaného obrázku lišit. Nyní vzniká ze stejného SVG, které se posílá na displej.
+- Ruční odeslání částečného překreslení a odeslání textu (přes panel i přes službu `dratek_eink.send_text`) nově zruší naplánovanou automatickou aktualizaci daného displeje – dřív mohla během několika sekund přepsat právě odeslaný obsah.
+- Automatické opakování zápisu po dočasné nedostupnosti Bluetooth přenosové cesty drželo zámek přenosové cesty po celou dobu čekání, což blokovalo zápis na ostatní displeje sdílející stejnou cestu. Zámek se nyní drží jen po dobu jednoho pokusu.
+- Vykreslování a balení obrázku pro displej běželo přímo ve smyčce událostí Home Assistanta na dvou místech (odeslání obrázku, zpracování nahrané ikony/vrstev vlastního prvku), což mohlo na chvíli zpomalit celou instanci. Nyní běží na pozadí.
+
+### Změněno
+- **Vykreslování obrazu do černé/bílé/červené je zrychlené přibližně 8–18×** díky přepisu z pixel-po-pixelu smyčky na operace nad celým obrázkem; výstup zůstává bajtově identický.
+- Interní modul `websocket.py` (dříve přes 2000 řádků) je rozdělený podle domén do samostatných souborů (zařízení, gateway, fronta, projekty, vlastní prvky, odesílání) – bez dopadu na chování. Přenos po částech i řízení dokončení přenosu z verzí 0.1.152–0.1.166 zůstávají beze změny.
+- Instalační balíček HACS již neobsahuje zkompilovaný Python bytecode ani duplicitní kopie firmwaru gateway; velikost balíčku integrace znatelně klesla.
+- Kliknutí na náhled šablony v katalogu šablonu rovnou odešle na displej, místo aby otevřelo její nastavení. Tlačítko „Nastavit šablonu“ pro doladění zůstává.
+- Vyhledávání v katalogu šablon už při psaní neposouvá stránku nahoru; sdílí stejný mechanismus udržení pozice jako ostatní vyhledávací pole v panelu.
+
 ## [0.1.166] - 2026-07-31
 
 ### Opraveno a zrychleno

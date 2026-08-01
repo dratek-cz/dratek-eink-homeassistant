@@ -741,7 +741,7 @@ export const devicesMixin = {
             <div class="devices-toolbar">
               <div class="device-search">
                 <ha-icon icon="mdi:magnify"></ha-icon>
-                <input type="search" data-display-template-search value="${this._escape(this._displayTemplateSearchQuery || "")}" placeholder="Hledat šablonu nebo údaj…" aria-label="Hledat šablony">
+                <input type="search" id="displayTemplateSearch" data-display-template-search value="${this._escape(this._displayTemplateSearchQuery || "")}" placeholder="Hledat šablonu nebo údaj…" aria-label="Hledat šablony">
               </div>
               <div class="display-template-categories" aria-label="Kategorie šablon">
                 ${categories.map((category) => `<button type="button" class="${activeCategory === category.id ? "is-active" : ""}" data-display-template-category="${category.id}" aria-pressed="${activeCategory === category.id}"><ha-icon icon="mdi:${category.icon}"></ha-icon>${category.title}</button>`).join("")}
@@ -761,7 +761,7 @@ export const devicesMixin = {
                   <span class="display-template-guide" role="tooltip"><strong>Jak nastavit ${this._escape(template.title)}</strong><ol>${guide.map((step) => `<li>${this._escape(step)}</li>`).join("")}</ol></span>
                 </span>
               </header>
-              <div class="display-template-tile-preview is-${orientation}" data-display-template-open="${template.id}" role="button" tabindex="0" aria-label="Umístit šablonu ${this._escape(template.title)} na displej">
+              <div class="display-template-tile-preview is-${orientation}" data-display-template-quick-send="${template.id}" role="button" tabindex="0" aria-label="Odeslat šablonu ${this._escape(template.title)} na displej">
                 <span class="display-template-drag-handle"><ha-icon icon="mdi:drag"></ha-icon>Přetáhnout na displej</span>
                 <span class="display-template-preview">${this._renderDisplayTemplateCatalogPreview(template, orientation)}</span>
               </div>
@@ -1128,9 +1128,20 @@ export const devicesMixin = {
       preview_image: image,
       preview_updated_at: Date.now(),
     };
-    this._devicePreviewImages?.delete(address);
-    this._devicePreviewRequests?.delete(address);
+    this._forgetCachedDisplayImages(address);
     this._saveCachedDeviceDrafts?.();
+  },
+
+  // Everything this panel remembers about how a display currently looks. A fresh
+  // upload replaces the picture on the hardware, so every cached rendering of the
+  // previous one has to go with it or the cards keep showing a stale image.
+  _forgetCachedDisplayImages(address) {
+    const key = String(address || "").toUpperCase();
+    if (!key) return;
+    this._devicePreviewImages?.delete(key);
+    this._devicePreviewRequests?.delete(key);
+    if (this._ditheredPreviewCache) delete this._ditheredPreviewCache[key];
+    if (this._ditheredPreviewPending) delete this._ditheredPreviewPending[key];
   },
 
   async _captureCurrentDisplayTemplatePreview() {
@@ -1316,6 +1327,9 @@ export const devicesMixin = {
     const autoSlotWidth = layout === "side-by-side" ? sourceWidth / 2 : sourceWidth;
     const autoSlotHeight = layout === "stacked" ? sourceHeight / 2 : sourceHeight;
     const autoFormat = autoSlotWidth >= autoSlotHeight ? "wide" : "narrow";
+    // When the template covers the whole screen the preview can be laid out at
+    // the panel's real pixel size, which is what the sent bitmap uses.
+    const primaryFillsDisplay = autoFit || !large400Layout;
     const ditherKey = autoFit ? this._escape(JSON.stringify({
       t: [template?.id || null, large400Layout && layout !== "single" ? (secondaryTemplate?.id || null) : null],
       o: orientation,
@@ -1333,8 +1347,8 @@ export const devicesMixin = {
               <div class="designer-device-bezel ${pe29Layout ? "designer-device-pe29" : ""} ${large400Layout ? "designer-device-large400" : ""} designer-device-landscape">${large400Layout ? `<span class="device-large400-top-band"></span><span class="device-large400-bottom-band"><span class="device-large400-label">${this._renderDeviceBarcode(address, true)}<span class="device-large400-mac">${this._escape(address)}</span></span></span>` : pe29Layout ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, false)}</span>` : `<span class="designer-device-code">${this._escape(physicalCode)}</span>`}</div>
               <div class="designer-device-screen template-designer-screen">
                 <div class="template-device-layout layout-${layout} ${large400Layout ? "is-large-display" : "is-small-display"}">
-                  ${this._renderDisplayTemplateSurface(template, large400Layout ? (autoFit ? autoFormat : (this._displayTemplateFormats?.primary || "narrow")) : (orientation === "landscape" ? "wide" : "narrow"), true, "primary", autoFit || !large400Layout, large400Layout ? (this._displayTemplateSizes?.primary || "large") : "large", autoFit)}
-                  ${large400Layout && layout !== "single" ? this._renderDisplayTemplateSurface(secondaryTemplate, autoFit ? autoFormat : (this._displayTemplateFormats?.secondary || "narrow"), false, "secondary", autoFit, "small", autoFit) : ""}
+                  ${this._renderDisplayTemplateSurface(template, large400Layout ? (autoFit ? autoFormat : (this._displayTemplateFormats?.primary || "narrow")) : (orientation === "landscape" ? "wide" : "narrow"), true, "primary", autoFit || !large400Layout, large400Layout ? (this._displayTemplateSizes?.primary || "large") : "large", autoFit, primaryFillsDisplay ? autoSlotWidth : 0, primaryFillsDisplay ? autoSlotHeight : 0)}
+                  ${large400Layout && layout !== "single" ? this._renderDisplayTemplateSurface(secondaryTemplate, autoFit ? autoFormat : (this._displayTemplateFormats?.secondary || "narrow"), false, "secondary", autoFit, "small", autoFit, autoFit ? autoSlotWidth : 0, autoFit ? autoSlotHeight : 0) : ""}
                 </div>
                 ${autoFit ? `<canvas class="template-dithered-preview" data-dithered-preview="${ditherKey}" data-dithered-address="${this._escape(address)}" width="${sourceWidth}" height="${sourceHeight}"></canvas>` : ""}
               </div>
@@ -1677,14 +1691,15 @@ export const devicesMixin = {
     </div>`;
   },
 
-  _renderDisplayTemplateSurface(template, format, primary = false, slot = "primary", fillDisplay = false, templateSize = "small", autoFit = false) {
+  _renderDisplayTemplateSurface(template, format, primary = false, slot = "primary", fillDisplay = false, templateSize = "small", autoFit = false, slotWidth = 0, slotHeight = 0) {
     const orientation = format === "wide" ? "landscape" : "portrait";
-    const preview = this._renderDisplayTemplatePreview(template);
-    const orientedPreview = orientation === "landscape"
-      ? preview.replace('class="tpl ', 'class="tpl tpl-landscape ')
-      : preview;
-    const templateWidth = orientation === "landscape" ? 296 : 150;
-    const templateHeight = orientation === "landscape" ? 150 : 296;
+    // Lay the preview out at the panel's own pixel size whenever it is known.
+    // _layoutTemplateSvg derives padding and font sizes from these numbers, so
+    // guessing them means the preview shrinks text differently than the panel.
+    const nativeWidth = Math.round(Number(slotWidth) || 0);
+    const nativeHeight = Math.round(Number(slotHeight) || 0);
+    const templateWidth = nativeWidth > 0 ? nativeWidth : (orientation === "landscape" ? 296 : 150);
+    const templateHeight = nativeHeight > 0 ? nativeHeight : (orientation === "landscape" ? 150 : 296);
     const placement = this._templateCanvasPlacements?.[slot] || { x: 9, y: 9 };
     const placementX = fillDisplay ? Math.max(0, Math.min(4, Number(placement.x || 0))) : Number(placement.x || 0);
     const placementY = fillDisplay ? Math.max(0, Math.min(4, Number(placement.y || 0))) : Number(placement.y || 0);
@@ -1693,7 +1708,7 @@ export const devicesMixin = {
       <div class="display-template-surface template-canvas-item size-${templateSize === "large" ? "large" : "small"} format-${format === "wide" ? "wide" : "narrow"} is-${orientation} ${selected ? "is-selected" : ""} ${autoFit ? "is-auto-fit" : ""}" data-preview-template="${template.id}" data-template-canvas-slot="${slot}" ${autoFit ? "" : `tabindex="0" role="button" aria-label="Šablona ${this._escape(template.title)}. Kliknutím vyberte a tažením přesuňte."`} style="--template-item-x:${placementX}%;--template-item-y:${placementY}%">
         <svg class="template-responsive-preview" viewBox="0 0 ${templateWidth} ${templateHeight}" preserveAspectRatio="${fillDisplay ? "none" : "xMidYMid meet"}" aria-hidden="true">
           <foreignObject x="0" y="0" width="${templateWidth}" height="${templateHeight}">
-            <div xmlns="http://www.w3.org/1999/xhtml" class="template-responsive-preview-body">${orientedPreview}</div>
+            <div xmlns="http://www.w3.org/1999/xhtml" class="template-responsive-preview-body">${this._templateSvgPreviewBody(template, templateWidth, templateHeight)}</div>
           </foreignObject>
         </svg>
         ${primary && !autoFit ? this._renderTemplateEditorOverlays() : ""}

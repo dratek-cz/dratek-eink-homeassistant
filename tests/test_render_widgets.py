@@ -200,8 +200,10 @@ class RenderWidgetTests(unittest.TestCase):
             (120, 120, 120),
         ])
         preview = render.quantize_bwr_preview(image)
+        # getcolors() avoids the getdata() deprecation while staying available on
+        # the oldest Pillow the manifest allows.
         self.assertEqual(
-            set(preview.getdata()),
+            {color for _count, color in preview.getcolors(maxcolors=256)},
             {(0, 0, 0), (255, 255, 255), (220, 20, 12)},
         )
 

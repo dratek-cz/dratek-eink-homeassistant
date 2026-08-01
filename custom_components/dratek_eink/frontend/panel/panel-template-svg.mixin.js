@@ -61,7 +61,7 @@ export const templateSvgMixin = {
     return resolved;
   },
 
-  async _preloadTemplateIcons(rows) {
+  _templateIconNames(rows) {
     const names = new Set();
     const collect = (row) => {
       if (!row) return;
@@ -70,7 +70,46 @@ export const templateSvgMixin = {
       (row.list || []).forEach((cell) => cell.icon && names.add(cell.icon));
     };
     rows.forEach(collect);
-    await Promise.all([...names].map((name) => this._mdiIconPath(name)));
+    return [...names];
+  },
+
+  async _preloadTemplateIcons(rows) {
+    await Promise.all(this._templateIconNames(rows).map((name) => this._mdiIconPath(name)));
+  },
+
+  // The on-screen preview has to be the very markup that gets rasterized and
+  // sent. It used to be a separate HTML rendering laid out by CSS inside a
+  // foreignObject, so preview and panel were two different drawings of the same
+  // template and could not agree. Icons resolve asynchronously through ha-icon,
+  // so return whatever is cached now and re-render once the rest arrive.
+  _templateSvgPreviewMarkup(template, width, height) {
+    if (!template) return "";
+    const rows = this._templateSvgRows(template);
+    const names = this._templateIconNames(rows);
+    this._mdiPathCache ||= new Map();
+    if (!names.every((name) => this._mdiPathCache.has(name)) && !this._templateIconPreloadPending) {
+      this._templateIconPreloadPending = true;
+      this._preloadTemplateIcons(rows).finally(() => {
+        this._templateIconPreloadPending = false;
+        this._render();
+        this._paint();
+      });
+    }
+    return this._layoutTemplateSvg(rows, width, height);
+  },
+
+  // Wrapped as a standalone <svg> so it can sit inside the preview's
+  // foreignObject and still scale with the slot. The export path in
+  // _rasterizeDisplayTemplatePreview copies this element's innerHTML, so the
+  // surrounding .template-responsive-preview-body has to stay in place.
+  _templateSvgPreviewBody(template, width, height) {
+    const markup = this._templateSvgPreviewMarkup(template, width, height);
+    if (!markup) return "";
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"`
+      + ` viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">`
+      + `<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>`
+      + markup
+      + `</svg>`;
   },
 
   // --------------------------------------------------------------- layout ---
@@ -506,7 +545,9 @@ export const templateSvgMixin = {
       && redDominance >= 52
       && green <= 145
       && blue <= 145;
-    if (intentionalRed) return [227, 27, 27];
+    // Must stay equal to BWR_RED in render.py, otherwise a backend rendered
+    // automatic update and a panel rendered manual send show different reds.
+    if (intentionalRed) return [220, 20, 12];
     const luminance = (red * 299 + green * 587 + blue * 114) / 1000;
     return luminance < 168 ? [0, 0, 0] : [255, 255, 255];
   },

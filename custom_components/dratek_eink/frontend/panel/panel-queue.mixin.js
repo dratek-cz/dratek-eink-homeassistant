@@ -129,7 +129,7 @@ export const queueMixin = {
 
   _renderKeepingSearchFocus() {
     const active = this.shadowRoot.activeElement;
-    const searchIds = new Set(["deviceSearch", "queueSearch", "symbolSearch"]);
+    const searchIds = new Set(["deviceSearch", "queueSearch", "symbolSearch", "displayTemplateSearch"]);
     const activeId = searchIds.has(active?.id) ? active.id : "";
     const selectionStart = activeId ? active.selectionStart : null;
     const selectionEnd = activeId ? active.selectionEnd : null;

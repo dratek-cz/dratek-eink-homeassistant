@@ -176,7 +176,11 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('!["Enter", " "].includes(event.key)', self.source)
         self.assertIn("Upravit displej", self.source)
         self.assertIn('this._activeTab = "display-settings";', self.source)
+        # The dedicated back button was removed once the main tabbar became
+        # visible on this page too - "Nalezené displeje" now covers the same
+        # navigation, so there is no reason to keep a second, redundant control.
         self.assertNotIn('id="displaySettingsBack"', self.source)
+        self.assertNotIn('display-settings-back', self.source)
         self.assertIn('["devices", "display-settings"].includes(this._activeTab)', self.source)
         self.assertNotIn('class="card display-settings-device-summary"', self.source)
         self.assertNotIn('class="display-settings-preview"', self.source)
@@ -314,7 +318,19 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('bitmap.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;', self.source)
         self.assertNotIn("URL.createObjectURL(new Blob([svg]", self.source)
         self.assertIn(".display-template-editor-right-column{grid-column:3;grid-row:1/3", self.source)
-        self.assertIn("preview.replace('class=\"tpl ', 'class=\"tpl tpl-landscape ')", self.source)
+        # The on-screen preview has to come from the same SVG builder that makes
+        # the bitmap actually sent. It used to be a separate HTML rendering laid
+        # out by CSS, which is why previews never matched the panel.
+        self.assertIn("_templateSvgPreviewBody(template, templateWidth, templateHeight)", self.source)
+        self.assertIn("return this._layoutTemplateSvg(rows, width, height);", self.source)
+        # The CSS-only landscape swap is still fine for the thumbnail-sized catalog
+        # tiles, but it must not come back into the editor preview - that one has to
+        # stay on the SVG builder asserted above, or previews drift from the bitmap.
+        self.assertEqual(
+            1,
+            self.source.count("preview.replace('class=\"tpl ', 'class=\"tpl tpl-landscape ')"),
+        )
+        self.assertIn("_renderDisplayTemplateCatalogPreview(template, orientation) {", self.source)
         self.assertNotIn('id="displayTemplateEditorBack"', self.source)
         self.assertNotIn("Zavřít designer", self.source)
         self.assertIn('class="template-editor-tools"', self.source)
@@ -469,8 +485,20 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("const label = this._translateSymbolLabel(item.label);", self.source)
 
     def test_all_search_inputs_keep_focus_during_rerenders(self):
-        for search_id in ("deviceSearch", "queueSearch", "symbolSearch"):
+        # The template search used to refocus itself with a separate, untested
+        # requestAnimationFrame + plain focus() path that lacked preventScroll,
+        # so re-rendering while typing jumped the page. It now shares the same
+        # helper as every other search box.
+        for search_id in ("deviceSearch", "queueSearch", "symbolSearch", "displayTemplateSearch"):
             self.assertIn(f'"{search_id}"', self.source)
+        self.assertIn('id="displayTemplateSearch"', self.source)
+        self.assertIn(
+            'data-display-template-search]")?.addEventListener("input", (event) => {\n'
+            "      this._displayTemplateSearchQuery = event.target.value;\n"
+            "      this._renderKeepingSearchFocus();",
+            self.source,
+        )
+        self.assertNotIn("window.requestAnimationFrame(() => {\n        const input = this.shadowRoot.querySelector(\"[data-display-template-search]\");", self.source)
         self.assertIn("_renderKeepingSearchFocus()", self.source)
         self.assertIn("next.focus({ preventScroll: true });", self.source)
         self.assertIn("next.setSelectionRange(selectionStart, selectionEnd, selectionDirection);", self.source)

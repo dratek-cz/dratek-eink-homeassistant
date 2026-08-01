@@ -10,6 +10,10 @@ import sys
 import types
 import unittest
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from websocket_sources import find_top_level_function
+
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENT = ROOT / "custom_components" / "dratek_eink"
@@ -104,14 +108,7 @@ class _States:
 
 class AutomationBindingTests(unittest.TestCase):
     def test_starting_manual_upload_removes_all_previous_automation(self):
-        source = (COMPONENT / "websocket.py").read_text(encoding="utf-8")
-        tree = ast.parse(source)
-        clear_function = next(
-            node
-            for node in tree.body
-            if isinstance(node, ast.AsyncFunctionDef)
-            and node.name == "_clear_previous_entity_automation"
-        )
+        clear_function = find_top_level_function("_clear_previous_entity_automation")
         isolated_module = ast.Module(body=[clear_function], type_ignores=[])
         ast.fix_missing_locations(isolated_module)
         calls = []
@@ -135,14 +132,7 @@ class AutomationBindingTests(unittest.TestCase):
         self.assertEqual([("FF:FF:92:81:46:32", None)], calls)
 
     def test_manual_upload_without_new_bindings_disables_previous_automation(self):
-        source = (COMPONENT / "websocket.py").read_text(encoding="utf-8")
-        tree = ast.parse(source)
-        save_function = next(
-            node
-            for node in tree.body
-            if isinstance(node, ast.AsyncFunctionDef)
-            and node.name == "_save_entity_automation"
-        )
+        save_function = find_top_level_function("_save_entity_automation")
         isolated_module = ast.Module(body=[save_function], type_ignores=[])
         ast.fix_missing_locations(isolated_module)
         calls = []

@@ -177,15 +177,11 @@ class TransferQueue:
         task.cancel()
 
     async def _run(self, job: dict[str, Any], runner: TransferRunner) -> dict[str, Any]:
-        resource_lock = self._locks.setdefault(job["resource"], asyncio.Lock())
         device_lock = self._device_locks.setdefault(job["address"], asyncio.Lock())
         async with device_lock:
             if self._should_skip_automatic_update(job):
                 return await self._skip_automatic_update(job)
-            async with resource_lock:
-                if self._should_skip_automatic_update(job):
-                    return await self._skip_automatic_update(job)
-                return await self._execute(job, runner)
+            return await self._execute(job, runner)
 
     async def _execute(self, job: dict[str, Any], runner: TransferRunner) -> dict[str, Any]:
         job["status"] = "writing"
@@ -195,9 +191,30 @@ class TransferQueue:
             job["log"].append(str(message))
             job["log"] = job["log"][-80:]
 
+        resource_lock = self._locks.setdefault(job["resource"], asyncio.Lock())
+        skipped: dict[str, Any] | None = None
+
+        async def run_attempt(log_line: Callable[[str], None]) -> dict[str, Any]:
+            """Hold the transport lock for one attempt only.
+
+            An automatic retry waits out a Bluetooth cooldown between attempts. If
+            that wait happened while the transport lock was held, every other
+            display on the same gateway - or every local display, since they all
+            share the "local" transport - would stall for the whole cooldown.
+            """
+            nonlocal skipped
+            async with resource_lock:
+                if self._should_skip_automatic_update(job):
+                    skipped = await self._skip_automatic_update(job)
+                    return skipped
+                return await runner(log_line)
+
         try:
             async with asyncio.timeout(TRANSFER_JOB_TIMEOUT_SECONDS):
-                result = await self._run_with_automatic_bluetooth_retry(job, runner, add_log)
+                result = await self._run_with_automatic_bluetooth_retry(job, run_attempt, add_log)
+            if skipped is not None:
+                # _skip_automatic_update already finalised the job and saved it.
+                return skipped
             for line in result.get("log", []):
                 if line not in job["log"]:
                     add_log(line)

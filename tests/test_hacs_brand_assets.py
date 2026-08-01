@@ -40,6 +40,26 @@ class HacsBrandAssetTests(unittest.TestCase):
             self.assertEqual(_png_size(integration_icon), size)
             self.assertEqual(repository_icon.read_bytes(), integration_icon.read_bytes())
 
+    def test_release_zip_excludes_developer_bytecode(self):
+        # __pycache__ was previously copied wholesale into the release, shipping
+        # ~270 KB of compiled bytecode for interpreter versions the user may not
+        # even run.
+        release_script = (ROOT / "tools" / "push-with-token.ps1").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("__pycache__", release_script)
+        self.assertIn("*.pyc", release_script)
+
+    def test_bundled_firmware_has_no_duplicate_images(self):
+        # gateway.py resolves every image through its board-suffixed name, so an
+        # unsuffixed copy is dead weight duplicated byte for byte in the download.
+        firmware_dir = ROOT / "custom_components" / "dratek_eink" / "firmware"
+        digests: dict[bytes, list[str]] = {}
+        for image in sorted(firmware_dir.glob("*.bin")):
+            digests.setdefault(image.read_bytes(), []).append(image.name)
+        duplicates = [names for names in digests.values() if len(names) > 1]
+        self.assertEqual(duplicates, [], f"Duplicate firmware images: {duplicates}")
+
     def test_release_zip_uses_portable_paths(self):
         release_script = (ROOT / "tools" / "push-with-token.ps1").read_text(
             encoding="utf-8"

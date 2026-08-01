@@ -231,6 +231,71 @@ class TransferQueueRetryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(order, ["first-start", "first-end", "second-start", "second-end"])
         self.assertTrue(all(job["status"] == "succeeded" for job in queue._jobs))
 
+    async def test_retry_cooldown_does_not_block_other_displays_on_the_transport(self):
+        hass = FakeHass()
+        queue = queue_module.TransferQueue(hass)
+        queue._loaded = True
+
+        async def save_history():
+            return None
+
+        queue._save_history = save_history
+        original_delay = queue_module.AUTOMATIC_BLUETOOTH_RETRY_DELAY_SECONDS
+        queue_module.AUTOMATIC_BLUETOOTH_RETRY_DELAY_SECONDS = 0.3
+        self.addCleanup(
+            setattr,
+            queue_module,
+            "AUTOMATIC_BLUETOOTH_RETRY_DELAY_SECONDS",
+            original_delay,
+        )
+
+        cooldown_started = asyncio.Event()
+        other_started = asyncio.Event()
+        attempts = 0
+
+        async def automatic_runner(_add_log):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                cooldown_started.set()
+                raise RuntimeError(
+                    "No backend with an available connection slot was found"
+                )
+            return {"ok": True}
+
+        async def other_runner(_add_log):
+            other_started.set()
+            return {"ok": True}
+
+        await queue.async_submit(
+            resource="local",
+            transport_type="local",
+            transport_name="Bluetooth",
+            address="aa:bb:cc:dd:ee:01",
+            operation="entity_update",
+            runner=automatic_runner,
+            wait_for_completion=False,
+        )
+        await asyncio.wait_for(cooldown_started.wait(), timeout=1)
+
+        await queue.async_submit(
+            resource="local",
+            transport_type="local",
+            transport_name="Bluetooth",
+            address="aa:bb:cc:dd:ee:02",
+            operation="design",
+            runner=other_runner,
+            wait_for_completion=False,
+        )
+
+        # Every local display shares the "local" transport. Waiting out the retry
+        # cooldown while holding that lock would stall all of them, so the second
+        # display has to start well before the 0.3s cooldown elapses.
+        await asyncio.wait_for(other_started.wait(), timeout=0.2)
+
+        await asyncio.gather(*hass.tasks)
+        self.assertEqual(attempts, 2)
+
     async def test_two_gateways_can_write_to_different_displays_in_parallel(self):
         hass = FakeHass()
         queue = queue_module.TransferQueue(hass)

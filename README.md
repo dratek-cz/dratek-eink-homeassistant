@@ -4,6 +4,17 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.167
+
+- obnovena registrace osmi websocket příkazů (odeslání šablony přes gateway, ukládání i načítání projektů, vlastní prvky), která chyběla od verze 0.1.131
+- kvantizace na černou/bílou/červenou je shodná v náhledu i v backendu a vykreslení obrazu je přibližně 8–18× rychlejší
+- náhled šablony v editoru vzniká ze stejného SVG, které se odesílá na displej
+- ruční odeslání textu i částečného překreslení zruší naplánovanou automatickou aktualizaci daného displeje
+- opakování zápisu po výpadku Bluetooth již neblokuje ostatní displeje na stejné přenosové cestě
+- instalační balíček HACS neobsahuje bytecode ani duplicitní firmware gateway
+- klik na náhled v katalogu šablonu rovnou odešle na displej
+- websocket vrstva je rozdělená do modulů `ws_*.py`; přenos po částech i řízení dokončení z verzí 0.1.152–0.1.166 zůstávají beze změny
+
 ## Novinky ve verzi 0.1.166
 
 - přenos nyní přesně kopíruje řízení toku oficiálního Picksmart klienta: další blok následuje po skutečném dokončení předchozího GATT zápisu

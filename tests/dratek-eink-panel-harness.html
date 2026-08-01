@@ -256,12 +256,15 @@
         const red = previewPixels.data[index];
         const green = previewPixels.data[index + 1];
         const blue = previewPixels.data[index + 2];
-        const luma = (red * 0.299) + (green * 0.587) + (blue * 0.114);
-        const color = luma > 160
-          ? [255, 255, 255]
-          : red > 160
-            ? [220, 20, 12]
-            : [0, 0, 0];
+        // Same rule as _quantizeEinkPixel in panel-template-svg.mixin.js and
+        // bwr_masks in render.py. The harness stands in for the backend renderer,
+        // so it has to classify pixels the same way or the local preview lies.
+        const redDominance = red - Math.max(green, blue);
+        const color = (red >= 105 && redDominance >= 52 && green <= 145 && blue <= 145)
+          ? [220, 20, 12]
+          : ((red * 299 + green * 587 + blue * 114) / 1000) < 168
+            ? [0, 0, 0]
+            : [255, 255, 255];
         previewPixels.data[index] = color[0];
         previewPixels.data[index + 1] = color[1];
         previewPixels.data[index + 2] = color[2];
@@ -324,7 +327,12 @@
         return {};
       },
     };
+    // The panel only scans when the user presses Obnovit; on boot it restores the
+    // last result from localStorage. A fresh harness has no such cache, so without
+    // this the page renders the "no displays nearby" empty state and none of the
+    // sample devices below are ever visible.
     await panel._scan();
+
     if (settingsAddress && devices.some((device) => device.address === settingsAddress)) {
       panel._selectedDeviceAddress = settingsAddress;
       panel._displaySettingsView = settingsView === "designer" ? "designer" : "templates";

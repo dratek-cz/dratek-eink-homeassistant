@@ -51,6 +51,11 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         color = call.data["color"]
 
         image = await hass.async_add_executor_job(render_text_image, sdk_type, text, font_size, color)
+        # The service writes the whole panel, so it counts as a manual upload:
+        # drop the display's scheduled entity refresh, otherwise the next tick
+        # would repaint over the text that was just sent.
+        await get_entity_auto_update_manager(hass).async_set_config(address, None)
+
         async def run_transfer(add_log):
             transfer = DratekTransfer(log=add_log, hass=hass)
             await transfer.send_image(address, sdk_type, image)

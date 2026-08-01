@@ -61,6 +61,27 @@ class DratekTransfer:
     def log(self, message: str) -> None:
         self._log(message)
 
+    async def _async_pack(
+        self,
+        sdk_type: int,
+        image: Image.Image,
+        transform: str | None,
+        orientation: str | None,
+    ) -> bytes:
+        """Pack the bitmap off the event loop.
+
+        Quantising and bit-packing a large panel is pure CPU work, so running it
+        inline would stall every other Home Assistant task for the duration. The
+        gateway path already offloads it; the local Bluetooth path must too.
+        """
+        if self._hass is not None:
+            return await self._hass.async_add_executor_job(
+                pack_bwr_image, sdk_type, image, transform, orientation
+            )
+        return await asyncio.to_thread(
+            pack_bwr_image, sdk_type, image, transform, orientation
+        )
+
     async def send_image(
         self,
         address: str,
@@ -279,7 +300,7 @@ class DratekTransfer:
         orientation: str | None = None,
         software_version: int | None = None,
     ) -> None:
-        payload = pack_bwr_image(sdk_type, image, transform, orientation)
+        payload = await self._async_pack(sdk_type, image, transform, orientation)
         software_version = self._resolve_software_version(address, software_version)
         responses: asyncio.Queue[bytes] = asyncio.Queue()
         loop = asyncio.get_running_loop()

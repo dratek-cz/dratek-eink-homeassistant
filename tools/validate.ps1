@@ -6,24 +6,51 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
-& $PythonPath -m compileall -q (Join-Path $repoRoot "custom_components\dratek_eink")
-if ($LASTEXITCODE -ne 0) {
-    throw "Kompilace Python souborů selhala."
+# Windows PowerShell 5.1 turns any stderr output from a native program into a
+# terminating NativeCommandError while $ErrorActionPreference is "Stop". Python's
+# unittest runner writes its progress to stderr, so the checks below have to run
+# with the preference relaxed and report failure through $LASTEXITCODE instead.
+function Invoke-Native {
+    param(
+        [Parameter(Mandatory)][string]$Executable,
+        [Parameter(Mandatory)][string[]]$Arguments,
+        [Parameter(Mandatory)][string]$FailureMessage
+    )
+
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & $Executable @Arguments
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        throw $FailureMessage
+    }
 }
 
-& $PythonPath -m unittest discover -s (Join-Path $repoRoot "tests") -p "test_*.py" -v
-if ($LASTEXITCODE -ne 0) {
-    throw "Unit testy selhaly."
+if (-not (Get-Command $PythonPath -ErrorAction SilentlyContinue)) {
+    throw "Python nebyl nalezen ($PythonPath). Predejte cestu prepinacem -PythonPath."
+}
+if (-not (Get-Command $NodePath -ErrorAction SilentlyContinue)) {
+    throw "Node.js nebyl nalezen ($NodePath). Nainstalujte jej (winget install OpenJS.NodeJS.LTS) nebo predejte cestu prepinacem -NodePath."
 }
 
-& $NodePath --check (Join-Path $repoRoot "custom_components\dratek_eink\frontend\dratek-eink-panel.js")
-if ($LASTEXITCODE -ne 0) {
-    throw "Kontrola hlavního JavaScript panelu selhala."
-}
+Invoke-Native -Executable $PythonPath `
+    -Arguments @("-m", "compileall", "-q", (Join-Path $repoRoot "custom_components\dratek_eink")) `
+    -FailureMessage "Kompilace Python souboru selhala."
 
-& $NodePath --check (Join-Path $repoRoot "custom_components\dratek_eink\frontend\dratek-eink-overview-card.js")
-if ($LASTEXITCODE -ne 0) {
-    throw "Kontrola JavaScript dashboardové karty selhala."
-}
+Invoke-Native -Executable $PythonPath `
+    -Arguments @("-m", "unittest", "discover", "-s", (Join-Path $repoRoot "tests"), "-p", "test_*.py", "-v") `
+    -FailureMessage "Unit testy selhaly."
 
-Write-Output "Všechny kontroly projektu prošly."
+Invoke-Native -Executable $NodePath `
+    -Arguments @("--check", (Join-Path $repoRoot "custom_components\dratek_eink\frontend\dratek-eink-panel.js")) `
+    -FailureMessage "Kontrola hlavniho JavaScript panelu selhala."
+
+Invoke-Native -Executable $NodePath `
+    -Arguments @("--check", (Join-Path $repoRoot "custom_components\dratek_eink\frontend\dratek-eink-overview-card.js")) `
+    -FailureMessage "Kontrola JavaScript dashboardove karty selhala."
+
+Write-Output "Vsechny kontroly projektu prosly."
