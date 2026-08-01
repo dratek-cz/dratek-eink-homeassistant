@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.168
+
+- opraven červený lem kolem černého textu na červené ploše, který se objevil ve verzi 0.1.167
+- panel po aktualizaci už neukazuje starou verzi v hlavičce a nespouští staré moduly z mezipaměti prohlížeče
+- opraveno ukládání a načítání projektů, které ve verzi 0.1.167 končilo chybou
+- z integrace odstraněn nepoužívaný příkaz pro stahování libovolné URL ze serveru Home Assistanta
+
 ## Novinky ve verzi 0.1.167
 
 - obnovena registrace osmi websocket příkazů (odeslání šablony přes gateway, ukládání i načítání projektů, vlastní prvky), která chyběla od verze 0.1.131

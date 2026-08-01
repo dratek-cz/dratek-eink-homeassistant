@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.168] - 2026-08-01
+
+### Opraveno
+- **Černý text už nemá červený lem.** Verze 0.1.167 sjednotila kvantizaci mezi náhledem v panelu a zápisem na pozadí, ale na nesprávném pravidle: pixel se považoval za červený, kdykoli červená složka převažovala nad zelenou a modrou. Přesně takové pixely ale vyrábí vyhlazování na hraně černého písma nad červenou plochou, takže každé černé písmeno na červené dostalo obrys. Pravidlo je vráceno na to, které fungovalo třicet vydání – červená jen tehdy, když je červená složka jasná a pixel je zároveň příliš tmavý na bílou. Regresní test vykreslí černý text na červené a vyžaduje, aby hraniční pixely zůstaly černé.
+- **Panel po aktualizaci hlásil starou verzi a spouštěl starý kód.** Parametr proti mezipaměti dostával jen vstupní soubor `dratek-eink-panel.js`; jeho šestnáct modulů se načítá relativními cestami bez parametru, takže prohlížeč mohl servírovat moduly z instalace i desítky vydání staré – včetně toho, ze kterého se čte verze v hlavičce. Verze je nyní součástí cesty ke statickým souborům, takže se každým vydáním mění adresa všech souborů v jakékoli úrovni importů.
+- Ukládání a načítání projektů končilo chybou `NameError`, protože rozdělení websocket vrstvy v 0.1.167 nechalo v modulu `ws_shared.py` odkaz na `DOMAIN` bez importu. Chyba se projevila až spuštěním, a protože moduly integrace nejdou v testech naimportovat bez Home Assistanta, žádný test ji nezachytil. Nová kontrola prochází všechny moduly a hlásí každé globální jméno, které modul používá, aniž by ho definoval nebo importoval.
+
+### Změněno
+- Z integrace zmizel websocket příkaz pro stahování libovolné URL ze serveru Home Assistanta. Nebyl nikdy zaregistrovaný a panel jej nevolá, takže jen rozšiřoval plochu odchozích spojení serveru; s ním odešlo 186 řádků nepoužívaného kódu.
+- Odstraněny čtyři pomocné funkce inspektoru, které byly v jednom souboru definované dvakrát. V JavaScriptu pozdější definice tiše přebije dřívější, takže úpravy té první se nikde neprojevovaly. Nový test hlídá, aby žádná metoda panelu nebyla definovaná dvakrát.
+
 ## [0.1.167] - 2026-08-01
 
 ### Opraveno
