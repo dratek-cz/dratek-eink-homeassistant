@@ -7,7 +7,7 @@ import time
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.event import async_call_later, async_track_state_change_event
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN, LOCAL_ROUTE_ID
@@ -468,7 +468,7 @@ class EntityAutoUpdateManager:
     async def _async_refresh(self, address: str) -> dict[str, Any] | None:
         config = self._configs.get(address)
         if not config:
-            return
+            return None
         image = await self.async_render_preview(address, config)
         route_type = config.get("route_type", "local")
         gateway_id = str(config.get("gateway_id") or "")
@@ -550,7 +550,7 @@ class EntityAutoUpdateManager:
                     ),
                     return_exceptions=True,
                 )
-            except Exception:  # noqa: one unavailable gateway must not break local automation
+            except Exception:  # one unavailable gateway must not break local automation
                 self._gateway_route_cache = {}
                 self._gateway_route_cache_at = time.monotonic()
                 return None

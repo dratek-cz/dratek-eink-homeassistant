@@ -38,7 +38,9 @@ def _module_level_names(assignment: str) -> set[str]:
         ):
             continue
         value = node.value
-        if isinstance(value, ast.Call):  # frozenset({...})
+        if isinstance(value, ast.Call):  # frozenset({...}) or an empty frozenset()
+            if not value.args:
+                return set()
             value = value.args[0]
         return {
             element.id if isinstance(element, ast.Name) else element.value

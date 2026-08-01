@@ -142,7 +142,14 @@ class BwrClassificationTests(unittest.TestCase):
     def test_a_pixel_is_never_both_white_and_red(self):
         image = _image(296, 128, "boundary", seed=5)
         white, red = render.bwr_masks(image)
-        overlap = [w and r for w, r in zip(white.convert("L").tobytes(), red.convert("L").tobytes())]
+        overlap = [
+            w and r
+            for w, r in zip(
+                white.convert("L").tobytes(),
+                red.convert("L").tobytes(),
+                strict=True,
+            )
+        ]
         self.assertFalse(any(overlap))
 
     def test_unaligned_widths_do_not_take_the_row_padded_path(self):

@@ -68,8 +68,7 @@ async def async_save_gateways(hass: HomeAssistant, gateways: list[dict[str, Any]
 
 def _normalize_host(host: str) -> str:
     host = str(host or "").strip()
-    host = host.removeprefix("http://").removeprefix("https://").strip("/")
-    return host
+    return host.removeprefix("http://").removeprefix("https://").strip("/")
 
 
 def _gateway_base_url(gateway: dict[str, Any]) -> str:

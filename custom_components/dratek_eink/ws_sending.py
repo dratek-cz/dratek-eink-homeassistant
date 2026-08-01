@@ -16,7 +16,7 @@ from .const import DOMAIN
 from .render import render_text_image
 from .queue import get_transfer_queue
 from .transfer import DratekTransfer
-from .ws_shared import _clear_previous_entity_automation, _save_entity_automation
+from .ws_shared import _clear_previous_entity_automation
 
 DESIGN_UPLOADS_KEY = "design_uploads"
 DESIGN_UPLOAD_CHUNK_BYTES = 64 * 1024
@@ -74,12 +74,9 @@ async def websocket_send_design(
                 msg.get("software_version"),
             )
             add_log("Design sent.")
-            await _save_entity_automation(
-                hass,
-                msg,
-                route_type="local",
-                transport_name="Home Assistant Bluetooth",
-            )
+            # Uploads are one-shot: drop any schedule that was registered while
+            # this transfer was queued, so it cannot repaint over the new picture.
+            await _clear_previous_entity_automation(hass, address)
             return {"ok": True, "address": address, "log": []}
 
         result = await get_transfer_queue(hass).async_submit(
@@ -91,7 +88,7 @@ async def websocket_send_design(
             runner=run_transfer,
             wait_for_completion=False,
         )
-    except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
+    except Exception as exc:  # BLE stack can raise platform-specific exceptions
         log(f"Send failed: {exc}")
         connection.send_result(
             msg["id"],
@@ -226,12 +223,9 @@ async def websocket_commit_design_upload(
                 msg.get("software_version"),
             )
             add_log("Design sent.")
-            await _save_entity_automation(
-                hass,
-                msg,
-                route_type="local",
-                transport_name="Home Assistant Bluetooth",
-            )
+            # Uploads are one-shot: drop any schedule that was registered while
+            # this transfer was queued, so it cannot repaint over the new picture.
+            await _clear_previous_entity_automation(hass, address)
             return {"ok": True, "address": address, "log": []}
 
         result = await get_transfer_queue(hass).async_submit(
@@ -326,7 +320,7 @@ async def websocket_send_partial_design(
             runner=run_transfer,
             wait_for_completion=False,
         )
-    except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
+    except Exception as exc:  # BLE stack can raise platform-specific exceptions
         log(f"Partial send failed: {exc}")
         connection.send_result(
             msg["id"],
@@ -385,7 +379,7 @@ async def websocket_send_text(
             operation="text",
             runner=run_transfer,
         )
-    except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
+    except Exception as exc:  # BLE stack can raise platform-specific exceptions
         log(f"Send failed: {exc}")
         connection.send_result(
             msg["id"],

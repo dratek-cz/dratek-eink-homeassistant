@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from typing import Any
-from urllib.parse import urlparse
-import asyncio
 import base64
 import io
-import json
 import time
 import uuid
 
 from PIL import Image
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-import voluptuous as vol
 
 from .automation import get_entity_auto_update_manager
 from .ws_shared import _load_project_data, _project_store
+
 
 @websocket_api.websocket_command({"type": "dratek_eink/custom_elements/list"})
 @websocket_api.async_response
@@ -101,10 +98,9 @@ def _normalized_layered_layers(value: Any, canvas_width: int, canvas_height: int
                 item["entity_attribute"] = str(source.get("entity_attribute") or source.get("entityAttribute") or "")[:120]
                 item["entityAttribute"] = item["entity_attribute"]
             if source.get("sample_value") is not None and str(source.get("sample_value")).strip() != "":
-                try:
+                # A non-numeric sample is fine - it just stays out of the element.
+                with suppress(ValueError, TypeError):
                     item["sample_value"] = float(source.get("sample_value"))
-                except (ValueError, TypeError):
-                    pass
             if source.get("rotation"):
                 item["rotation"] = _clamped_int(source.get("rotation"), 0, 0, 360)
 
@@ -401,190 +397,3 @@ async def websocket_delete_custom_element(
     await _project_store(hass).async_save(data)
     connection.send_result(msg["id"], {"ok": True, "deleted": len(data["custom_elements"]) < before})
 
-
-def _json_path_value(value: Any, path: str) -> Any:
-    """Resolve object paths and project fields from arrays using [] or [*]."""
-    parts = [part for part in path.replace("[*]", "[]").split(".") if part]
-
-    def _walk(current: Any, index: int) -> Any:
-        if index >= len(parts):
-            return current
-        part = parts[index]
-        project = part.endswith("[]")
-        key = part[:-2] if project else part
-        if project:
-            sequence = current.get(key) if key and isinstance(current, dict) else current
-            if not isinstance(sequence, list):
-                raise KeyError(part)
-            return [_walk(item, index + 1) for item in sequence]
-        if isinstance(current, list):
-            if key.isdigit():
-                return _walk(current[int(key)], index + 1)
-            return [_walk(item, index) for item in current]
-        if isinstance(current, dict):
-            return _walk(current[key], index + 1)
-        raise KeyError(part)
-
-    return _walk(value, 0)
-
-
-def _json_field_options(value: Any, prefix: str = "", depth: int = 0) -> list[dict[str, Any]]:
-    """Return selectable scalar and series fields from a JSON response."""
-    if depth > 6:
-        return []
-    fields: list[dict[str, Any]] = []
-    if isinstance(value, dict):
-        for key, item in list(value.items())[:80]:
-            path = f"{prefix}.{key}" if prefix else str(key)
-            fields.extend(_json_field_options(item, path, depth + 1))
-        return fields[:160]
-    if isinstance(value, list):
-        scalar_items = [item for item in value if not isinstance(item, (dict, list)) and item is not None]
-        if scalar_items and len(scalar_items) == len([item for item in value if item is not None]):
-            numeric = all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in scalar_items)
-            fields.append({
-                "path": prefix,
-                "kind": "number_series" if numeric else "text_series",
-                "count": len(scalar_items),
-                "preview": [str(item)[:60] for item in scalar_items[:4]],
-            })
-            return fields
-        first_object = next((item for item in value if isinstance(item, dict)), None)
-        if first_object is not None:
-            array_prefix = f"{prefix}[]" if prefix else "[]"
-            objects = [item for item in value if isinstance(item, dict)]
-            for key in list(first_object)[:80]:
-                projected = [item.get(key) for item in objects if item.get(key) is not None]
-                path = f"{array_prefix}.{key}"
-                fields.extend(_json_field_options(projected, path, depth + 1))
-        return fields[:160]
-    if prefix and value is not None:
-        numeric = isinstance(value, (int, float)) and not isinstance(value, bool)
-        fields.append({
-            "path": prefix,
-            "kind": "number" if numeric else "text",
-            "count": 1,
-            "preview": [str(value)[:60]],
-        })
-    return fields
-
-
-def _json_collections(value: Any, prefix: str = "", depth: int = 0) -> list[dict[str, Any]]:
-    """Describe JSON objects and arrays as user-friendly datasets and columns."""
-    if depth > 6:
-        return []
-    collections: list[dict[str, Any]] = []
-    if isinstance(value, dict):
-        scalar_fields = []
-        for key, item in list(value.items())[:80]:
-            if item is None or isinstance(item, (dict, list)):
-                continue
-            numeric = isinstance(item, (int, float)) and not isinstance(item, bool)
-            scalar_fields.append({"key": str(key), "kind": "number" if numeric else "text", "preview": [str(item)[:60]]})
-        if scalar_fields:
-            collections.append({"path": prefix, "label": prefix or "Kořen odpovědi", "count": 1, "fields": scalar_fields})
-        for key, item in list(value.items())[:80]:
-            child_path = f"{prefix}.{key}" if prefix else str(key)
-            collections.extend(_json_collections(item, child_path, depth + 1))
-        return collections[:120]
-    if isinstance(value, list):
-        objects = [item for item in value if isinstance(item, dict)][:512]
-        if objects:
-            keys: list[str] = []
-            for item in objects:
-                for key in item:
-                    if key not in keys and len(keys) < 80:
-                        keys.append(str(key))
-            fields = []
-            for key in keys:
-                samples = [item.get(key) for item in objects if item.get(key) is not None and not isinstance(item.get(key), (dict, list))]
-                if not samples:
-                    continue
-                numeric = all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in samples)
-                fields.append({
-                    "key": key,
-                    "kind": "number" if numeric else "text",
-                    "preview": [str(item)[:60] for item in samples[:4]],
-                })
-            if fields:
-                collections.append({"path": prefix, "label": prefix or "Seznam", "count": len(value), "fields": fields})
-            first = objects[0]
-            for key, item in list(first.items())[:80]:
-                if isinstance(item, (dict, list)):
-                    projected = [obj.get(key) for obj in objects if obj.get(key) is not None]
-                    child_path = f"{prefix}[].{key}" if prefix else str(key)
-                    collections.extend(_json_collections(projected, child_path, depth + 1))
-            return collections[:120]
-        scalars = [item for item in value if item is not None and not isinstance(item, (dict, list))]
-        if scalars:
-            numeric = all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in scalars)
-            collections.append({
-                "path": prefix,
-                "label": prefix or "Seznam hodnot",
-                "count": len(scalars),
-                "fields": [{"key": "$value", "kind": "number" if numeric else "text", "preview": [str(item)[:60] for item in scalars[:4]]}],
-            })
-    return collections[:120]
-
-
-@websocket_api.websocket_command(
-    {
-        "type": "dratek_eink/custom_elements/fetch_url",
-        "url": str,
-        vol.Optional("json_path", default=""): str,
-        vol.Optional("label_json_path", default=""): str,
-    }
-)
-@websocket_api.async_response
-async def websocket_fetch_custom_element_url(
-    hass: HomeAssistant,
-    connection: websocket_api.ActiveConnection,
-    msg: dict[str, Any],
-) -> None:
-    url = str(msg["url"] or "").strip()
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        connection.send_error(msg["id"], "invalid_url", "URL must use HTTP or HTTPS.")
-        return
-    try:
-        session = async_get_clientsession(hass)
-        async with asyncio.timeout(12):
-            async with session.get(url, allow_redirects=True, max_redirects=3) as response:
-                response.raise_for_status()
-                raw = await response.content.read(1_048_577)
-                if len(raw) > 1_048_576:
-                    raise ValueError("Response is larger than 1 MB.")
-                text = raw.decode(response.charset or "utf-8", errors="replace")
-        try:
-            root_value: Any = json.loads(text)
-        except json.JSONDecodeError:
-            root_value = text.strip()
-        fields = _json_field_options(root_value)
-        collections = _json_collections(root_value)
-        value = root_value
-        mapping_error = ""
-        path = str(msg.get("json_path") or "").strip()
-        if path:
-            try:
-                value = _json_path_value(root_value, path)
-            except (KeyError, IndexError, TypeError, ValueError) as exc:
-                mapping_error = f"Hodnoty: cesta {path} nebyla nalezena ({exc})."
-        labels: Any = []
-        label_path = str(msg.get("label_json_path") or "").strip()
-        if label_path:
-            try:
-                labels = _json_path_value(root_value, label_path)
-            except (KeyError, IndexError, TypeError, ValueError) as exc:
-                mapping_error = f"{mapping_error} Popisky: cesta {label_path} nebyla nalezena ({exc}).".strip()
-        serialized = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-        serialized_labels = labels if isinstance(labels, str) else json.dumps(labels, ensure_ascii=False, separators=(",", ":"))
-        connection.send_result(msg["id"], {
-            "ok": True,
-            "value": serialized[:65535],
-            "labels": serialized_labels[:65535],
-            "fields": fields,
-            "collections": collections,
-            "mapping_error": mapping_error,
-        })
-    except Exception as exc:
-        connection.send_error(msg["id"], "fetch_failed", str(exc))

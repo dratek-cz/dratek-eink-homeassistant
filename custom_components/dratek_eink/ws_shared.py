@@ -8,23 +8,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .automation import get_entity_auto_update_manager
+from .const import DOMAIN
 from .project_storage import normalize_project_data
 
 PROJECT_STORE_KEY = "dratek_eink.projects"
-
-
 PROJECT_STORE_VERSION = 1
-
-
 PROJECT_STORE_DATA_KEY = "project_store"
-
-
 PROJECT_DATA_CACHE_KEY = "project_data_cache"
-
-
 DISCOVERY_CACHE_KEY = "dratek_eink.discovery_cache"
-
-
 DISCOVERY_GRACE_SECONDS = 5 * 60
 
 
@@ -44,19 +35,6 @@ def _battery_payload(device: Any) -> dict[str, Any]:
         "battery_percent": device.battery_percent,
         "battery_estimated": True,
     }
-
-
-async def _save_entity_automation(
-    hass: HomeAssistant,
-    msg: dict[str, Any],
-    *,
-    route_type: str,
-    gateway_id: str = "",
-    transport_name: str = "",
-) -> None:
-    # Uploads are intentionally one-shot. Ignore automation payloads from an
-    # older cached frontend and remove any legacy schedule for this display.
-    await _clear_previous_entity_automation(hass, msg["address"])
 
 
 def _project_store(hass: HomeAssistant) -> Store:

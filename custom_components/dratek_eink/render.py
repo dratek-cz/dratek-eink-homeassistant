@@ -861,7 +861,8 @@ def _render_bound_weather(binding: dict[str, Any], value: str) -> Image.Image:
     elif "snow" in condition: icon_symbol = "SNOW"
     elif "thunder" in condition: icon_symbol = "STORM"
     temp_text = f"{binding.get('sample_temp', '21.5')} C"
-    font = load_font(max(10, min(18, round(h * 0.3))), bold=True)
+    # _draw_centered_text loads its own font from the size it is given, so the
+    # font that used to be built here was thrown away on every call.
     _draw_centered_text(draw, f"[{icon_symbol}] {temp_text}", w // 2, h // 2, w - 4, h - 4, max(10, round(h * 0.25)))
     return output
 

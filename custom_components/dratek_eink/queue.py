@@ -223,7 +223,7 @@ class TransferQueue:
                 job["error"] = str(result.get("error") or "Prenos selhal.")
             else:
                 job["status"] = "succeeded"
-        except Exception as exc:  # noqa: BLE and network stacks expose platform errors
+        except Exception as exc:  # BLE and network stacks expose platform errors
             if isinstance(exc, TimeoutError):
                 last_step = next(
                     (line for line in reversed(job["log"]) if not line.startswith("Transfer failed:")),

@@ -37,8 +37,8 @@ from .ws_shared import (
     _clear_previous_entity_automation,
     _load_project_data,
     _project_store,
-    _save_entity_automation,
 )
+
 
 @websocket_api.websocket_command({"type": "dratek_eink/gateways/list"})
 @websocket_api.async_response
@@ -217,13 +217,9 @@ async def websocket_send_gateway_design(
                 msg.get("software_version"),
             )
             if transfer_result and transfer_result.get("ok") is not False:
-                await _save_entity_automation(
-                    hass,
-                    msg,
-                    route_type="gateway",
-                    gateway_id=msg["gateway_id"],
-                    transport_name=str(gateway.get("name") or gateway.get("host") or "DRATEK eInk gateway"),
-                )
+                # Uploads are one-shot: drop any schedule that was registered while
+                # this transfer was queued, so it cannot repaint over the new picture.
+                await _clear_previous_entity_automation(hass, msg["address"])
             return transfer_result or {"ok": False, "error": "Gateway nebyla nalezena.", "log": []}
 
         result = await get_transfer_queue(hass).async_submit(

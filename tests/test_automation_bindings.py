@@ -132,34 +132,34 @@ class AutomationBindingTests(unittest.TestCase):
         self.assertEqual([("FF:FF:92:81:46:32", None)], calls)
 
     def test_manual_upload_without_new_bindings_disables_previous_automation(self):
-        save_function = find_top_level_function("_save_entity_automation")
-        isolated_module = ast.Module(body=[save_function], type_ignores=[])
-        ast.fix_missing_locations(isolated_module)
-        calls = []
-
-        class Manager:
-            async def async_set_config(self, address, config):
-                calls.append((address, config))
-
-        namespace = {
-            "Any": object,
-            "HomeAssistant": object,
-            "get_entity_auto_update_manager": lambda _hass: Manager(),
-            "_clear_previous_entity_automation": (
-                lambda _hass, address: Manager().async_set_config(address, None)
-            ),
-        }
-        exec(compile(isolated_module, "websocket.py", "exec"), namespace)
-
-        asyncio.run(
-            namespace["_save_entity_automation"](
-                object(),
-                {"address": "ff:ff:92:81:46:32"},
-                route_type="local",
-            )
-        )
-
-        self.assertEqual([("ff:ff:92:81:46:32", None)], calls)
+        # Uploads are one-shot: the handler clears any schedule before queueing,
+        # and the queued runner clears again once the picture is actually on the
+        # display. The second clear is what stops a schedule registered while the
+        # transfer sat in the queue from repainting over the fresh design.
+        for name in (
+            "websocket_send_design",
+            "websocket_commit_design_upload",
+            "websocket_send_gateway_design",
+        ):
+            with self.subTest(handler=name):
+                handler = find_top_level_function(name)
+                runners = [
+                    node
+                    for node in ast.walk(handler)
+                    if isinstance(node, ast.AsyncFunctionDef) and node is not handler
+                ]
+                self.assertEqual(1, len(runners), f"{name} has no queued runner")
+                cleared = [
+                    call
+                    for call in ast.walk(runners[0])
+                    if isinstance(call, ast.Call)
+                    and getattr(call.func, "id", "") == "_clear_previous_entity_automation"
+                ]
+                self.assertTrue(
+                    cleared,
+                    f"{name} finishes a transfer without cancelling the display's "
+                    "scheduled refresh, so it can overwrite the upload.",
+                )
 
     def test_disabling_automation_clears_pending_refresh_and_timer(self):
         address = "FF:FF:92:81:46:32"

@@ -168,7 +168,7 @@ class DratekTransfer:
                 await self._set_rgb_led_once(address, packet)
                 self.log("RGB LED setting accepted by the display.")
                 return
-            except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
+            except Exception as exc:  # BLE stack can raise platform-specific exceptions
                 last_error = exc
                 self.log(f"RGB LED attempt {attempt}/3 failed: {exc}")
                 if attempt < 3:
@@ -215,7 +215,7 @@ class DratekTransfer:
                 await self._flash_identify_once(address, packet)
                 self.log("Find me command accepted by the display.")
                 return
-            except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
+            except Exception as exc:  # BLE stack can raise platform-specific exceptions
                 last_error = exc
                 self.log(f"Find me attempt {attempt}/3 failed: {exc}")
                 if attempt < 3:
@@ -278,7 +278,7 @@ class DratekTransfer:
                 )
                 self.log("Transfer completed.")
                 return
-            except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
+            except Exception as exc:  # BLE stack can raise platform-specific exceptions
                 last_error = exc
                 self.log(f"Transfer attempt {attempt}/{max_attempts} failed: {exc}")
                 transient = self._is_transient_connection_error(exc)
@@ -537,7 +537,7 @@ class DratekTransfer:
             data = manufacturer_data.get(DRATEK_COMPANY_ID)
             if data and len(data) > 2:
                 return int(data[2])
-        except Exception:  # noqa: HA Bluetooth compatibility varies by core version
+        except Exception:  # HA Bluetooth compatibility varies by core version
             pass
         return int(supplied_version or 0)
 
@@ -613,7 +613,7 @@ class DratekTransfer:
             try:
                 async with asyncio.timeout(MTU_NEGOTIATION_TIMEOUT):
                     await acquire_mtu()
-            except Exception as exc:  # noqa: private BlueZ hook differs by Bleak version
+            except Exception as exc:  # private BlueZ hook differs by Bleak version
                 self.log(
                     f"Explicit MTU negotiation was unavailable ({exc}); "
                     "continuing with the MTU selected by BlueZ."
@@ -672,7 +672,7 @@ class DratekTransfer:
                 if not require_response:
                     await asyncio.sleep(STREAM_WRITE_DELAY)
                 return
-            except Exception as exc:  # noqa: BLE stacks expose platform-specific write errors
+            except Exception as exc:  # BLE stacks expose platform-specific write errors
                 # A timed-out ATT request may already have reached the display.
                 # Repeating the same raw image block would shift/corrupt the
                 # display buffer, so restart the whole prepared transfer instead.

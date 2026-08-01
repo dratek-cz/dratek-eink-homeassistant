@@ -65,7 +65,7 @@ def decorated_command_handlers() -> dict[str, str]:
                 schema = decorator.args[0] if decorator.args else None
                 command_type = ""
                 if isinstance(schema, ast.Dict):
-                    for key, value in zip(schema.keys, schema.values):
+                    for key, value in zip(schema.keys, schema.values, strict=True):
                         if (
                             isinstance(key, ast.Constant)
                             and key.value == "type"

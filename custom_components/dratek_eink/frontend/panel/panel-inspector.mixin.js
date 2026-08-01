@@ -1203,32 +1203,6 @@ export const inspectorMixin = {
     return `<details class="inspector-section" ${open ? "open" : ""}><summary class="inspector-section-title"><ha-icon icon="${icon}"></ha-icon><span>${title}</span><ha-icon class="inspector-chevron" icon="mdi:chevron-down"></ha-icon></summary><div class="inspector-section-body">${body}</div></details>`;
   },
 
-  _inspectorColor(prop, value, label, colors = ["black", "red", "white"]) {
-    const names = { none: "Žádná", original: "Původní", black: "Černá", red: "Červená", white: "Bílá" };
-    const selected = value || (colors.includes("none") ? "none" : "black");
-    return `<div class="field"><label><ha-icon icon="mdi:palette"></ha-icon>${label}</label><div class="color-options">${colors.map((color) => `<button type="button" class="color-option ${selected === color ? "selected" : ""}" data-inspector-prop="${prop}" data-inspector-value="${color}" title="${names[color]}"><span class="color-dot ${color}"></span><span>${names[color]}</span></button>`).join("")}</div></div>`;
-  },
-
-  _inspectorSegments(prop, value, options, label) {
-    return `<div class="field"><label>${label}</label><div class="segment-control">${options.map((option) => `<button type="button" class="segment-button ${String(value) === String(option.value) ? "selected" : ""}" data-inspector-prop="${prop}" data-inspector-value="${option.value}" title="${option.label}"><ha-icon icon="${option.icon}"></ha-icon></button>`).join("")}</div></div>`;
-  },
-
-  _inspectorToggle(prop, checked, icon, label) {
-    return `<label class="toggle-card"><ha-icon icon="${icon}"></ha-icon><span>${label}</span><input data-prop="${prop}" type="checkbox" ${checked ? "checked" : ""}></label>`;
-  },
-
-  _setInspectorProperty(prop, value) {
-    const object = this._selectedObject();
-    if (!object) return;
-    const nextValue = prop === "rotation" ? Number(value) : value;
-    if (object[prop] === nextValue) return;
-    this._pushHistory();
-    object[prop] = nextValue;
-    this._render();
-    this._paint();
-    this._scheduleDraftSave();
-  },
-
   _renderInspectorGeometry(object) {
     return this._inspectorSection("mdi:move-resize", "Pozice a rozměry", `
       <div class="row"><div class="field"><label><ha-icon icon="mdi:axis-x-arrow"></ha-icon>X</label><input data-prop="x" type="number" value="${object.x}"></div><div class="field"><label><ha-icon icon="mdi:axis-y-arrow"></ha-icon>Y</label><input data-prop="y" type="number" value="${object.y}"></div></div>

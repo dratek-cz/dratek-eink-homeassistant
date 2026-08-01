@@ -74,7 +74,7 @@ async def websocket_set_rgb_led(
             operation="rgb_led",
             runner=run_transfer,
         )
-    except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
+    except Exception as exc:  # BLE stack can raise platform-specific exceptions
         connection.send_result(
             msg["id"],
             {"ok": False, "address": address, "error": str(exc), "log": []},
@@ -112,7 +112,7 @@ async def websocket_flash_identify(
             operation="flash_identify",
             runner=run_transfer,
         )
-    except Exception as exc:  # noqa: BLE stack can raise platform-specific exceptions
+    except Exception as exc:  # BLE stack can raise platform-specific exceptions
         connection.send_result(
             msg["id"],
             {"ok": False, "address": address, "error": str(exc), "log": []},
@@ -143,7 +143,7 @@ async def websocket_render_preview(
         output = io.BytesIO()
         image.save(output, format="PNG")
         encoded = base64.b64encode(output.getvalue()).decode("ascii")
-    except Exception as exc:  # noqa: render failures must reach the designer
+    except Exception as exc:  # render failures must reach the designer
         connection.send_error(msg["id"], "preview_failed", str(exc))
         return
     connection.send_result(
@@ -168,7 +168,7 @@ async def websocket_scan(
     try:
         scanner_count = bluetooth.async_scanner_count(hass, connectable=True)
         service_infos = bluetooth.async_discovered_service_info(hass, connectable=True)
-    except Exception as exc:  # noqa: BLE availability can differ by HA installation
+    except Exception as exc:  # BLE availability can differ by HA installation
         scanner_count = 0
         service_infos = []
         local_scan_error = str(exc)

@@ -48,7 +48,11 @@ class HacsBrandAssetTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("__pycache__", release_script)
-        self.assertIn("*.pyc", release_script)
+        self.assertIn(".pyc", release_script)
+        # Get-ChildItem ignores -Include when it is handed -LiteralPath, so that
+        # combination matched every file in the staged package and the prune
+        # deleted all of it. v0.1.167 shipped a 22-byte zip once because of it.
+        self.assertNotRegex(release_script, r"-LiteralPath[^\r\n]*-Include")
 
     def test_bundled_firmware_has_no_duplicate_images(self):
         # gateway.py resolves every image through its board-suffixed name, so an

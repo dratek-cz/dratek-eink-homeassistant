@@ -12,7 +12,6 @@ from homeassistant.core import HomeAssistant, callback
 
 from .ws_custom_elements import (
     websocket_delete_custom_element,
-    websocket_fetch_custom_element_url,
     websocket_list_custom_elements,
     websocket_save_custom_element,
 )
@@ -60,19 +59,13 @@ from .ws_sending import (
     websocket_upload_design_chunk,
 )
 
-# Handlers that carry a @websocket_command decorator but are deliberately not
-# exposed. test_websocket_registration.py compares the decorated handlers against
-# the registrations below, so anything left out has to be listed here on purpose -
-# that check exists because v0.1.131 silently dropped ten registrations and the
-# panel lost gateway sending, projects and custom elements for twenty releases.
-INTENTIONALLY_UNREGISTERED = frozenset(
-    {
-        # Fetches an arbitrary client supplied URL from the Home Assistant host.
-        # No frontend code calls it, so it stays off rather than widening the
-        # server's outbound surface for a feature nothing uses.
-        "websocket_fetch_custom_element_url",
-    }
-)
+# Escape hatch for handlers that carry a @websocket_command decorator but must
+# stay unexposed. test_websocket_registration.py compares the decorated handlers
+# against the registrations below, so anything left out has to be named here on
+# purpose - that check exists because v0.1.131 silently dropped ten registrations
+# and the panel lost gateway sending, projects and custom elements for twenty
+# releases. Empty is the healthy state: an unreachable handler is dead code.
+INTENTIONALLY_UNREGISTERED = frozenset()
 
 COMMANDS = (
     websocket_scan,
@@ -128,5 +121,4 @@ __all__ = [
     "INTENTIONALLY_UNREGISTERED",
     "async_setup",
     *(command.__name__ for command in COMMANDS),
-    "websocket_fetch_custom_element_url",
 ]
