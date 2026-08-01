@@ -63,7 +63,10 @@ Copy-Item -Recurse -Path (Join-Path $repoRoot "custom_components\dratek_eink\*")
 Get-ChildItem -LiteralPath $targetFolder -Recurse -Directory -Filter "__pycache__" |
     Sort-Object { $_.FullName.Length } -Descending |
     Remove-Item -Recurse -Force
-Get-ChildItem -LiteralPath $targetFolder -Recurse -File -Include "*.pyc", "*.pyo" |
+# -Include is silently ignored next to -LiteralPath, which made this match every
+# file in the package and empty the whole zip. Filter on the extension instead.
+Get-ChildItem -LiteralPath $targetFolder -Recurse -File |
+    Where-Object { $_.Extension -in ".pyc", ".pyo" } |
     Remove-Item -Force
 
 $zipPath = Join-Path $repoRoot "dratek_eink.zip"
