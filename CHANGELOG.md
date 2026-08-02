@@ -2,6 +2,19 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.171] - 2026-08-02
+
+### Opraveno
+- **Šablona se na displej zapisovala posunutá.** Odesílaný obrázek nevznikal ze stejného rendereru jako náhled – klonoval se viditelný DOM do SVG `foreignObject` a ten se rasterizoval. Klon při vyříznutí ztratil měřítko i pozicovací kontext svého rodiče, takže kresba v exportu sedla mimo, zatímco náhled na obrazovce vypadal správně a nic na příčinu neukazovalo. Na štítku na výšku zůstávalo vlevo 7 pixelů prázdna, na štítku na šířku 51 z 296, tedy šestina displeje. Obrázek pro panel nyní staví stejný renderer jako náhled, v nativním rozlišení displeje; snímání DOM je odstraněné i s celou svou obsluhou klonování a vkládání stylů. Ověřeno na šesti kombinacích velikostí a orientací: kresba dosedá na levý, pravý i spodní okraj přesně.
+- **Ikony v šablonách se nenačítaly.** Home Assistant vykresluje `ha-icon` přes vnořený `ha-svg-icon`, který nejdřív vytvoří `<svg><g></g></svg>` a `<path>` doplní teprve po stažení příslušného balíku ikon. Panel považoval za hotovou každou neprázdnou `<svg>`, takže zachytil prázdnou skupinu, uložil si ji jako úspěšně načtenou a už ji nikdy nezkusil znovu – ikona, která tenhle závod prohrála, zůstala prázdná po celou relaci. Šablona počasí si žádá pět ikon z jednoho balíku naráz a prohrávala pokaždé, zatímco šablona domu vyhrávala. Ikona se nyní považuje za vykreslenou, až když `<svg>` obsahuje něco kreslitelného; stejnou slabinu měla i čekací smyčka před odesláním obrázku.
+- **Šablona nevyplňovala celou plochu menšího displeje.** Byla umisťovaná jako přesunutelný objekt na 96 % plochy, což vlevo a nahoře nechávalo bílý pruh – naměřeno 11 pixelů vlevo proti jednomu vpravo. Přesouvání dává smysl jen na displeji 400×300, kde se na obrazovku vejdou dvě šablony vedle sebe; na menším displeji je šablona vždy přes celou plochu a nenabízí už uchopení, které by stejně nemělo kam pohnout.
+
+### Přidáno
+- **Průvodce nastavením u každé šablony.** Otazník na dlaždici a tlačítko v nastavení otevřou okno, které jmenuje konkrétní integrace Home Assistantu poskytující entity, jež šablona potřebuje – u kalendáře třeba Místní kalendář, Google Calendar a CalDAV, u zabezpečení ústřednu alarmu a kontakty dveří. Okno se zároveň podívá do vaší instalace a u každé integrace řekne, zda už ji máte, nebo které entity chybí; u údajů šablony ukáže, co se přiřadilo samo a co je potřeba vybrat ručně. Nahradilo bublinu, která pro všechny šablony opakovala tytéž tři obecné věty.
+
+### Změněno
+- Testovací harness napodobuje `ha-icon` tak, jak jej Home Assistant skutečně vykresluje: dvě vnořené komponenty, prázdná skupina nejdřív a cesta o okamžik později. Předchozí verze zapisovala hotovou ikonu v jednom kroku, takže okno, ve kterém chyba s prázdnými ikonami žila, vůbec neuměla vytvořit. Ikony v něm nově respektují velikost, kterou jim panel předepisuje, místo pevných 24 pixelů.
+
 ## [0.1.170] - 2026-08-02
 
 ### Opraveno

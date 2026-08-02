@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.171
+
+- šablona se na displej zapisuje přesně, bez bílého pruhu u levého okraje
+- ikony v šablonách se načítají spolehlivě, včetně počasí
+- šablona vyplňuje celou plochu i na menším displeji
+- každá šablona má průvodce, který ukáže, jaké integrace Home Assistantu potřebuje a co z nich už máte
+
 ## Novinky ve verzi 0.1.170
 
 - náhled šablony v katalogu nyní odpovídá tomu, co se objeví na displeji – obojí kreslí jediný renderer
