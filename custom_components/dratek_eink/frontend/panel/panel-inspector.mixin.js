@@ -605,6 +605,12 @@ export const inspectorMixin = {
         this._paint();
       });
     });
+    this.shadowRoot.querySelectorAll("[data-template-option]").forEach((input) => input.addEventListener("change", (event) => {
+      this._displayTemplateOptions ||= {};
+      this._displayTemplateOptions[input.dataset.templateOption] = !!event.target.checked;
+      this._render();
+      this._paint();
+    }));
     this.shadowRoot.querySelectorAll("[data-template-editor-tool]").forEach((button) => button.addEventListener("click", () => {
       this._addTemplateEditorElement(button.dataset.templateEditorTool, button.dataset.templateEditorIcon || "");
     }));

@@ -15,6 +15,8 @@
 // used for the on-screen preview and for the bitmap sent to the panel, so they
 // are identical by construction.
 
+import qrcode from "../qrcode-generator.js";
+
 const RED = "#e31b1b";
 const BLACK = "#000000";
 const FONT = "Arial, Helvetica, sans-serif";
@@ -217,6 +219,18 @@ export const templateSvgMixin = {
       + `</svg>`;
   },
 
+  // The catalog tile. Same drawing, one difference: a tile is a fixed box in a
+  // grid, so the panel letterboxes inside it rather than stretching to fill it.
+  _templateSvgThumbnail(template, width, height) {
+    const markup = this._templateSvgPreviewMarkup(template, width, height);
+    if (!markup) return "";
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"`
+      + ` viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">`
+      + `<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>`
+      + markup
+      + `</svg>`;
+  },
+
   // --------------------------------------------------------------- layout ---
 
   // Advance width of a string at a given size. Blocks that place two runs of text
@@ -413,6 +427,8 @@ export const templateSvgMixin = {
     if (row.spark) return this._blockSpark(row, box);
     if (row.datebox) return this._blockDatebox(row, box);
     if (row.board) return this._blockBoard(row, box);
+    if (row.qr) return this._blockQr(row, box);
+    if (row.pricetag) return this._blockPriceTag(row, box);
     if (row.text != null) return this._blockText(row, box);
     return "";
   },
@@ -801,6 +817,91 @@ export const templateSvgMixin = {
     return parts.join("");
   },
 
+  // The price itself, and what a promotion does to it.
+  //
+  // On promotion the old price is struck through above the new one and the whole
+  // block reverses out of a filled panel, so a shopper reads "this is cheaper than
+  // it was" from across the aisle without reading either number. That is the entire
+  // job of a shelf label, and it is why the promotion is a switch on the template
+  // rather than yet another value someone has to bind an entity to.
+  _blockPriceTag(row, box) {
+    const tag = row.pricetag;
+    const sale = !!tag.sale;
+    const parts = [];
+    if (sale) {
+      parts.push(`<rect x="${box.x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${box.w.toFixed(2)}" height="${box.h.toFixed(2)}" fill="${RED}"></rect>`);
+    }
+    const ink = sale ? "#ffffff" : BLACK;
+    const cx = box.x + box.w / 2;
+    let top = box.y + box.h * 0.06;
+    if (sale && tag.was) {
+      const wasSize = Math.max(6, Math.min(box.h * 0.17, box.w * 0.13));
+      const wasY = top + wasSize * 0.6;
+      parts.push(this._svgText(tag.was, cx, wasY, wasSize, { color: ink, maxWidth: box.w * 0.7 }));
+      // The strike is what makes it a former price rather than a second one.
+      const struck = Math.min(this._svgTextWidth(tag.was, wasSize, false), box.w * 0.7);
+      parts.push(this._svgHairline(cx - struck / 2, wasY, struck, Math.max(1, wasSize * 0.09), ink));
+      top = wasY + wasSize * 0.55;
+    }
+    const priceHeight = box.y + box.h * (tag.unit ? 0.82 : 0.94) - top;
+    const unitRatio = 0.36;
+    const span = (size) => this._svgTextWidth(tag.price, size, true)
+      + (tag.currency ? this._svgTextWidth(` ${tag.currency}`, size * unitRatio, true) : 0);
+    let size = Math.max(9, priceHeight * 0.86);
+    if (span(size) > box.w * 0.94) size = Math.max(8, (size * box.w * 0.94) / span(size));
+    const left = cx - span(size) / 2;
+    const baseline = top + priceHeight * 0.55;
+    parts.push(this._svgText(tag.price, left, baseline, size, { anchor: "start", bold: true, color: ink }));
+    if (tag.currency) {
+      parts.push(this._svgText(tag.currency, left + this._svgTextWidth(tag.price, size, true) + size * unitRatio * 0.3,
+        baseline + size * 0.24, size * unitRatio, { anchor: "start", bold: true, color: ink }));
+    }
+    if (tag.unit) {
+      parts.push(this._svgText(tag.unit, cx, box.y + box.h * 0.91, Math.max(5, Math.min(box.h * 0.13, box.w * 0.1)), { color: ink, maxWidth: box.w * 0.92 }));
+    }
+    return parts.join("");
+  },
+
+  // A real, scannable code.
+  //
+  // The Wi-Fi template used to show a QR in its catalog thumbnail while the picture
+  // actually sent to the tag had none - the thumbnail was a different renderer, and
+  // nothing reconciled the two. Modules are snapped to whole device pixels and drawn
+  // as one path with crisp edges, because a module landing on a half pixel comes out
+  // grey, and the three-colour quantiser then turns that grey into whichever of
+  // black or white it is nearer - which is how a code stops scanning.
+  _blockQr(row, box) {
+    const text = String(row.qr.text ?? "");
+    if (!text) return "";
+    const code = qrcode(0, row.qr.correction || "M");
+    code.addData(text);
+    try {
+      code.make();
+    } catch (_error) {
+      // Too much data for the largest symbol; a missing code beats a broken one.
+      return "";
+    }
+    const modules = code.getModuleCount();
+    const quiet = 2;
+    const side = Math.min(box.w, box.h);
+    const cell = Math.max(1, Math.floor(side / (modules + quiet * 2)));
+    const drawn = cell * modules;
+    const margin = cell * quiet;
+    const x = Math.round(box.x + (box.w - drawn) / 2);
+    const y = Math.round(box.y + (box.h - drawn) / 2);
+    let path = "";
+    for (let rowIndex = 0; rowIndex < modules; rowIndex++) {
+      for (let column = 0; column < modules; column++) {
+        if (code.isDark(rowIndex, column)) {
+          path += `M${x + column * cell} ${y + rowIndex * cell}h${cell}v${cell}h${-cell}z`;
+        }
+      }
+    }
+    return `<rect x="${(x - margin).toFixed(0)}" y="${(y - margin).toFixed(0)}" width="${(drawn + margin * 2).toFixed(0)}"`
+      + ` height="${(drawn + margin * 2).toFixed(0)}" fill="#ffffff"></rect>`
+      + `<path d="${path}" fill="${BLACK}" shape-rendering="crispEdges"></path>`;
+  },
+
   // A departure board: the line number lives in a filled badge, so it is found by
   // shape before anything is read.
   _blockBoard(row, box) {
@@ -835,6 +936,15 @@ export const templateSvgMixin = {
   // ids without a second copy of the list drifting out of step with this one.
   _templateSvgSpecs(template) {
     const v = (index, fallback) => this._templateDisplayValue(template, index, fallback);
+    // Charts, meters and dials need numbers rather than formatted strings, and the
+    // weather and calendar rows need data that arrives from a service call. All of
+    // them fall back to the sample so a template still reads as itself before any
+    // entity is bound.
+    const series = (index, fallback) => this._templateSeries(template, index, fallback);
+    const ratio = (index, fallback) => this._templatePercent(template, index, fallback) / 100;
+    const day = (index) => this._templateForecastDay(template, index);
+    const event = (index) => this._templateCalendarEntry(template, index);
+    const option = (name) => this._templateOptionActive(template, name);
     return {
       // Twenty templates, twenty shapes. The variable indices are fixed by the
       // catalog in panel-devices.mixin.js - v(0) is that template's first bound
@@ -844,12 +954,7 @@ export const templateSvgMixin = {
         { stat: { value: v(0, "23"), unit: "°C", caption: v(1, "Polojasno") }, h: 0.30 },
         { text: v(3, "23. května"), h: 0.07, size: 0.045 },
         { rule: true, h: 0.02 },
-        { strip: [
-          { label: "PÁ", icon: "weather-partly-cloudy", value: v(4, "22°") },
-          { label: "SO", icon: "weather-sunny", value: "25°" },
-          { label: "NE", icon: "weather-rainy", value: "18°" },
-          { label: "PO", icon: "weather-cloudy", value: "20°" },
-        ], h: 0.25 },
+        { strip: [day(0), day(1), day(2), day(3)], h: 0.25 },
         { flex: true },
         { footer: [{ label: "AKTUALIZOVÁNO", value: v(2, "12:45") }], h: 0.13 },
       ],
@@ -857,7 +962,7 @@ export const templateSvgMixin = {
         { text: "Cena elektřiny", h: 0.075, size: 0.05, bold: true },
         { stat: { value: v(0, "2,45"), unit: "Kč/kWh", caption: v(1, "12:00–13:00") }, h: 0.27 },
         { bars: {
-          values: [1.62, 1.48, 1.36, 1.29, 1.34, 1.51, 1.88, 2.24, 2.06, 1.72, 1.38, 1.12, 0.86, 0.94, 1.08, 1.42, 1.96, 2.58, 2.74, 2.39, 2.05, 1.84, 1.71, 1.63],
+          values: series(2, [1.62, 1.48, 1.36, 1.29, 1.34, 1.51, 1.88, 2.24, 2.06, 1.72, 1.38, 1.12, 0.86, 0.94, 1.08, 1.42, 1.96, 2.58, 2.74, 2.39, 2.05, 1.84, 1.71, 1.63]),
           labels: ["0", "", "", "", "", "6", "", "", "", "", "", "12", "", "", "", "", "", "18", "", "", "", "", "", "23"],
           highlight: 12,
         }, h: 0.43 },
@@ -888,7 +993,7 @@ export const templateSvgMixin = {
       ],
       solar: () => [
         { text: "Fotovoltaika", h: 0.075, size: 0.05, bold: true },
-        { ring: { percent: 0.47, value: v(0, "2,35"), caption: "kW" }, h: 0.42 },
+        { ring: { percent: ratio(0, 47), value: v(0, "2,35"), caption: "kW" }, h: 0.42 },
         { list: [
           { icon: "weather-sunny", label: "Dnes", value: v(1, "8,2 kWh") },
           { icon: "calendar-month", label: "Měsíc", value: v(2, "152 kWh") },
@@ -917,8 +1022,8 @@ export const templateSvgMixin = {
         { stat: { value: v(0, "23,5"), unit: "°C", caption: "Obývák" }, h: 0.3 },
         { rule: true, h: 0.02 },
         { meters: [
-          { label: "Vlhkost", value: v(1, "40 %"), percent: 0.4 },
-          { label: "CO₂", value: v(2, "650 ppm"), percent: 0.32, color: "red" },
+          { label: "Vlhkost", value: v(1, "40 %"), percent: ratio(1, 40) },
+          { label: "CO₂", value: v(2, "650 ppm"), percent: ratio(2, 32), color: "red" },
         ], h: 0.28 },
         { flex: true },
         { footer: [{ label: "KOMFORT", value: "Optimální" }], h: 0.13 },
@@ -935,19 +1040,22 @@ export const templateSvgMixin = {
         { footer: [{ label: "AKTUALIZACE", value: v(3, "12:45") }], h: 0.14 },
       ],
       wifi: () => [
-        { icon: "wifi", h: 0.16 },
         { text: "Wi-Fi", h: 0.075, size: 0.055, bold: true },
-        { band: { label: "SÍŤ", value: v(0, "Home_Network") }, bleed: true, h: 0.21 },
-        { gap: true, h: 0.025 },
-        { band: { label: "HESLO", value: v(1, "MyPassword123"), color: "black" }, bleed: true, h: 0.21 },
+        // Low redundancy on purpose: it costs four modules of symbol size, and on a
+        // tag this small every module is a device pixel that decides whether a phone
+        // can read the code at all.
+        { qr: { text: `WIFI:T:WPA;S:${v(0, "Home_Network")};P:${v(1, "MyPassword123")};;`, correction: "L" }, h: 0.36 },
+        { band: { label: "SÍŤ", value: v(0, "Home_Network") }, bleed: true, h: 0.16 },
+        { gap: true, h: 0.02 },
+        { band: { label: "HESLO", value: v(1, "MyPassword123"), color: "black" }, bleed: true, h: 0.16 },
         { flex: true },
-        { footer: [{ label: "ZABEZPEČENÍ", value: "WPA2" }], h: 0.13 },
+        { footer: [{ label: "NASKENUJ", value: "a připoj se" }], h: 0.13 },
       ],
       calendar: () => [
         { text: "Kalendář", h: 0.075, size: 0.05, bold: true },
         { rule: true, h: 0.02 },
-        { datebox: { day: "23", month: "KVĚ", color: "red", lines: [v(0, "Schůzka"), "15:00 · kancelář"] }, h: 0.27 },
-        { datebox: { day: "24", month: "KVĚ", lines: [v(1, "Narozeniny"), "Tomáš · celý den"] }, h: 0.27 },
+        { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, h: 0.27 },
+        { datebox: { day: event(1).day, month: event(1).month, lines: [event(1).title, event(1).detail] }, h: 0.27 },
         { flex: true },
         { footer: [{ label: "SVÁTEK MÁ", value: v(2, "Jana") }], h: 0.14 },
       ],
@@ -989,7 +1097,7 @@ export const templateSvgMixin = {
       ],
       air: () => [
         { text: "Kvalita vzduchu", h: 0.07, size: 0.046, bold: true },
-        { dial: { percent: 0.21, value: v(0, "42"), caption: "AQI · výborná", min: "0", max: "200" }, h: 0.35 },
+        { dial: { percent: ratio(0, 21) / 2, value: v(0, "42"), caption: "AQI", min: "0", max: "200" }, h: 0.35 },
         { rule: true, h: 0.02 },
         { list: [
           { icon: "molecule-co2", label: "CO₂", value: v(1, "612 ppm") },
@@ -1012,7 +1120,7 @@ export const templateSvgMixin = {
       water: () => [
         { text: "Spotřeba vody", h: 0.07, size: 0.046, bold: true },
         { stat: { value: v(0, "126"), unit: "l", caption: "dnes" }, h: 0.26 },
-        { spark: { values: [96, 131, 108, 142, 119, 174, 126], caption: "7 dní" }, h: 0.24 },
+        { spark: { values: series(0, [96, 131, 108, 142, 119, 174, 126]), caption: "7 dní" }, h: 0.24 },
         { rule: true, h: 0.02 },
         { strip: [
           { label: "TÝDEN", value: v(1, "0,84 m³") },
@@ -1047,10 +1155,10 @@ export const templateSvgMixin = {
         { text: "Home server", h: 0.07, size: 0.046, bold: true },
         { band: { label: "STAV", value: v(0, "ONLINE") }, bleed: true, h: 0.17 },
         { meters: [
-          { label: "CPU", value: v(1, "24 %"), percent: 0.24 },
-          { label: "RAM", value: v(2, "61 %"), percent: 0.61 },
-          { label: "Disk", value: v(3, "73 %"), percent: 0.73, color: "red" },
-          { label: "Teplota", value: v(4, "48 °C"), percent: 0.48 },
+          { label: "CPU", value: v(1, "24 %"), percent: ratio(1, 24) },
+          { label: "RAM", value: v(2, "61 %"), percent: ratio(2, 61) },
+          { label: "Disk", value: v(3, "73 %"), percent: ratio(3, 73), color: "red" },
+          { label: "Teplota", value: v(4, "48 °C"), percent: ratio(4, 48) },
         ], h: 0.48 },
         { flex: true },
         { footer: [{ label: "PROVOZ", value: v(5, "18 dní") }], h: 0.13 },
@@ -1058,7 +1166,7 @@ export const templateSvgMixin = {
       garden: () => [
         { text: v(0, "Záhon rajčat"), h: 0.075, size: 0.048, bold: true },
         { stat: { value: v(1, "36"), unit: "%", caption: "vlhkost půdy" }, h: 0.26 },
-        { spark: { values: [62, 58, 55, 49, 47, 43, 40, 38, 36], caption: "7 dní" }, h: 0.27 },
+        { spark: { values: series(1, [62, 58, 55, 49, 47, 43, 40, 38, 36]), caption: "7 dní" }, h: 0.27 },
         { rule: true, h: 0.02 },
         { list: [
           { icon: "weather-sunny", label: "Teplota", value: v(2, "24 °C") },
@@ -1066,6 +1174,35 @@ export const templateSvgMixin = {
         ], h: 0.18 },
         { flex: true },
         { footer: [{ label: "ZÁLIVKA", value: v(4, "18:30") }], h: 0.13 },
+      ],
+      price: () => [
+        { text: v(0, "Jablka Golden"), h: 0.1, size: 0.055, bold: true },
+        { rule: true, h: 0.02 },
+        { pricetag: {
+          price: v(1, "24,90"),
+          currency: "Kč",
+          unit: v(4, "49,80 Kč / kg"),
+          was: v(3, "34,90 Kč"),
+          sale: option("sale"),
+        }, h: 0.44 },
+        { qr: { text: v(5, "8594001234567") }, h: 0.24 },
+        { flex: true },
+        { footer: [{ label: option("sale") ? "AKCE DO" : "PLATNÁ OD", value: "31. 5." }], h: 0.13 },
+      ],
+      priceshelf: () => [
+        { band: { value: option("sale") ? "AKCE" : "CENOVKA", color: option("sale") ? "red" : "black" }, bleed: true, h: 0.14 },
+        { text: v(0, "Jablka Golden"), h: 0.11, size: 0.06, bold: true },
+        { pricetag: {
+          price: v(1, "24,90"),
+          currency: "Kč",
+          unit: v(4, "49,80 Kč / kg"),
+          was: v(3, "34,90 Kč"),
+          sale: option("sale"),
+        }, h: 0.46 },
+        { rule: true, h: 0.02 },
+        { list: [{ icon: "package-variant", label: "Skladem", value: v(5, "18 ks") }], h: 0.12 },
+        { flex: true },
+        { footer: [{ label: "KÓD", value: v(2, "8594001234567") }], h: 0.13 },
       ],
     };
   },

@@ -1,4 +1,3 @@
-import qrcode from "../qrcode-generator.js";
 import { DRATEK_EINK_VERSION } from "./panel-constants.js";
 
 export const devicesMixin = {
@@ -474,8 +473,10 @@ export const devicesMixin = {
       { id: "birthdays", number: "18", category: "information", title: "Narozeniny", variables: [["account", "Jméno"], ["numeric", "Věk"], ["calendar-star", "Další narozeniny"], ["gift-outline", "Připomínka"]] },
       { id: "server", number: "19", category: "technology", title: "Stav serveru", variables: [["server-network", "Dostupnost"], ["chip", "CPU"], ["memory", "RAM"], ["harddisk", "Disk"], ["thermometer", "Teplota"], ["clock-outline", "Doba provozu"]] },
       { id: "garden", number: "20", category: "nature", title: "Zahrada", variables: [["sprout-outline", "Záhon"], ["water-percent", "Vlhkost půdy"], ["thermometer", "Teplota"], ["weather-windy", "Vítr"], ["sprinkler-variant", "Další zálivka"]] },
+      { id: "price", number: "21", category: "shop", title: "Cenovka", options: [["sale", "Akce", "Zobrazí štítek AKCE, původní cenu přeškrtne a novou zvýrazní."]], variables: [["tag-outline", "Název zboží"], ["currency-usd", "Cena"], ["sale", "Akce"], ["cash-multiple", "Původní cena"], ["scale-balance", "Jednotková cena"], ["barcode", "Kód zboží"]] },
+      { id: "priceshelf", number: "22", category: "shop", title: "Regálová cenovka", options: [["sale", "Akce", "Zobrazí štítek AKCE a doplní o kolik zboží zlevnilo."]], variables: [["tag-outline", "Název zboží"], ["currency-usd", "Cena"], ["sale", "Akce"], ["cash-multiple", "Původní cena"], ["scale-balance", "Jednotková cena"], ["package-variant", "Skladem"]] },
     ];
-    const prepared = new Set(["weather", "home", "solar", "living", "calendar", "security", "air", "thermostat", "server", "garden"]);
+    const prepared = new Set(["weather", "home", "solar", "living", "calendar", "security", "air", "thermostat", "server", "garden", "price", "priceshelf"]);
     return templates.map((template) => ({
       ...template,
       kind: prepared.has(template.id) ? "prepared" : "custom",
@@ -488,6 +489,13 @@ export const devicesMixin = {
         "Přetáhněte šablonu na náhled displeje vlevo.",
         "Aplikace automaticky najde první entitu weather.* v Home Assistantu.",
         "Teplota, stav počasí, datum a čas se doplní automaticky; zdroj lze později změnit v nastavení šablony.",
+      ];
+    }
+    if (template.id === "price" || template.id === "priceshelf") {
+      return [
+        "Přetáhněte cenovku na náhled displeje vlevo.",
+        "V Nastavit vyberte entity s názvem zboží a cenou – nejlépe pomocníky typu text a číslo.",
+        "Přepínačem Akce zvýrazníte slevu; zapnout ji může i pomocník typu spínač, pokud jej u údaje Akce vyberete.",
       ];
     }
     if (template.kind === "prepared") {
@@ -523,149 +531,27 @@ export const devicesMixin = {
     });
   },
 
-  _renderDisplayTemplatePreview(template) {
-    const icon = (name, className = "") => `<ha-icon class="${className}" icon="mdi:${name}"></ha-icon>`;
-    const value = (index, fallback) => this._escape(this._templateDisplayValue(template, index, fallback));
-    const percent = (index, fallback) => this._templatePercent(template, index, fallback);
-    const energySeries = this._templateSeries(template, 2, [4, 2, 5, 8, 7, 11, 15, 13, 18, 14, 10, 12, 6, 9]);
-    const energyMin = Math.min(...energySeries);
-    const energyMax = Math.max(...energySeries);
-    const energyRange = Math.max(1, energyMax - energyMin);
-    const energyPoints = energySeries.map((value, index) => {
-      const x = energySeries.length === 1 ? 0 : (index / (energySeries.length - 1)) * 180;
-      const y = 60 - ((value - energyMin) / energyRange) * 48;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(" ");
-    const waterSeries = this._templateSeries(template, 3, [42, 70, 52, 88, 61, 45, 73]);
-    const waterMax = Math.max(1, ...waterSeries);
-    const waterBars = waterSeries.slice(-9).map((value) => `<b style="height:${Math.max(8, Math.round((value / waterMax) * 92))}%"></b>`).join("");
-    const wifiNetwork = this._templateDisplayValue(template, 0, "Home_Network");
-    const wifiPassword = this._templateDisplayValue(template, 1, "MyPassword123");
-    const wifiCode = qrcode(0, "M");
-    wifiCode.addData(`WIFI:T:WPA;S:${wifiNetwork};P:${wifiPassword};;`);
-    wifiCode.make();
-    const wifiQr = wifiCode.createSvgTag(3, 0, "QR kód pro připojení k Wi-Fi", `Wi-Fi ${wifiNetwork}`);
-    const previews = {
-      weather: `<div class="tpl tpl-weather">
-        ${icon("weather-partly-cloudy", "tpl-weather-icon")}
-        <strong>${value(1, "Polojasno")}</strong><span>${value(3, "23. května")}</span><i></i><b>${value(2, "12:45")}</b><i></i>
-        <em>${value(0, "23 °C")}</em><small>${icon("thermometer")} ${value(1, "Polojasno")}<br>${value(4, "24° / 13°")}</small>
-        <footer><span>SO<br>${icon("weather-partly-cloudy")}<br>${value(4, "22°")}</span><span>NE<br>${icon("weather-sunny")}<br>25°</span><span>PO<br>${icon("weather-rainy")}<br>18°</span><span>ÚT<br>${icon("weather-cloudy")}<br>20°</span></footer>
-      </div>`,
-      energy: `<div class="tpl tpl-energy">
-        <header>${icon("lightning-bolt", "tpl-red")}<span><strong>Cena elektřiny</strong><small>Kč / kWh</small></span></header><i></i>
-        <em>${value(0, "2,45 Kč")}</em><span>${value(1, "12:00–13:00")}</span><span>Dnes</span>
-        <svg viewBox="0 0 180 70" aria-hidden="true" data-template-chart="energy"><polyline points="${energyPoints}"></polyline></svg>
-        <footer>${icon("tag")}<span>Nejlevnější dnes<br><b>${value(3, "2,45 Kč")}</b></span><small>${value(1, "12:00–13:00")}</small></footer>
-      </div>`,
-      home: `<div class="tpl tpl-home">
-        <h3>Dům</h3>${icon("home", "tpl-home-icon tpl-red")}
-        <ul><li>${icon("thermometer")}<span>${value(0, "21,5 °C")}</span></li><li>${icon("water")}<span>${value(1, "45 %")}</span></li><li>${icon("lightbulb-on")}<span>${value(2, "3 světla ON")}</span></li><li>${icon("lock")}<span>${value(3, "Vše zamčeno")}</span></li></ul><i></i>
-        <footer>${icon("check-circle")}<strong>Všechno v pořádku</strong></footer>
-      </div>`,
-      waste: `<div class="tpl tpl-waste">
-        <h3>Odpady</h3><section>${icon("trash-can-outline")}<span><b>${value(0, "ZÍTRA")}</b><strong>Plast</strong></span></section><i></i>
-        <section>${icon("recycle")}<span><b>${value(1, "za 7 dní")}</b><strong>${value(2, "Papír")}</strong></span></section>
-      </div>`,
-      solar: `<div class="tpl tpl-solar">
-        <header>${icon("weather-sunny-outline")}<span><strong>Fotovoltaika</strong><small>Aktuální výkon</small></span></header>
-        ${icon("solar-power", "tpl-solar-icon")}<em>${value(0, "2,35 kW")}</em><i></i>
-        <ul><li><span>Dnes</span><b>${value(1, "8,2 kWh")}</b></li><li><span>Tento měsíc</span><b>${value(2, "152 kWh")}</b></li><li><span>Celkem</span><b>${value(3, "3,45 MWh")}</b></li></ul>
-        <footer>${icon("leaf")} Úspora CO₂: ${value(4, "125 kg")}</footer>
-      </div>`,
-      washer: `<div class="tpl tpl-washer">
-        <h3>Pračka</h3>${icon("washing-machine", "tpl-washer-icon")}
-        <label>Program</label><strong class="tpl-red">${value(0, "Bavlna 60°")}</strong><i></i>
-        <section>${icon("clock-outline")}<span>Zbývá</span><b>${value(1, "01:15")}</b></section><i></i><footer>Skončí v ${value(2, "14:30")}</footer>
-      </div>`,
-      living: `<div class="tpl tpl-living">
-        <h3>Obývák</h3><section>${icon("thermometer", "tpl-red")}<em>${value(0, "23,5 °C")}</em></section><i></i>
-        <section>${icon("water")}<strong>Vlhkost: ${value(1, "40 %")}</strong></section><i></i><footer>CO₂: ${value(2, "650 ppm")}</footer>
-      </div>`,
-      presence: `<div class="tpl tpl-presence">
-        <h3>Kdo je doma</h3>
-        <ul><li>${icon("account")}<strong>${value(0, "Petr")}</strong>${icon("home", "tpl-red")}</li><li>${icon("account")}<strong>Jana</strong>${icon("home", "tpl-red")}</li><li>${icon("account")}<strong>Eliška</strong><b>${value(2, "Ve škole")}</b></li></ul>
-        <footer>${icon("clock-outline")}<span>${value(1, "Poslední aktualizace")}<br><strong>${value(3, "12:45")}</strong></span></footer>
-      </div>`,
-      wifi: `<div class="tpl tpl-wifi">
-        <h3>Wi-Fi</h3><span class="tpl-wifi-qr">${wifiQr}</span>
-        <label>Síť</label><strong class="tpl-red">${this._escape(wifiNetwork)}</strong><i></i><label>Heslo</label><strong class="tpl-red">${this._escape(wifiPassword)}</strong><i></i>
-        <footer>${icon("wifi")} Naskenuj pro připojení</footer>
-      </div>`,
-      calendar: `<div class="tpl tpl-calendar">
-        <h3>Kalendář</h3>
-        <section><span class="tpl-date">${icon("calendar-blank")}<b>23</b></span><span><b>PÁTEK</b><strong>${value(0, "Schůzka")}</strong><small>15:00</small></span></section><i></i>
-        <section><span class="tpl-date">${icon("calendar-blank")}<b>24</b></span><span><b>SOBOTA</b><strong>${value(1, "Narozeniny")}</strong><small>Tomáš</small></span></section>
-        <footer>${icon("cake-variant")}<span>Zítra má svátek<br><strong>${value(2, "Jana")}</strong></span></footer>
-      </div>`,
-      security: `<div class="tpl tpl-security">
-        <h3>Zabezpečení</h3>${icon("shield-home", "tpl-security-icon")}
-        <em>${value(0, "ZAPNUTO")}</em><span>Dům je zabezpečený</span><i></i>
-        <ul><li>${icon("door-closed-lock")}<span>Dveře</span><b>${value(1, "Zamčeno")}</b></li><li>${icon("window-closed")}<span>Okna</span><b>${value(2, "Zavřeno")}</b></li><li>${icon("motion-sensor")}<span>Pohyb</span><b>${value(3, "Klid")}</b></li></ul>
-        <footer>${icon("check-circle")} Všechny zóny v pořádku</footer>
-      </div>`,
-      transport: `<div class="tpl tpl-transport">
-        <h3>Odjezdy</h3><header>${icon("tram")}<span><strong>${value(0, "Hlavní nádraží")}</strong><small>směr Centrum</small></span></header>
-        <ul><li><b>${value(1, "9")}</b><span>Náměstí</span><em>${value(2, "3 min")}</em></li><li><b>4</b><span>Univerzita</span><em>8 min</em></li><li><b>12</b><span>Nemocnice</span><em>14 min</em></li></ul>
-        <footer>${icon("walk")} Zastávka ${value(3, "240 m")}</footer>
-      </div>`,
-      shopping: `<div class="tpl tpl-shopping">
-        <h3>Nákupní seznam</h3><ul><li>${icon("checkbox-marked")}<span>${value(0, "Mléko")}</span></li><li>${icon("checkbox-blank-outline")}<span>Chléb</span></li><li>${icon("checkbox-blank-outline")}<span>Jablka</span></li><li>${icon("checkbox-blank-outline")}<span>Káva</span></li><li>${icon("checkbox-blank-outline")}<span>${value(1, "Prací gel")}</span></li></ul>
-        <footer>${icon("cart-outline")} ${value(2, "Zbývají 4 položky")}</footer>
-      </div>`,
-      air: `<div class="tpl tpl-air">
-        <h3>Kvalita vzduchu</h3>${icon("air-filter", "tpl-air-icon")}<em>Výborná</em><strong>${value(0, "42 AQI")}</strong><i></i>
-        <section><span>CO₂<b>${value(1, "612 ppm")}</b></span><span>PM2.5<b>${value(2, "8 µg/m³")}</b></span><span>Vlhkost<b>${value(3, "46 %")}</b></span></section>
-        <footer>${icon("leaf")} Doporučeno nevětrat</footer>
-      </div>`,
-      thermostat: `<div class="tpl tpl-thermostat">
-        <h3>Topení</h3>${icon("radiator", "tpl-thermostat-icon")}<label>Obývací pokoj</label><em>${value(0, "22,5 °C")}</em><span>Cílová teplota ${value(1, "23 °C")}</span>
-        <div class="tpl-heat-scale"><i style="width:${percent(2, 48)}%"></i><b style="left:${percent(2, 48)}%"></b></div>
-        <section><span>${icon("fire")} Topení aktivní</span><strong>${value(2, "48 %")}</strong></section>
-        <footer>Další změna v ${value(3, "22:00")}</footer>
-      </div>`,
-      water: `<div class="tpl tpl-water">
-        <h3>Spotřeba vody</h3>${icon("water-pump", "tpl-water-icon")}<em>${value(0, "126 l")}</em><span>Dnes</span>
-        <section data-template-chart="water">${waterBars}</section>
-        <ul><li><span>Tento týden</span><b>${value(1, "0,84 m³")}</b></li><li><span>Tento měsíc</span><b>${value(2, "3,12 m³")}</b></li></ul>
-        <footer>${icon("trending-down")} ${value(3, "O 12 % méně než včera")}</footer>
-      </div>`,
-      parcel: `<div class="tpl tpl-parcel">
-        <h3>Zásilka</h3>${icon("package-variant-closed", "tpl-parcel-icon")}<em>${value(0, "Na cestě")}</em><strong>${value(1, "RR 458 921 730 CZ")}</strong>
-        <ol><li class="done"><b></b><span>Převzato dopravcem</span></li><li class="done"><b></b><span>Na depu Brno</span></li><li class="active"><b></b><span>${value(2, "Doručení dnes")}</span></li></ol>
-        <footer>${icon("truck-delivery-outline")} ${value(3, "13:00–15:00")}</footer>
-      </div>`,
-      birthdays: `<div class="tpl tpl-birthdays">
-        <h3>Narozeniny</h3>${icon("cake-variant", "tpl-birthday-icon")}<em>Dnes slaví</em><strong>${value(0, "Lucie")}</strong><span>${value(1, "32 let")}</span><i></i>
-        <section><small>Další narozeniny</small><b>${value(2, "Tomáš")}</b><span>za 4 dny</span></section>
-        <footer>${icon("gift-outline")} ${value(3, "Nezapomeň popřát")}</footer>
-      </div>`,
-      server: `<div class="tpl tpl-server">
-        <h3>Stav serveru</h3><header>${icon("server-network")}<span><strong>Home server</strong><small>192.168.1.10</small></span><b>${value(0, "ONLINE")}</b></header>
-        <section><span>CPU<b>${value(1, "24 %")}</b><i style="width:${percent(1, 24)}%"></i></span><span>RAM<b>${value(2, "61 %")}</b><i style="width:${percent(2, 61)}%"></i></span><span>Disk<b>${value(3, "73 %")}</b><i style="width:${percent(3, 73)}%"></i></span></section>
-        <ul><li>${icon("thermometer")}<span>Teplota</span><b>${value(4, "48 °C")}</b></li><li>${icon("clock-outline")}<span>Provoz</span><b>${value(5, "18 dní")}</b></li></ul>
-        <footer>${icon("check-network-outline")} Všechny služby běží</footer>
-      </div>`,
-      garden: `<div class="tpl tpl-garden">
-        <h3>Zahrada</h3><header>${icon("flower")}<span><strong>${value(0, "Záhon rajčat")}</strong><small>Automatická závlaha</small></span></header>
-        <em>Vlhkost ${value(1, "36 %")}</em><div class="tpl-moisture"><i style="width:${percent(1, 36)}%"></i></div>
-        <section><span>${icon("weather-sunny")} ${value(2, "24 °C")}</span><span>${icon("water-percent")} ${value(1, "36 %")}</span><span>${icon("weather-windy")} ${value(3, "8 km/h")}</span></section>
-        <i></i><strong>Další zalévání</strong><b>${value(4, "18:30 · 12 minut")}</b>
-        <footer>${icon("sprinkler-variant")} Závlaha připravena</footer>
-      </div>`,
-    };
-    return previews[template.id] || "";
-  },
-
-  _renderDisplayTemplateCatalogPreview(template, orientation) {
-    const preview = this._renderDisplayTemplatePreview(template);
-    return orientation === "landscape"
-      ? preview.replace('class="tpl ', 'class="tpl tpl-landscape ')
-      : preview;
+  // The catalog tile shows the very drawing the display will get, laid out at the
+  // panel's own resolution. It used to be a second, hand-written HTML rendering of
+  // all twenty templates: the tile you picked and the picture that arrived on the
+  // tag were two different designs by two different code paths, so every change to
+  // one drifted silently from the other. There is now one renderer.
+  _renderDisplayTemplateCatalogPreview(template, orientation, size) {
+    const base = size && size.width && size.height ? size : { width: 250, height: 128 };
+    const long = Math.max(base.width, base.height);
+    const short = Math.min(base.width, base.height);
+    const width = orientation === "landscape" ? long : short;
+    const height = orientation === "landscape" ? short : long;
+    return this._templateSvgThumbnail(template, width, height);
   },
 
   _renderDisplayTemplatesSection(device) {
     const size = this._devicePreviewSize(device);
+    // The tile carries the panel's own proportions, so the thumbnail is the shape
+    // of the thing being configured rather than the shape of a stylesheet box.
+    const previewAspect = this._displayTemplateOrientation === "landscape"
+      ? `${Math.max(size.width, size.height)}/${Math.min(size.width, size.height)}`
+      : `${Math.min(size.width, size.height)}/${Math.max(size.width, size.height)}`;
     const battery = this._batteryInfo(device);
     const rssi = Number(device.rssi);
     const editing = this._editingDeviceAddress === device.address;
@@ -763,7 +649,7 @@ export const devicesMixin = {
               </header>
               <div class="display-template-tile-preview is-${orientation}" data-display-template-quick-send="${template.id}" role="button" tabindex="0" aria-label="Odeslat šablonu ${this._escape(template.title)} na displej">
                 <span class="display-template-drag-handle"><ha-icon icon="mdi:drag"></ha-icon>Přetáhnout na displej</span>
-                <span class="display-template-preview">${this._renderDisplayTemplateCatalogPreview(template, orientation)}</span>
+                <span class="display-template-preview" style="aspect-ratio:${previewAspect};min-height:0">${this._renderDisplayTemplateCatalogPreview(template, orientation, size)}</span>
               </div>
               <div class="display-template-tile-meta">
                 <span class="display-template-variables" aria-label="Použité údaje">${template.variables.map(([iconName, label]) => `<span><ha-icon icon="mdi:${iconName}"></ha-icon>${this._escape(label)}</span>`).join("")}</span>
@@ -951,6 +837,7 @@ export const devicesMixin = {
                   ? "Místo pro druhou šablonu je odemčené. Přidejte ji v galerii šablon."
                   : "Na displeji jsou dvě malé šablony. Kliknutím v náhledu vyberete tu, kterou upravujete."
               : "Malý displej používá jednu šablonu přes celou plochu. Při otočení displeje se šablona otočí automaticky."}</p>
+            ${this._renderTemplateOptionSettings(activeTemplate)}
             <p class="template-settings-intro">Vyberte, ze kterých entit Home Assistantu se mají načítat hodnoty. Systémové údaje jsou nastavené automaticky.</p>
             <div class="template-variable-settings">${activeTemplate.variables.map((variable, index) => this._renderTemplateVariableSetting(activeTemplate, variable, index)).join("")}</div>
           </aside>
@@ -1522,6 +1409,218 @@ export const devicesMixin = {
     }).join("")}</div>`;
   },
 
+  // --------------------------------------------------- template switches ---
+
+  // Some templates carry a state that is a decision rather than a reading: a price
+  // tag is on promotion because someone says so, not because a sensor changed. Such
+  // a switch can still be driven by an entity - a helper toggle, a binary sensor
+  // from the till system - so the manual switch and the bound entity are ORed: the
+  // shop can flip it by hand today and automate it tomorrow without rebuilding.
+  _templateOptionActive(template, option) {
+    if (this._displayTemplateOptions?.[`${template?.id}:${option}`]) return true;
+    const entity = this._templateEntityForKind(template, [option]);
+    const state = entity ? this._hass?.states?.[entity] : null;
+    return ["on", "true", "1", "akce", "sale"].includes(String(state?.state ?? "").toLowerCase());
+  },
+
+  _renderTemplateOptionSettings(template) {
+    const options = template?.options || [];
+    if (!options.length) return "";
+    return `<div class="template-option-settings">${options.map(([option, label, help]) => {
+      const active = !!this._displayTemplateOptions?.[`${template.id}:${option}`];
+      const bound = this._templateEntityForKind(template, [option]);
+      return `<label class="template-option-switch ${active ? "is-active" : ""}">
+        <input type="checkbox" data-template-option="${this._escape(`${template.id}:${option}`)}" ${active ? "checked" : ""}>
+        <span><strong>${this._escape(label)}</strong><small>${this._escape(help)}${bound ? ` Řídí i entita ${bound}.` : ""}</small></span>
+      </label>`;
+    }).join("")}</div>`;
+  },
+
+  // ------------------------------------------------------- live template data ---
+
+  // Home Assistant stopped publishing forecasts as a weather attribute in 2024.4;
+  // they come from the weather.get_forecasts service now, which is why the forecast
+  // row of the weather template had been showing sample data on every install since.
+  // Rendering is synchronous, so the fetch fills a cache and asks for a repaint when
+  // it lands - the same shape the icon warm-up uses.
+  _templateForecast(entityId) {
+    if (!entityId || !this._hass?.callService) return null;
+    this._templateForecastCache ||= new Map();
+    if (this._templateForecastCache.has(entityId)) return this._templateForecastCache.get(entityId);
+    this._templateForecastCache.set(entityId, null);
+    Promise.resolve()
+      .then(() => this._hass.callService("weather", "get_forecasts", { type: "daily" }, { entity_id: entityId }, false, true))
+      .then((result) => {
+        const forecast = result?.response?.[entityId]?.forecast;
+        if (Array.isArray(forecast) && forecast.length) {
+          this._templateForecastCache.set(entityId, forecast);
+          this._scheduleTemplateDataRepaint();
+        }
+      })
+      .catch(() => {
+        // An installation too old for response data, or a weather integration
+        // without a daily forecast. The sample row stays, which is honest.
+      });
+    return null;
+  },
+
+  _templateCalendarEvents(entityId) {
+    if (!entityId || !this._hass?.callService) return null;
+    this._templateCalendarCache ||= new Map();
+    if (this._templateCalendarCache.has(entityId)) return this._templateCalendarCache.get(entityId);
+    this._templateCalendarCache.set(entityId, null);
+    Promise.resolve()
+      // A duration avoids formatting a local timestamp by hand, which is the part
+      // of calendar.get_events that goes wrong across time zones.
+      .then(() => this._hass.callService("calendar", "get_events", { duration: { days: 21 } }, { entity_id: entityId }, false, true))
+      .then((result) => {
+        const events = result?.response?.[entityId]?.events;
+        if (Array.isArray(events)) {
+          this._templateCalendarCache.set(entityId, events);
+          this._scheduleTemplateDataRepaint();
+        }
+      })
+      .catch(() => {});
+    return null;
+  },
+
+  // Both fetches land independently; coalescing the repaint keeps a template with a
+  // forecast and a calendar from redrawing the whole panel twice.
+  _scheduleTemplateDataRepaint() {
+    if (this._templateDataRepaintPending) return;
+    this._templateDataRepaintPending = true;
+    setTimeout(() => {
+      this._templateDataRepaintPending = false;
+      this._render();
+      this._paint();
+    }, 0);
+  },
+
+  // The entity bound to the first slot of a template that asks for one of `kinds`.
+  _templateEntityForKind(template, kinds) {
+    const variables = template?.variables || [];
+    for (let index = 0; index < variables.length; index++) {
+      const meta = this._templateVariableMeta(variables[index], index);
+      if (!kinds.includes(this._templateSlotKind(meta.label, meta.icon))) continue;
+      const binding = this._templateBinding(template, meta);
+      if (binding && !binding.startsWith("internal:")) return binding;
+    }
+    return "";
+  },
+
+  _weatherConditionIcon(condition) {
+    return {
+      "clear-night": "weather-night",
+      cloudy: "weather-cloudy",
+      exceptional: "alert-circle-outline",
+      fog: "weather-fog",
+      hail: "weather-hail",
+      lightning: "weather-lightning",
+      "lightning-rainy": "weather-lightning-rainy",
+      partlycloudy: "weather-partly-cloudy",
+      pouring: "weather-pouring",
+      rainy: "weather-rainy",
+      snowy: "weather-snowy",
+      "snowy-rainy": "weather-snowy-rainy",
+      sunny: "weather-sunny",
+      windy: "weather-windy",
+      "windy-variant": "weather-windy",
+    }[String(condition || "")] || "";
+  },
+
+  _weatherConditionLabel(condition) {
+    return {
+      "clear-night": "Jasná noc",
+      cloudy: "Zataženo",
+      exceptional: "Výjimečné",
+      fog: "Mlha",
+      hail: "Krupobití",
+      lightning: "Bouřky",
+      "lightning-rainy": "Bouřky s deštěm",
+      partlycloudy: "Polojasno",
+      pouring: "Vydatný déšť",
+      rainy: "Déšť",
+      snowy: "Sněžení",
+      "snowy-rainy": "Déšť se sněhem",
+      sunny: "Jasno",
+      windy: "Větrno",
+      "windy-variant": "Větrno",
+    }[String(condition || "")] || "";
+  },
+
+  // One column of the forecast strip. Falls back to the sample day so the template
+  // still reads as a weather template before the service call returns.
+  _templateForecastDay(template, index) {
+    const sample = [
+      { label: "PÁ", icon: "weather-partly-cloudy", value: "22°" },
+      { label: "SO", icon: "weather-sunny", value: "25°" },
+      { label: "NE", icon: "weather-rainy", value: "18°" },
+      { label: "PO", icon: "weather-cloudy", value: "20°" },
+    ][index] || { label: "", icon: "", value: "" };
+    const forecast = this._templateForecast(this._templateEntityForKind(template, ["forecast", "weather"]));
+    const entry = Array.isArray(forecast) ? forecast[index] : null;
+    if (!entry) return sample;
+    const date = new Date(entry.datetime);
+    const temperature = Number(entry.temperature);
+    return {
+      label: Number.isNaN(date.getTime())
+        ? sample.label
+        : new Intl.DateTimeFormat("cs-CZ", { weekday: "short" }).format(date).replace(/\./g, "").toLocaleUpperCase("cs"),
+      icon: this._weatherConditionIcon(entry.condition) || sample.icon,
+      value: Number.isFinite(temperature) ? `${Math.round(temperature)}°` : sample.value,
+    };
+  },
+
+  // One entry of the calendar template: a boxed date beside what is happening.
+  _templateCalendarEntry(template, index) {
+    const samples = [
+      { day: "23", month: "KVĚ", title: "Schůzka", detail: "15:00 · kancelář" },
+      { day: "24", month: "KVĚ", title: "Narozeniny", detail: "Tomáš · celý den" },
+    ];
+    const sample = samples[index] || samples[0];
+    const events = this._templateCalendarEvents(this._templateEntityForKind(template, ["calendar"]));
+    const event = Array.isArray(events) ? events[index] : null;
+    if (!event) return sample;
+    const start = new Date(event.start);
+    if (Number.isNaN(start.getTime())) return { ...sample, title: event.summary || sample.title };
+    const allDay = !String(event.start).includes("T");
+    const time = new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(start);
+    return {
+      day: String(start.getDate()),
+      month: new Intl.DateTimeFormat("cs-CZ", { month: "short" }).format(start).replace(/\./g, "").slice(0, 3).toLocaleUpperCase("cs"),
+      title: event.summary || sample.title,
+      detail: [allDay ? "celý den" : time, event.location].filter(Boolean).join(" · "),
+    };
+  },
+
+  // States that are words rather than numbers. Left raw they reach the panel in
+  // English - a presence template that prints "not_home" is not a finished feature.
+  _templateStateWords(entityId, state, kind) {
+    const domain = String(entityId || "").split(".")[0];
+    const value = String(state?.state ?? "").toLowerCase();
+    const deviceClass = String(state?.attributes?.device_class || "");
+    if (domain === "weather") return this._weatherConditionLabel(value);
+    if (domain === "person" || domain === "device_tracker") {
+      if (value === "home") return "Doma";
+      if (value === "not_home") return "Pryč";
+      return state?.state ? String(state.state) : "";
+    }
+    if (domain === "lock") return value === "locked" ? "Zamčeno" : value === "unlocked" ? "Odemčeno" : "";
+    if (domain === "light" || domain === "switch") return value === "on" ? "Zapnuto" : value === "off" ? "Vypnuto" : "";
+    if (domain === "alarm_control_panel") {
+      return { disarmed: "Vypnuto", armed_home: "Doma", armed_away: "Mimo dům", armed_night: "Noc", arming: "Aktivuji", pending: "Čekám", triggered: "POPLACH" }[value] || "";
+    }
+    if (domain === "binary_sensor") {
+      const on = value === "on";
+      if (["door", "garage_door", "opening"].includes(deviceClass) || kind === "door") return on ? "Otevřeno" : "Zavřeno";
+      if (["window"].includes(deviceClass) || kind === "window") return on ? "Otevřeno" : "Zavřeno";
+      if (["motion", "occupancy", "presence"].includes(deviceClass) || kind === "motion") return on ? "Pohyb" : "Klid";
+      if (["moisture"].includes(deviceClass)) return on ? "Vlhko" : "Sucho";
+      return on ? "Ano" : "Ne";
+    }
+    return "";
+  },
+
   _templateDisplayValue(template, variableIndex, fallback = "") {
     const variable = template?.variables?.[variableIndex];
     if (!variable) return fallback;
@@ -1544,6 +1643,7 @@ export const devicesMixin = {
       return fallback;
     }
     const state = binding ? this._hass?.states?.[binding] : null;
+    const kind = this._templateSlotKind(meta.label, meta.icon);
     const weatherState = String(binding || "").startsWith("weather.");
     const weatherAttributes = state?.attributes || {};
     let raw = state?.state;
@@ -1551,11 +1651,19 @@ export const devicesMixin = {
     if (weatherState && normalized.includes("teplot")) {
       raw = weatherAttributes.temperature;
       forcedUnit = weatherAttributes.temperature_unit || "°C";
-    } else if (weatherState && normalized.includes("predpoved")) {
-      const forecast = Array.isArray(weatherAttributes.forecast) ? weatherAttributes.forecast[0] : null;
-      raw = forecast
-        ? `${forecast.condition || state?.state || ""}${Number.isFinite(Number(forecast.temperature)) ? ` ${forecast.temperature} ${weatherAttributes.temperature_unit || "°C"}` : ""}`
-        : state?.state;
+    } else if (kind === "forecast") {
+      // The service-backed forecast, not the attribute Home Assistant removed.
+      const tomorrow = this._templateForecast(binding)?.[1];
+      const high = Number(tomorrow?.temperature);
+      const low = Number(tomorrow?.templow);
+      raw = Number.isFinite(high)
+        ? `${Math.round(high)}° / ${Number.isFinite(low) ? Math.round(low) : "-"}°`
+        : undefined;
+    } else if (kind === "calendar") {
+      raw = this._templateCalendarEvents(binding)?.[0]?.summary;
+    } else {
+      const words = this._templateStateWords(binding, state, kind);
+      if (words) return words;
     }
     if (raw === undefined || raw === null || ["", "unknown", "unavailable"].includes(String(raw).toLowerCase())) return fallback;
     const unit = String(forcedUnit || state?.attributes?.unit_of_measurement || "").trim();
@@ -1624,28 +1732,114 @@ export const devicesMixin = {
     };
   },
 
+  // What a template slot is actually asking for, independent of how its label reads.
+  // Matching on label text alone picked the wrong entity constantly - "Teplota"
+  // matched anything containing "teplo", the heating switch included - because a
+  // name is a description while a device_class is a declaration.
+  _templateSlotKind(label, icon = "") {
+    const text = `${label} ${icon}`.toLocaleLowerCase("cs");
+    const has = (...needles) => needles.some((needle) => text.includes(needle));
+    if (has("akce", "sleva")) return "sale";
+    if (has("název zboží", "zboží")) return "product";
+    if (has("původní cena")) return "monetary";
+    if (has("jednotková cena")) return "monetary";
+    if (has("kód")) return "barcode";
+    if (has("skladem", "zásob")) return "stock";
+    if (has("předpově")) return "forecast";
+    if (has("počas")) return "weather";
+    if (has("událost", "kalend")) return "calendar";
+    if (has("svátek")) return "nameday";
+    if (has("osob", "přítom", "jméno")) return "person";
+    if (has("teplot", "termostat")) return "temperature";
+    if (has("vlhkost")) return "humidity";
+    if (has("co₂", "co2")) return "carbon_dioxide";
+    if (has("pm2", "aqi", "kvalit")) return "air_quality";
+    if (has("bateri")) return "battery";
+    if (has("signál")) return "signal_strength";
+    if (has("cena", "tarif", "minimum")) return "monetary";
+    if (has("výkon")) return "power";
+    if (has("spotřeb", "výrob")) return "energy";
+    if (has("vod", "zálivk")) return "water";
+    if (has("vít")) return "wind_speed";
+    if (has("světl")) return "light";
+    if (has("zám")) return "lock";
+    if (has("dveř")) return "door";
+    if (has("okn")) return "window";
+    if (has("pohyb")) return "motion";
+    if (has("alarm", "režim")) return "alarm";
+    if (has("zásilk", "sledovac", "doruč")) return "shipment";
+    if (has("položk", "splněn", "seznam")) return "todo";
+    if (has("program")) return "program";
+    if (has("věk", "číslo")) return "generic";
+    if (has("zbývaj", "dokonč", "změn")) return "timestamp";
+    return "generic";
+  },
+
+  // Domains and device classes each kind accepts. A declared device_class outranks
+  // any keyword match in the score below, which is what makes the binding reliable
+  // on an installation whose entities are not named in Czech.
+  _templateSlotTargets(kind) {
+    const targets = {
+      forecast: { domains: ["weather"] },
+      weather: { domains: ["weather"] },
+      calendar: { domains: ["calendar"] },
+      person: { domains: ["person", "device_tracker"] },
+      temperature: { domains: ["sensor", "climate"], classes: ["temperature"] },
+      humidity: { domains: ["sensor"], classes: ["humidity", "moisture"] },
+      carbon_dioxide: { domains: ["sensor"], classes: ["carbon_dioxide"] },
+      air_quality: { domains: ["sensor"], classes: ["aqi", "pm25"] },
+      battery: { domains: ["sensor"], classes: ["battery"] },
+      signal_strength: { domains: ["sensor"], classes: ["signal_strength"] },
+      monetary: { domains: ["sensor"], classes: ["monetary"], units: ["kč", "czk", "eur", "/kwh"] },
+      power: { domains: ["sensor"], classes: ["power"], units: ["kw", "w"] },
+      energy: { domains: ["sensor"], classes: ["energy"], units: ["kwh", "wh", "mwh"] },
+      water: { domains: ["sensor"], classes: ["water"], units: ["l", "m³"] },
+      wind_speed: { domains: ["sensor"], classes: ["wind_speed"] },
+      light: { domains: ["light", "switch"] },
+      lock: { domains: ["lock"] },
+      door: { domains: ["binary_sensor", "cover"], classes: ["door", "garage_door", "opening"] },
+      window: { domains: ["binary_sensor", "cover"], classes: ["window", "opening"] },
+      motion: { domains: ["binary_sensor"], classes: ["motion", "occupancy", "presence"] },
+      alarm: { domains: ["alarm_control_panel"] },
+      todo: { domains: ["todo", "sensor"] },
+      program: { domains: ["sensor", "select", "vacuum", "humidifier"] },
+      timestamp: { domains: ["sensor", "input_datetime"], classes: ["timestamp", "duration"] },
+      shipment: { domains: ["sensor"] },
+      nameday: { domains: ["sensor", "calendar"] },
+      // A promotion is a decision, so the entity that carries it is a helper the
+      // shop can flip - or a binary sensor fed by the till system.
+      sale: { domains: ["input_boolean", "binary_sensor", "switch"] },
+      product: { domains: ["input_text", "sensor"] },
+      barcode: { domains: ["input_text", "sensor"] },
+      stock: { domains: ["sensor", "input_number"] },
+      generic: { domains: ["sensor", "binary_sensor", "input_number", "input_text"] },
+    };
+    return targets[kind] || targets.generic;
+  },
+
   _suggestTemplateEntity(meta) {
     const states = this._hass?.states || {};
     const entries = Object.entries(states);
     if (!entries.length) return "";
-    const text = `${meta.label} ${meta.icon}`.toLocaleLowerCase("cs");
-    const domainHints = text.includes("osob") || text.includes("přítom") ? ["person.", "device_tracker."]
-      : text.includes("kalend") || text.includes("udál") ? ["calendar."]
-        : text.includes("počas") || text.includes("předpově") ? ["weather."]
-          : text.includes("svět") ? ["light."]
-            : text.includes("zám") || text.includes("dveř") || text.includes("okn") ? ["lock.", "binary_sensor."]
-              : ["sensor.", "binary_sensor.", "input_number.", "input_text."];
-    const keywords = String(meta.label || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/\s+/).filter((word) => word.length > 2);
+    const kind = this._templateSlotKind(meta.label, meta.icon);
+    const { domains = [], classes = [], units = [] } = this._templateSlotTargets(kind);
+    const strip = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const keywords = strip(meta.label).split(/\s+/).filter((word) => word.length > 2);
     const scored = entries.map(([entityId, state]) => {
-      const haystack = `${entityId} ${state?.attributes?.friendly_name || ""} ${state?.attributes?.device_class || ""}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-      const domainScore = domainHints.some((domain) => entityId.startsWith(domain)) ? 3 : 0;
-      const keywordScore = keywords.reduce((score, keyword) => score + (haystack.includes(keyword) ? 4 : 0), 0);
+      const domain = entityId.split(".")[0];
       const attributes = state?.attributes || {};
-      const seriesScore = String(meta.icon || "").includes("chart")
-        && [attributes.values, attributes.prices, attributes.data, attributes.history].some((value) => Array.isArray(value)) ? 7 : 0;
-      return { entityId, score: domainScore + keywordScore + seriesScore };
+      let score = 0;
+      if (domains.includes(domain)) score += 6;
+      if (classes.length && classes.includes(String(attributes.device_class || ""))) score += 10;
+      if (units.length && units.some((unit) => strip(attributes.unit_of_measurement).includes(strip(unit)))) score += 4;
+      score += keywords.reduce((sum, word) => sum + (strip(`${entityId} ${attributes.friendly_name || ""}`).includes(word) ? 3 : 0), 0);
+      if ([attributes.values, attributes.prices, attributes.data, attributes.history].some(Array.isArray)) score += 2;
+      // An unavailable entity renders as its fallback anyway, so anything live is
+      // a better binding than one that will show nothing.
+      if (["unavailable", "unknown"].includes(String(state?.state).toLowerCase())) score -= 5;
+      return { entityId, score };
     }).sort((a, b) => b.score - a.score || a.entityId.localeCompare(b.entityId));
-    return scored[0]?.score > 3 ? scored[0].entityId : "";
+    return scored[0]?.score >= 6 ? scored[0].entityId : "";
   },
 
   _templateBinding(template, meta) {
@@ -1678,17 +1872,6 @@ export const devicesMixin = {
     if (value.includes("bateri")) return "82 %";
     if (value.includes("signál")) return "-48 dBm";
     return "Aktivní";
-  },
-
-  _renderDisplayTemplateWidePreview(template) {
-    const primary = this._templateVariableMeta(template.variables[0] || ["view-dashboard-outline", "Stav"], 0);
-    const details = template.variables.slice(1, 4);
-    return `<div class="tpl-wide tpl-wide-${template.id}">
-      <header><span><ha-icon icon="mdi:${primary.icon}"></ha-icon></span><div><small>Šablona ${template.number}</small><strong>${this._escape(template.title)}</strong></div></header>
-      <section class="tpl-wide-main"><small>${this._escape(primary.label)}</small><strong>${this._escape(this._templateDisplayValue(template, 0, this._templateSampleValue(primary.label)))}</strong></section>
-      <div class="tpl-wide-metrics">${details.map(([icon, label], index) => `<span><ha-icon icon="mdi:${icon}"></ha-icon><small>${this._escape(label)}</small><strong>${this._escape(this._templateDisplayValue(template, index + 1, this._templateSampleValue(label)))}</strong></span>`).join("")}</div>
-      <footer><ha-icon icon="mdi:home-assistant"></ha-icon>Aktualizováno z Home Assistantu</footer>
-    </div>`;
   },
 
   _renderDisplayTemplateSurface(template, format, primary = false, slot = "primary", fillDisplay = false, templateSize = "small", autoFit = false, slotWidth = 0, slotHeight = 0) {

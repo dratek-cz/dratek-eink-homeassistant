@@ -206,8 +206,15 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('${this._displaySettingsView === "templates" ? this._renderDisplayTemplatesSection(device) : ""}', self.source)
         self.assertNotIn('return this._renderDisplayTemplatesPage(device)', self.source)
         self.assertIn('class="display-template-grid"', self.source)
-        self.assertEqual(self.source.count('number: "'), 20)
-        self.assertEqual(self.source.count("variables: [["), 20)
+        self.assertEqual(self.source.count('number: "'), 22)
+        self.assertEqual(self.source.count("variables: [["), 22)
+        # A promotion is a decision rather than a reading, so a price tag carries a
+        # switch as well as its entity bindings - and the switch and a bound helper
+        # are ORed, so the shop can flip it by hand today and automate it later.
+        self.assertIn('options: [["sale", "Akce"', self.source)
+        self.assertIn("_templateOptionActive(template, option) {", self.source)
+        self.assertIn('data-template-option="${this._escape(`${template.id}:${option}`)}"', self.source)
+        self.assertIn("_blockPriceTag(row, box) {", self.source)
         self.assertIn('class="display-template-variable-count"', self.source)
         self.assertIn('class="display-template-variables"', self.source)
         self.assertIn('aria-label="Použité údaje"', self.source)
@@ -234,11 +241,13 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".display-template-workspace{display:grid;grid-template-columns:minmax(280px,1fr) minmax(0,2fr)", self.source)
         self.assertIn('this._displayTemplateCategory = button.dataset.displayTemplateCategory || "prepared";', self.source)
         self.assertIn('this._displayTemplateSearchQuery = event.target.value;', self.source)
-        self.assertIn('WIFI:T:WPA;S:Home_Network;P:MyPassword123;;', self.source)
-        self.assertIn('class="tpl-wifi-qr"', self.source)
-        self.assertNotIn('icon("qrcode", "tpl-qr-icon")', self.source)
-        self.assertIn(".tpl-air>em{color:#e31b1b", self.source)
-        self.assertIn(".tpl-server footer{display:flex;align-items:center;justify-content:center;gap:4px;background:#e31b1b", self.source)
+        # The Wi-Fi code is built by the SVG renderer, so it reaches the panel. It
+        # used to exist only in the catalog thumbnail's HTML, which was never sent
+        # anywhere - the tag showed the network name and password as plain text and
+        # no code at all, while the tile promised one.
+        self.assertIn('WIFI:T:WPA;S:${v(0, "Home_Network")};P:${v(1, "MyPassword123")};;', self.source)
+        self.assertIn("_blockQr(row, box) {", self.source)
+        self.assertIn('shape-rendering="crispEdges"', self.source)
         self.assertIn('data-display-template-open="${template.id}"', self.source)
         self.assertIn('class="display-template-card display-template-drag-card ${used ? "is-used" : ""}"', self.source)
         self.assertIn("Přetáhněte sem šablonu", self.source)
@@ -323,20 +332,18 @@ class FrontendToolLibraryTests(unittest.TestCase):
         # out by CSS, which is why previews never matched the panel.
         self.assertIn("_templateSvgPreviewBody(template, templateWidth, templateHeight)", self.source)
         self.assertIn("return this._layoutTemplateSvg(rows, width, height);", self.source)
-        # The CSS-only landscape swap is still fine for the thumbnail-sized catalog
-        # tiles, but it must not come back into the editor preview - that one has to
-        # stay on the SVG builder asserted above, or previews drift from the bitmap.
-        self.assertEqual(
-            1,
-            self.source.count("preview.replace('class=\"tpl ', 'class=\"tpl tpl-landscape ')"),
-        )
-        self.assertIn("_renderDisplayTemplateCatalogPreview(template, orientation) {", self.source)
+        # The catalog thumbnail comes from that same builder. It did not: the tiles
+        # were a second, hand-written HTML rendering of all twenty templates, so the
+        # tile you picked and the picture that arrived on the tag were two different
+        # designs maintained by two different code paths.
+        self.assertIn("_renderDisplayTemplateCatalogPreview(template, orientation, size) {", self.source)
+        self.assertIn("return this._templateSvgThumbnail(template, width, height);", self.source)
+        self.assertNotIn("_renderDisplayTemplatePreview(template) {", self.source)
+        self.assertNotIn('class="tpl ', self.source)
         self.assertNotIn('id="displayTemplateEditorBack"', self.source)
         self.assertNotIn("Zavřít designer", self.source)
         self.assertIn('class="template-editor-tools"', self.source)
         self.assertIn("context.putImageData(pixels, 0, 0)", self.source)
-        self.assertIn('data-template-chart="energy"', self.source)
-        self.assertIn('data-template-chart="water"', self.source)
         self.assertIn('this._displaySettingsView = stayInCatalog ? "templates" : "designer";', self.source)
         self.assertIn('this._displayDesignerReturnView = "templates";', self.source)
         self.assertIn('<small>Designer</small>', self.source)
@@ -351,27 +358,22 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".display-template-caption{box-sizing:border-box;width:100%;margin:0", self.source)
         for icon in (
             "weather-partly-cloudy",
-            "lightning-bolt",
             "home",
             "trash-can-outline",
-            "solar-power",
-            "washing-machine",
             "thermometer",
             "account",
-            "calendar-blank",
+            "calendar-month",
         ):
-            self.assertIn(f'icon("{icon}"', self.source)
+            self.assertIn(f'icon: "{icon}"', self.source)
         self.assertIn(".display-settings-action.is-active{", self.source)
-        self.assertIn("_renderDisplayTemplatePreview(template)", self.source)
         self.assertIn("_templateDisplayValue(template, variableIndex", self.source)
         self.assertIn("state?.attributes?.unit_of_measurement", self.source)
-        self.assertIn('const value = (index, fallback) => this._escape(this._templateDisplayValue(template, index, fallback));', self.source)
         self.assertIn(".display-template-preview{box-sizing:border-box", self.source)
         self.assertIn("border:2px solid #111", self.source)
         self.assertIn('<span class="display-template-tile-identity"><strong>${this._escape(template.title)}</strong>', self.source)
         self.assertIn("grid-template-columns:repeat(auto-fill,minmax(240px,1fr))", self.source)
         self.assertIn('class="display-template-tile-preview is-${orientation}"', self.source)
-        self.assertIn("_renderDisplayTemplateCatalogPreview(template, orientation)", self.source)
+        self.assertIn("_renderDisplayTemplateCatalogPreview(template, orientation, size)", self.source)
         self.assertIn('class="display-template-tile-actions"', self.source)
         for title in (
             "Zabezpečení",
@@ -386,8 +388,19 @@ class FrontendToolLibraryTests(unittest.TestCase):
             "Zahrada",
         ):
             self.assertIn(f'title: "{title}"', self.source)
+        # Charts, meters and dials read the bound entity rather than carrying a
+        # hard-coded number, so a template is a working readout as soon as it is
+        # dropped on a display instead of a picture of one.
         self.assertIn("_templatePercent(template, variableIndex", self.source)
-        self.assertIn('style="width:${percent(1, 24)}%"', self.source)
+        self.assertIn("const series = (index, fallback) => this._templateSeries(template, index, fallback);", self.source)
+        self.assertIn("const ratio = (index, fallback) => this._templatePercent(template, index, fallback) / 100;", self.source)
+        self.assertIn('{ label: "CPU", value: v(1, "24 %"), percent: ratio(1, 24) },', self.source)
+        # The forecast and the calendar come from services; Home Assistant removed
+        # the forecast attribute in 2024.4, so the weather strip had been showing
+        # sample data on every installation since.
+        self.assertIn('this._hass.callService("weather", "get_forecasts"', self.source)
+        self.assertIn('this._hass.callService("calendar", "get_events"', self.source)
+        self.assertIn("{ strip: [day(0), day(1), day(2), day(3)], h: 0.25 },", self.source)
         self.assertIn("return this._rasterizeDisplayTemplatePreview(screen);", self.source)
         self.assertIn('data-template-save', self.source)
         self.assertIn('data-template-editable-part', self.source)
