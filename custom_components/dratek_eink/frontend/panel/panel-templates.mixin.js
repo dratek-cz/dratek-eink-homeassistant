@@ -302,13 +302,14 @@ export const templatesMixin = {
     this._scheduleDraftSave();
   },
 
-  _applyTemplate(templateId) {
+  _applyTemplate(templateId, skipConfirm = false) {
     const template = this._templateDefinitions().find((item) => item.id === templateId);
     if (!template) return;
-    if (this._objects.length && !confirm(`Nahradit aktualni navrh sablonou "${template.title}"?`)) return;
+    if (!skipConfirm && this._objects.length && !confirm(`Nahradit aktualni navrh sablonou "${template.title}"?`)) return;
     this._pushHistory();
-    this._orientation = "portrait";
-    const size = this._displaySize();
+    const device = this._device();
+    const size = this._displaySize(device);
+    this._orientation = device?.orientation || (size.width > size.height ? "landscape" : "portrait");
     const sourceWidth = Math.max(250, ...template.objects.map((object) => Math.max(Number(object.x || 0), Number(object.x2 || 0)) + Number(object.w || 0)));
     const sourceHeight = Math.max(300, ...template.objects.map((object) => Math.max(Number(object.y || 0), Number(object.y2 || 0)) + Number(object.h || 0)));
     const sx = size.width / sourceWidth;

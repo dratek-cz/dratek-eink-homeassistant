@@ -215,6 +215,15 @@ export const templateSvgMixin = {
   // so return whatever is cached now and re-render once the rest arrive.
   _templateSvgPreviewMarkup(template, width, height) {
     if (!template) return "";
+    if (template.id === "blank") {
+      const cx = width / 2;
+      const cy = height / 2 - 12;
+      return `<rect x="6" y="6" width="${width - 12}" height="${height - 12}" rx="10" fill="none" stroke="#00a2a5" stroke-width="2" stroke-dasharray="6,4"></rect>`
+        + `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="20" fill="#00a2a5" opacity="0.14"></circle>`
+        + `<path d="M${(cx - 9).toFixed(2)} ${cy.toFixed(2)} H${(cx + 9).toFixed(2)} M${cx.toFixed(2)} ${(cy - 9).toFixed(2)} V${(cy + 9).toFixed(2)}" stroke="#00a2a5" stroke-width="3" stroke-linecap="round"></path>`
+        + `<text x="${cx.toFixed(2)}" y="${(cy + 34).toFixed(2)}" font-family="${FONT}" font-size="13" font-weight="bold" fill="#172127" text-anchor="middle">Vytvořit vlastní šablonu</text>`
+        + `<text x="${cx.toFixed(2)}" y="${(cy + 49).toFixed(2)}" font-family="${FONT}" font-size="10" fill="#64727b" text-anchor="middle">Prázdná plocha od nuly</text>`;
+    }
     const rows = this._templateSvgRows(template);
     this._requestTemplateIcons(rows);
     this._warmTemplateIcons();
@@ -231,7 +240,7 @@ export const templateSvgMixin = {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"`
       + ` viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">`
       + `<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>`
-      + markup
+      + `<g class="tpl">${markup}</g>`
       + `</svg>`;
   },
 
@@ -395,7 +404,8 @@ export const templateSvgMixin = {
     if (!footerRow || footerHeight <= 0) return [];
     const parts = [];
     const top = height - footerHeight;
-    parts.push(`<rect x="0" y="${top.toFixed(2)}" width="${width}" height="${footerHeight.toFixed(2)}" fill="${RED}"></rect>`);
+    const footerColor = footerRow.color === "red" ? RED : BLACK;
+    parts.push(`<rect x="0" y="${top.toFixed(2)}" width="${width}" height="${footerHeight.toFixed(2)}" fill="${footerColor}"></rect>`);
     const cells = footerRow.footer;
     const cellWidth = width / (cells.length || 1);
     cells.forEach((cell, index) => {
@@ -416,6 +426,7 @@ export const templateSvgMixin = {
     });
     return parts;
   },
+
 
   // ---------------------------------------------------------------- blocks ---
 
@@ -1191,20 +1202,36 @@ export const templateSvgMixin = {
         { flex: true },
         { footer: [{ label: "ZÁLIVKA", value: v(4, "18:30") }], h: 0.13 },
       ],
-      price: () => [
-        { text: v(0, "Jablka Golden"), h: 0.1, size: 0.055, bold: true },
-        { rule: true, h: 0.02 },
-        { pricetag: {
-          price: v(1, "24,90"),
-          currency: "Kč",
-          unit: v(4, "49,80 Kč / kg"),
-          was: v(3, "34,90 Kč"),
-          sale: option("sale"),
-        }, h: 0.44 },
-        { qr: { text: v(5, "8594001234567") }, h: 0.24 },
-        { flex: true },
-        { footer: [{ label: option("sale") ? "AKCE DO" : "PLATNÁ OD", value: "31. 5." }], h: 0.13 },
-      ],
+      price: () => {
+        const isSale = option("sale");
+        if (!isSale) {
+          // Plain black-and-white price tag: name, large price, product code in black footer
+          return [
+            { band: { value: "CENOVKA", color: "black" }, bleed: true, h: 0.13 },
+            { text: v(0, "Jablka Golden"), h: 0.14, size: 0.075, bold: true },
+            { pricetag: {
+              price: v(1, "149,-"),
+              currency: "Kč",
+              sale: false,
+            }, h: 0.59 },
+            { flex: true },
+            { footer: [{ label: "KÓD / EAN", value: v(3, "8594001234567") }], color: "black", h: 0.14 },
+          ];
+        }
+        // Sale variant: red band, struck old price, big new price, code in red footer
+        return [
+          { band: { value: "AKCE", color: "red" }, bleed: true, h: 0.13 },
+          { text: v(0, "Jablka Golden"), h: 0.13, size: 0.068, bold: true },
+          { pricetag: {
+            price: v(1, "149,-"),
+            currency: "Kč",
+            was: v(2, "199,- Kč"),
+            sale: true,
+          }, h: 0.60 },
+          { flex: true },
+          { footer: [{ label: "KÓD / EAN", value: v(3, "8594001234567") }], color: "red", h: 0.14 },
+        ];
+      },
       priceshelf: () => [
         { band: { value: option("sale") ? "AKCE" : "CENOVKA", color: option("sale") ? "red" : "black" }, bleed: true, h: 0.14 },
         { text: v(0, "Jablka Golden"), h: 0.11, size: 0.06, bold: true },
@@ -1218,7 +1245,7 @@ export const templateSvgMixin = {
         { rule: true, h: 0.02 },
         { list: [{ icon: "package-variant", label: "Skladem", value: v(5, "18 ks") }], h: 0.12 },
         { flex: true },
-        { footer: [{ label: "KÓD", value: v(2, "8594001234567") }], h: 0.13 },
+        { footer: [{ label: "KÓD", value: v(2, "8594001234567") }], color: option("sale") ? "red" : "black", h: 0.13 },
       ],
     };
   },

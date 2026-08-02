@@ -30,8 +30,17 @@
       status.className = "error";
       status.textContent = `Lokální náhled se nepodařilo spustit:\n${String(value || "Neznámá chyba")}`;
     };
-    window.addEventListener("error", (event) => showBootError(event.error?.stack || event.message));
-    window.addEventListener("unhandledrejection", (event) => showBootError(event.reason?.stack || event.reason));
+    window.addEventListener("error", (event) => {
+      const file = event.filename || "";
+      const line = event.lineno || 0;
+      const col = event.colno || 0;
+      const stack = event.error?.stack || event.message || "Uncaught Error";
+      showBootError(`${stack}\nSoubor: ${file}:${line}:${col}`);
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      const reason = event.reason?.stack || event.reason || "Unhandled Rejection";
+      showBootError(reason);
+    });
   </script>
   <script type="module">
     import { mdiPaths } from "./vendor/mdi/paths.js";
@@ -196,7 +205,7 @@
         }
       });
     }
-    await import("../custom_components/dratek_eink/frontend/dratek-eink-panel.js");
+    await import(`../custom_components/dratek_eink/frontend/dratek-eink-panel.js?t=${Date.now()}`);
 
     const gateways = [
       { id:"gateway-workshop", name:"Gateway dílna", host:"192.168.1.41", status:{ok:true,hostname:"dratek-dilna.local",ip:"192.168.1.41",firmware:"0.1.125",chip:"ESP32-S3",wifi_rssi:-49,uptime_ms:184320000,ble_initialized:true,ota_supported:true,free_heap:182440} },

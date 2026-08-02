@@ -108,7 +108,8 @@ export const previewMixin = {
   },
 
   _paintStoredDevicePreview(canvas, address, draft) {
-    const source = String(draft?.preview_image || "");
+    const device = (this._result?.devices || []).find((item) => String(item.address || "").toUpperCase() === address);
+    const source = String(draft?.preview_image || device?.preview_image || device?.last_image || "");
     if (!source.startsWith("data:image/")) return false;
     const key = `sent:${Number(draft?.preview_updated_at || 0)}:${source.length}:${this._hash(source)}`;
     const cached = this._devicePreviewImages.get(address);

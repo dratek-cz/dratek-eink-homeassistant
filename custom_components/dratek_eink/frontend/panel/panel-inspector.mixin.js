@@ -303,6 +303,10 @@ export const inspectorMixin = {
       this._pendingDisplayTemplateConflict = null;
       this._displayDesignerReturnView = "templates";
       this._displaySettingsView = stayInCatalog ? "templates" : "designer";
+
+      // Load template objects into canvas state
+      this._applyTemplate(templateId, true);
+
       this._render();
       this._paint();
       // Assigning a template while staying in the catalog - the preview's
@@ -503,6 +507,7 @@ export const inspectorMixin = {
       });
       item.addEventListener("pointerdown", (event) => {
         if (event.button !== 0) return;
+        if (event.target.closest?.(".template-editable-part")) return;
         event.preventDefault();
         event.stopPropagation();
         const slot = item.dataset.templateCanvasSlot || "primary";
@@ -675,6 +680,171 @@ export const inspectorMixin = {
       this._paint();
     });
     this.shadowRoot.querySelector("[data-template-send]")?.addEventListener("click", () => this._sendDisplayTemplatePreview());
+    this.shadowRoot.querySelectorAll("[data-display-template-canvas-open]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const templateId = button.dataset.displayTemplateCanvasOpen || "";
+        this._applyTemplate(templateId, true);
+        const device = this._device();
+        if (device) this._selectedDeviceAddress = device.address;
+        this._displaySettingsView = "designer";
+        this._render();
+        this._paint();
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-photoshop-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this._photoshopSidebarTab = button.dataset.photoshopTab;
+        this._render();
+        this._paint();
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-template-part-color]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const key = String(this._selectedTemplatePart || "");
+        if (!key) return;
+        this._templateElementAdjustments ||= {};
+        this._templateElementAdjustments[key] ||= { x: 0, y: 0, scale: 1 };
+        this._templateElementAdjustments[key].color = button.dataset.templatePartColor;
+        this._render();
+        this._paint();
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-layer-select]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this._selectedTemplatePart = button.dataset.layerSelect;
+        this._render();
+        this._paint();
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-layer-toggle-hide]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const key = button.dataset.layerToggleHide;
+        this._templateElementAdjustments ||= {};
+        this._templateElementAdjustments[key] ||= { x: 0, y: 0, scale: 1 };
+        this._templateElementAdjustments[key].hidden = !this._templateElementAdjustments[key].hidden;
+        this._render();
+        this._paint();
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-layer-toggle-lock]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const key = button.dataset.layerToggleLock;
+        this._templateElementAdjustments ||= {};
+        this._templateElementAdjustments[key] ||= { x: 0, y: 0, scale: 1 };
+        this._templateElementAdjustments[key].locked = !this._templateElementAdjustments[key].locked;
+        this._render();
+        this._paint();
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-device-price-sale]").forEach((button) => {
+      button.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this._activePriceSaleDeviceAddress = button.dataset.devicePriceSale;
+        this._render();
+        this._paint();
+
+        setTimeout(() => {
+          const updateLiveDiscount = () => {
+            const address = this._activePriceSaleDeviceAddress;
+            const titleVal = this.shadowRoot.querySelector("#priceSaleTitle")?.value || "Jablka Golden";
+            const oldValRaw = this.shadowRoot.querySelector("#priceSaleOldPrice")?.value || "199";
+            const newValRaw = this.shadowRoot.querySelector("#priceSaleNewPrice")?.value || "149";
+            const codeVal = this.shadowRoot.querySelector("#priceSaleCode")?.value || "8594001234567";
+
+            const oldVal = parseFloat(String(oldValRaw).replace(",", ".")) || 0;
+            const newVal = parseFloat(String(newValRaw).replace(",", ".")) || 0;
+            const pct = oldVal > 0 ? Math.round(((oldVal - newVal) / oldVal) * 100) : 0;
+            const saved = Math.max(0, oldVal - newVal);
+
+            const pctEl = this.shadowRoot.querySelector(".summary-discount-badge");
+            const saveEl = this.shadowRoot.querySelector(".summary-save-text strong");
+            if (pctEl) pctEl.textContent = `- ${pct} %`;
+            if (saveEl) saveEl.textContent = `${saved.toFixed(1).replace(".", ",")} Kč`;
+
+            if (address) {
+              const upperAddr = String(address).toUpperCase();
+              this._deviceDrafts ||= {};
+              this._deviceDrafts[upperAddr] ||= { template: "price", assigned_templates: ["price"] };
+              const draft = this._deviceDrafts[upperAddr];
+              draft.bindings ||= {};
+              draft.bindings["tag-outline"] = titleVal;
+              draft.bindings["cash-multiple"] = String(oldValRaw);
+              draft.bindings["currency-usd"] = String(newValRaw);
+              draft.bindings["barcode"] = codeVal;
+
+              this._displayTemplateBindings ||= {};
+              this._displayTemplateBindings["price:tag-outline"] = titleVal;
+              this._displayTemplateBindings["price:cash-multiple"] = String(oldValRaw);
+              this._displayTemplateBindings["price:currency-usd"] = String(newValRaw);
+              this._displayTemplateBindings["price:barcode"] = codeVal;
+
+              this._paint();
+            }
+          };
+
+          this.shadowRoot.querySelector("#priceSaleTitle")?.addEventListener("input", updateLiveDiscount);
+          this.shadowRoot.querySelector("#priceSaleOldPrice")?.addEventListener("input", updateLiveDiscount);
+          this.shadowRoot.querySelector("#priceSaleNewPrice")?.addEventListener("input", updateLiveDiscount);
+          this.shadowRoot.querySelector("#priceSaleCode")?.addEventListener("input", updateLiveDiscount);
+        }, 50);
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-price-sale-close]").forEach((closeBtn) => {
+      closeBtn.addEventListener("click", (e) => {
+        if (e.target === closeBtn || closeBtn.classList.contains("price-sale-close-btn")) {
+          this._activePriceSaleDeviceAddress = null;
+          this._render();
+          this._paint();
+        }
+      });
+    });
+
+    const applyPriceSale = async (isSaleActive) => {
+      const address = this._activePriceSaleDeviceAddress;
+      if (!address) return;
+
+      const titleVal = this.shadowRoot.querySelector("#priceSaleTitle")?.value || "Jablka Golden";
+      const oldVal = this.shadowRoot.querySelector("#priceSaleOldPrice")?.value || "199";
+      const newVal = this.shadowRoot.querySelector("#priceSaleNewPrice")?.value || "149";
+      const codeVal = this.shadowRoot.querySelector("#priceSaleCode")?.value || "8594001234567";
+
+      this._displayTemplateBindings ||= {};
+      this._displayTemplateBindings["price:tag-outline"] = titleVal;
+      this._displayTemplateBindings["price:cash-multiple"] = String(oldVal);
+      this._displayTemplateBindings["price:currency-usd"] = String(newVal);
+      this._displayTemplateBindings["price:barcode"] = codeVal;
+      this._displayTemplateOptions ||= {};
+      this._displayTemplateOptions["price:sale"] = isSaleActive;
+
+      const upperAddr = String(address).toUpperCase();
+      this._deviceDrafts ||= {};
+      this._deviceDrafts[upperAddr] ||= { template: "price", assigned_templates: ["price"] };
+      const draft = this._deviceDrafts[upperAddr];
+      draft.template = "price";
+      draft.assigned_templates = ["price"];
+      draft.options ||= {};
+      draft.options["sale"] = isSaleActive;
+      draft.bindings ||= {};
+      draft.bindings["tag-outline"] = titleVal;
+      draft.bindings["cash-multiple"] = String(oldVal);
+      draft.bindings["currency-usd"] = String(newVal);
+      draft.bindings["barcode"] = codeVal;
+
+      this._activePriceSaleDeviceAddress = null;
+      await this._saveCurrentDeviceDraft?.();
+      await this._sendDisplayTemplatePreview?.();
+      this._render();
+      this._paint();
+    };
+
+    this.shadowRoot.querySelector("[data-price-sale-apply]")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      applyPriceSale(true);
+    });
+    this.shadowRoot.querySelector("[data-price-sale-disable]")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      applyPriceSale(false);
+    });
     this.shadowRoot.querySelectorAll("[data-topology-device]").forEach((card) => {
       card.addEventListener("dragstart", (event) => {
         const address = card.dataset.topologyDevice;
