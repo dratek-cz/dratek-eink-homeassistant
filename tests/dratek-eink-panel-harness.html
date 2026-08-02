@@ -36,6 +36,42 @@
   <script type="module">
     import { mdiPaths } from "./vendor/mdi/paths.js";
 
+    // Home Assistant renders MDI icons as SVG paths. Use the same shape data
+    // locally so serialized previews never depend on a webfont and therefore
+    // cannot turn into fallback squares.
+    //
+    // The nesting below is not decoration. Home Assistant's ha-icon renders an
+    // <ha-svg-icon>, which renders <svg><g>…</g></svg> through Lit: the <svg> and
+    // its <g> exist from the first frame and the <path> only arrives once the mdi
+    // chunk has loaded. A stand-in that wrote the finished <svg> in one step could
+    // not reproduce that window, which is exactly where the panel used to capture
+    // an empty group and cache it as a resolved icon.
+    if (!customElements.get("ha-svg-icon")) {
+      customElements.define("ha-svg-icon", class extends HTMLElement {
+        static get observedAttributes() { return ["path"]; }
+        connectedCallback() {
+          this._shadow ||= this.attachShadow({ mode: "open" });
+          this._render();
+        }
+        attributeChangedCallback() { this._render(); }
+        _render() {
+          if (!this._shadow) return;
+          const path = this.getAttribute("path") || "";
+          // Home Assistant sizes the icon from its host, not from attributes on the
+          // svg: --mdc-icon-size is what the panel's stylesheet sets. Without this
+          // the svg has no intrinsic size and every icon outside the templates
+          // collapses, which is not a faithful stand-in either.
+          this._shadow.innerHTML = `<style>
+            :host{display:inline-flex;align-items:center;justify-content:center;position:relative;
+                  vertical-align:middle;width:var(--mdc-icon-size,24px);height:var(--mdc-icon-size,24px);
+                  fill:currentColor}
+            svg{display:block;width:100%;height:100%;pointer-events:none}
+          </style><svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" focusable="false" role="img" aria-hidden="true"><g>${
+            path ? `<path d="${path}" fill="currentColor"></path>` : ""
+          }</g></svg>`;
+        }
+      });
+    }
     if (!customElements.get("ha-icon")) {
       customElements.define("ha-icon", class extends HTMLElement {
         static get observedAttributes() { return ["icon"]; }
@@ -49,16 +85,16 @@
           if (!this._shadow) return;
           const icon = String(this.getAttribute("icon") || "").replace(/^mdi:/, "");
           if (!icon) { this._shadow.innerHTML = ""; return; }
-          // Home Assistant renders MDI icons as SVG paths. Use the same shape
-          // data locally so serialized previews never depend on a webfont and
-          // therefore cannot turn into fallback squares.
-          this._shadow.innerHTML = "";
-          const attempt = () => {
+          // The child appears at once; its path lands a tick later, as it does
+          // when Home Assistant has to fetch the icon chunk first.
+          this._shadow.innerHTML = `<style>
+            :host{display:inline-flex;align-items:center;justify-content:center;fill:currentColor}
+          </style><ha-svg-icon></ha-svg-icon>`;
+          const target = this._shadow.querySelector("ha-svg-icon");
+          setTimeout(() => {
             if (String(this.getAttribute("icon") || "").replace(/^mdi:/, "") !== icon) return;
-            const path = mdiPaths[icon] || mdiPaths["help-circle-outline"];
-            this._shadow.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="${path}" fill="currentColor"></path></svg>`;
-          };
-          setTimeout(attempt, 0);
+            target.setAttribute("path", mdiPaths[icon] || mdiPaths["help-circle-outline"]);
+          }, 0);
         }
       });
     }

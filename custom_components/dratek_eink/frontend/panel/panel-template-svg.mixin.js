@@ -98,9 +98,25 @@ export const templateSvgMixin = {
     try {
       const deadline = Date.now() + 4000;
       while (Date.now() < deadline) {
-        const svg = this._findSvgDeep(icon.shadowRoot) || this._findSvgDeep(icon);
-        const inner = svg?.innerHTML?.trim();
-        if (inner) return { inner, viewBox: svg.getAttribute("viewBox") || "0 0 24 24" };
+        const svg = this._findRenderedIconSvg(icon.shadowRoot) || this._findRenderedIconSvg(icon);
+        // Wait for something drawable, not merely for a non-empty <svg>.
+        //
+        // Home Assistant's ha-icon renders an <ha-svg-icon>, which renders
+        // <svg><g>…</g></svg> through Lit. The <svg> and its <g> exist from the
+        // first frame; the <path> only appears once the mdi chunk has loaded.
+        // Treating any non-empty innerHTML as success therefore captured an empty
+        // group, cached it as a hit and never retried - so whichever icons lost
+        // that race stayed blank for the whole session. The weather template asks
+        // for five icons out of one chunk and lost it every time, which is why it
+        // showed none while the house showed its own.
+        if (svg) {
+          return {
+            // Lit leaves comment markers behind; they serialise into the exported
+            // SVG for no benefit.
+            inner: svg.innerHTML.replace(/<!--[\s\S]*?-->/g, "").trim(),
+            viewBox: svg.getAttribute("viewBox") || "0 0 24 24",
+          };
+        }
         // ha-icon fills its shadow root while painting a frame, so waking on the
         // next frame sees the geometry the moment it exists rather than up to a
         // fixed 50 ms later. The timer is the fallback for a backgrounded tab,
@@ -206,9 +222,9 @@ export const templateSvgMixin = {
   },
 
   // Wrapped as a standalone <svg> so it can sit inside the preview's
-  // foreignObject and still scale with the slot. The export path in
-  // _rasterizeDisplayTemplatePreview copies this element's innerHTML, so the
-  // surrounding .template-responsive-preview-body has to stay in place.
+  // foreignObject and still scale with the slot. This is the on-screen copy only;
+  // what the panel receives is built by _buildDisplayTemplateSvg at the display's
+  // native resolution, so nothing here has to survive being cloned or serialised.
   _templateSvgPreviewBody(template, width, height) {
     const markup = this._templateSvgPreviewMarkup(template, width, height);
     if (!markup) return "";
@@ -1271,7 +1287,10 @@ export const templateSvgMixin = {
     return red >= 161 ? [220, 20, 12] : [0, 0, 0];
   },
 
-  async _rasterizeDisplayTemplateSvg(templates, width, height, layout = "single") {
+  // `paintOverlay` draws on top of the finished template, in device pixels, before
+  // the three-colour quantiser runs - anything painted after it would be off the
+  // palette the panel can actually show.
+  async _rasterizeDisplayTemplateSvg(templates, width, height, layout = "single", paintOverlay = null) {
     const svg = await this._buildDisplayTemplateSvg(templates, width, height, layout);
     const bitmap = new Image();
     await new Promise((resolve, reject) => {
@@ -1287,6 +1306,7 @@ export const templateSvgMixin = {
     context.fillStyle = "#fff";
     context.fillRect(0, 0, width, height);
     context.drawImage(bitmap, 0, 0, width, height);
+    if (paintOverlay) paintOverlay(context, width, height);
 
     const pixels = context.getImageData(0, 0, width, height);
     for (let index = 0; index < pixels.data.length; index += 4) {

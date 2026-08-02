@@ -234,7 +234,30 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('class="display-template-workspace"', self.source)
         self.assertIn('data-display-template-dropzone', self.source)
         self.assertIn('draggable="true" data-display-template-drag="${template.id}"', self.source)
-        self.assertIn('class="display-template-guide"', self.source)
+        # Every template gets a setup window naming the integrations that produce
+        # the entities it binds to. The hover tooltip it replaces carried the same
+        # three generic lines for all of them, which answered nothing: a calendar
+        # template is useless until a calendar integration exists, and the panel
+        # never said so.
+        # A display that carries one template shows it edge to edge. The drag
+        # placement only means something on the 400x300 panel, where two templates
+        # share the screen; on every smaller one it inset the drawing by a few
+        # percent and left 11 px of white down the left of the preview that the
+        # real panel never has.
+        self.assertIn(
+            ".template-designer-screen .template-device-layout.is-small-display"
+            " .display-template-surface{left:0;top:0;width:100%;height:100%;border:0}",
+            self.source,
+        )
+        self.assertIn("const fullBleed = fillDisplay && !autoFit;", self.source)
+        self.assertIn('${fullBleed ? "is-full-bleed" : ""}', self.source)
+        self.assertIn('"[data-template-canvas-slot]:not(.is-auto-fit):not(.is-full-bleed)"', self.source)
+        self.assertIn("_templateSetupRecipes() {", self.source)
+        self.assertIn("_renderDisplayTemplateSetupDialog() {", self.source)
+        self.assertIn('data-display-template-setup="${this._escape(template.id)}"', self.source)
+        self.assertIn("_hasEntityDomain(domain) {", self.source)
+        self.assertNotIn('class="display-template-guide"', self.source)
+        self.assertNotIn("_displayTemplateSetupGuide(template)", self.source)
         self.assertIn("application/x-dratek-display-template", self.source)
         self.assertIn("_prepareDisplayTemplateBindings(template)", self.source)
         self.assertIn('entityId.startsWith("weather.")', self.source)
@@ -248,6 +271,23 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('WIFI:T:WPA;S:${v(0, "Home_Network")};P:${v(1, "MyPassword123")};;', self.source)
         self.assertIn("_blockQr(row, box) {", self.source)
         self.assertIn('shape-rendering="crispEdges"', self.source)
+        # An icon counts as rendered only once its <svg> holds something drawable.
+        # Home Assistant's ha-icon renders an ha-svg-icon, which renders
+        # <svg><g></g></svg> through Lit and fills the <g> only after the mdi chunk
+        # loads. Accepting a non-empty <svg> captured that empty group, cached it as
+        # a hit and never retried, so whichever icons lost the race stayed blank for
+        # the session - the weather template draws five icons from one chunk and lost
+        # it every time while the house template happened to win.
+        self.assertIn("_findRenderedIconSvg(root) {", self.source)
+        self.assertIn(
+            'svg?.querySelector("path[d],circle,rect,polygon,polyline,ellipse,line,text,image,use") ? svg : null',
+            self.source,
+        )
+        self.assertIn(
+            "this._findRenderedIconSvg(icon.shadowRoot) || this._findRenderedIconSvg(icon)",
+            self.source,
+        )
+        self.assertNotIn("!this._findSvgDeep(el.shadowRoot)", self.source)
         self.assertIn('data-display-template-open="${template.id}"', self.source)
         self.assertIn('class="display-template-card display-template-drag-card ${used ? "is-used" : ""}"', self.source)
         self.assertIn("Přetáhněte sem šablonu", self.source)
@@ -313,17 +353,18 @@ class FrontendToolLibraryTests(unittest.TestCase):
             "Další zápis proběhne pouze ručně.",
             self.source,
         )
-        self.assertIn("_rasterizeDisplayTemplatePreview(screen)", self.source)
-        self.assertIn('.replace(/@font-face\\s*\\{[^}]*\\}/gi, "")', self.source)
-        self.assertIn('if (!source.startsWith("data:image/")) image.remove();', self.source)
-        self.assertIn('const safeStyle = style.replace(/url\\(', self.source)
-        self.assertIn("font-family: Arial, sans-serif !important;", self.source)
-        self.assertIn('clone.querySelectorAll("svg.template-responsive-preview")', self.source)
-        self.assertIn('const sourceResponsivePreviews = [...layout.querySelectorAll("svg.template-responsive-preview")];', self.source)
-        self.assertIn("const previewBounds = sourcePreview?.getBoundingClientRect();", self.source)
-        self.assertIn("replacement.style.transform = `scale(${scaleX},${scaleY})`;", self.source)
-        self.assertIn('replacement.style.transformOrigin = "0 0";', self.source)
-        self.assertIn('replacement.className = "template-responsive-preview-body template-export-preview-body";', self.source)
+        # The bitmap the panel receives is built by the SVG renderer, never
+        # screenshotted from the DOM. Cloning the live preview into a foreignObject
+        # lost the scale transform and the positioning context of the parent it was
+        # cut away from, so the drawing landed off-centre in the exported image -
+        # 7 px of blank down the left of a portrait tag and 51 px, a sixth of the
+        # panel, on a landscape one, while the preview on screen looked right.
+        self.assertNotIn("_rasterizeDisplayTemplatePreview", self.source)
+        self.assertNotIn("template-export-preview-body", self.source)
+        self.assertIn("return this._rasterizeDisplayTemplateSvg(", self.source)
+        self.assertIn("_collectTemplateOverlayBoxes() {", self.source)
+        self.assertIn("_paintTemplateOverlays(context, overlays, width, height) {", self.source)
+        self.assertIn("if (paintOverlay) paintOverlay(context, width, height);", self.source)
         self.assertIn('bitmap.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;', self.source)
         self.assertNotIn("URL.createObjectURL(new Blob([svg]", self.source)
         self.assertIn(".display-template-editor-right-column{grid-column:3;grid-row:1/3", self.source)
@@ -401,7 +442,9 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('this._hass.callService("weather", "get_forecasts"', self.source)
         self.assertIn('this._hass.callService("calendar", "get_events"', self.source)
         self.assertIn("{ strip: [day(0), day(1), day(2), day(3)], h: 0.25 },", self.source)
-        self.assertIn("return this._rasterizeDisplayTemplatePreview(screen);", self.source)
+        # The thumbnail a tile remembers is the image the panel was actually given,
+        # not a second rendering of its own.
+        self.assertIn("const image = await this._renderCurrentDisplayTemplateImage(device);", self.source)
         self.assertIn('data-template-save', self.source)
         self.assertIn('data-template-editable-part', self.source)
         self.assertIn('template_config: this._displayTemplateDraftPayload?.(device)', self.source)

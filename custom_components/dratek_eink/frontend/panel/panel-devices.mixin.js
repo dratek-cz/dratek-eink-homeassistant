@@ -2,7 +2,6 @@ import { DRATEK_EINK_VERSION } from "./panel-constants.js";
 
 export const devicesMixin = {
 
-
   async _scan({ background = false } = {}) {
     if (!this._hass || this._scanInProgress) return;
     this._scanInProgress = true;
@@ -412,7 +411,333 @@ export const devicesMixin = {
       ${this._displaySettingsView === "templates" ? this._renderDisplayTemplatesSection(device) : ""}
       ${this._displaySettingsView === "designer" ? this._renderDisplayTemplateEditor(device) : ""}
       ${this._renderDisplayTemplateConflictDialog(device)}
+      ${this._renderDisplayTemplateSetupDialog()}
     </section>`;
+  },
+
+  // ------------------------------------------------------- setup guidance ---
+
+  // What each template needs before it can show anything real.
+  //
+  // The three generic steps that used to sit in a hover tooltip were true of every
+  // template and therefore told you nothing: a calendar template is useless until a
+  // calendar integration exists, and nothing in the panel said so. Every entry below
+  // names the integrations that produce the entities the template binds to, so the
+  // answer to "why is this still showing sample data" is one click away.
+  //
+  // `domain` is what the integration puts in the entity id, which is also how the
+  // dialog checks whether it is already installed. `core: true` means Home Assistant
+  // ships it, so a documentation link is safe to offer; everything else is named
+  // without a link, because promising a URL for a community integration that may have
+  // moved is worse than not linking at all.
+  _templateSetupRecipes() {
+    const helper = (kind, why) => ({ name: `Pomocník typu ${kind}`, domain: kind === "text" ? "input_text" : kind === "číslo" ? "input_number" : kind === "spínač" ? "input_boolean" : "input_datetime", why, core: true, helper: true });
+    return {
+      weather: {
+        summary: "Aktuální teplota, stav počasí a čtyřdenní předpověď.",
+        integrations: [
+          { name: "Met.no", domain: "weather", core: true, why: "Dodá entitu weather.* s předpovědí. V Home Assistantu bývá už po instalaci." },
+          { name: "OpenWeatherMap", domain: "weather", core: true, why: "Alternativa, pokud chcete jiný zdroj předpovědi." },
+        ],
+        steps: [
+          "Zkontrolujte, že v Nastavení → Zařízení a služby máte integraci počasí.",
+          "Přetáhněte šablonu na náhled displeje; entita weather.* se najde sama.",
+          "Předpověď se načítá službou weather.get_forecasts – integrace ji musí podporovat, jinak zůstanou ukázkové dny.",
+        ],
+      },
+      energy: {
+        summary: "Aktuální cena elektřiny a průběh ceny během dne.",
+        integrations: [
+          { name: "Integrace spotových cen elektřiny", domain: "sensor", why: "Dodá senzor s aktuální cenou. Většina těchto integrací se instaluje přes HACS." },
+        ],
+        steps: [
+          "Nainstalujte integraci, která poskytuje senzor s cenou elektřiny.",
+          "V Nastavit vyberte u údaje Aktuální cena tento senzor.",
+          "Sloupcový graf se vykreslí, pokud má senzor atribut s polem cen na celý den; jinak zůstane ukázkový průběh.",
+        ],
+      },
+      home: {
+        summary: "Teplota, vlhkost, světla a zámky v jedné dlaždicové přehledce.",
+        integrations: [
+          { name: "Senzory teploty a vlhkosti", domain: "sensor", why: "Cokoli s device_class temperature a humidity – Zigbee, ESPHome, Bluetooth." },
+          { name: "Světla a zámky", domain: "light", why: "Entity light.* a lock.*, které chcete na štítku sledovat." },
+        ],
+        steps: [
+          "Přetáhněte šablonu na displej; senzory se přiřadí podle svého device_class.",
+          "V Nastavit zkontrolujte, že u každé dlaždice sedí správná místnost.",
+        ],
+      },
+      waste: {
+        summary: "Nejbližší dva svozy odpadu a jejich druh.",
+        integrations: [
+          { name: "Integrace svozu odpadu", domain: "sensor", why: "Obvykle z HACS podle obce. Dodá senzor s datem nejbližšího svozu." },
+          helper("datum", "Pokud integrace pro vaši obec neexistuje, zadejte termíny ručně."),
+        ],
+        steps: [
+          "Nainstalujte integraci svozu pro svou obec, nebo si vytvořte pomocníky typu datum.",
+          "V Nastavit přiřaďte první a druhý svoz.",
+        ],
+      },
+      solar: {
+        summary: "Okamžitý výkon fotovoltaiky a výroba za den, měsíc a celkem.",
+        integrations: [
+          { name: "Integrace vašeho střídače", domain: "sensor", core: true, why: "Fronius, GoodWe, SolarEdge, SolaX a další jsou součástí Home Assistantu." },
+        ],
+        steps: [
+          "Přidejte integraci střídače v Nastavení → Zařízení a služby.",
+          "Šablona si vezme senzory s device_class power a energy.",
+          "Mezikruží se plní podle procentní hodnoty; pokud senzor procenta nemá, zobrazí ukázkovou výplň.",
+        ],
+      },
+      washer: {
+        summary: "Program pračky, zbývající čas a čas dokončení.",
+        integrations: [
+          { name: "Home Connect", domain: "sensor", core: true, why: "Pro pračky Bosch a Siemens. Dodá program i zbývající čas." },
+          { name: "Senzor spotřeby + šablona", domain: "sensor", why: "U pračky bez chytrého připojení se stav odvodí od příkonu chytré zásuvky." },
+        ],
+        steps: [
+          "Připojte pračku podporovanou integrací, nebo si stav odvoďte ze zásuvky.",
+          "V Nastavit přiřaďte program a zbývající čas.",
+        ],
+      },
+      living: {
+        summary: "Teplota v místnosti s ukazateli vlhkosti a CO₂.",
+        integrations: [
+          { name: "Senzor teploty a vlhkosti", domain: "sensor", why: "Jakýkoli senzor s device_class temperature a humidity." },
+          { name: "Senzor CO₂", domain: "sensor", why: "Například přes ESPHome nebo Netatmo; device_class carbon_dioxide." },
+        ],
+        steps: ["Přetáhněte šablonu na displej a v Nastavit zkontrolujte místnost u každého senzoru."],
+      },
+      presence: {
+        summary: "Kdo z domácnosti je doma a kdo ne.",
+        integrations: [
+          { name: "Osoby", domain: "person", core: true, why: "Nastavení → Lidé. Každý člen domácnosti je entita person.*." },
+          { name: "Home Assistant Companion", domain: "device_tracker", core: true, why: "Mobilní aplikace hlásí polohu, ze které se přítomnost odvodí." },
+        ],
+        steps: [
+          "V Nastavení → Lidé založte členy domácnosti.",
+          "Propojte je se sledovacím zařízením z mobilní aplikace.",
+          "Stavy se na štítku zobrazí česky jako Doma a Pryč.",
+        ],
+      },
+      wifi: {
+        summary: "QR kód pro připojení k Wi-Fi, název sítě a heslo.",
+        integrations: [
+          helper("text", "Jeden pomocník na název sítě a druhý na heslo."),
+        ],
+        steps: [
+          "V Nastavení → Zařízení a služby → Pomocníci vytvořte dva pomocníky typu text.",
+          "Vyplňte název sítě a heslo a v Nastavit je u šablony vyberte.",
+          "QR kód se vygeneruje sám z obou hodnot.",
+        ],
+        note: "Na malých štítcích na šířku (296 × 128) vyjde kód asi 8 mm a je na hraně čitelnosti. Použijte raději štítek na výšku nebo větší.",
+      },
+      calendar: {
+        summary: "Dvě nejbližší události z kalendáře a svátek.",
+        integrations: [
+          { name: "Místní kalendář", domain: "calendar", core: true, why: "Kalendář přímo v Home Assistantu, bez cloudu. Nejrychlejší způsob, jak šablonu vyzkoušet." },
+          { name: "Google Calendar", domain: "calendar", core: true, why: "Napojení na Google účet; události se načtou automaticky." },
+          { name: "CalDAV", domain: "calendar", core: true, why: "Pro Nextcloud, iCloud a další servery podporující CalDAV." },
+        ],
+        steps: [
+          "Přidejte některou kalendářovou integraci v Nastavení → Zařízení a služby.",
+          "Přetáhněte šablonu na displej; entita calendar.* se najde sama.",
+          "Události se čtou službou calendar.get_events na 21 dní dopředu.",
+        ],
+      },
+      security: {
+        summary: "Režim alarmu a stav dveří, oken a pohybu.",
+        integrations: [
+          { name: "Manual alarm", domain: "alarm_control_panel", core: true, why: "Alarm přímo v Home Assistantu, konfiguruje se v configuration.yaml. Vhodné pro vyzkoušení." },
+          { name: "Integrace vaší ústředny", domain: "alarm_control_panel", why: "Jablotron, Alarmo a další; každá dodá entitu alarm_control_panel.*." },
+          { name: "Kontakty dveří a oken", domain: "binary_sensor", why: "Binární senzory s device_class door, window a motion." },
+        ],
+        steps: [
+          "Zprovozněte ústřednu alarmu, nebo použijte Manual alarm pro začátek.",
+          "Přidejte kontakty dveří, oken a detektor pohybu.",
+          "V Nastavit zkontrolujte přiřazení; stavy se zobrazí česky.",
+        ],
+      },
+      transport: {
+        summary: "Nejbližší odjezdy ze zastávky s čísly linek.",
+        integrations: [
+          { name: "Integrace vašeho dopravce", domain: "sensor", why: "Obvykle z HACS podle města, nebo vlastní REST senzor nad otevřeným API dopravce." },
+        ],
+        steps: [
+          "Zprovozněte senzor, který vrací nejbližší odjezdy.",
+          "V Nastavit přiřaďte zastávku a časy odjezdů.",
+        ],
+      },
+      shopping: {
+        summary: "Nákupní seznam se zaškrtnutými položkami.",
+        integrations: [
+          { name: "Místní úkolovník", domain: "todo", core: true, why: "Seznamy úkolů přímo v Home Assistantu." },
+          { name: "Nákupní seznam", domain: "todo", core: true, why: "Klasický nákupní seznam Home Assistantu." },
+        ],
+        steps: [
+          "Přidejte integraci seznamu v Nastavení → Zařízení a služby.",
+          "V Nastavit přiřaďte seznam k údaji Položky.",
+        ],
+      },
+      air: {
+        summary: "Index kvality vzduchu na budíku s hodnotami CO₂, PM2.5 a vlhkosti.",
+        integrations: [
+          { name: "Airly", domain: "sensor", core: true, why: "Venkovní kvalita ovzduší podle nejbližší stanice." },
+          { name: "Netatmo", domain: "sensor", core: true, why: "Vnitřní senzor CO₂ a kvality vzduchu." },
+          { name: "ESPHome", domain: "sensor", core: true, why: "Vlastní senzor CO₂ nebo prachu postavený na ESP." },
+        ],
+        steps: ["Zprovozněte zdroj dat o vzduchu a v Nastavit přiřaďte AQI, CO₂ a PM2.5."],
+      },
+      thermostat: {
+        summary: "Aktuální a cílová teplota s výkonem topení.",
+        integrations: [
+          { name: "Integrace vašeho termostatu", domain: "climate", core: true, why: "Tado, Netatmo, Zigbee hlavice a další dodají entitu climate.*." },
+          { name: "Generic thermostat", domain: "climate", core: true, why: "Termostat složený z teploměru a spínače přímo v Home Assistantu." },
+        ],
+        steps: ["Přidejte termostat a v Nastavit přiřaďte aktuální i cílovou teplotu."],
+      },
+      water: {
+        summary: "Spotřeba vody dnes s trendem za týden.",
+        integrations: [
+          { name: "Vodoměr", domain: "sensor", why: "Impulzní vstup, Zigbee vodoměr nebo senzor přes ESPHome; device_class water." },
+          { name: "Utility Meter", domain: "sensor", core: true, why: "Z průběžného odečtu udělá denní, týdenní a měsíční spotřebu." },
+        ],
+        steps: [
+          "Zprovozněte měření spotřeby vody.",
+          "Přidejte Utility Meter pro denní, týdenní a měsíční hodnotu.",
+          "V Nastavit přiřaďte jednotlivá období.",
+        ],
+      },
+      parcel: {
+        summary: "Stav zásilky a průběh dopravy.",
+        integrations: [
+          { name: "17TRACK", domain: "sensor", core: true, why: "Sleduje zásilky napříč dopravci; dodá senzor se stavem." },
+        ],
+        steps: ["Přidejte integraci sledování zásilek a v Nastavit přiřaďte stav zásilky."],
+      },
+      birthdays: {
+        summary: "Kdo dnes slaví a kdo je na řadě příště.",
+        integrations: [
+          { name: "Místní kalendář", domain: "calendar", core: true, why: "Založte kalendář Narozeniny s celodenními opakovanými událostmi." },
+        ],
+        steps: [
+          "Vytvořte kalendář s narozeninami jako opakované celodenní události.",
+          "V Nastavit jej přiřaďte k údaji Jméno.",
+        ],
+      },
+      server: {
+        summary: "Dostupnost serveru s ukazateli CPU, RAM, disku a teploty.",
+        integrations: [
+          { name: "System Monitor", domain: "sensor", core: true, why: "Zátěž procesoru, paměti a disku stroje, na kterém běží Home Assistant." },
+        ],
+        steps: [
+          "Přidejte integraci System Monitor a vyberte, které hodnoty sledovat.",
+          "V Nastavit přiřaďte CPU, RAM a disk; ukazatele se plní podle procent.",
+        ],
+      },
+      garden: {
+        summary: "Vlhkost půdy se sedmidenním trendem a další zálivka.",
+        integrations: [
+          { name: "Xiaomi BLE", domain: "sensor", core: true, why: "Čidla Mi Flora měří vlhkost půdy přes Bluetooth." },
+          { name: "ESPHome", domain: "sensor", core: true, why: "Vlastní čidlo vlhkosti půdy postavené na ESP." },
+        ],
+        steps: ["Zprovozněte čidlo vlhkosti půdy a v Nastavit jej přiřaďte."],
+      },
+      price: {
+        summary: "Cenovka se jménem zboží, cenou a QR kódem.",
+        integrations: [
+          helper("text", "Název zboží a kód zboží pro QR kód."),
+          helper("číslo", "Cena, původní cena a jednotková cena."),
+          helper("spínač", "Nepovinné: zapíná akci automatizací nebo z pokladního systému."),
+        ],
+        steps: [
+          "V Nastavení → Zařízení a služby → Pomocníci vytvořte pomocníky pro název a cenu.",
+          "V Nastavit je přiřaďte k jednotlivým údajům.",
+          "Akci zapnete přepínačem v Nastavit, nebo pomocníkem typu spínač u údaje Akce.",
+        ],
+      },
+      priceshelf: {
+        summary: "Regálová cenovka s pruhem, cenou a skladovou zásobou.",
+        integrations: [
+          helper("text", "Název zboží a kód zboží."),
+          helper("číslo", "Cena, původní cena a počet kusů skladem."),
+          helper("spínač", "Nepovinné: zapíná akci automatizací nebo z pokladního systému."),
+        ],
+        steps: [
+          "Vytvořte pomocníky pro název, cenu a zásobu.",
+          "V Nastavit je přiřaďte k údajům šablony.",
+          "Přepínačem Akce zvýrazníte slevu.",
+        ],
+      },
+    };
+  },
+
+  _hasEntityDomain(domain) {
+    const states = this._hass?.states || {};
+    const prefix = `${domain}.`;
+    return Object.keys(states).some((entityId) => entityId.startsWith(prefix));
+  },
+
+  _templateSetupRecipe(template) {
+    return this._templateSetupRecipes()[template?.id] || {
+      summary: "Šablona zobrazuje hodnoty z entit Home Assistantu.",
+      integrations: [],
+      steps: [
+        "Přetáhněte šablonu na náhled displeje vlevo.",
+        "Klikněte na Nastavit a u jednotlivých údajů vyberte entity.",
+      ],
+    };
+  },
+
+  _renderDisplayTemplateSetupDialog() {
+    const templateId = this._displayTemplateSetupId;
+    if (!templateId) return "";
+    const template = this._displayTemplateCards().find((item) => item.id === templateId);
+    if (!template) return "";
+    const recipe = this._templateSetupRecipe(template);
+    const integrations = (recipe.integrations || []).map((item) => {
+      const found = this._hasEntityDomain(item.domain);
+      const link = item.core && !item.helper
+        ? `<a href="https://www.home-assistant.io/integrations/${this._escape(item.domain)}/" target="_blank" rel="noopener noreferrer">Dokumentace</a>`
+        : "";
+      return `<li class="template-setup-integration ${found ? "is-found" : "is-missing"}">
+        <span class="template-setup-status"><ha-icon icon="mdi:${found ? "check-circle" : "alert-circle-outline"}"></ha-icon></span>
+        <div><strong>${this._escape(item.name)}</strong><small>${this._escape(item.why)}</small>
+          <span class="template-setup-meta">${found ? `Nalezeno v Home Assistantu (${this._escape(item.domain)}.*)` : `Zatím nenalezeno – chybí entity ${this._escape(item.domain)}.*`} ${link}</span>
+        </div>
+      </li>`;
+    }).join("");
+    const slots = template.variables.map((variable, index) => {
+      const meta = this._templateVariableMeta(variable, index);
+      const binding = this._templateBinding(template, meta);
+      const automatic = meta.automatic;
+      const resolved = automatic || (binding && !binding.startsWith("internal:"));
+      return `<li class="${resolved ? "is-found" : "is-missing"}">
+        <ha-icon icon="mdi:${resolved ? "check" : "help-circle-outline"}"></ha-icon>
+        <strong>${this._escape(meta.label)}</strong>
+        <span>${automatic ? "Doplní Home Assistant" : binding ? this._escape(binding) : "Nenalezeno – vyberte entitu ručně"}</span>
+      </li>`;
+    }).join("");
+    return `<div class="modal-backdrop template-setup-backdrop" data-template-setup-close>
+      <section class="template-setup-dialog" role="dialog" aria-modal="true" aria-labelledby="templateSetupTitle">
+        <header>
+          <div><small>Jak zprovoznit šablonu</small><h2 id="templateSetupTitle">${this._escape(template.title)}</h2></div>
+          <button type="button" class="ghost" data-template-setup-close aria-label="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button>
+        </header>
+        <p class="template-setup-summary">${this._escape(recipe.summary)}</p>
+        ${integrations ? `<h3><ha-icon icon="mdi:puzzle-outline"></ha-icon>Co je potřeba v Home Assistantu</h3>
+        <ul class="template-setup-integrations">${integrations}</ul>` : ""}
+        <h3><ha-icon icon="mdi:format-list-numbered"></ha-icon>Postup</h3>
+        <ol class="template-setup-steps">${(recipe.steps || []).map((step) => `<li>${this._escape(step)}</li>`).join("")}</ol>
+        <h3><ha-icon icon="mdi:database-search-outline"></ha-icon>Údaje šablony</h3>
+        <ul class="template-setup-slots">${slots}</ul>
+        ${recipe.note ? `<p class="template-setup-note"><ha-icon icon="mdi:information-outline"></ha-icon>${this._escape(recipe.note)}</p>` : ""}
+        <div class="template-setup-actions">
+          <button type="button" data-display-template-open="${this._escape(template.id)}"><ha-icon icon="mdi:tune-variant"></ha-icon>Nastavit šablonu</button>
+          <button type="button" class="secondary" data-template-setup-close>Zavřít</button>
+        </div>
+      </section>
+    </div>`;
   },
 
   _renderDisplayTemplateConflictDialog(device) {
@@ -481,35 +806,6 @@ export const devicesMixin = {
       ...template,
       kind: prepared.has(template.id) ? "prepared" : "custom",
     }));
-  },
-
-  _displayTemplateSetupGuide(template) {
-    if (template.id === "weather") {
-      return [
-        "Přetáhněte šablonu na náhled displeje vlevo.",
-        "Aplikace automaticky najde první entitu weather.* v Home Assistantu.",
-        "Teplota, stav počasí, datum a čas se doplní automaticky; zdroj lze později změnit v nastavení šablony.",
-      ];
-    }
-    if (template.id === "price" || template.id === "priceshelf") {
-      return [
-        "Přetáhněte cenovku na náhled displeje vlevo.",
-        "V Nastavit vyberte entity s názvem zboží a cenou – nejlépe pomocníky typu text a číslo.",
-        "Přepínačem Akce zvýrazníte slevu; zapnout ji může i pomocník typu spínač, pokud jej u údaje Akce vyberete.",
-      ];
-    }
-    if (template.kind === "prepared") {
-      return [
-        "Přetáhněte šablonu na náhled displeje vlevo.",
-        "Aplikace zkusí automaticky přiřadit odpovídající entity Home Assistantu.",
-        "Po kliknutí na Nastavit můžete zkontrolovat nebo změnit každý zdroj dat.",
-      ];
-    }
-    return [
-      "Přetáhněte šablonu na náhled displeje vlevo.",
-      "Klikněte na Nastavit a u jednotlivých údajů vyberte vlastní entity Home Assistantu.",
-      "Zkontrolujte živý náhled a odešlete hotový obsah do displeje.",
-    ];
   },
 
   _prepareDisplayTemplateBindings(template) {
@@ -637,15 +933,12 @@ export const devicesMixin = {
           </div>
           ${visibleCards.length ? `<div class="display-template-grid">${visibleCards.map((template) => {
             const used = assignedTemplates.includes(template.id);
-            const guide = this._displayTemplateSetupGuide(template);
             return `<article class="display-template-card display-template-drag-card ${used ? "is-used" : ""}" draggable="true" data-display-template-drag="${template.id}" aria-label="${this._escape(template.title)}. Přetáhněte na displej.">
               <header class="display-template-tile-header">
                 <span class="display-template-kind-icon"><ha-icon icon="mdi:${template.kind === "prepared" ? "auto-fix" : "tune-variant"}"></ha-icon></span>
                 <span class="display-template-tile-identity"><strong>${this._escape(template.title)}</strong><small>${template.kind === "prepared" ? "Automatické nastavení" : "Vlastní zdroje dat"}</small></span>
                 <span class="display-template-variable-count">${template.variables.length} údajů</span>
-                <span class="display-template-help" tabindex="0" aria-label="Zobrazit návod pro šablonu ${this._escape(template.title)}"><ha-icon icon="mdi:information-outline"></ha-icon>
-                  <span class="display-template-guide" role="tooltip"><strong>Jak nastavit ${this._escape(template.title)}</strong><ol>${guide.map((step) => `<li>${this._escape(step)}</li>`).join("")}</ol></span>
-                </span>
+                <button type="button" class="display-template-help" data-display-template-setup="${this._escape(template.id)}" title="Jak zprovoznit šablonu ${this._escape(template.title)}" aria-label="Jak zprovoznit šablonu ${this._escape(template.title)}"><ha-icon icon="mdi:help-circle-outline"></ha-icon></button>
               </header>
               <div class="display-template-tile-preview is-${orientation}" data-display-template-quick-send="${template.id}" role="button" tabindex="0" aria-label="Odeslat šablonu ${this._escape(template.title)} na displej">
                 <span class="display-template-drag-handle"><ha-icon icon="mdi:drag"></ha-icon>Přetáhnout na displej</span>
@@ -837,6 +1130,7 @@ export const devicesMixin = {
                   ? "Místo pro druhou šablonu je odemčené. Přidejte ji v galerii šablon."
                   : "Na displeji jsou dvě malé šablony. Kliknutím v náhledu vyberete tu, kterou upravujete."
               : "Malý displej používá jednu šablonu přes celou plochu. Při otočení displeje se šablona otočí automaticky."}</p>
+            <button type="button" class="secondary template-setup-open" data-display-template-setup="${this._escape(activeTemplate.id)}"><ha-icon icon="mdi:help-circle-outline"></ha-icon>Jak zprovoznit tuto šablonu</button>
             ${this._renderTemplateOptionSettings(activeTemplate)}
             <p class="template-settings-intro">Vyberte, ze kterých entit Home Assistantu se mají načítat hodnoty. Systémové údaje jsou nastavené automaticky.</p>
             <div class="template-variable-settings">${activeTemplate.variables.map((variable, index) => this._renderTemplateVariableSetting(activeTemplate, variable, index)).join("")}</div>
@@ -869,15 +1163,91 @@ export const devicesMixin = {
     return { templates, width, height, layout };
   },
 
+  // The image the panel receives comes from the same builder that draws the
+  // preview, at the display's exact resolution.
+  //
+  // It used to be a screenshot of the live DOM: the visible preview was cloned
+  // into a foreignObject and rasterised. That clone lost the scale transform and
+  // the positioning context of the parent it was cut away from, so the drawing
+  // landed off-centre inside the exported bitmap - 7 px of blank down the left of
+  // a portrait tag and 51 px, a sixth of the panel, on a landscape one, while the
+  // preview on screen looked correct. Building the SVG directly has no DOM to
+  // lose: what the renderer lays out is what the panel gets, to the pixel.
   async _renderCurrentDisplayTemplateImage(device = this._device()) {
     const request = this._currentDisplayTemplateSvgRequest(device);
     if (!request) throw new Error("Není vybrána žádná šablona.");
-    const screen = this.shadowRoot.querySelector(".display-template-editor-stage .template-designer-screen")
-      || this.shadowRoot.querySelector(".display-template-dropzone .template-designer-screen");
-    if (screen && screen.getBoundingClientRect().width > 0) {
-      return this._rasterizeDisplayTemplatePreview(screen);
+    const overlays = this._collectTemplateOverlayBoxes();
+    return this._rasterizeDisplayTemplateSvg(
+      request.templates,
+      request.width,
+      request.height,
+      request.layout,
+      overlays.length ? (context, width, height) => this._paintTemplateOverlays(context, overlays, width, height) : null,
+    );
+  },
+
+  // Elements added in the element editor live only in the preview's HTML, so they
+  // are measured where they sit on screen and re-drawn onto the bitmap in device
+  // pixels. Without this they would simply stop reaching the panel the moment the
+  // send path stopped screenshotting the DOM.
+  _collectTemplateOverlayBoxes() {
+    if (!(this._templateEditorElements || []).length) return [];
+    const surface = this.shadowRoot.querySelector(".display-template-editor-stage .display-template-surface")
+      || this.shadowRoot.querySelector(".display-template-dropzone .display-template-surface");
+    const frame = surface?.getBoundingClientRect();
+    if (!frame?.width || !frame?.height) return [];
+    return [...surface.querySelectorAll(".template-overlay")].map((element) => {
+      const box = element.getBoundingClientRect();
+      const image = element.querySelector("img");
+      return {
+        kind: element.classList.contains("template-overlay-image") ? "image"
+          : element.classList.contains("template-overlay-text") ? "text"
+            : element.classList.contains("template-overlay-line") ? "line"
+              : element.classList.contains("is-circle") ? "circle" : "rect",
+        x: (box.left - frame.left) / frame.width,
+        y: (box.top - frame.top) / frame.height,
+        w: box.width / frame.width,
+        h: box.height / frame.height,
+        text: element.textContent.trim(),
+        src: image?.getAttribute("src") || "",
+      };
+    });
+  },
+
+  _paintTemplateOverlays(context, overlays, width, height) {
+    context.save();
+    for (const item of overlays) {
+      const x = item.x * width;
+      const y = item.y * height;
+      const w = Math.max(1, item.w * width);
+      const h = Math.max(1, item.h * height);
+      context.fillStyle = "#000000";
+      context.strokeStyle = "#000000";
+      context.lineWidth = Math.max(1, Math.round(Math.min(width, height) * 0.008));
+      if (item.kind === "image" && item.src.startsWith("data:image/")) {
+        const bitmap = new Image();
+        bitmap.src = item.src;
+        // Already decoded: the element is on screen, so the browser has it.
+        if (bitmap.complete) context.drawImage(bitmap, x, y, w, h);
+      } else if (item.kind === "text") {
+        const size = Math.max(7, h * 0.8);
+        context.font = `700 ${size}px Arial, Helvetica, sans-serif`;
+        context.textBaseline = "top";
+        context.fillText(item.text, x, y);
+      } else if (item.kind === "line") {
+        context.beginPath();
+        context.moveTo(x, y + h / 2);
+        context.lineTo(x + w, y + h / 2);
+        context.stroke();
+      } else if (item.kind === "circle") {
+        context.beginPath();
+        context.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+        context.stroke();
+      } else {
+        context.strokeRect(x, y, w, h);
+      }
     }
-    return this._rasterizeDisplayTemplateSvg(request.templates, request.width, request.height, request.layout);
+    context.restore();
   },
 
   async _sendLocalDisplayDesignChunked(payload) {
@@ -1031,12 +1401,13 @@ export const devicesMixin = {
     if (this._ditheredPreviewPending) delete this._ditheredPreviewPending[key];
   },
 
+  // What the tile remembers has to be what the panel was given, so it comes from
+  // the same builder rather than from a second rendering of its own.
   async _captureCurrentDisplayTemplatePreview() {
     const device = this._device();
-    const screen = this.shadowRoot.querySelector(".template-designer-screen");
-    if (!device || !screen) return false;
+    if (!device) return false;
     try {
-      const image = await this._rasterizeDisplayTemplatePreview(screen);
+      const image = await this._renderCurrentDisplayTemplateImage(device);
       this._rememberSentDisplayPreview(device, image);
       return true;
     } catch (err) {
@@ -1066,132 +1437,16 @@ export const devicesMixin = {
     return null;
   },
 
-  async _rasterizeDisplayTemplatePreview(screen) {
-    const layout = screen.querySelector(".template-device-layout");
-    if (!layout) throw new Error("Náhled displeje není dostupný.");
-    // mdi ha-icon elements render their glyph into their shadow root
-    // asynchronously; give any that were just added a moment to finish so
-    // the export doesn't have to fall back to leaving them empty.
-    for (let attempt = 0; attempt < 40; attempt++) {
-      const pending = [...layout.querySelectorAll("ha-icon")].some((el) => !this._findSvgDeep(el.shadowRoot));
-      if (!pending) break;
-      await new Promise((resolve) => setTimeout(resolve, 75));
-    }
-    const sourceResponsivePreviews = [...layout.querySelectorAll("svg.template-responsive-preview")];
-    const clone = layout.cloneNode(true);
-    const sourceIcons = [...layout.querySelectorAll("ha-icon")];
-    [...clone.querySelectorAll("ha-icon")].forEach((target, index) => {
-      const source = sourceIcons[index];
-      const sourceSvg = this._findSvgDeep(source?.shadowRoot);
-      if (!sourceSvg) {
-        // Leave the (empty) element in place instead of removing it: templates
-        // lay out their children with CSS grid in DOM order, so deleting an
-        // icon that hasn't finished rendering yet shifts every later element
-        // into the wrong row and corrupts the whole layout.
-        return;
-      }
-      const icon = sourceSvg.cloneNode(true);
-      const style = getComputedStyle(source);
-      icon.setAttribute("width", style.width || "24px");
-      icon.setAttribute("height", style.height || "24px");
-      icon.style.color = style.color || "#111";
-      icon.style.display = "block";
-      target.replaceWith(icon);
-    });
-    clone.querySelectorAll(".is-selected,.is-dragging").forEach((item) => item.classList.remove("is-selected", "is-dragging"));
-    clone.querySelectorAll(".template-canvas-selection-label").forEach((item) => item.remove());
-    // The interactive preview uses an SVG foreignObject per template so it can
-    // scale responsively. Nesting those foreignObjects inside the export SVG
-    // makes Chromium mark the resulting bitmap as cross-origin. Flatten every
-    // template back to ordinary XHTML before creating the single export SVG.
-    clone.querySelectorAll("svg.template-responsive-preview").forEach((preview, index) => {
-      const body = preview.querySelector(".template-responsive-preview-body");
-      const sourcePreview = sourceResponsivePreviews[index];
-      if (!body) {
-        preview.remove();
-        return;
-      }
-      const viewBox = String(sourcePreview?.getAttribute("viewBox") || preview.getAttribute("viewBox") || "0 0 1 1")
-        .trim().split(/\s+/).map(Number);
-      const nativeWidth = Math.max(1, Number(viewBox[2]) || 1);
-      const nativeHeight = Math.max(1, Number(viewBox[3]) || 1);
-      const previewBounds = sourcePreview?.getBoundingClientRect();
-      const scaleX = Math.max(0.001, Number(previewBounds?.width || nativeWidth) / nativeWidth);
-      const scaleY = Math.max(0.001, Number(previewBounds?.height || nativeHeight) / nativeHeight);
-      const replacement = document.createElement("div");
-      replacement.className = "template-responsive-preview-body template-export-preview-body";
-      replacement.style.width = `${nativeWidth}px`;
-      replacement.style.height = `${nativeHeight}px`;
-      replacement.style.transform = `scale(${scaleX},${scaleY})`;
-      replacement.style.transformOrigin = "0 0";
-      replacement.style.overflow = "hidden";
-      replacement.innerHTML = body.innerHTML;
-      preview.replaceWith(replacement);
-    });
-    // Canvas becomes unreadable as soon as the SVG foreignObject resolves a
-    // font or image through an external URL. Keep the exported SVG completely
-    // self-contained: imported user images are already converted to data URLs.
-    clone.querySelectorAll("img").forEach((image) => {
-      const source = String(image.getAttribute("src") || "").trim();
-      if (!source.startsWith("data:image/")) image.remove();
-    });
-    clone.querySelectorAll("[style]").forEach((element) => {
-      const style = String(element.getAttribute("style") || "");
-      const safeStyle = style.replace(/url\((?!["']?data:)[^)]+\)/gi, "none");
-      if (safeStyle !== style) element.setAttribute("style", safeStyle);
-    });
-    const bounds = screen.getBoundingClientRect();
-    const orientation = this._displayTemplateOrientation === "portrait" ? "portrait" : "landscape";
-    const base = this._baseDisplaySize(this._device());
-    const width = orientation === "portrait" ? Math.min(base.width, base.height) : Math.max(base.width, base.height);
-    const height = orientation === "portrait" ? Math.max(base.width, base.height) : Math.min(base.width, base.height);
-    const css = [...this.shadowRoot.querySelectorAll("style")]
-      .map((style) => style.textContent || "")
-      .join("\n")
-      .replace(/@font-face\s*\{[^}]*\}/gi, "")
-      .replace(/url\((?!["']?data:)[^)]+\)/gi, "none");
-    const exportCss = `${css}
-      .template-device-layout,
-      .template-device-layout * {
-        font-family: Arial, sans-serif !important;
-      }`;
-    // Cloning only .template-device-layout drops its .template-designer-screen
-    // parent, so every ".template-designer-screen .display-template-surface"
-    // rule (including sizing/positioning) fails to match in the exported markup
-    // and an unrelated same-named class from the catalog dialog wins instead.
-    // Re-wrap the clone so the scoped selectors still apply.
-    const screenWrapper = document.createElement("div");
-    screenWrapper.className = "template-designer-screen";
-    screenWrapper.style.cssText = "width:100%;height:100%";
-    screenWrapper.appendChild(clone);
-    const markup = new XMLSerializer().serializeToString(screenWrapper);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.max(1, bounds.width)}" height="${Math.max(1, bounds.height)}" viewBox="0 0 ${Math.max(1, bounds.width)} ${Math.max(1, bounds.height)}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;overflow:hidden;background:#fff"><style>${exportCss}</style>${markup}</div></foreignObject></svg>`;
-    const bitmap = new Image();
-    await new Promise((resolve, reject) => {
-      bitmap.onload = resolve;
-      bitmap.onerror = () => reject(new Error("Náhled se nepodařilo převést na obrázek."));
-      bitmap.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-    });
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    context.fillStyle = "#fff";
-    context.fillRect(0, 0, width, height);
-    context.drawImage(bitmap, 0, 0, width, height);
-    const pixels = context.getImageData(0, 0, width, height);
-    for (let index = 0; index < pixels.data.length; index += 4) {
-      const red = pixels.data[index];
-      const green = pixels.data[index + 1];
-      const blue = pixels.data[index + 2];
-      const color = this._quantizeEinkPixel(red, green, blue);
-      pixels.data[index] = color[0];
-      pixels.data[index + 1] = color[1];
-      pixels.data[index + 2] = color[2];
-      pixels.data[index + 3] = 255;
-    }
-    context.putImageData(pixels, 0, 0);
-    return canvas.toDataURL("image/png");
+  // An <svg> counts as a rendered icon only once it holds something drawable.
+  //
+  // Home Assistant's ha-icon renders an <ha-svg-icon>, which renders
+  // <svg><g>…</g></svg> through Lit: the <svg> and its empty <g> are there from
+  // the first frame and the <path> arrives only after the mdi chunk has loaded.
+  // Testing for the <svg> alone therefore always succeeded immediately, so every
+  // wait for icons to finish returned at once and the icons were captured blank.
+  _findRenderedIconSvg(root) {
+    const svg = this._findSvgDeep(root);
+    return svg?.querySelector("path[d],circle,rect,polygon,polyline,ellipse,line,text,image,use") ? svg : null;
   },
 
   _renderTemplatePhysicalDevicePreview(device, template, secondaryTemplate, orientation, layout, autoFit = false) {
@@ -1886,16 +2141,20 @@ export const devicesMixin = {
     const placement = this._templateCanvasPlacements?.[slot] || { x: 9, y: 9 };
     const placementX = fillDisplay ? Math.max(0, Math.min(4, Number(placement.x || 0))) : Number(placement.x || 0);
     const placementY = fillDisplay ? Math.max(0, Math.min(4, Number(placement.y || 0))) : Number(placement.y || 0);
-    const selected = !autoFit && this._selectedTemplateCanvasSlot === slot;
+    const selected = !autoFit && !fillDisplay && this._selectedTemplateCanvasSlot === slot;
+    // A template that covers the whole panel has nowhere to be moved to, so it
+    // is drawn edge to edge and offers neither the drag handle nor the outline.
+    const fullBleed = fillDisplay && !autoFit;
+    const placeable = !autoFit && !fullBleed;
     return `<div class="template-display-slot" data-template-display-slot="${slot}">
-      <div class="display-template-surface template-canvas-item size-${templateSize === "large" ? "large" : "small"} format-${format === "wide" ? "wide" : "narrow"} is-${orientation} ${selected ? "is-selected" : ""} ${autoFit ? "is-auto-fit" : ""}" data-preview-template="${template.id}" data-template-canvas-slot="${slot}" ${autoFit ? "" : `tabindex="0" role="button" aria-label="Šablona ${this._escape(template.title)}. Kliknutím vyberte a tažením přesuňte."`} style="--template-item-x:${placementX}%;--template-item-y:${placementY}%">
+      <div class="display-template-surface template-canvas-item size-${templateSize === "large" ? "large" : "small"} format-${format === "wide" ? "wide" : "narrow"} is-${orientation} ${selected ? "is-selected" : ""} ${autoFit ? "is-auto-fit" : ""} ${fullBleed ? "is-full-bleed" : ""}" data-preview-template="${template.id}" data-template-canvas-slot="${slot}" ${placeable ? `tabindex="0" role="button" aria-label="Šablona ${this._escape(template.title)}. Kliknutím vyberte a tažením přesuňte."` : ""} style="--template-item-x:${placementX}%;--template-item-y:${placementY}%">
         <svg class="template-responsive-preview" viewBox="0 0 ${templateWidth} ${templateHeight}" preserveAspectRatio="${fillDisplay ? "none" : "xMidYMid meet"}" aria-hidden="true">
           <foreignObject x="0" y="0" width="${templateWidth}" height="${templateHeight}">
             <div xmlns="http://www.w3.org/1999/xhtml" class="template-responsive-preview-body">${this._templateSvgPreviewBody(template, templateWidth, templateHeight)}</div>
           </foreignObject>
         </svg>
         ${primary && !autoFit ? this._renderTemplateEditorOverlays() : ""}
-        ${autoFit ? "" : `<span class="template-canvas-selection-label">${this._escape(template.title)}</span>`}
+        ${placeable ? `<span class="template-canvas-selection-label">${this._escape(template.title)}</span>` : ""}
       </div>
     </div>`;
   },

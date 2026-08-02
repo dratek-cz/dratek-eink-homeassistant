@@ -333,6 +333,9 @@ export const inspectorMixin = {
       });
       button.addEventListener("click", () => {
       const templateId = button.dataset.displayTemplateOpen || "";
+      // The setup window offers this button too; leaving it open would put a modal
+      // over the settings it just sent the user to.
+      this._displayTemplateSetupId = "";
       if (hasTemplateSlotConflict(templateId)) {
         this._pendingDisplayTemplateConflict = { templateId };
         this._render();
@@ -489,7 +492,7 @@ export const inspectorMixin = {
       this._render();
       this._paint();
     }));
-    this.shadowRoot.querySelectorAll("[data-template-canvas-slot]:not(.is-auto-fit)").forEach((item) => {
+    this.shadowRoot.querySelectorAll("[data-template-canvas-slot]:not(.is-auto-fit):not(.is-full-bleed)").forEach((item) => {
       item.addEventListener("click", (event) => {
         event.stopPropagation();
         const slot = item.dataset.templateCanvasSlot || "primary";
@@ -605,6 +608,23 @@ export const inspectorMixin = {
         this._paint();
       });
     });
+    this.shadowRoot.querySelectorAll("[data-display-template-setup]").forEach((button) => button.addEventListener("click", (event) => {
+      // The tile is draggable and its preview sends the template on click, so the
+      // help button has to keep its click to itself.
+      event.stopPropagation();
+      this._displayTemplateSetupId = button.dataset.displayTemplateSetup;
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelectorAll("[data-template-setup-close]").forEach((element) => element.addEventListener("click", (event) => {
+      // The backdrop carries the same attribute as the buttons do, so a click that
+      // bubbled up from inside the dialog must not close it. On a button any target
+      // counts - the click usually lands on its ha-icon rather than the button.
+      if (element.classList.contains("modal-backdrop") && event.target !== element) return;
+      this._displayTemplateSetupId = "";
+      this._render();
+      this._paint();
+    }));
     this.shadowRoot.querySelectorAll("[data-template-option]").forEach((input) => input.addEventListener("change", (event) => {
       this._displayTemplateOptions ||= {};
       this._displayTemplateOptions[input.dataset.templateOption] = !!event.target.checked;
