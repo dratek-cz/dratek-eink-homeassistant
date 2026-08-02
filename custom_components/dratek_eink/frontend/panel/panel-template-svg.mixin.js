@@ -404,7 +404,7 @@ export const templateSvgMixin = {
     if (!footerRow || footerHeight <= 0) return [];
     const parts = [];
     const top = height - footerHeight;
-    const footerColor = footerRow.color === "red" ? RED : BLACK;
+    const footerColor = footerRow.color === "black" ? BLACK : RED;
     parts.push(`<rect x="0" y="${top.toFixed(2)}" width="${width}" height="${footerHeight.toFixed(2)}" fill="${footerColor}"></rect>`);
     const cells = footerRow.footer;
     const cellWidth = width / (cells.length || 1);
