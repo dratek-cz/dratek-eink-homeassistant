@@ -4,7 +4,15 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.172
+
+- cenovka bez akce je čistě černobílá – pruh je černý, footer s kódem zboží je černý, cena se zobrazuje jen jednou
+- cenovka s akcí má červený pruh, přeškrtnutou původní cenu a novou zvýrazněnou cenu; footer s kódem zboží je červený
+- opravena barva footeru u všech šablon: dříve byl vždy červený, nyní se řídí nastavením každé šablony
+- v hlavičce displeje se adresa zobrazuje pod názvem na samostatném řádku; odstraněn text „Váš displej · Plocha pro šablony"
+
 ## Novinky ve verzi 0.1.171
+
 
 - šablona se na displej zapisuje přesně, bez bílého pruhu u levého okraje
 - ikony v šablonách se načítají spolehlivě, včetně počasí
