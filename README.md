@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.170
+
+- náhled šablony v katalogu nyní odpovídá tomu, co se objeví na displeji – obojí kreslí jediný renderer
+- přibyly cenovky s přepínačem Akce, který zvýrazní slevu; zapnout ji lze ručně i entitou
+- šablony se napojují na entity samy podle jejich typu, předpověď a kalendář se načítají službami Home Assistantu
+- Wi-Fi šablona posílá na štítek skutečný QR kód a stavy entit se zobrazují česky
+
 ## Novinky ve verzi 0.1.169
 
 - každá z dvaceti šablon displeje má vlastní rozvržení – dosud jich dvacet sdílelo jen sedm opakujících se staveb a lišily se pouze texty

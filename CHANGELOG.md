@@ -2,6 +2,19 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.170] - 2026-08-02
+
+### Opraveno
+- **Náhled šablony v katalogu neodpovídal tomu, co se objevilo na displeji.** Katalogové dlaždice byly druhé, ručně psané HTML vykreslení všech dvaceti šablon, zatímco na displej se posílalo SVG – dva různé návrhy téže věci, každý ve vlastním kódu, a nic je nedrželo v souladu. Přepracování šablon ve verzi 0.1.169 rozdíl ještě zvětšilo, protože změnilo jen jednu z těch dvou cest. Dlaždice nyní kreslí přesně to SVG, které dostane displej, ve skutečném rozlišení a proporcích panelu. Ruční HTML varianta i její styly, dohromady přes 34 000 znaků, jsou pryč; renderer je jediný.
+- **Wi-Fi šablona měla QR kód pouze v katalogu.** Na štítek se nikdy neodeslal – tag ukazoval jen název sítě a heslo jako text, přestože náhled kód sliboval. QR je nyní součástí SVG rendereru, takže se skutečně vytiskne. Jeho moduly se zarovnávají na celé pixely displeje: modul, který padne na půl pixelu, vyjde šedě a kvantizace na tři barvy jej pak strhne na černou nebo bílou, čímž kód přestane být čitelný.
+- **Předpověď počasí ukazovala ukázková data na každé instalaci.** Home Assistant přestal předpověď publikovat jako atribut entity `weather.*` ve verzi 2024.4, ale šablona ten atribut četla dál. Předpověď se nyní načítá službou `weather.get_forecasts` a kalendářní události službou `calendar.get_events`; když integrace odpověď neposkytne, zůstanou ukázková data.
+- **Automatické přiřazení entit se řídilo názvem.** Údaj „Teplota“ tak našel cokoli, co obsahovalo „teplo“, včetně spínače topení. Rozhoduje nyní především `device_class`, protože název je popis, kdežto device_class deklarace – přiřazení proto funguje i na instalaci, jejíž entity nejsou pojmenované česky.
+- **Stavy entit se zobrazovaly anglicky.** Šablona přítomnosti tiskla `not_home`, zámky `locked`. Stavy osob, zámků, světel, alarmu, dveří, oken i pohybu a podmínky počasí se překládají do češtiny.
+
+### Přidáno
+- **Cenovky.** Dvě nové šablony – Cenovka a Regálová cenovka. Přepínač Akce zobrazí štítek, přeškrtne původní cenu a vyvede cenový blok bíle na červené, takže sleva je patrná z uličky bez čtení čísel. Přepínač se sčítá s entitou: akci lze zapnout ručně v nastavení šablony i pomocníkem typu spínač nebo binárním senzorem z pokladního systému, takže ruční start nevylučuje pozdější automatizaci.
+- Grafy, ukazatele, budíky a mezikruží ve všech šablonách čtou hodnoty z navázané entity místo napevno zadaných čísel.
+
 ## [0.1.169] - 2026-08-01
 
 ### Opraveno
