@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.176] - 2026-08-03
+
+### Opraveno
+- Release ZIPy 0.1.174 a 0.1.175 vytvořené ve Windows obsahovaly zpětná lomítka v názvech položek. Linux je nerozbalil jako adresáře, ale vytvořil v kořeni integrace soubory pojmenované např. `frontend\dratek-eink-panel.js`; skutečný adresář `frontend/` proto neexistoval a panel končil na 404. Nový release builder zapisuje výhradně POSIX cesty a regresní test zakazuje jakékoli zpětné lomítko v archivu.
+
 ## [0.1.175] - 2026-08-03
 
 ### Opraveno

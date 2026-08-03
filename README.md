@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.176
+
+- opraven instalační ZIP pro Linux: frontend se nyní rozbalí do skutečného adresáře `frontend/`, takže panel již nekončí chybou 404
+
 ## Novinky ve verzi 0.1.175
 
 - opraveno `Unable to load custom panel` po aktualizaci: nová verzovaná cesta panelu se v Home Assistantu vždy zaregistruje a stará registrace se při upgradu nahradí
