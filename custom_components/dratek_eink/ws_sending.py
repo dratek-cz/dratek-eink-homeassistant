@@ -36,6 +36,7 @@ DESIGN_UPLOAD_TTL_SECONDS = 10 * 60
         "transform": str,
         vol.Optional("software_version"): int,
         vol.Optional("automation"): dict,
+        vol.Optional("template_ids"): [str],
     }
 )
 @websocket_api.async_response
@@ -79,7 +80,9 @@ async def websocket_send_design(
             # this transfer was queued, so it cannot repaint over the new picture.
             await _clear_previous_entity_automation(hass, address)
             try:
-                await async_save_display_preview(hass, address, image, orientation)
+                await async_save_display_preview(
+                    hass, address, image, orientation, list(msg.get("template_ids") or [])
+                )
             except Exception as exc:
                 add_log(f"Display updated, but its preview could not be saved: {exc}")
             return {"ok": True, "address": address, "log": []}
@@ -180,6 +183,7 @@ async def websocket_upload_design_chunk(
         "transform": str,
         vol.Optional("software_version"): int,
         vol.Optional("automation"): dict,
+        vol.Optional("template_ids"): [str],
     }
 )
 @websocket_api.async_response
@@ -233,7 +237,11 @@ async def websocket_commit_design_upload(
             await _clear_previous_entity_automation(hass, address)
             try:
                 await async_save_display_preview(
-                    hass, address, image, msg.get("orientation", "landscape")
+                    hass,
+                    address,
+                    image,
+                    msg.get("orientation", "landscape"),
+                    list(msg.get("template_ids") or []),
                 )
             except Exception as exc:
                 add_log(f"Display updated, but its preview could not be saved: {exc}")
@@ -381,7 +389,7 @@ async def websocket_send_text(
             await transfer.send_image(address, sdk_type, image)
             add_log("Text sent.")
             try:
-                await async_save_display_preview(hass, address, image)
+                await async_save_display_preview(hass, address, image, template_ids=[])
             except Exception as exc:
                 add_log(f"Display updated, but its preview could not be saved: {exc}")
             return {"ok": True, "address": address, "text": text, "log": []}

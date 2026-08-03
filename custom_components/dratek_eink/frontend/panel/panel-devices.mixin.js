@@ -970,6 +970,7 @@ export const devicesMixin = {
     const editing = this._editingDeviceAddress === device.address;
     const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
     const assignedTemplates = this._assignedDisplayTemplates(device);
+    const sentTemplates = this._sentDisplayTemplates(device);
     const categories = [
       { id: "prepared", icon: "auto-fix", title: "Předpřipravené" },
       { id: "custom", icon: "tune-variant", title: "Vlastní nastavení" },
@@ -1053,8 +1054,9 @@ export const devicesMixin = {
           </div>
           ${visibleCards.length ? `<div class="display-template-grid">${visibleCards.map((template) => {
             const used = assignedTemplates.includes(template.id);
+            const onDisplay = sentTemplates.includes(template.id);
             if (template.id === "blank") {
-              return `<article class="display-template-card display-template-drag-card display-template-blank-card" data-display-template-open="blank" aria-label="Vytvořit vlastní šablonu od nuly. Kliknutím otevřete designer.">
+              return `<article class="display-template-card display-template-drag-card display-template-blank-card ${onDisplay ? "is-on-display" : ""}" data-display-template-open="blank" aria-label="Vytvořit vlastní šablonu od nuly. Kliknutím otevřete designer.">
                 <header class="display-template-tile-header">
                   <span class="display-template-kind-icon is-blank-icon"><ha-icon icon="mdi:plus-circle-outline"></ha-icon></span>
                   <span class="display-template-tile-identity"><strong>Vytvořit vlastní šablonu</strong><small>Návrh od nuly v eInk Studiu</small></span>
@@ -1068,7 +1070,7 @@ export const devicesMixin = {
                 </div>
               </article>`;
             }
-            return `<article class="display-template-card display-template-drag-card ${used ? "is-used" : ""}" draggable="true" data-display-template-drag="${template.id}" aria-label="${this._escape(template.title)}. Přetáhněte na displej.">
+            return `<article class="display-template-card display-template-drag-card ${used ? "is-used" : ""} ${onDisplay ? "is-on-display" : ""}" draggable="true" data-display-template-drag="${template.id}" aria-label="${this._escape(template.title)}. Přetáhněte na displej.">
               <header class="display-template-tile-header">
                 <span class="display-template-kind-icon"><ha-icon icon="mdi:${template.kind === "prepared" ? "auto-fix" : "tune-variant"}"></ha-icon></span>
                 <span class="display-template-tile-identity"><strong>${this._escape(template.title)}</strong><small>${template.kind === "prepared" ? "Automatické nastavení" : "Vlastní zdroje dat"}</small></span>
@@ -1083,7 +1085,7 @@ export const devicesMixin = {
                 <span class="display-template-variables" aria-label="Použité údaje">${template.variables.map(([iconName, label]) => `<span><ha-icon icon="mdi:${iconName}"></ha-icon>${this._escape(label)}</span>`).join("")}</span>
               </div>
               <div class="display-template-tile-actions">
-                <button type="button" class="display-template-card-action" data-display-template-open="${template.id}"><ha-icon icon="mdi:tune-variant"></ha-icon>${used ? "Upravit nastavení" : "Nastavit šablonu"}</button>
+                <button type="button" class="display-template-card-action" data-display-template-open="${template.id}"><ha-icon icon="mdi:${onDisplay ? "check-circle" : "tune-variant"}"></ha-icon>${onDisplay ? "Na displeji · upravit" : used ? "Upravit nastavení" : "Nastavit šablonu"}</button>
               </div>
             </article>`;
           }).join("")}</div>` : `<div class="display-template-empty"><ha-icon icon="mdi:magnify-close"></ha-icon><strong>Žádná šablona neodpovídá filtru</strong><span>Zkuste jiný název nebo druh šablony.</span></div>`}
@@ -1096,6 +1098,13 @@ export const devicesMixin = {
     const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
     const assigned = this._displayTemplateAssignments?.[address];
     if (Array.isArray(assigned)) return assigned.filter(Boolean).slice(0, 2);
+    return [];
+  },
+
+  _sentDisplayTemplates(device = this._device()) {
+    const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
+    const sent = this._deviceDrafts?.[address]?.sent_template_ids;
+    if (Array.isArray(sent)) return sent.filter(Boolean).slice(0, 2);
     return [];
   },
 
@@ -1540,6 +1549,7 @@ export const devicesMixin = {
         software_version: payload.software_version,
         orientation: payload.orientation,
         transform: payload.transform,
+        template_ids: Array.isArray(payload.template_ids) ? payload.template_ids : [],
       });
     } catch (err) {
       throw new Error(`Home Assistant nezařadil přijatý obrázek do fronty: ${this._message(err)}`);
@@ -1571,6 +1581,7 @@ export const devicesMixin = {
         image,
         orientation: this._displayTemplateOrientation === "portrait" ? "portrait" : "landscape",
         transform: this._displayTransform || "rotate_cw",
+        template_ids: [...this._assignedDisplayTemplates(device)],
       };
       const result = gatewayId
         ? await this._hass.callWS({
@@ -1646,6 +1657,7 @@ export const devicesMixin = {
       preview_width: width,
       preview_height: height,
       preview_orientation: portrait ? "portrait" : "landscape",
+      sent_template_ids: [...this._assignedDisplayTemplates(device)],
     };
     this._forgetCachedDisplayImages(address);
     this._saveCachedDeviceDrafts?.();

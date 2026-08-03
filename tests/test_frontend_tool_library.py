@@ -50,6 +50,22 @@ class FrontendToolLibraryTests(unittest.TestCase):
             self.source,
         )
 
+    def test_blank_template_opens_a_truly_empty_designer(self):
+        self.assertIn('if (templateId === "blank") {', self.source)
+        self.assertIn('this._objects = [];', self.source)
+        self.assertIn('this._projectName = "Vlastní šablona";', self.source)
+
+    def test_sent_template_state_is_persistent_and_fully_green(self):
+        self.assertIn("_sentDisplayTemplates(device = this._device())", self.source)
+        self.assertIn("sent_template_ids", self.source)
+        self.assertIn('template_ids: [...this._assignedDisplayTemplates(device)]', self.source)
+        self.assertIn('${onDisplay ? "is-on-display" : ""}', self.source)
+        self.assertIn(".display-template-card.is-on-display{", self.source)
+        self.assertIn("rgba(104,211,145,.3)", self.source)
+
+    def test_display_tile_hover_is_blue(self):
+        self.assertIn(".display-grid .display-tile:hover{border-color:#2563eb", self.source)
+
     def test_chart_and_status_have_reliable_entity_inputs(self):
         self.assertIn('data-entity-input=', self.source)
         self.assertIn('setEntityBinding', self.source)
@@ -289,7 +305,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
         )
         self.assertNotIn("!this._findSvgDeep(el.shadowRoot)", self.source)
         self.assertIn('data-display-template-open="${template.id}"', self.source)
-        self.assertIn('class="display-template-card display-template-drag-card ${used ? "is-used" : ""}"', self.source)
+        self.assertIn(
+            'class="display-template-card display-template-drag-card ${used ? "is-used" : ""} ${onDisplay ? "is-on-display" : ""}"',
+            self.source,
+        )
         self.assertIn("Přetáhněte sem šablonu", self.source)
         self.assertIn("Přetáhnout", self.source)
         self.assertIn("_assignDisplayTemplate(device, templateId, replaceIndex)", self.source)

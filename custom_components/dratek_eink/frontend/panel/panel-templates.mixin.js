@@ -303,6 +303,29 @@ export const templatesMixin = {
   },
 
   _applyTemplate(templateId, skipConfirm = false) {
+    if (templateId === "blank") {
+      if (!skipConfirm && this._objects.length && !confirm("Nahradit aktuální návrh prázdnou šablonou?")) return;
+      this._pushHistory();
+      const device = this._device();
+      const size = this._displaySize(device);
+      this._orientation = device?.orientation || (size.width > size.height ? "landscape" : "portrait");
+      this._objects = [];
+      this._variables = {};
+      this._invertColors = false;
+      this._backgroundColor = "white";
+      this._selectedIds = [];
+      this._selectedProjectId = "";
+      this._projectName = "Vlastní šablona";
+      this._nextId = 1;
+      this._templateDialogOpen = false;
+      this._newProjectDialogOpen = false;
+      this._fileMenuOpen = false;
+      this._fitZoom();
+      this._render();
+      this._paint();
+      this._scheduleDraftSave();
+      return;
+    }
     const template = this._templateDefinitions().find((item) => item.id === templateId);
     if (!template) return;
     if (!skipConfirm && this._objects.length && !confirm(`Nahradit aktualni navrh sablonou "${template.title}"?`)) return;

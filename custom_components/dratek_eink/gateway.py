@@ -355,6 +355,7 @@ async def async_send_gateway_payload(
     transform: str | None = None,
     orientation: str | None = None,
     software_version: int | None = None,
+    log_callback: Any = None,
 ) -> dict[str, Any] | None:
     gateways = await async_load_gateways(hass)
     gateway = next((item for item in gateways if item.get("id") == gateway_id), None)
@@ -364,7 +365,10 @@ async def async_send_gateway_payload(
     log: list[str] = []
 
     def add_log(message: str) -> None:
-        log.append(message)
+        line = str(message)
+        log.append(line)
+        if callable(log_callback):
+            log_callback(line)
 
     try:
         add_log(f"Packing image {image.width}x{image.height} for SDK type {sdk_type}.")

@@ -180,6 +180,7 @@ async def websocket_scan_gateway(
         "transform": str,
         vol.Optional("software_version"): int,
         vol.Optional("automation"): dict,
+        vol.Optional("template_ids"): [str],
     }
 )
 @websocket_api.async_response
@@ -216,6 +217,7 @@ async def websocket_send_gateway_design(
                 msg.get("transform"),
                 msg.get("orientation"),
                 msg.get("software_version"),
+                log_callback=add_log,
             )
             if transfer_result and transfer_result.get("ok") is not False:
                 # Uploads are one-shot: drop any schedule that was registered while
@@ -223,7 +225,11 @@ async def websocket_send_gateway_design(
                 await _clear_previous_entity_automation(hass, msg["address"])
                 try:
                     await async_save_display_preview(
-                        hass, msg["address"], image, msg.get("orientation", "landscape")
+                        hass,
+                        msg["address"],
+                        image,
+                        msg.get("orientation", "landscape"),
+                        list(msg.get("template_ids") or []),
                     )
                 except Exception as exc:
                     add_log(f"Displej byl aktualizovan, ale nahled se nepodarilo ulozit: {exc}")

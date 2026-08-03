@@ -498,7 +498,14 @@ class EntityAutoUpdateManager:
             async def run_gateway(add_log):
                 add_log(f"Automatic entity update via {transport_name or 'gateway'}.")
                 result = await async_send_gateway_payload(
-                    self.hass, gateway_id, address, sdk_type, image, transform, orientation
+                    self.hass,
+                    gateway_id,
+                    address,
+                    sdk_type,
+                    image,
+                    transform,
+                    orientation,
+                    log_callback=add_log,
                 )
                 if result and result.get("ok") is not False:
                     try:

@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.182] - 2026-08-03
+
+### Vylepšeno – šablony, náhledy a gateway fronta
+- Fronta zápisu nyní průběžně zobrazuje také jednotlivé kroky nahrávání přes gateway, včetně automatických aktualizací.
+- Kliknutí na vlastní prázdnou šablonu otevře designer bez jediného objektu a bez obsahu předchozího návrhu.
+- Integrace si po úspěšném zápisu trvale pamatuje, která šablona je skutečně na displeji. Její karta je celá zeleně zvýrazněná; pouhá změna výběru v editoru tento stav nepřepíše.
+- Karty displejů na hlavní stránce se při najetí myší zvýrazní modře místo zeleně.
+
 ## [0.1.181] - 2026-08-03
 
 ### Opraveno – návrat ke spolehlivému přenosu

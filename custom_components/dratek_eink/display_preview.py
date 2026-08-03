@@ -58,6 +58,7 @@ async def async_save_display_preview(
     address: str,
     image: Image.Image,
     orientation: str | None = None,
+    template_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Remember an image only after its transfer to the display succeeded."""
     normalized_address = str(address or "").strip().upper()
@@ -76,6 +77,16 @@ async def async_save_display_preview(
     lock = domain_data.setdefault(PREVIEW_SAVE_LOCK_KEY, asyncio.Lock())
     async with lock:
         previews = await async_load_display_previews(hass)
+        previous = previews.get(normalized_address, {})
+        if template_ids is None:
+            if isinstance(previous.get("sent_template_ids"), list):
+                preview["sent_template_ids"] = list(previous["sent_template_ids"])
+        else:
+            preview["sent_template_ids"] = [
+                str(template_id).strip()
+                for template_id in template_ids[:2]
+                if str(template_id).strip()
+            ]
         previews[normalized_address] = preview
         await _preview_store(hass).async_save({"previews": previews})
     return preview

@@ -428,7 +428,7 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
                 submitted.update(kwargs)
                 return await kwargs["runner"](lambda _line: None)
 
-        async def send_gateway(_hass, gateway_id, *_args):
+        async def send_gateway(_hass, gateway_id, *_args, **_kwargs):
             submitted["sent_gateway_id"] = gateway_id
             return {"ok": True}
 
@@ -480,7 +480,7 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
                 submitted.update(kwargs)
                 return await kwargs["runner"](lambda _line: None)
 
-        async def send_gateway(_hass, gateway_id, *_args):
+        async def send_gateway(_hass, gateway_id, *_args, **_kwargs):
             submitted["sent_gateway_id"] = gateway_id
             return {"ok": True}
 

@@ -15,6 +15,8 @@ class DisplayPreviewPersistenceTests(unittest.TestCase):
         self.assertIn('"preview_image": data_url', source)
         self.assertIn('"preview_updated_at": int(time.time() * 1000)', source)
         self.assertIn("async with lock:", source)
+        self.assertIn('preview["sent_template_ids"]', source)
+        self.assertIn('previous.get("sent_template_ids")', source)
 
     def test_draft_reads_include_the_persistent_snapshot(self):
         source = (COMPONENT / "ws_projects.py").read_text(encoding="utf-8")
@@ -33,6 +35,10 @@ class DisplayPreviewPersistenceTests(unittest.TestCase):
         for source in (sending, automation):
             self.assertIn("preview could not be saved", source.lower())
         self.assertIn("nahled se nepodarilo ulozit", gateways.lower())
+        self.assertIn('vol.Optional("template_ids"): [str]', sending)
+        self.assertIn('vol.Optional("template_ids"): [str]', gateways)
+        self.assertIn('list(msg.get("template_ids") or [])', sending)
+        self.assertIn('list(msg.get("template_ids") or [])', gateways)
 
 
 if __name__ == "__main__":

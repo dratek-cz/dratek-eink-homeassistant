@@ -1,2 +1,2 @@
-export const DRATEK_EINK_VERSION = "0.1.181";
+export const DRATEK_EINK_VERSION = "0.1.182";
 export const CURRENT_GATEWAY_FIRMWARES = new Set(["0.1.47-gateway"]);

@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.182
+
+- fronta zápisu zobrazuje živé kroky nahrávání přes gateway
+- vlastní prázdná šablona otevírá zcela čistý designer
+- šablona skutečně uložená na displeji se pamatuje i po restartu a její celá karta je zelená
+- náhled displeje na hlavní stránce se při najetí myší zvýrazní modře
+
 ## Novinky ve verzi 0.1.181
 
 - odstraněny experimentální rychlé BlueZ přenosy, které mohly hlásit úspěch bez skutečného překreslení displeje
