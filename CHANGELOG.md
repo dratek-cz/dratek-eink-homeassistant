@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.177] - 2026-08-03
+
+### Opraveno a zrychleno
+- Přímý Bluetooth přenos streamujících displejů, které nabízejí `write` i `write-without-response`, už nečeká na pomalý ATT round-trip u každého obrazového bloku. První blok je potvrzený, prostřední bloky tvoří 40ms tempovaný proud a poslední potvrzený blok funguje po sekundovém odtečení fronty jako doručovací bariéra. U displeje 128×296 se tak počet potvrzovaných zápisů snižuje ze 40 na 2; stejná oprava platí pro velký SDK 75.
+- Zůstává zachována ochrana proti poškození obrazu: nejednoznačně timeoutovaný poslední blok se přijme pouze tehdy, když byla potvrzena vstupní bariéra a všechny předchozí bloky byly v pořadí předány. Charakteristiky s jediným režimem zápisu nadále používají plně potvrzovaný bezpečný přenos.
+
 ## [0.1.176] - 2026-08-03
 
 ### Opraveno

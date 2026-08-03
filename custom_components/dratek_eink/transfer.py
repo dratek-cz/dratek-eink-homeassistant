@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 WRITE_ACK_SDK_TYPES = {51}
+FINAL_BLOCK_DRAIN_DELAY = 1.0
 FINAL_BLOCK_RESPONSE_TIMEOUT = 2
 MTU_NEGOTIATION_TIMEOUT = 4
 RGB_LED_COMMAND = 0x30
@@ -374,19 +375,28 @@ class DratekTransfer:
             # after each control-point notification and ignores its block index
             # after the initial request.
             streaming_mode = bool(int(software_version or 0) & 0x80)
-            # The official Picksmart client advances streaming firmware from
-            # the GATT write-complete callback. Use ATT-confirmed writes whenever
-            # the characteristic permits them; local no-response queueing is not
-            # proof that the display consumed a block.
+            # Streaming displays that expose both write modes can use a paced
+            # burst. The first confirmed write opens the ordered stream, the
+            # intermediate no-response writes avoid a BlueZ round trip per
+            # block, and the final confirmed write is a delivery barrier after
+            # the local queue has drained. Characteristics with only one mode
+            # keep their original fully confirmed/notification-paced behavior.
+            terminal_barrier_writes = (
+                streaming_mode
+                and "write" in write_char.properties
+                and "write-without-response" in write_char.properties
+            )
             require_gatt_response = (
-                int(sdk_type) in WRITE_ACK_SDK_TYPES
-                or (
-                    streaming_mode and "write" in write_char.properties
+                not terminal_barrier_writes
+                and (
+                    int(sdk_type) in WRITE_ACK_SDK_TYPES
+                    or "write-without-response" not in write_char.properties
                 )
-                or "write-without-response" not in write_char.properties
             )
             write_mode = (
-                "vendor write-complete flow control"
+                "paced burst with first/final GATT barriers"
+                if terminal_barrier_writes
+                else "vendor write-complete flow control"
                 if require_gatt_response
                 else "paced write without response"
             )
@@ -410,7 +420,20 @@ class DratekTransfer:
 
                 end_block = total_blocks if streaming_mode else next_block + 1
                 for block_number in range(next_block, end_block):
-                    block_requires_response = require_gatt_response
+                    block_requires_response = require_gatt_response or (
+                        terminal_barrier_writes
+                        and block_number in {next_block, total_blocks - 1}
+                    )
+                    if (
+                        terminal_barrier_writes
+                        and block_requires_response
+                        and block_number == total_blocks - 1
+                        and block_number != next_block
+                    ):
+                        # A short barrier delay lets BlueZ hand every paced
+                        # no-response block to the controller before the final
+                        # confirmed write closes the ordered stream.
+                        await asyncio.sleep(FINAL_BLOCK_DRAIN_DELAY)
                     final_response_missing = False
                     try:
                         await self._write_image_block(
@@ -426,10 +449,19 @@ class DratekTransfer:
                             ),
                         )
                     except TimeoutError:
+                        confirmed_flow_complete = (
+                            require_gatt_response
+                            and len(confirmed_blocks) == total_blocks - 1
+                        )
+                        paced_stream_complete = (
+                            terminal_barrier_writes
+                            and next_block in confirmed_blocks
+                            and len(sent_blocks) == total_blocks - 1
+                        )
                         if (
                             not streaming_mode
                             or block_number != total_blocks - 1
-                            or len(confirmed_blocks) != total_blocks - 1
+                            or not (confirmed_flow_complete or paced_stream_complete)
                         ):
                             raise
                         # Several Picksmart controllers consume the final block
@@ -466,7 +498,7 @@ class DratekTransfer:
                             responses,
                             timeout=(
                                 OPTIONAL_COMPLETION_TIMEOUT
-                                if require_gatt_response
+                                if require_gatt_response or terminal_barrier_writes
                                 else UNCONFIRMED_WRITE_DRAIN_TIMEOUT
                             ),
                         )

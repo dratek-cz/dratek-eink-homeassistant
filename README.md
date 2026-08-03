@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.177
+
+- výrazně zrychlen přímý Bluetooth přenos přes Home Assistant: u streamujících displejů se potvrzuje první a poslední blok, prostřední bloky se posílají jako bezpečně tempovaný proud
+- displej 128×296 nyní potřebuje pouze 2 potvrzované BLE zápisy místo 40; oprava platí také pro velký SDK typ 75
+
 ## Novinky ve verzi 0.1.176
 
 - opraven instalační ZIP pro Linux: frontend se nyní rozbalí do skutečného adresáře `frontend/`, takže panel již nekončí chybou 404
