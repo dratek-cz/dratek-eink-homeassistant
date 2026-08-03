@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.178
+
+- opraven falešně úspěšný rychlý Bluetooth přenos, po kterém se displej nepřekreslil: proud dat nyní potvrzuje každý osmý blok
+- při selhání kontrolního bodu se přenos automaticky zopakuje bezpečným režimem s potvrzením každého bloku; velký displej má pro tento náhradní pokus dostatečný čas
+
 ## Novinky ve verzi 0.1.177
 
 - výrazně zrychlen přímý Bluetooth přenos přes Home Assistant: u streamujících displejů se potvrzuje první a poslední blok, prostřední bloky se posílají jako bezpečně tempovaný proud

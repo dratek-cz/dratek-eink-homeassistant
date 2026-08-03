@@ -92,7 +92,7 @@ class TransferQueueRetryTests(unittest.IsolatedAsyncioTestCase):
 
         result = await queue._execute(job, runner)
 
-        self.assertIn("exceeded the 240s safety timeout", result["error"])
+        self.assertIn("exceeded the 600s safety timeout", result["error"])
         self.assertIn("Last step: Display accepted block 11/124 (8%).", result["error"])
 
     async def test_empty_platform_exception_is_returned_with_its_type(self):

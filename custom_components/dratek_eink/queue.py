@@ -15,7 +15,10 @@ QUEUE_STORE_KEY = "dratek_eink.transfer_queue"
 QUEUE_STORE_VERSION = 1
 QUEUE_DATA_KEY = "transfer_queue"
 HISTORY_LIMIT = 100
-TRANSFER_JOB_TIMEOUT_SECONDS = 240
+# A checkpoint failure deliberately retries with a fully confirmed stream.
+# Large 400x300 panels can need more than four minutes on slow BlueZ adapters,
+# so the outer safety net must cover that reliable fallback as well.
+TRANSFER_JOB_TIMEOUT_SECONDS = 600
 AUTOMATIC_BLUETOOTH_RETRY_DELAY_SECONDS = 20
 LEGACY_COMPLETION_TIMEOUT_MARKER = "waiting for the display to confirm the completed refresh"
 RETRYABLE_BLUETOOTH_ERROR_MARKERS = (

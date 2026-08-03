@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.178] - 2026-08-03
+
+### Opraveno
+- Zrychlený přenos z verze 0.1.177 mohl na BlueZ skončit falešným úspěchem: operační systém přijal nepotvrzované bloky do Bluetooth fronty, ale displej je nepřevzal a obraz se nepřekreslil. Rychlý přenos nyní uzavírá krátké dávky potvrzeným GATT zápisem každých 8 bloků a před každým kontrolním bodem nechá frontu 0,8 sekundy odtéct.
+- Pokud kontrolní bod selže, další pokus automaticky přejde do spolehlivého režimu s potvrzením každého obrazového bloku. Celková bezpečnostní pojistka fronty byla zvýšena na 600 sekund, aby tento náhradní režim stihl dokončit i přenos 300×400; běžný rychlý pokus se tím nezpomaluje.
+
 ## [0.1.177] - 2026-08-03
 
 ### Opraveno a zrychleno
