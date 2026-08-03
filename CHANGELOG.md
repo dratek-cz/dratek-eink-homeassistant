@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.180] - 2026-08-03
+
+### Opraveno a zrychleno
+- Běžné volání Bleaku `write_gatt_char(..., response=False)` mohlo přes D-Bus přijmout všech 40 nebo 125 bloků do lokální fronty BlueZ, aniž je Bluetooth adaptér skutečně odvysílal. Integrace pak nesprávně hlásila dokončený přenos, ale displej nepřekreslil obraz.
+- Streamující displeje na Linuxu nyní používají rozhraní BlueZ `AcquireWrite`. Každý celý 244bajtový blok se zapisuje do samostatně získaného GATT socketu, který poskytuje zpětný tlak kernelu bez pomalého ATT potvrzení každého bloku. Tím se zachová rychlost i fyzické předání posledního bloku.
+- Pokud `AcquireWrite` na konkrétní kombinaci BlueZ a adaptéru selže, další pokus automaticky použije pomalejší potvrzované zápisy; přenos tedy nebude označen jako úspěšný pouze na základě lokální D-Bus fronty.
+
 ## [0.1.179] - 2026-08-03
 
 ### Opraveno a zrychleno

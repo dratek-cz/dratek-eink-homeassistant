@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.180
+
+- přímý přenos na Linuxu používá flow-controlled socket BlueZ `AcquireWrite` místo neřízené D-Bus fronty, která mohla zahodit všechny obrazové bloky
+- rychlá cesta předává celé 244bajtové bloky s kernelovým zpětným tlakem; při nedostupnosti socketu se automaticky použije bezpečný potvrzovaný pokus
+
 ## Novinky ve verzi 0.1.179
 
 - rychlý Bluetooth přenos už nestřídá potvrzované a nepotvrzované zápisy, jejichž přechod na některých BlueZ adaptérech timeoutoval
