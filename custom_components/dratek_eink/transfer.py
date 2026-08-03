@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
-import os
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -276,7 +275,6 @@ class DratekTransfer:
                     partial,
                     orientation,
                     software_version,
-                    force_confirmed_writes=attempt > 1,
                 )
                 self.log("Transfer completed.")
                 return
@@ -301,7 +299,6 @@ class DratekTransfer:
         partial: tuple[int, int, int, int, int] | None = None,
         orientation: str | None = None,
         software_version: int | None = None,
-        force_confirmed_writes: bool = False,
     ) -> None:
         payload = await self._async_pack(sdk_type, image, transform, orientation)
         software_version = self._resolve_software_version(address, software_version)
@@ -377,28 +374,17 @@ class DratekTransfer:
             # after each control-point notification and ignores its block index
             # after the initial request.
             streaming_mode = bool(int(software_version or 0) & 0x80)
-            # BlueZ's regular D-Bus write-without-response call can accept a full
-            # image into its local queue without delivering the 244-byte commands.
-            # AcquireWrite exposes BlueZ's flow-controlled GATT socket instead.
-            # It keeps the fast command protocol without mixing in ATT requests.
-            bluez_acquired_stream = (
-                not force_confirmed_writes
-                and streaming_mode
-                and "write-without-response" in write_char.properties
-                and self._can_acquire_bluez_write(client, write_char)
-            )
+            # Only an ATT response proves that this BlueZ adapter handed the
+            # complete 244-byte block to the display. Both D-Bus command writes
+            # and AcquireWrite sockets have produced false success on the tested
+            # Home Assistant host, so streaming displays use confirmed writes.
             require_gatt_response = (
-                not bluez_acquired_stream
-                and (
-                    int(sdk_type) in WRITE_ACK_SDK_TYPES
-                    or "write-without-response" not in write_char.properties
-                    or force_confirmed_writes
-                )
+                int(sdk_type) in WRITE_ACK_SDK_TYPES
+                or (streaming_mode and "write" in write_char.properties)
+                or "write-without-response" not in write_char.properties
             )
             write_mode = (
-                "BlueZ AcquireWrite flow-controlled stream"
-                if bluez_acquired_stream
-                else "vendor write-complete flow control"
+                "vendor write-complete flow control"
                 if require_gatt_response
                 else "paced write without response"
             )
@@ -406,8 +392,6 @@ class DratekTransfer:
                 f"Transfer mode: {'streaming' if streaming_mode else 'notification-paced legacy'}, "
                 f"block writes: {write_mode} (software version {int(software_version or 0)})."
             )
-            if force_confirmed_writes:
-                self.log("Reliable retry enabled: every image block must receive a GATT response.")
             if len(response) < 6 or response[0] != 5 or response[1] != 0:
                 raise RuntimeError(f"Invalid first image-block request: {response.hex(' ').upper()}")
             next_block = int.from_bytes(response[2:6], "little")
@@ -428,26 +412,18 @@ class DratekTransfer:
                     final_response_missing = False
                     try:
                         block_data = _next_block(payload, block_size, block_number)
-                        if bluez_acquired_stream:
-                            await self._write_bluez_acquired_block(
-                                client,
-                                write_char,
-                                block_data,
-                                block_number,
-                            )
-                        else:
-                            await self._write_image_block(
-                                client,
-                                write_char,
-                                block_data,
-                                block_number,
-                                require_response=block_requires_response,
-                                operation_timeout=(
-                                    FINAL_BLOCK_RESPONSE_TIMEOUT
-                                    if streaming_mode and block_number == total_blocks - 1
-                                    else GATT_OPERATION_TIMEOUT
-                                ),
-                            )
+                        await self._write_image_block(
+                            client,
+                            write_char,
+                            block_data,
+                            block_number,
+                            require_response=block_requires_response,
+                            operation_timeout=(
+                                FINAL_BLOCK_RESPONSE_TIMEOUT
+                                if streaming_mode and block_number == total_blocks - 1
+                                else GATT_OPERATION_TIMEOUT
+                            ),
+                        )
                     except TimeoutError:
                         confirmed_flow_complete = (
                             require_gatt_response
@@ -480,8 +456,6 @@ class DratekTransfer:
                             delivery = "Final block handed off"
                         elif block_requires_response:
                             delivery = "Display acknowledged"
-                        elif bluez_acquired_stream:
-                            delivery = "BlueZ flow-controlled"
                         else:
                             delivery = "Bluetooth queued"
                         self.log(
@@ -650,85 +624,6 @@ class DratekTransfer:
 
         mtu_size = int(getattr(client, "mtu_size", 0) or 0)
         self.log(f"Negotiated ATT MTU: {mtu_size or 'unknown'} bytes.")
-
-    @staticmethod
-    def _bluez_characteristic_path(write_char) -> str | None:
-        """Return the D-Bus path across supported Bleak BlueZ versions."""
-        path = getattr(write_char, "path", None)
-        if path:
-            return str(path)
-        obj = getattr(write_char, "obj", None)
-        if isinstance(obj, (tuple, list)) and obj:
-            return str(obj[0])
-        return None
-
-    def _can_acquire_bluez_write(self, client, write_char) -> bool:
-        backend = getattr(client, "_backend", None)
-        return bool(
-            backend is not None
-            and type(backend).__module__.startswith("bleak.backends.bluezdbus")
-            and getattr(backend, "_bus", None) is not None
-            and self._bluez_characteristic_path(write_char)
-        )
-
-    async def _write_bluez_acquired_block(
-        self,
-        client,
-        write_char,
-        data: bytes,
-        block_number: int,
-    ) -> None:
-        """Write one command through BlueZ's flow-controlled AcquireWrite socket."""
-        from bleak.backends.bluezdbus import defs
-        from bleak.backends.bluezdbus.utils import assert_reply
-        from dbus_fast.message import Message
-
-        backend = getattr(client, "_backend", None)
-        bus = getattr(backend, "_bus", None)
-        path = self._bluez_characteristic_path(write_char)
-        if bus is None or path is None:
-            raise RuntimeError("BlueZ AcquireWrite backend is unavailable.")
-
-        try:
-            async with asyncio.timeout(GATT_OPERATION_TIMEOUT):
-                while True:
-                    reply = await bus.call(
-                        Message(
-                            destination=defs.BLUEZ_SERVICE,
-                            path=path,
-                            interface=defs.GATT_CHARACTERISTIC_INTERFACE,
-                            member="AcquireWrite",
-                            signature="a{sv}",
-                            body=[{}],
-                        )
-                    )
-                    if reply.error_name in {
-                        "org.bluez.Error.InProgress",
-                        "org.bluez.Error.NotPermitted",
-                    }:
-                        # BlueZ observes the HUP from the previous one-packet
-                        # socket asynchronously. Give it one event-loop turn to
-                        # release WriteAcquired before requesting the next socket.
-                        await asyncio.sleep(0.01)
-                        continue
-                    assert_reply(reply)
-                    if not reply.unix_fds:
-                        raise RuntimeError("BlueZ AcquireWrite returned no file descriptor.")
-                    fd = reply.unix_fds[0]
-                    try:
-                        written = os.write(fd, data)
-                        if written != len(data):
-                            raise RuntimeError(
-                                f"BlueZ accepted only {written}/{len(data)} bytes "
-                                f"for image block {block_number}."
-                            )
-                    finally:
-                        os.close(fd)
-                    return
-        except TimeoutError as exc:
-            raise TimeoutError(
-                f"BlueZ AcquireWrite timed out during block {block_number}."
-            ) from exc
 
     async def _write_char(
         self,

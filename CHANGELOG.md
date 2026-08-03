@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.181] - 2026-08-03
+
+### Opraveno – návrat ke spolehlivému přenosu
+- Experimentální rychlé cesty z verzí 0.1.177 až 0.1.180 mohly na počítačovém BlueZ předat obraz pouze lokální frontě nebo socketu a přesto ohlásit úspěch, zatímco displej neobdržel poslední či žádný blok a nepřekreslil se. Tyto cesty byly odstraněny.
+- Streamující displeje nyní znovu používají potvrzovaný GATT zápis pro každý obrazový blok. Je to pomalejší, ale jde o jediný režim, u kterého protokol na dotčeném adaptéru prokázal převzetí všech bloků displejem. Bez fyzického ověření už integrace rychlou neřízenou cestu nepoužije.
+
 ## [0.1.180] - 2026-08-03
 
 ### Opraveno a zrychleno

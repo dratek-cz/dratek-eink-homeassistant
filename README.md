@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.181
+
+- odstraněny experimentální rychlé BlueZ přenosy, které mohly hlásit úspěch bez skutečného překreslení displeje
+- přímý Bluetooth přenos opět potvrzuje každý obrazový blok; je pomalejší, ale na problematickém adaptéru prokazatelně doručuje celý obraz
+
 ## Novinky ve verzi 0.1.180
 
 - přímý přenos na Linuxu používá flow-controlled socket BlueZ `AcquireWrite` místo neřízené D-Bus fronty, která mohla zahodit všechny obrazové bloky
