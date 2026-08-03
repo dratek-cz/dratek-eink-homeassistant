@@ -270,7 +270,11 @@ export const devicesMixin = {
   // Geometrie rámečku displeje. Sdílí ji velký náhled na stránce displejů
   // i miniatura v mapě připojení, aby oba ukazovaly stejný tvar zařízení.
   _deviceFrameGeometry(device) {
-    const { width: sourceWidth, height: sourceHeight, draft } = this._devicePreviewSize(device);
+    const draftSize = this._devicePreviewSize(device);
+    const { draft } = draftSize;
+    const hasSentPreview = String(draft?.preview_image || device?.preview_image || device?.last_image || "").startsWith("data:image/");
+    const sourceWidth = hasSentPreview ? Math.max(1, Number(draft?.preview_width || draftSize.width)) : draftSize.width;
+    const sourceHeight = hasSentPreview ? Math.max(1, Number(draft?.preview_height || draftSize.height)) : draftSize.height;
     const portraitLayout = sourceHeight > sourceWidth;
     const large400Layout = this._isLarge400Device(device);
     const base = this._baseDisplaySize(device);
@@ -311,13 +315,10 @@ export const devicesMixin = {
     const designerFrameRadius = geometry.frameRadius;
     const pe29Layout = this._isPe29Device(device);
     const physicalCode = device.physical_code || "00.00.00.00";
-    const assignedTemplates = this._assignedDisplayTemplates(device);
     const hasPreviewContent = !!(
-      draft?.objects?.length ||
       draft?.preview_image ||
       (device.preview_image && String(device.preview_image).startsWith("data:image/")) ||
-      (device.last_image && String(device.last_image).startsWith("data:image/")) ||
-      assignedTemplates.length > 0
+      (device.last_image && String(device.last_image).startsWith("data:image/"))
     );
     return `<div class="device-preview-wrap preview-${previewMode} ${catalogWordmark ? "catalog-device-preview" : ""}">
       <div class="device-preview-fit" style="--frame-ratio:${nativeOuterRatio.toFixed(4)};--preview-width:${previewWidth}px">
@@ -383,17 +384,11 @@ export const devicesMixin = {
         : recentlySucceededJob
           ? `<div class="display-uploaded-state" role="status" aria-live="polite"><ha-icon icon="mdi:check-circle"></ha-icon><strong>Úspěšně nahráno</strong><span>Displej se vykresluje</span></div>`
           : "";
+      // A card represents the physical tag, not the current editor state. Its
+      // canvas is therefore painted only from the last successfully written
+      // snapshot. Before the first recorded write it stays honestly empty.
       const assignedTemplates = this._assignedDisplayTemplates(device);
-      const primaryTemplate = this._displayTemplates?.find((t) => t.id === assignedTemplates[0]);
-      const secondaryTemplate = this._displayTemplates?.find((t) => t.id === assignedTemplates[1]);
-      const orientation = device.orientation || "landscape";
-      const layout = device.layout || "single";
-      const address = String(device.address || "").toUpperCase();
-      const draft = this._deviceDrafts?.[address] || null;
-      const hasCustomDraft = !!(draft?.objects?.length || draft?.preview_image);
-      const cardPreview = (primaryTemplate && !hasCustomDraft)
-        ? this._renderTemplatePhysicalDevicePreview(device, primaryTemplate, secondaryTemplate, orientation, layout, true)
-        : this._renderDevicePreview(device, mode === "list" ? "mini" : mode);
+      const cardPreview = this._renderDevicePreview(device, mode === "list" ? "mini" : mode);
 
       return `<article class="display-tile ${temporarilyUnseen ? "is-stale" : ""} ${writingJob ? "is-writing" : ""} ${recentlySucceededJob ? "is-uploaded" : ""}" data-device-card-settings="${this._escape(device.address)}" role="button" tabindex="0" aria-label="Upravit displej ${this._escape(this._deviceTitle(device))}">
         <header class="display-tile-header">
@@ -1080,7 +1075,7 @@ export const devicesMixin = {
                 <span class="display-template-variable-count">${template.variables.length} údajů</span>
                 <button type="button" class="display-template-help" data-display-template-setup="${this._escape(template.id)}" title="Jak zprovoznit šablonu ${this._escape(template.title)}" aria-label="Jak zprovoznit šablonu ${this._escape(template.title)}"><ha-icon icon="mdi:help-circle-outline"></ha-icon></button>
               </header>
-              <div class="display-template-tile-preview is-${orientation}" data-display-template-quick-send="${template.id}" role="button" tabindex="0" aria-label="Odeslat šablonu ${this._escape(template.title)} na displej">
+              <div class="display-template-tile-preview is-${orientation}" data-display-template-select="${template.id}" role="button" tabindex="0" aria-label="Vybrat šablonu ${this._escape(template.title)} pro displej">
                 <span class="display-template-drag-handle"><ha-icon icon="mdi:drag"></ha-icon>Přetáhnout na displej</span>
                 <span class="display-template-preview" style="aspect-ratio:${previewAspect};min-height:0">${this._renderDisplayTemplateCatalogPreview(template, orientation, size)}</span>
               </div>
@@ -1648,6 +1643,9 @@ export const devicesMixin = {
       orientation: portrait ? "portrait" : "landscape",
       preview_image: image,
       preview_updated_at: Date.now(),
+      preview_width: width,
+      preview_height: height,
+      preview_orientation: portrait ? "portrait" : "landscape",
     };
     this._forgetCachedDisplayImages(address);
     this._saveCachedDeviceDrafts?.();
@@ -1746,8 +1744,8 @@ export const devicesMixin = {
                     ${this._renderDisplayTemplateSurface(template, large400Layout ? (autoFit ? autoFormat : (this._displayTemplateFormats?.primary || "narrow")) : (orientation === "landscape" ? "wide" : "narrow"), true, "primary", autoFit || !large400Layout, large400Layout ? (this._displayTemplateSizes?.primary || "large") : "large", autoFit, primaryFillsDisplay ? autoSlotWidth : 0, primaryFillsDisplay ? autoSlotHeight : 0)}
                     ${large400Layout && layout !== "single" ? this._renderDisplayTemplateSurface(secondaryTemplate, autoFit ? autoFormat : (this._displayTemplateFormats?.secondary || "narrow"), false, "secondary", autoFit, "small", autoFit, autoFit ? autoSlotWidth : 0, autoFit ? autoSlotHeight : 0) : ""}
                   </div>
+                  ${autoFit ? `<canvas class="template-dithered-preview" data-dithered-preview="${ditherKey}" data-dithered-address="${this._escape(address)}" width="${sourceWidth}" height="${sourceHeight}"></canvas>` : ""}
                 </div>
-                ${autoFit ? `<canvas class="template-dithered-preview" data-dithered-preview="${ditherKey}" data-dithered-address="${this._escape(address)}" width="${sourceWidth}" height="${sourceHeight}"></canvas>` : ""}
               </div>
             </div>
           </foreignObject>

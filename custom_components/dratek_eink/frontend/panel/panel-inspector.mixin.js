@@ -157,9 +157,6 @@ export const inspectorMixin = {
     this.shadowRoot.querySelectorAll("[data-gateway-name-cancel]").forEach((button) => button.addEventListener("click", () => { this._editingGatewayId = ""; this._render(); this._paint(); }));
     this.shadowRoot.querySelectorAll("[data-language]").forEach((button) => button.addEventListener("click", () => this._setUiLanguage(button.dataset.language)));
     this.shadowRoot.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", async () => {
-      if (this._activeTab === "display-settings" && this._displaySettingsView === "designer") {
-        await this._captureCurrentDisplayTemplatePreview();
-      }
       this._activeTab = button.dataset.tab;
       this._render();
       this._paint();
@@ -309,8 +306,8 @@ export const inspectorMixin = {
 
       this._render();
       this._paint();
-      // Assigning a template while staying in the catalog - the preview's
-      // quick-send, or a drag-and-drop drop onto the device preview - keeps the
+      // Assigning a template while staying in the catalog - by clicking its
+      // preview, or by dragging it onto the device preview - keeps the
       // user on the same page, so their scroll position must not move. Only
       // switching into the designer is a real page change worth resetting.
       if (!stayInCatalog) {
@@ -319,7 +316,7 @@ export const inspectorMixin = {
     };
     // A large display already carrying one full-size template has no room for a
     // second without the user choosing to shrink it or replace it outright, so
-    // both the "configure" button and the preview's quick-send have to detect
+    // both the "configure" button and the selectable preview have to detect
     // that and defer to the conflict dialog instead of silently overwriting.
     const hasTemplateSlotConflict = (templateId) => {
       const device = this._device();
@@ -353,23 +350,22 @@ export const inspectorMixin = {
     // right away instead of opening the designer - the designer stays reachable
     // through the "Nastavit šablonu" button next to it for anyone who wants to
     // adjust bindings first.
-    this.shadowRoot.querySelectorAll("[data-display-template-quick-send]").forEach((tile) => {
+    this.shadowRoot.querySelectorAll("[data-display-template-select]").forEach((tile) => {
       tile.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
         tile.click();
       });
-      tile.addEventListener("click", async () => {
-        const templateId = tile.dataset.displayTemplateQuickSend || "";
+      tile.addEventListener("click", () => {
+        const templateId = tile.dataset.displayTemplateSelect || "";
         if (!templateId) return;
         if (hasTemplateSlotConflict(templateId)) {
-          this._pendingDisplayTemplateConflict = { templateId, stayInCatalog: true, autoSend: true };
+          this._pendingDisplayTemplateConflict = { templateId, stayInCatalog: true };
           this._render();
           this._paint();
           return;
         }
         openDisplayTemplate(templateId, null, true);
-        await this._sendDisplayTemplatePreview();
       });
     });
     this.shadowRoot.querySelectorAll("[data-display-template-drag]").forEach((card) => {
@@ -453,24 +449,20 @@ export const inspectorMixin = {
         this._paint();
         return;
       }
-      // The quick-send preview click still has to send once the user resolves
-      // the conflict, otherwise choosing "shrink" or "replace" here would leave
-      // the template assigned but never actually written to the display.
+      // Resolving the conflict only changes the editor draft. The user still
+      // confirms the physical transfer separately with the Send button.
       const stayInCatalog = this._pendingDisplayTemplateConflict?.stayInCatalog === true;
-      const autoSend = this._pendingDisplayTemplateConflict?.autoSend === true;
       this._displayTemplateSizes ||= { primary: "large", secondary: "small" };
       if (action === "shrink") {
         this._displayTemplateSizes.primary = "small";
         this._displayTemplateSizes.secondary = "small";
         openDisplayTemplate(pendingTemplateId, null, stayInCatalog);
-        if (autoSend) await this._sendDisplayTemplatePreview();
         return;
       }
       if (action === "replace") {
         this._displayTemplateSizes.primary = "large";
         this._displayTemplateSizes.secondary = "small";
         openDisplayTemplate(pendingTemplateId, 0, stayInCatalog);
-        if (autoSend) await this._sendDisplayTemplatePreview();
       }
     }));
     this.shadowRoot.querySelectorAll("[data-template-orientation]").forEach((button) => button.addEventListener("click", () => {
@@ -832,7 +824,6 @@ export const inspectorMixin = {
 
       this._activePriceSaleDeviceAddress = null;
       await this._saveCurrentDeviceDraft?.();
-      await this._sendDisplayTemplatePreview?.();
       this._render();
       this._paint();
     };

@@ -106,14 +106,16 @@ export const projectsMixin = {
 
   _mergeDraftWithSentPreview(address, draft) {
     const local = this._deviceDrafts?.[String(address || "").toUpperCase()];
-    if (!local?.preview_image) return draft || null;
+    const serverPreviewAt = Number(draft?.preview_updated_at || 0);
+    const localPreviewAt = Number(local?.preview_updated_at || 0);
+    if (!local?.preview_image || serverPreviewAt >= localPreviewAt) return draft || null;
     return {
       ...(draft || {}),
-      width: local.width,
-      height: local.height,
-      orientation: local.orientation,
       preview_image: local.preview_image,
       preview_updated_at: local.preview_updated_at,
+      preview_width: local.preview_width || local.width,
+      preview_height: local.preview_height || local.height,
+      preview_orientation: local.preview_orientation || local.orientation,
     };
   },
 

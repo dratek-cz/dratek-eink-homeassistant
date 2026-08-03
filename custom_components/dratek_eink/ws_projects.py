@@ -10,6 +10,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
 
 from .automation import get_entity_auto_update_manager
+from .display_preview import async_display_preview, async_load_display_previews
 from .ws_shared import (
     _load_project_data,
     _normalize_address,
@@ -122,6 +123,9 @@ async def websocket_load_device_draft(
 ) -> None:
     data = await _load_project_data(hass)
     draft = data["device_drafts"].get(_normalize_address(msg["address"]))
+    preview = await async_display_preview(hass, msg["address"])
+    if preview:
+        draft = {**(draft or {}), **preview}
     connection.send_result(msg["id"], {"draft": draft})
 
 
@@ -134,11 +138,14 @@ async def websocket_list_device_drafts(
 ) -> None:
     """Return all display drafts in one request for fast card previews."""
     data = await _load_project_data(hass)
+    previews = await async_load_display_previews(hass)
     drafts = {
-        _normalize_address(address): draft
+        _normalize_address(address): {**draft, **previews.get(_normalize_address(address), {})}
         for address, draft in data["device_drafts"].items()
         if isinstance(address, str) and isinstance(draft, dict)
     }
+    for address, preview in previews.items():
+        drafts.setdefault(address, {}).update(preview)
     connection.send_result(msg["id"], {"drafts": drafts})
 
 
@@ -170,4 +177,5 @@ async def websocket_save_device_draft(
         await get_entity_auto_update_manager(hass).async_set_refresh_interval(
             address, draft["refresh_interval_seconds"]
         )
-    connection.send_result(msg["id"], {"draft": draft})
+    preview = await async_display_preview(hass, address)
+    connection.send_result(msg["id"], {"draft": {**draft, **(preview or {})}})

@@ -339,10 +339,18 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('class="display-template-send-button"', self.source)
         self.assertIn("data-template-send", self.source)
         self.assertIn("_sendDisplayTemplatePreview()", self.source)
+        self.assertIn('data-display-template-select="${template.id}"', self.source)
+        self.assertNotIn("data-display-template-quick-send", self.source)
+        self.assertNotIn("autoSend", self.source)
+        self.assertEqual(
+            self.source.count("this._sendDisplayTemplatePreview"),
+            1,
+            "Only the explicit Send button may start a physical display transfer.",
+        )
         self.assertIn("this._rememberSentDisplayPreview(device, image);", self.source)
         self.assertIn("_rememberSentDisplayPreview(device, image)", self.source)
         self.assertIn("_captureCurrentDisplayTemplatePreview()", self.source)
-        self.assertIn("await this._captureCurrentDisplayTemplatePreview();", self.source)
+        self.assertNotIn("await this._captureCurrentDisplayTemplatePreview();", self.source)
         self.assertIn("preview_image: image", self.source)
         self.assertIn("this._saveCachedDeviceDrafts?.();", self.source)
         self.assertIn(
@@ -669,12 +677,13 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".properties-panel .text-font-row", self.source)
 
     def test_device_cards_scale_an_already_quantized_native_canvas(self):
-        self.assertIn('const nativeCanvas = document.createElement("canvas");', self.source)
         self.assertIn("ctx.imageSmoothingEnabled = false;", self.source)
         self.assertIn(
-            "ctx.drawImage(nativeCanvas, 0, 0, canvas.width, canvas.height);",
+            "context.drawImage(image, 0, 0, target.width, target.height);",
             self.source,
         )
+        self.assertIn("this._paintStoredDevicePreview(canvas, address, draft)", self.source)
+        self.assertNotIn('const nativeCanvas = document.createElement("canvas");', self.source)
         self.assertIn('class="device-preview-designer-svg"', self.source)
         self.assertIn("<foreignObject", self.source)
         self.assertIn("designer-device-stage device-preview-designer-copy", self.source)
@@ -712,6 +721,16 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("preview_updated_at: local.preview_updated_at", self.source)
         self.assertIn("this._devicePreviewImages.set(address, { key, image })", self.source)
         self.assertIn('canvas[data-device-preview]', self.source)
+        self.assertIn("serverPreviewAt >= localPreviewAt", self.source)
+        self.assertIn("previousActive.has(job.id) && job.status === \"succeeded\"", self.source)
+        self.assertIn("await this._loadDevicePreviewDrafts(this._result.devices)", self.source)
+        self.assertIn("an empty/unknown screen", self.source)
+
+    def test_physical_template_preview_keeps_the_dithered_canvas_inside_the_screen(self):
+        screen = self.source.index('class="designer-device-screen template-designer-screen"')
+        canvas = self.source.index('class="template-dithered-preview"', screen)
+        screen_end = self.source.index("</div>", canvas)
+        self.assertLess(canvas, screen_end)
 
     def test_device_card_selection_is_not_restored_from_designer(self):
         self.assertIn("this._renderDeviceCards(result.devices)", self.source)

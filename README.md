@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.174
+
+- hlavní přehled i nastavení displeje si pamatují poslední skutečně odeslaný obraz, a to i po restartu Home Assistantu
+- náhled v nastavení znovu zobrazuje celý fyzický rámeček displeje
+- výběr, přetažení nebo úprava šablony již nevytváří zbytečné zápisy ve frontě; na displej se odešle pouze po kliknutí na **Odeslat**
+
 ## Novinky ve verzi 0.1.173
 
 - opravena chyba z verze 0.1.172: footer všech šablon byl nesprávně černý místo červeného; nyní je opět červený a cenovka bez akce má správně černý footer

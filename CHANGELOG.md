@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.174] - 2026-08-03
+
+### Opraveno
+- Náhledy na hlavní stránce a v nastavení displeje ukazují poslední obrázek, který byl na displej skutečně úspěšně odeslán. Snímek se ukládá v Home Assistantu a po restartu integrace se znovu načte; neodeslaná rozpracovaná šablona už nemění stav fyzického displeje v přehledu.
+- Náhled v nastavení znovu obsahuje celý rámeček displeje. Kvantizované plátno je vloženo dovnitř obrazovky a nepřekrývá konstrukci zařízení.
+- Kliknutí na dlaždici šablony, její přetažení, vyřešení konfliktu rozvržení ani změna cenové akce už nevytváří zápis ve frontě. Fyzický přenos se spustí pouze explicitním tlačítkem **Odeslat**.
+
 ## [0.1.171] - 2026-08-02
 
 ### Opraveno

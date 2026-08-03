@@ -13,6 +13,7 @@ from homeassistant.core import HomeAssistant
 import voluptuous as vol
 
 from .const import DOMAIN
+from .display_preview import async_save_display_preview
 from .render import render_text_image
 from .queue import get_transfer_queue
 from .transfer import DratekTransfer
@@ -77,6 +78,10 @@ async def websocket_send_design(
             # Uploads are one-shot: drop any schedule that was registered while
             # this transfer was queued, so it cannot repaint over the new picture.
             await _clear_previous_entity_automation(hass, address)
+            try:
+                await async_save_display_preview(hass, address, image, orientation)
+            except Exception as exc:
+                add_log(f"Display updated, but its preview could not be saved: {exc}")
             return {"ok": True, "address": address, "log": []}
 
         result = await get_transfer_queue(hass).async_submit(
@@ -226,6 +231,12 @@ async def websocket_commit_design_upload(
             # Uploads are one-shot: drop any schedule that was registered while
             # this transfer was queued, so it cannot repaint over the new picture.
             await _clear_previous_entity_automation(hass, address)
+            try:
+                await async_save_display_preview(
+                    hass, address, image, msg.get("orientation", "landscape")
+                )
+            except Exception as exc:
+                add_log(f"Display updated, but its preview could not be saved: {exc}")
             return {"ok": True, "address": address, "log": []}
 
         result = await get_transfer_queue(hass).async_submit(
@@ -369,6 +380,10 @@ async def websocket_send_text(
             transfer = DratekTransfer(log=add_log, hass=hass)
             await transfer.send_image(address, sdk_type, image)
             add_log("Text sent.")
+            try:
+                await async_save_display_preview(hass, address, image)
+            except Exception as exc:
+                add_log(f"Display updated, but its preview could not be saved: {exc}")
             return {"ok": True, "address": address, "text": text, "log": []}
 
         result = await get_transfer_queue(hass).async_submit(

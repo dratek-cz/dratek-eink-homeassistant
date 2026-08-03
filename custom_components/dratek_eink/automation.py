@@ -14,6 +14,7 @@ from .const import DOMAIN, LOCAL_ROUTE_ID
 from .gateway import async_load_gateways, async_scan_gateway, async_send_gateway_payload
 from .queue import get_transfer_queue
 from .render import render_entity_bound_image
+from .display_preview import async_save_display_preview
 from .transfer import DratekTransfer
 
 STORE_KEY = "dratek_eink.entity_automations"
@@ -499,6 +500,11 @@ class EntityAutoUpdateManager:
                 result = await async_send_gateway_payload(
                     self.hass, gateway_id, address, sdk_type, image, transform, orientation
                 )
+                if result and result.get("ok") is not False:
+                    try:
+                        await async_save_display_preview(self.hass, address, image, orientation)
+                    except Exception as exc:
+                        add_log(f"Display updated, but its preview could not be saved: {exc}")
                 return result or {"ok": False, "error": "Gateway was not found.", "log": []}
 
             return await queue.async_submit(
@@ -514,6 +520,10 @@ class EntityAutoUpdateManager:
             add_log("Automatic entity update via Home Assistant Bluetooth.")
             transfer = DratekTransfer(log=add_log, hass=self.hass)
             await transfer.send_image(address, sdk_type, image, transform, orientation)
+            try:
+                await async_save_display_preview(self.hass, address, image, orientation)
+            except Exception as exc:
+                add_log(f"Display updated, but its preview could not be saved: {exc}")
             return {"ok": True, "address": address, "log": []}
 
         return await queue.async_submit(

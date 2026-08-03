@@ -82,22 +82,11 @@ export const previewMixin = {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.imageSmoothingEnabled = false;
         if (this._paintStoredDevicePreview(canvas, address, draft)) return;
-        if (!draft) {
-          ctx.fillStyle = "#fff";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          return;
-        }
-        const sourceWidth = Math.max(1, Number(canvas.dataset.sourceWidth || draft.width || canvas.width));
-        const sourceHeight = Math.max(1, Number(canvas.dataset.sourceHeight || draft.height || canvas.height));
-        this._objects = Array.isArray(draft.objects) ? draft.objects : [];
-        this._variables = draft.variables || {};
-        this._backgroundColor = ["white", "black", "red"].includes(draft.background_color) ? draft.background_color : "white";
-        this._invertColors = !!draft.invert_colors;
-        const nativeCanvas = document.createElement("canvas");
-        nativeCanvas.width = sourceWidth;
-        nativeCanvas.height = sourceHeight;
-        this._drawScene(nativeCanvas.getContext("2d", { willReadFrequently: true }), sourceWidth, sourceHeight, false);
-        ctx.drawImage(nativeCanvas, 0, 0, canvas.width, canvas.height);
+        // A physical-device preview must never silently substitute an unsent
+        // editor draft. Until the first successful write is recorded, the
+        // truthful state is an empty/unknown screen.
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
       });
     } finally {
       this._objects = previous.objects;

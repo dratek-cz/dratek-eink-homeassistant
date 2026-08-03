@@ -52,8 +52,19 @@ export const queueMixin = {
   async _loadQueue(render = true) {
     if (!this._hass) return;
     window.clearTimeout(this._queuePollTimer);
+    const previousActive = new Set(
+      (this._queue?.jobs || [])
+        .filter((job) => ["queued", "writing"].includes(job.status))
+        .map((job) => job.id)
+    );
     try {
       this._queue = await this._hass.callWS({ type: "dratek_eink/queue/list" });
+      const completedWrite = (this._queue?.jobs || []).some((job) =>
+        previousActive.has(job.id) && job.status === "succeeded"
+      );
+      if (completedWrite && this._result?.devices?.length) {
+        await this._loadDevicePreviewDrafts(this._result.devices);
+      }
     } catch (err) {
       this._queue = {
         ...(this._queue || { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0 }),

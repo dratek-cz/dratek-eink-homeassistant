@@ -13,6 +13,7 @@ import voluptuous as vol
 
 from .automation import get_entity_auto_update_manager
 from .const import GATEWAY_FIRMWARE_VERSION
+from .display_preview import async_save_display_preview
 from .gateway import (
     async_add_gateway,
     async_delete_gateway,
@@ -220,6 +221,12 @@ async def websocket_send_gateway_design(
                 # Uploads are one-shot: drop any schedule that was registered while
                 # this transfer was queued, so it cannot repaint over the new picture.
                 await _clear_previous_entity_automation(hass, msg["address"])
+                try:
+                    await async_save_display_preview(
+                        hass, msg["address"], image, msg.get("orientation", "landscape")
+                    )
+                except Exception as exc:
+                    add_log(f"Displej byl aktualizovan, ale nahled se nepodarilo ulozit: {exc}")
             return transfer_result or {"ok": False, "error": "Gateway nebyla nalezena.", "log": []}
 
         result = await get_transfer_queue(hass).async_submit(
