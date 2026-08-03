@@ -94,26 +94,48 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_register_panel(hass: HomeAssistant) -> None:
-    if not hass.data[DOMAIN].get("static_paths_registered"):
+    # The panel path contains the release version, so a single boolean cannot
+    # describe its registration. During an integration reload that boolean can
+    # survive while aiohttp has already dropped the old static resource; the
+    # frontend then points at the new version and receives a 404. Track every
+    # versioned path separately and always register the current one once.
+    registered_panel_paths = hass.data[DOMAIN].setdefault(
+        "registered_panel_static_paths", set()
+    )
+    if PANEL_STATIC_PATH not in registered_panel_paths:
         frontend_path = Path(__file__).parent / "frontend"
-        brand_path = Path(__file__).parent / "brand"
         static_configs = [
             StaticPathConfig(PANEL_STATIC_PATH, str(frontend_path), cache_headers=False)
         ]
-        if brand_path.exists():
+        # Migrate the old all-in-one marker without registering the stable brand
+        # route twice. A fresh Home Assistant process registers both resources.
+        brand_registered = bool(
+            hass.data[DOMAIN].get("brand_static_path_registered")
+            or hass.data[DOMAIN].get("static_paths_registered")
+        )
+        brand_path = Path(__file__).parent / "brand"
+        if brand_path.exists() and not brand_registered:
             static_configs.append(
                 StaticPathConfig(f"/{DOMAIN}_brand", str(brand_path), cache_headers=True)
             )
         await hass.http.async_register_static_paths(static_configs)
+        registered_panel_paths.add(PANEL_STATIC_PATH)
+        if brand_path.exists():
+            hass.data[DOMAIN]["brand_static_path_registered"] = True
         hass.data[DOMAIN]["static_paths_registered"] = True
 
     frontend.add_extra_js_url(hass, OVERVIEW_CARD_MODULE_URL)
 
-    if hass.data[DOMAIN].get("panel_registered"):
-        return
-    if PANEL_URL_PATH in hass.data.get("frontend_panels", {}):
+    registered_version = hass.data[DOMAIN].get("panel_registered_version")
+    panel_exists = PANEL_URL_PATH in hass.data.get("frontend_panels", {})
+    if panel_exists and registered_version == PANEL_VERSION:
         hass.data[DOMAIN]["panel_registered"] = True
         return
+    if panel_exists:
+        # The existing sidebar entry still contains the previous module URL.
+        # Replacing it is the supported Home Assistant API for refreshing a
+        # custom panel registration after an integration update.
+        frontend.async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
 
     await panel_custom.async_register_panel(
         hass,
@@ -126,3 +148,4 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
         require_admin=False,
     )
     hass.data[DOMAIN]["panel_registered"] = True
+    hass.data[DOMAIN]["panel_registered_version"] = PANEL_VERSION

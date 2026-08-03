@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.175] - 2026-08-03
+
+### Opraveno
+- Po aktualizaci integrace mohl panel odkazovat na novou verzovanou adresu, zatímco Home Assistant její statickou HTTP cestu kvůli starému booleovskému příznaku znovu nezaregistroval. Načtení pak končilo chybou `Unable to load custom panel` a všechny soubory pod `/dratek_eink_panel/<verze>/` vracely 404. Integrace nyní sleduje každou verzovanou cestu samostatně a při změně verze nahradí starou registraci panelu podporovaným API Home Assistantu.
+
 ## [0.1.174] - 2026-08-03
 
 ### Opraveno
