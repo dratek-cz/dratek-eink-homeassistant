@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.179
+
+- rychlý Bluetooth přenos už nestřídá potvrzované a nepotvrzované zápisy, jejichž přechod na některých BlueZ adaptérech timeoutoval
+- celý obraz včetně posledního bloku se odesílá jednotným tempovaným proudem; spojení zůstává otevřené pro bezpečné odtečení Bluetooth fronty
+
 ## Novinky ve verzi 0.1.178
 
 - opraven falešně úspěšný rychlý Bluetooth přenos, po kterém se displej nepřekreslil: proud dat nyní potvrzuje každý osmý blok

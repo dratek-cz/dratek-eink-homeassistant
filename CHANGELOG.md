@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.179] - 2026-08-03
+
+### Opraveno a zrychleno
+- Přímý Bluetooth přenos už uvnitř jednoho obrazu nestřídá nepotvrzované GATT příkazy s potvrzovanými GATT požadavky. Na některých BlueZ adaptérech právě první změna režimu po osmi blocích timeoutovala, takže verze 0.1.178 spadla do velmi pomalého potvrzování každého bloku.
+- Streamující displej nyní dostává všechny obrazové bloky, včetně rozhodujícího posledního bloku, jako jeden rovnoměrně tempovaný proud `write-without-response`. Po odeslání zůstává Bluetooth spojení otevřené až 10 sekund pro odtečení fronty a volitelné potvrzení překreslení. Potvrzovaný režim zůstává zachovaný pro charakteristiky, které rychlý způsob zápisu nenabízejí.
+
 ## [0.1.178] - 2026-08-03
 
 ### Opraveno

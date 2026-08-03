@@ -22,8 +22,6 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 WRITE_ACK_SDK_TYPES = {51}
-ACK_CHECKPOINT_INTERVAL = 8
-ACK_CHECKPOINT_DRAIN_DELAY = 0.8
 FINAL_BLOCK_RESPONSE_TIMEOUT = 2
 MTU_NEGOTIATION_TIMEOUT = 4
 RGB_LED_COMMAND = 0x30
@@ -277,7 +275,6 @@ class DratekTransfer:
                     partial,
                     orientation,
                     software_version,
-                    force_confirmed_writes=attempt > 1,
                 )
                 self.log("Transfer completed.")
                 return
@@ -302,7 +299,6 @@ class DratekTransfer:
         partial: tuple[int, int, int, int, int] | None = None,
         orientation: str | None = None,
         software_version: int | None = None,
-        force_confirmed_writes: bool = False,
     ) -> None:
         payload = await self._async_pack(sdk_type, image, transform, orientation)
         software_version = self._resolve_software_version(address, software_version)
@@ -378,24 +374,25 @@ class DratekTransfer:
             # after each control-point notification and ignores its block index
             # after the initial request.
             streaming_mode = bool(int(software_version or 0) & 0x80)
-            # BlueZ can report a final confirmed write even when a long preceding
-            # no-response burst never reached the display. Bound each burst with
-            # an acknowledged checkpoint, allowing the adapter queue to drain
-            # every eight blocks. A retry falls back to confirmation per block.
-            checkpointed_writes = (
-                not force_confirmed_writes
-                and streaming_mode
-                and "write" in write_char.properties
+            # Do not switch between ATT write commands and write requests inside
+            # one image stream. Some BlueZ adapters never complete the first
+            # confirmed request after a no-response burst, so the final block is
+            # lost and the display cannot refresh. Streaming firmware can use one
+            # uniformly paced command stream whenever the characteristic offers it.
+            unconfirmed_stream = (
+                streaming_mode
                 and "write-without-response" in write_char.properties
             )
             require_gatt_response = (
-                force_confirmed_writes
-                or int(sdk_type) in WRITE_ACK_SDK_TYPES
-                or "write-without-response" not in write_char.properties
+                not unconfirmed_stream
+                and (
+                    int(sdk_type) in WRITE_ACK_SDK_TYPES
+                    or "write-without-response" not in write_char.properties
+                )
             )
             write_mode = (
-                f"checkpointed burst (GATT response every {ACK_CHECKPOINT_INTERVAL} blocks)"
-                if checkpointed_writes
+                "uniform paced write without response"
+                if unconfirmed_stream
                 else "vendor write-complete flow control"
                 if require_gatt_response
                 else "paced write without response"
@@ -404,8 +401,6 @@ class DratekTransfer:
                 f"Transfer mode: {'streaming' if streaming_mode else 'notification-paced legacy'}, "
                 f"block writes: {write_mode} (software version {int(software_version or 0)})."
             )
-            if force_confirmed_writes:
-                self.log("Reliable retry enabled: every image block must receive a GATT response.")
             if len(response) < 6 or response[0] != 5 or response[1] != 0:
                 raise RuntimeError(f"Invalid first image-block request: {response.hex(' ').upper()}")
             next_block = int.from_bytes(response[2:6], "little")
@@ -422,20 +417,7 @@ class DratekTransfer:
 
                 end_block = total_blocks if streaming_mode else next_block + 1
                 for block_number in range(next_block, end_block):
-                    block_requires_response = (
-                        checkpointed_writes
-                        and (
-                            block_number == next_block
-                            or (block_number + 1) % ACK_CHECKPOINT_INTERVAL == 0
-                            or block_number == total_blocks - 1
-                        )
-                    ) or (require_gatt_response and not checkpointed_writes)
-                    if (
-                        checkpointed_writes
-                        and block_requires_response
-                        and block_number != next_block
-                    ):
-                        await asyncio.sleep(ACK_CHECKPOINT_DRAIN_DELAY)
+                    block_requires_response = require_gatt_response
                     final_response_missing = False
                     try:
                         await self._write_image_block(
@@ -455,23 +437,10 @@ class DratekTransfer:
                             require_gatt_response
                             and len(confirmed_blocks) == total_blocks - 1
                         )
-                        expected_checkpoints = {
-                            checkpoint
-                            for checkpoint in range(next_block, total_blocks - 1)
-                            if checkpoint == next_block
-                            or (checkpoint + 1) % ACK_CHECKPOINT_INTERVAL == 0
-                        }
-                        checkpointed_stream_complete = (
-                            checkpointed_writes
-                            and expected_checkpoints.issubset(confirmed_blocks)
-                            and len(sent_blocks) == total_blocks - 1
-                        )
                         if (
                             not streaming_mode
                             or block_number != total_blocks - 1
-                            or not (
-                                confirmed_flow_complete or checkpointed_stream_complete
-                            )
+                            or not confirmed_flow_complete
                         ):
                             raise
                         # Several Picksmart controllers consume the final block
@@ -508,7 +477,7 @@ class DratekTransfer:
                             responses,
                             timeout=(
                                 OPTIONAL_COMPLETION_TIMEOUT
-                                if require_gatt_response or checkpointed_writes
+                                if require_gatt_response
                                 else UNCONFIRMED_WRITE_DRAIN_TIMEOUT
                             ),
                         )
