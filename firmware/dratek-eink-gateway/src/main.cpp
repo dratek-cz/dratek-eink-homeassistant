@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.47-gateway";
+static const char* FIRMWARE_VERSION = "0.1.48-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -54,6 +54,10 @@ String uploadAddress;
 String uploadJobId;
 uint8_t uploadSoftwareVersion = 0;
 uint8_t queuedSoftwareVersion = 0;
+bool uploadPartial = false;
+bool queuedPartial = false;
+uint32_t uploadPartialX = 0, uploadPartialY = 0, uploadPartialWidth = 0, uploadPartialHeight = 0;
+uint32_t queuedPartialX = 0, queuedPartialY = 0, queuedPartialWidth = 0, queuedPartialHeight = 0;
 String uploadError;
 bool uploadDuplicate = false;
 SemaphoreHandle_t transferMutex = nullptr;
@@ -158,6 +162,7 @@ void handleStatus() {
   doc["gateway_id"] = gatewayId;
   doc["hostname"] = hostname;
   doc["firmware"] = FIRMWARE_VERSION;
+  doc["partial_update"] = true;
   doc["chip"] = CHIP_FAMILY;
   doc["ip"] = WiFi.localIP().toString();
   doc["mac"] = WiFi.macAddress();
@@ -364,7 +369,7 @@ bool connectToDisplay(NimBLEClient*& client, const String& address, TransferLogS
   return false;
 }
 
-bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& payload, uint8_t softwareVersion, TransferLogSink& log) {
+bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& payload, uint8_t softwareVersion, TransferLogSink& log, bool partial = false, uint32_t partialX = 0, uint32_t partialY = 0, uint32_t partialWidth = 0, uint32_t partialHeight = 0) {
   NimBLEClient* client = NimBLEDevice::createClient();
   client->setConnectTimeout(18);
   addLog(log, "Connecting to display " + address + ".");
@@ -414,6 +419,26 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
   int chunkSize = blockSize - 4;
   int totalBlocks = (payload.size() + chunkSize - 1) / chunkSize;
   addLog(log, "Block size " + String(blockSize) + ", payload " + String(payload.size()) + " bytes, blocks " + String(totalBlocks) + ".");
+
+  if (partial) {
+    uint8_t area[21] = {0};
+    area[0] = 0x60;
+    uint32_t values[5] = {partialX, partialY, partialWidth, partialHeight, 0};
+    for (int field = 0; field < 5; field++) {
+      for (int byteIndex = 0; byteIndex < 4; byteIndex++) {
+        area[1 + field * 4 + byteIndex] = (values[field] >> (byteIndex * 8)) & 0xFF;
+      }
+    }
+    clearNotifications();
+    controlChar->writeValue(area, sizeof(area), true);
+    if (!waitForPacket(0x60, packet, 8000) || packet.size() < 2 || packet[1] != 0) {
+      client->disconnect();
+      NimBLEDevice::deleteClient(client);
+      addLog(log, "Partial update area rejected or timed out.");
+      return false;
+    }
+    addLog(log, "Partial update area x=" + String(partialX) + ", y=" + String(partialY) + ", width=" + String(partialWidth) + ", height=" + String(partialHeight) + ".");
+  }
 
   uint8_t prepare[6];
   prepare[0] = 0x02;
@@ -556,7 +581,7 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
     return false;
   }
 
-  addLog(log, "Full-screen image transfer completed.");
+  addLog(log, partial ? "Partial image transfer completed." : "Full-screen image transfer completed.");
   client->disconnect();
   NimBLEDevice::deleteClient(client);
   addLog(log, "Bluetooth released after display confirmation.");
@@ -663,11 +688,24 @@ void handleTransferUploadChunk() {
     uploadAddress = server.arg("address");
     uploadJobId = server.arg("id");
     uploadSoftwareVersion = (uint8_t)server.arg("software_version").toInt();
+    uploadPartial = server.arg("partial") == "1";
+    uploadPartialX = (uint32_t)server.arg("x").toInt();
+    uploadPartialY = (uint32_t)server.arg("y").toInt();
+    uploadPartialWidth = (uint32_t)server.arg("width").toInt();
+    uploadPartialHeight = (uint32_t)server.arg("height").toInt();
     uploadError = "";
     uploadDuplicate = false;
 
     if (uploadAddress.length() == 0) {
       uploadError = "missing_address";
+      return;
+    }
+    if (uploadPartial && (
+      uploadPartialWidth == 0 || uploadPartialHeight == 0
+      || uploadPartialWidth > 4096 || uploadPartialHeight > 4096
+      || uploadPartialY % 8 != 0 || uploadPartialHeight % 8 != 0
+    )) {
+      uploadError = "invalid_partial_area";
       return;
     }
     if (uploadJobId.length() && transferMutex) {
@@ -727,6 +765,16 @@ void handleTransferUploadComplete() {
     sendJson(doc, 400);
     return;
   }
+  if (uploadPartial) {
+    uint64_t pixels = (uint64_t)uploadPartialWidth * (uint64_t)uploadPartialHeight;
+    uint64_t expectedBytes = pixels * 2 / 8;
+    if (pixels % 8 != 0 || expectedBytes != uploadPayload.size()) {
+      doc["ok"] = false;
+      doc["error"] = "partial_payload_size_mismatch";
+      sendJson(doc, 400);
+      return;
+    }
+  }
   if (gatewayOperationBusy()) {
     doc["ok"] = false;
     doc["error"] = "gateway_busy";
@@ -739,6 +787,11 @@ void handleTransferUploadComplete() {
   xSemaphoreTake(transferMutex, portMAX_DELAY);
   queuedPayload.swap(uploadPayload);
   queuedSoftwareVersion = uploadSoftwareVersion;
+  queuedPartial = uploadPartial;
+  queuedPartialX = uploadPartialX;
+  queuedPartialY = uploadPartialY;
+  queuedPartialWidth = uploadPartialWidth;
+  queuedPartialHeight = uploadPartialHeight;
   transferJob.id = jobId;
   transferJob.address = uploadAddress;
   transferJob.status = "queued";
@@ -789,11 +842,18 @@ void transferTask(void*) {
   String jobId;
   String address;
   uint8_t softwareVersion;
+  bool partial;
+  uint32_t partialX, partialY, partialWidth, partialHeight;
   std::vector<uint8_t> payload;
   xSemaphoreTake(transferMutex, portMAX_DELAY);
   jobId = transferJob.id;
   address = transferJob.address;
   softwareVersion = queuedSoftwareVersion;
+  partial = queuedPartial;
+  partialX = queuedPartialX;
+  partialY = queuedPartialY;
+  partialWidth = queuedPartialWidth;
+  partialHeight = queuedPartialHeight;
   payload.swap(queuedPayload);
   transferJob.status = "running";
   transferJob.updatedMs = millis();
@@ -804,7 +864,7 @@ void transferTask(void*) {
   addLog(log, "Transfer job " + jobId + " started.");
   addLog(log, "Payload " + String(payload.size()) + " bytes loaded; free heap " + String(ESP.getFreeHeap()) + ".");
   addLog(log, "Largest free memory block " + String(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)) + " bytes.");
-  bool ok = sendPayloadToDisplay(address, payload, softwareVersion, log);
+  bool ok = sendPayloadToDisplay(address, payload, softwareVersion, log, partial, partialX, partialY, partialWidth, partialHeight);
   payload.clear();
   payload.shrink_to_fit();
   addLog(log, "Payload released; free heap " + String(ESP.getFreeHeap()) + ".");

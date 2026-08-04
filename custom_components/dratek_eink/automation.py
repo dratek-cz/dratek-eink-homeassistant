@@ -1,19 +1,22 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import io
 import json
 import re
 import time
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 from homeassistant.helpers.storage import Store
+from PIL import Image, ImageChops
 
 from .const import DOMAIN, LOCAL_ROUTE_ID
-from .gateway import async_load_gateways, async_scan_gateway, async_send_gateway_payload
+from .gateway import async_gateway_status, async_load_gateways, async_scan_gateway, async_send_gateway_payload
 from .queue import get_transfer_queue
-from .render import render_entity_bound_image
+from .render import prepare_image_for_display, render_entity_bound_image
 from .display_preview import async_save_display_preview
 from .transfer import DratekTransfer
 
@@ -22,8 +25,8 @@ STORE_VERSION = 1
 DATA_KEY = "entity_auto_update_manager"
 DEBOUNCE_SECONDS = 0.15
 RETRY_AFTER_BUSY_SECONDS = 1.0
-DEFAULT_REFRESH_INTERVAL_SECONDS = 60
-MIN_REFRESH_INTERVAL_SECONDS = 30
+DEFAULT_REFRESH_INTERVAL_SECONDS = 2
+MIN_REFRESH_INTERVAL_SECONDS = 1
 MAX_REFRESH_INTERVAL_SECONDS = 86400
 BATTERY_SAVER_THRESHOLD_PERCENT = 15
 BATTERY_SAVER_MIN_INTERVAL_SECONDS = 3600
@@ -155,13 +158,15 @@ class EntityAutoUpdateManager:
     async def async_initialize(self) -> None:
         if self._initialized:
             return
-        # Automatic display refreshes used to survive Home Assistant restarts.
-        # Manual-only mode deliberately forgets that persisted state so an old
-        # clock or entity binding cannot wake up and overwrite a display.
-        await self._store.async_load()
-        self._configs = {}
+        stored = await self._store.async_load() or {}
+        configs = stored.get("configs") if isinstance(stored, dict) else {}
+        self._configs = {
+            str(address).upper(): dict(config)
+            for address, config in (configs or {}).items()
+            if isinstance(config, dict) and config.get("enabled")
+        }
         self._initialized = True
-        await self._store.async_save({"configs": {}})
+        self._refresh_listener()
 
     @staticmethod
     def _refresh_interval(config: dict[str, Any]) -> int:
@@ -183,6 +188,11 @@ class EntityAutoUpdateManager:
         refresh_task = getattr(self, "_refresh_tasks", {}).pop(normalized, None)
         if refresh_task is not None and not refresh_task.done():
             refresh_task.cancel()
+        if isinstance(config, dict) and config.get("enabled") and config.get("bindings"):
+            updated = dict(config)
+            updated["enabled"] = True
+            updated["refresh_interval_seconds"] = self._refresh_interval(updated)
+            self._configs[normalized] = updated
         await self._store.async_save({"configs": self._configs})
         self._refresh_listener()
 
@@ -247,6 +257,17 @@ class EntityAutoUpdateManager:
         if self._unsubscribe:
             self._unsubscribe()
             self._unsubscribe = None
+        entity_ids = sorted({
+            entity_id
+            for config in self._configs.values()
+            for binding in config.get("bindings", [])
+            if isinstance(binding, dict)
+            for entity_id, _attribute in _binding_sources(binding)
+        })
+        if entity_ids:
+            self._unsubscribe = async_track_state_change_event(
+                self.hass, entity_ids, self._handle_state_change
+            )
 
     @staticmethod
     def _condition_matches(value: Any, operator: str, target: str) -> bool:
@@ -399,8 +420,6 @@ class EntityAutoUpdateManager:
 
     @callback
     def _handle_state_change(self, event: Any) -> None:
-        # Manual-only mode never reacts to Home Assistant state changes.
-        return
         entity_id = event.data.get("entity_id")
         old_state = event.data.get("old_state")
         new_state = event.data.get("new_state")
@@ -419,8 +438,6 @@ class EntityAutoUpdateManager:
 
     @callback
     def _schedule_refresh(self, address: str) -> None:
-        # Defense in depth for callbacks left behind by an older loaded module.
-        return
         self._pending_refreshes.add(address)
         active_task = self._refresh_tasks.get(address)
         if active_task is not None and not active_task.done():
@@ -466,6 +483,51 @@ class EntityAutoUpdateManager:
         finally:
             self._refresh_tasks.pop(address, None)
 
+    @staticmethod
+    def _decode_base_image(value: str) -> Image.Image:
+        encoded = str(value or "")
+        if "," in encoded:
+            encoded = encoded.split(",", 1)[1]
+        return Image.open(io.BytesIO(base64.b64decode(encoded))).convert("RGB")
+
+    @staticmethod
+    def _encode_base_image(image: Image.Image) -> str:
+        output = io.BytesIO()
+        image.convert("RGB").save(output, format="PNG", optimize=True)
+        return "data:image/png;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+
+    @staticmethod
+    def _changed_region(previous: Image.Image, current: Image.Image) -> tuple[int, int, int, int] | None:
+        if previous.size != current.size:
+            return (0, 0, current.width, current.height)
+        box = ImageChops.difference(previous.convert("RGB"), current.convert("RGB")).getbbox()
+        if box is None:
+            return None
+        x0, y0, x1, y1 = box
+        # Picksmart's area command requires vertical coordinates to be aligned
+        # to eight pixels. A one-pixel safety margin also covers antialiasing.
+        x0 = max(0, x0 - 1)
+        x1 = min(current.width, x1 + 1)
+        y0 = max(0, ((y0 - 1) // 8) * 8)
+        y1 = min(current.height, ((y1 + 8) // 8) * 8)
+        if y1 <= y0:
+            y1 = min(current.height, y0 + 8)
+        if y0 % 8 or (y1 - y0) % 8:
+            # A panel whose physical height is not byte-aligned (for example
+            # 400x300) cannot express a safe area touching its last four rows.
+            # Let the caller choose the full-image fallback in that case.
+            return (0, 0, current.width, current.height)
+        return (x0, y0, x1, y1)
+
+    async def _remember_rendered_image(self, address: str, image: Image.Image) -> None:
+        config = self._configs.get(address)
+        if not config:
+            return
+        config["base_image"] = await self.hass.async_add_executor_job(
+            self._encode_base_image, image
+        )
+        await self._store.async_save({"configs": self._configs})
+
     async def _async_refresh(self, address: str) -> dict[str, Any] | None:
         config = self._configs.get(address)
         if not config:
@@ -493,21 +555,62 @@ class EntityAutoUpdateManager:
         transform = config.get("transform")
         orientation = config.get("orientation")
         queue = get_transfer_queue(self.hass)
+        try:
+            previous = await self.hass.async_add_executor_job(
+                self._decode_base_image, str(config.get("base_image") or "")
+            )
+        except Exception:
+            previous = image.copy()
+        previous_hardware, current_hardware = await asyncio.gather(
+            self.hass.async_add_executor_job(
+                prepare_image_for_display, sdk_type, previous, transform, orientation
+            ),
+            self.hass.async_add_executor_job(
+                prepare_image_for_display, sdk_type, image, transform, orientation
+            ),
+        )
+        changed = self._changed_region(previous_hardware, current_hardware)
+        if changed is None:
+            return {"ok": True, "unchanged": True, "address": address}
+        x0, y0, x1, y1 = changed
+        partial = (x0, y0, x1 - x0, y1 - y0)
+        region = current_hardware.crop((x0, y0, x1, y1))
+        use_partial = (
+            partial[1] % 8 == 0
+            and partial[3] % 8 == 0
+            and partial[2] * partial[3]
+            < current_hardware.width * current_hardware.height * 0.85
+        )
 
         if route_type == "gateway" and gateway_id:
+            gateway_partial = False
+            if use_partial:
+                gateway = next(
+                    (item for item in await async_load_gateways(self.hass) if str(item.get("id")) == gateway_id),
+                    None,
+                )
+                status = await async_gateway_status(self.hass, gateway) if gateway else {}
+                gateway_partial = bool(status.get("partial_update"))
+
             async def run_gateway(add_log):
                 add_log(f"Automatic entity update via {transport_name or 'gateway'}.")
+                if gateway_partial:
+                    add_log(f"Only changed area x={x0}, y={y0}, width={partial[2]}, height={partial[3]} will be sent.")
+                elif use_partial:
+                    add_log("Gateway firmware does not support safe area writes yet; sending the complete image.")
                 result = await async_send_gateway_payload(
                     self.hass,
                     gateway_id,
                     address,
                     sdk_type,
-                    image,
-                    transform,
-                    orientation,
+                    region if gateway_partial else image,
+                    None if gateway_partial else transform,
+                    None if gateway_partial else orientation,
                     log_callback=add_log,
+                    partial=partial if gateway_partial else None,
                 )
                 if result and result.get("ok") is not False:
+                    await self._remember_rendered_image(address, image)
                     try:
                         await async_save_display_preview(self.hass, address, image, orientation)
                     except Exception as exc:
@@ -526,7 +629,14 @@ class EntityAutoUpdateManager:
         async def run_local(add_log):
             add_log("Automatic entity update via Home Assistant Bluetooth.")
             transfer = DratekTransfer(log=add_log, hass=self.hass)
-            await transfer.send_image(address, sdk_type, image, transform, orientation)
+            if use_partial:
+                add_log(f"Sending only changed area x={x0}, y={y0}, width={partial[2]}, height={partial[3]}.")
+                await transfer.send_partial_image(
+                    address, sdk_type, region, x0, y0, partial[2], partial[3]
+                )
+            else:
+                await transfer.send_image(address, sdk_type, image, transform, orientation)
+            await self._remember_rendered_image(address, image)
             try:
                 await async_save_display_preview(self.hass, address, image, orientation)
             except Exception as exc:

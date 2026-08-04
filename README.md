@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.184
+
+- prvky designeru navázané na entity Home Assistantu se po změně hodnoty automaticky překreslí ve stejné šabloně
+- do displeje se přenáší pouze skutečně změněná oblast; při nepodporovaném nebo nezarovnatelném výřezu se bezpečně použije celý obraz
+- automatické vazby se ukládají spolu s úspěšně zapsaným návrhem a obnoví se i po restartu Home Assistantu
+- grafy dál uchovávají nastavených 1–20 posledních hodnot a aktualizují pouze svůj vlastní prostor
+- gateway firmware 0.1.48 přidává bezpečný dílčí přenos pro ESP32 i ESP32-S3
+
 ## Novinky ve verzi 0.1.183
 
 - designer při posouvání stránky drží horní lištu, levou paletu i náhled displeje na místě

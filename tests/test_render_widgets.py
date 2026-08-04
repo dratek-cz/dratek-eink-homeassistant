@@ -45,6 +45,14 @@ class RenderWidgetTests(unittest.TestCase):
         }
         return render._render_bound_layer(binding, "layer")
 
+    def test_partial_region_is_packed_without_full_panel_resize(self):
+        from PIL import Image
+
+        region = Image.new("RGB", (37, 16), "white")
+        payload = render.pack_bwr_region(region)
+
+        self.assertEqual(37 * 16 * 2 // 8, len(payload))
+
     def test_auto_fit_text_grows_with_its_area(self):
         common = {
             "fontSize": 12,

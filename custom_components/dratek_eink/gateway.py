@@ -18,7 +18,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from PIL import Image
 
-from .render import pack_bwr_image
+from .render import pack_bwr_image, pack_bwr_region
 
 GATEWAY_STORE_KEY = "dratek_eink.gateways"
 GATEWAY_STORE_VERSION = 1
@@ -173,6 +173,7 @@ async def async_gateway_status(hass: HomeAssistant, gateway: dict[str, Any]) -> 
         "ota_error": payload.get("ota_error"),
         "ota_bytes_written": payload.get("ota_bytes_written"),
         "ota_expected_size": payload.get("ota_expected_size"),
+        "partial_update": bool(payload.get("partial_update")),
         "firmware_size": payload.get("firmware_size"),
         "flash_size": payload.get("flash_size"),
         "running_partition_size": payload.get("running_partition_size"),
@@ -356,6 +357,7 @@ async def async_send_gateway_payload(
     orientation: str | None = None,
     software_version: int | None = None,
     log_callback: Any = None,
+    partial: tuple[int, int, int, int] | None = None,
 ) -> dict[str, Any] | None:
     gateways = await async_load_gateways(hass)
     gateway = next((item for item in gateways if item.get("id") == gateway_id), None)
@@ -372,7 +374,10 @@ async def async_send_gateway_payload(
 
     try:
         add_log(f"Packing image {image.width}x{image.height} for SDK type {sdk_type}.")
-        payload = await hass.async_add_executor_job(pack_bwr_image, sdk_type, image, transform, orientation)
+        payload = await hass.async_add_executor_job(
+            pack_bwr_region if partial else pack_bwr_image,
+            *([image] if partial else [sdk_type, image, transform, orientation]),
+        )
         add_log(f"Payload size: {len(payload)} bytes.")
         session = async_get_clientsession(hass)
         base_url = _gateway_send_base_url(gateway)
@@ -382,6 +387,9 @@ async def async_send_gateway_payload(
             f"&id={request_id}"
             f"&software_version={int(software_version or 0)}"
         )
+        if partial:
+            x, y, width, height = partial
+            start_url += f"&partial=1&x={x}&y={y}&width={width}&height={height}"
         add_log(f"Streaming binary transfer job to gateway {base_url.removeprefix('http://')}.")
         data: dict[str, Any] = {}
         upload_error = ""

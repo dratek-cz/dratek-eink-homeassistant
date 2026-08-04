@@ -15,7 +15,7 @@ from .const import (
     PARTIAL_UPDATE_CONFIRMED_SDK_TYPES,
     WRITE_CHARS,
 )
-from .render import pack_bwr_image
+from .render import pack_bwr_image, pack_bwr_region
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -81,6 +81,11 @@ class DratekTransfer:
         return await asyncio.to_thread(
             pack_bwr_image, sdk_type, image, transform, orientation
         )
+
+    async def _async_pack_region(self, image: Image.Image) -> bytes:
+        if self._hass is not None:
+            return await self._hass.async_add_executor_job(pack_bwr_region, image)
+        return await asyncio.to_thread(pack_bwr_region, image)
 
     async def send_image(
         self,
@@ -300,7 +305,11 @@ class DratekTransfer:
         orientation: str | None = None,
         software_version: int | None = None,
     ) -> None:
-        payload = await self._async_pack(sdk_type, image, transform, orientation)
+        payload = (
+            await self._async_pack_region(image)
+            if partial is not None
+            else await self._async_pack(sdk_type, image, transform, orientation)
+        )
         software_version = self._resolve_software_version(address, software_version)
         responses: asyncio.Queue[bytes] = asyncio.Queue()
         loop = asyncio.get_running_loop()
@@ -509,7 +518,11 @@ class DratekTransfer:
                 raise RuntimeError(
                     f"Display ended transfer after only {len(sent_blocks)}/{total_blocks} blocks."
                 )
-            self.log("Full-screen image transfer completed; releasing Bluetooth.")
+            self.log(
+                "Partial image transfer completed; releasing Bluetooth."
+                if partial is not None
+                else "Full-screen image transfer completed; releasing Bluetooth."
+            )
 
             if write_notify_enabled:
                 await client.stop_notify(write_char)

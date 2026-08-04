@@ -1796,6 +1796,115 @@ export const devicesMixin = {
     context.restore();
   },
 
+  _displayTemplateEntityAutomation(image, device, gatewayId = "") {
+    const size = this._devicePreviewSize(device);
+    const landscape = this._displayTemplateOrientation !== "portrait";
+    const width = landscape ? Math.max(size.width, size.height) : Math.min(size.width, size.height);
+    const height = landscape ? Math.min(size.width, size.height) : Math.max(size.width, size.height);
+    const px = (value, extent, minimum = 0) => Math.max(minimum, Math.round(Number(value || 0) * extent / 100));
+    const bindings = [];
+
+    for (const source of this._templateEditorElements || []) {
+      const item = this._quarterTurnedUserTemplateElement(source);
+      const entityId = String(item.entityId || "").trim();
+      if (!entityId || !["chart", "gauge", "signal", "slider"].includes(item.type)) continue;
+      const x = px(item.x, width);
+      const y = px(item.y, height);
+      const w = Math.min(width - x, px(item.w, width, 1));
+      const h = Math.min(height - y, px(item.h, height, 1));
+      const common = {
+        id: String(item.id || `entity-${bindings.length + 1}`),
+        entity_id: entityId,
+        entity_attribute: String(item.entityAttribute || ""),
+        x, y, w, h,
+        fallback: String(item.value ?? ""),
+        backgroundColor: "white",
+        rotation: Number(item.rotation || 0),
+      };
+
+      if (item.type === "chart") {
+        bindings.push({
+          ...common,
+          type: "chart",
+          fallback: JSON.stringify((item.historyValues || []).map(Number).filter(Number.isFinite).slice(-Number(item.historyLimit || 10))),
+          chartType: ["bar", "area"].includes(item.variant) ? item.variant : "line",
+          maxPoints: Math.max(1, Math.min(20, Number(item.historyLimit || 10))),
+          history_mode: String(item.sampleInterval || "change") === "attribute" ? "attribute" : "rolling",
+          color: "red",
+          graphColor: "black",
+          strokeWidth: Math.max(1, Number(item.strokeWidth || 2)),
+          showGrid: item.showGrid !== false,
+          showAxes: item.variant !== "sparkline",
+          showValues: item.showValue !== false,
+        });
+        continue;
+      }
+
+      if (item.type === "signal") {
+        bindings.push({
+          ...common,
+          type: "text",
+          status_icons: true,
+          status_on_symbol: item.showState === false ? String(item.text || "Aktivní") : `${String(item.text || "Stav")}  ON`,
+          status_off_symbol: item.showState === false ? String(item.text || "Vypnuto") : `${String(item.text || "Stav")}  OFF`,
+          status_on_values: "on,true,1,open,home,active,heat,heating,playing,unlocked",
+          fontSize: Math.max(8, Math.round(Number(item.fontSize || 10) * height / 128)),
+          minFontSize: 7,
+          bold: true,
+          textAlign: "center",
+          verticalAlign: "middle",
+          color: "black",
+        });
+        continue;
+      }
+
+      const objectType = item.type === "slider" ? "slider" : (item.variant === "donut" ? "pie" : "gauge");
+      bindings.push({
+        ...common,
+        type: "layered",
+        entity_ids: [entityId],
+        canvas_width: w,
+        canvas_height: h,
+        default_symbol: "default",
+        fallback: "default",
+        layers: [{ id: "default", objects: [{
+          type: objectType,
+          entity_id: entityId,
+          entity_attribute: String(item.entityAttribute || ""),
+          x: 0, y: 0, w, h,
+          min_value: 0,
+          max_value: 100,
+          unit: item.showPercent === false ? "" : "%",
+          color: "red",
+          fill: "red",
+          stroke: "black",
+          stroke_width: Math.max(1, Number(item.strokeWidth || 2)),
+          show_value: item.showValue !== false,
+          show_arc: item.showTrack !== false,
+          show_needle: item.variant === "semicircle",
+          arc_mode: item.variant === "semicircle" ? "180" : "360",
+        }] }],
+      });
+    }
+
+    if (!bindings.length) return undefined;
+    return {
+      enabled: true,
+      base_image: image,
+      bindings,
+      sdk_type: Number(device.sdk_type),
+      software_version: Number(device.sw || 0),
+      orientation: landscape ? "landscape" : "portrait",
+      transform: this._displayTransform || "rotate_cw",
+      refresh_interval_seconds: 1,
+      gateway_selection: "manual",
+      manual_gateway_id: gatewayId || "local",
+      route_type: gatewayId ? "gateway" : "local",
+      gateway_id: gatewayId,
+      transport_name: gatewayId ? "DRATEK eInk gateway" : "Home Assistant Bluetooth",
+    };
+  },
+
   async _sendLocalDisplayDesignChunked(payload) {
     const encoded = String(payload.image || "").replace(/^data:[^,]*,/, "");
     if (!encoded) throw new Error("Vykreslený obrázek je prázdný.");
@@ -1827,6 +1936,7 @@ export const devicesMixin = {
         software_version: payload.software_version,
         orientation: payload.orientation,
         transform: payload.transform,
+        automation: payload.automation,
         template_ids: Array.isArray(payload.template_ids) ? payload.template_ids : [],
       });
     } catch (err) {
@@ -1861,6 +1971,7 @@ export const devicesMixin = {
         transform: this._displayTransform || "rotate_cw",
         template_ids: [...this._assignedDisplayTemplates(device)],
       };
+      payload.automation = this._displayTemplateEntityAutomation(image, device, gatewayId);
       const result = gatewayId
         ? await this._hass.callWS({
           type: "dratek_eink/gateways/send_design",
@@ -1878,7 +1989,7 @@ export const devicesMixin = {
         this._rememberSentDisplayPreview(device, image);
         this._templateSendResult = {
           ok: true,
-          message: `Náhled byl úspěšně zapsán přes ${gatewayId ? "zvolenou gateway" : "Home Assistant Bluetooth"}. Další zápis proběhne pouze ručně.`,
+          message: `Náhled byl úspěšně zapsán přes ${gatewayId ? "zvolenou gateway" : "Home Assistant Bluetooth"}.${payload.automation ? " Navázané hodnoty se nyní aktualizují automaticky po změně." : " Další zápis proběhne pouze ručně."}`,
         };
       }
       await this._loadQueue?.(true);

@@ -36,6 +36,7 @@ from .gateway import (
 from .queue import get_transfer_queue
 from .ws_shared import (
     _clear_previous_entity_automation,
+    _install_entity_automation,
     _load_project_data,
     _project_store,
 )
@@ -222,7 +223,9 @@ async def websocket_send_gateway_design(
             if transfer_result and transfer_result.get("ok") is not False:
                 # Uploads are one-shot: drop any schedule that was registered while
                 # this transfer was queued, so it cannot repaint over the new picture.
-                await _clear_previous_entity_automation(hass, msg["address"])
+                await _install_entity_automation(
+                    hass, msg["address"], msg.get("automation")
+                )
                 try:
                     await async_save_display_preview(
                         hass,

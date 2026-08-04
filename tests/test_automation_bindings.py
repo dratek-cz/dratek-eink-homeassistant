@@ -9,6 +9,7 @@ import asyncio
 import sys
 import types
 import unittest
+from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -48,12 +49,17 @@ def _load_automation_module():
     local_modules = {
         "const": {"DOMAIN": "dratek_eink", "LOCAL_ROUTE_ID": "local"},
         "gateway": {
+            "async_gateway_status": lambda *_args, **_kwargs: None,
             "async_load_gateways": lambda *_args, **_kwargs: None,
             "async_scan_gateway": lambda *_args, **_kwargs: None,
             "async_send_gateway_payload": lambda *_args, **_kwargs: None,
         },
         "queue": {"get_transfer_queue": lambda _hass: None},
-        "render": {"render_entity_bound_image": lambda *_args, **_kwargs: None},
+        "render": {
+            "prepare_image_for_display": lambda _sdk, image, *_args: image,
+            "render_entity_bound_image": lambda *_args, **_kwargs: None,
+        },
+        "display_preview": {"async_save_display_preview": lambda *_args, **_kwargs: None},
         "transfer": {"DratekTransfer": object},
     }
     for name, attributes in local_modules.items():
@@ -107,6 +113,21 @@ class _States:
 
 
 class AutomationBindingTests(unittest.TestCase):
+    def test_changed_region_is_small_and_vertically_byte_aligned(self):
+        previous = Image.new("RGB", (296, 128), "white")
+        current = previous.copy()
+        current.paste("black", (100, 41, 125, 54))
+
+        region = automation.EntityAutoUpdateManager._changed_region(previous, current)
+
+        self.assertIsNotNone(region)
+        x0, y0, x1, y1 = region
+        self.assertLess(x0, 100)
+        self.assertGreaterEqual(x1, 125)
+        self.assertEqual(0, y0 % 8)
+        self.assertEqual(0, (y1 - y0) % 8)
+        self.assertLess((x1 - x0) * (y1 - y0), 296 * 128)
+
     def test_starting_manual_upload_removes_all_previous_automation(self):
         clear_function = find_top_level_function("_clear_previous_entity_automation")
         isolated_module = ast.Module(body=[clear_function], type_ignores=[])
@@ -131,11 +152,9 @@ class AutomationBindingTests(unittest.TestCase):
 
         self.assertEqual([("FF:FF:92:81:46:32", None)], calls)
 
-    def test_manual_upload_without_new_bindings_disables_previous_automation(self):
-        # Uploads are one-shot: the handler clears any schedule before queueing,
-        # and the queued runner clears again once the picture is actually on the
-        # display. The second clear is what stops a schedule registered while the
-        # transfer sat in the queue from repainting over the fresh design.
+    def test_successful_upload_installs_new_automation_or_clears_it(self):
+        # A queued write clears the old schedule before transfer. Once the image
+        # is physically present, the bindings belonging to that image replace it.
         for name in (
             "websocket_send_design",
             "websocket_commit_design_upload",
@@ -149,16 +168,16 @@ class AutomationBindingTests(unittest.TestCase):
                     if isinstance(node, ast.AsyncFunctionDef) and node is not handler
                 ]
                 self.assertEqual(1, len(runners), f"{name} has no queued runner")
-                cleared = [
+                installed = [
                     call
                     for call in ast.walk(runners[0])
                     if isinstance(call, ast.Call)
-                    and getattr(call.func, "id", "") == "_clear_previous_entity_automation"
+                    and getattr(call.func, "id", "") == "_install_entity_automation"
                 ]
                 self.assertTrue(
-                    cleared,
-                    f"{name} finishes a transfer without cancelling the display's "
-                    "scheduled refresh, so it can overwrite the upload.",
+                    installed,
+                    f"{name} finishes a transfer without installing the bindings "
+                    "that belong to the newly written image.",
                 )
 
     def test_disabling_automation_clears_pending_refresh_and_timer(self):
@@ -224,7 +243,7 @@ class AutomationBindingTests(unittest.TestCase):
             automation._binding_sources(binding),
         )
 
-    def test_widget_attribute_change_does_not_schedule_in_manual_mode(self):
+    def test_widget_attribute_change_schedules_bound_display(self):
         manager = automation.EntityAutoUpdateManager.__new__(
             automation.EntityAutoUpdateManager
         )
@@ -260,7 +279,7 @@ class AutomationBindingTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual([], scheduled)
+        self.assertEqual(["FF:FF:92:81:46:32"], scheduled)
 
     def test_custom_element_edit_does_not_schedule_display_in_manual_mode(self):
         manager = automation.EntityAutoUpdateManager.__new__(
@@ -364,7 +383,10 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
         manager = automation.EntityAutoUpdateManager.__new__(
             automation.EntityAutoUpdateManager
         )
-        manager.hass = object()
+        async def executor(function, *args):
+            return function(*args)
+
+        manager.hass = types.SimpleNamespace(async_add_executor_job=executor)
         manager._gateway_route_cache = {}
         manager._gateway_route_cache_at = 0.0
         manager._gateway_route_lock = asyncio.Lock()
@@ -406,7 +428,10 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
         manager = automation.EntityAutoUpdateManager.__new__(
             automation.EntityAutoUpdateManager
         )
-        manager.hass = object()
+        async def executor(function, *args):
+            return function(*args)
+
+        manager.hass = types.SimpleNamespace(async_add_executor_job=executor)
         manager._configs = {
             address: {
                 "route_type": "gateway",
@@ -416,7 +441,11 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
                 "bindings": [{"type": "text"}],
             }
         }
-        manager.async_render_preview = lambda *_args: asyncio.sleep(0, result=object())
+        manager.async_render_preview = lambda *_args: asyncio.sleep(
+            0, result=Image.new("RGB", (10, 8), "white")
+        )
+        manager._changed_region = lambda _previous, _current: (0, 0, 10, 8)
+        manager._remember_rendered_image = lambda *_args: asyncio.sleep(0)
         manager._async_best_gateway_route = lambda _address: asyncio.sleep(
             0,
             result={"id": "office", "name": "Gateway kancelář", "rssi": -48},
@@ -452,7 +481,10 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
         manager = automation.EntityAutoUpdateManager.__new__(
             automation.EntityAutoUpdateManager
         )
-        manager.hass = object()
+        async def executor(function, *args):
+            return function(*args)
+
+        manager.hass = types.SimpleNamespace(async_add_executor_job=executor)
         manager._configs = {
             address: {
                 "gateway_selection": "manual",
@@ -464,7 +496,11 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
                 "bindings": [{"type": "text"}],
             }
         }
-        manager.async_render_preview = lambda *_args: asyncio.sleep(0, result=object())
+        manager.async_render_preview = lambda *_args: asyncio.sleep(
+            0, result=Image.new("RGB", (10, 8), "white")
+        )
+        manager._changed_region = lambda _previous, _current: (0, 0, 10, 8)
+        manager._remember_rendered_image = lambda *_args: asyncio.sleep(0)
         route_scan_called = False
 
         async def best_route(_address):

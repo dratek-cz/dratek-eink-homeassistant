@@ -82,7 +82,7 @@ class TransferCompletionTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         transfer_loop = source.index("while (true)", source.index("Picksmart selects one of two protocols"))
-        completion = source.index('addLog(log, "Full-screen image transfer completed.");')
+        completion = source.index('addLog(log, partial ? "Partial image transfer completed."')
         section = source[transfer_loop:completion]
 
         self.assertIn("streamingMode = (softwareVersion & 0x80) == 0x80", source)

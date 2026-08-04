@@ -26,6 +26,20 @@ async def _clear_previous_entity_automation(
     await get_entity_auto_update_manager(hass).async_set_config(address, None)
 
 
+async def _install_entity_automation(
+    hass: HomeAssistant,
+    address: str,
+    automation: dict[str, Any] | None,
+) -> None:
+    """Activate the HA bindings that belong to a successfully written design."""
+    config = dict(automation) if isinstance(automation, dict) else None
+    if config and isinstance(config.get("bindings"), list) and config["bindings"]:
+        config["enabled"] = True
+        await get_entity_auto_update_manager(hass).async_set_config(address, config)
+        return
+    await _clear_previous_entity_automation(hass, address)
+
+
 def _battery_payload(device: Any) -> dict[str, Any]:
     """Expose raw voltage data and the CR2450 capacity estimate."""
     return {

@@ -235,7 +235,17 @@ def _draw_centered_text(
 def _render_bound_text(binding: dict[str, Any], value: str) -> Image.Image:
     width = max(1, round(float(binding.get("w", 1))))
     height = max(1, round(float(binding.get("h", 1))))
-    layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    backgrounds = {
+        "black": (0, 0, 0, 255),
+        "red": (220, 20, 12, 255),
+        "white": (255, 255, 255, 255),
+        "transparent": (0, 0, 0, 0),
+    }
+    background = backgrounds.get(
+        str(binding.get("backgroundColor") or "transparent"),
+        backgrounds["transparent"],
+    )
+    layer = Image.new("RGBA", (width, height), background)
     draw = ImageDraw.Draw(layer)
     padding = max(0, round(float(binding.get("padding", 0))))
     available_width = max(1, width - padding * 2)
@@ -1048,4 +1058,19 @@ def pack_bwr_image(
 
     # Widths like 212, 250, 196 and 210 are not byte aligned, so the row padding
     # above would shift the stream. Pack those from the flat masks instead.
+    return _pack_planes_unaligned(white, red, pixel_count)
+
+
+def pack_bwr_region(image: Image.Image) -> bytes:
+    """Pack a partial-update crop without resizing it to the full panel."""
+    rgb = image.convert("RGB")
+    width, height = rgb.size
+    pixel_count = width * height
+    if pixel_count % 8 != 0:
+        raise ValueError(
+            f"Partial display region is not byte aligned: {width}x{height}"
+        )
+    white, red = bwr_masks(rgb)
+    if width % 8 == 0:
+        return white.tobytes() + red.tobytes()
     return _pack_planes_unaligned(white, red, pixel_count)

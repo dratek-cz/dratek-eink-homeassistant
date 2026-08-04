@@ -17,7 +17,7 @@ from .display_preview import async_save_display_preview
 from .render import render_text_image
 from .queue import get_transfer_queue
 from .transfer import DratekTransfer
-from .ws_shared import _clear_previous_entity_automation
+from .ws_shared import _clear_previous_entity_automation, _install_entity_automation
 
 DESIGN_UPLOADS_KEY = "design_uploads"
 DESIGN_UPLOAD_CHUNK_BYTES = 64 * 1024
@@ -76,9 +76,7 @@ async def websocket_send_design(
                 msg.get("software_version"),
             )
             add_log("Design sent.")
-            # Uploads are one-shot: drop any schedule that was registered while
-            # this transfer was queued, so it cannot repaint over the new picture.
-            await _clear_previous_entity_automation(hass, address)
+            await _install_entity_automation(hass, address, msg.get("automation"))
             try:
                 await async_save_display_preview(
                     hass, address, image, orientation, list(msg.get("template_ids") or [])
@@ -232,9 +230,7 @@ async def websocket_commit_design_upload(
                 msg.get("software_version"),
             )
             add_log("Design sent.")
-            # Uploads are one-shot: drop any schedule that was registered while
-            # this transfer was queued, so it cannot repaint over the new picture.
-            await _clear_previous_entity_automation(hass, address)
+            await _install_entity_automation(hass, address, msg.get("automation"))
             try:
                 await async_save_display_preview(
                     hass,
