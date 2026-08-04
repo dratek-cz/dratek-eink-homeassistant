@@ -35,10 +35,13 @@ from .gateway import (
 )
 from .queue import get_transfer_queue
 from .ws_shared import (
+    _clear_entity_automation_if_matches,
     _clear_previous_entity_automation,
     _install_entity_automation,
     _load_project_data,
     _project_store,
+    _request_entity_automation_refresh,
+    _save_gateway_preferences,
 )
 
 
@@ -96,6 +99,7 @@ async def websocket_delete_gateway(
             preferences.pop(address, None)
         if affected_addresses:
             await _project_store(hass).async_save(data)
+            await _save_gateway_preferences(hass, preferences)
             manager = get_entity_auto_update_manager(hass)
             for address in affected_addresses:
                 await manager.async_set_gateway_preference(address, "")
@@ -206,37 +210,51 @@ async def websocket_send_gateway_design(
             )
             return
         await _clear_previous_entity_automation(hass, msg["address"])
+        automation = msg.get("automation")
+        # Register listeners while the manual gateway write is queued. Any HA
+        # value changed meanwhile is retained and refreshed after that write.
+        automation = await _install_entity_automation(
+            hass, msg["address"], automation
+        )
 
         async def run_transfer(add_log) -> dict[str, Any]:
-            add_log(f"Zapis pres gateway {gateway.get('name') or gateway.get('host')} zarazen do zpracovani.")
-            transfer_result = await async_send_gateway_payload(
-                hass,
-                msg["gateway_id"],
-                msg["address"],
-                msg["sdk_type"],
-                image,
-                msg.get("transform"),
-                msg.get("orientation"),
-                msg.get("software_version"),
-                log_callback=add_log,
-            )
-            if transfer_result and transfer_result.get("ok") is not False:
-                # Uploads are one-shot: drop any schedule that was registered while
-                # this transfer was queued, so it cannot repaint over the new picture.
-                await _install_entity_automation(
-                    hass, msg["address"], msg.get("automation")
+            try:
+                add_log(f"Zapis pres gateway {gateway.get('name') or gateway.get('host')} zarazen do zpracovani.")
+                transfer_result = await async_send_gateway_payload(
+                    hass,
+                    msg["gateway_id"],
+                    msg["address"],
+                    msg["sdk_type"],
+                    image,
+                    msg.get("transform"),
+                    msg.get("orientation"),
+                    msg.get("software_version"),
+                    log_callback=add_log,
                 )
-                try:
-                    await async_save_display_preview(
-                        hass,
-                        msg["address"],
-                        image,
-                        msg.get("orientation", "landscape"),
-                        list(msg.get("template_ids") or []),
+                if transfer_result and transfer_result.get("ok") is not False:
+                    try:
+                        await async_save_display_preview(
+                            hass,
+                            msg["address"],
+                            image,
+                            msg.get("orientation", "landscape"),
+                            list(msg.get("template_ids") or []),
+                        )
+                    except Exception as exc:
+                        add_log(f"Displej byl aktualizovan, ale nahled se nepodarilo ulozit: {exc}")
+                    await _request_entity_automation_refresh(
+                        hass, msg["address"], automation
                     )
-                except Exception as exc:
-                    add_log(f"Displej byl aktualizovan, ale nahled se nepodarilo ulozit: {exc}")
-            return transfer_result or {"ok": False, "error": "Gateway nebyla nalezena.", "log": []}
+                else:
+                    await _clear_entity_automation_if_matches(
+                        hass, msg["address"], automation
+                    )
+                return transfer_result or {"ok": False, "error": "Gateway nebyla nalezena.", "log": []}
+            except BaseException:
+                await _clear_entity_automation_if_matches(
+                    hass, msg["address"], automation
+                )
+                raise
 
         result = await get_transfer_queue(hass).async_submit(
             resource=f"gateway:{msg['gateway_id']}",

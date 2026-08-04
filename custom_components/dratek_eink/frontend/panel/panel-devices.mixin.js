@@ -1164,8 +1164,44 @@ export const devicesMixin = {
     return next;
   },
 
+  _activeTemplateEditorStateId() {
+    return String(
+      this._selectedTemplateCanvasSlot === "secondary"
+        ? this._selectedDisplayTemplateSecondaryId
+        : this._selectedDisplayTemplateId
+    );
+  },
+
+  _rememberActiveTemplateEditorState(templateId = this._activeTemplateEditorStateId()) {
+    const id = String(templateId || "");
+    if (!id) return;
+    this._templateEditorStates ||= {};
+    this._templateEditorStates[id] = {
+      editor_elements: structuredClone(this._templateEditorElements || []),
+      element_adjustments: structuredClone(this._templateElementAdjustments || {}),
+    };
+  },
+
+  _restoreTemplateEditorState(templateId, template = null) {
+    const id = String(templateId || "");
+    const saved = this._templateEditorStates?.[id];
+    const sourceElements = saved?.editor_elements
+      ?? (template?.user_created ? template.editor_elements : []);
+    const sourceAdjustments = saved?.element_adjustments
+      ?? (template?.user_created ? template.element_adjustments : {});
+    this._templateEditorElements = Array.isArray(sourceElements)
+      ? structuredClone(sourceElements).map((item) => this._normalizeTemplateEditorElement(item))
+      : [];
+    this._templateElementAdjustments = structuredClone(sourceAdjustments || {});
+    this._selectedTemplateEditorElementId = "";
+    this._selectedTemplatePart = "";
+    this._templateOverlayDrag = null;
+    this._refreshTemplateEntityElements?.();
+  },
+
   _displayTemplateDraftPayload(device = this._device()) {
     const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
+    this._rememberActiveTemplateEditorState();
     return {
       assignments: address ? [...(this._displayTemplateAssignments?.[address] || [])] : [],
       selected_primary: this._selectedDisplayTemplateId || "",
@@ -1175,6 +1211,7 @@ export const devicesMixin = {
       bindings: structuredClone(this._displayTemplateBindings || {}),
       editor_elements: structuredClone(this._templateEditorElements || []),
       element_adjustments: structuredClone(this._templateElementAdjustments || {}),
+      template_states: structuredClone(this._templateEditorStates || {}),
       formats: structuredClone(this._displayTemplateFormats || {}),
       sizes: structuredClone(this._displayTemplateSizes || {}),
       placements: structuredClone(this._templateCanvasPlacements || {}),
@@ -1196,6 +1233,7 @@ export const devicesMixin = {
       this._selectedDisplayTemplateSecondaryId = "";
       this._displayTemplateBindings = {};
       this._templateEditorElements = [];
+      this._templateEditorStates = {};
       this._selectedTemplateEditorElementId = "";
       this._templateOverlayDrag = null;
       this._templateElementAdjustments = {};
@@ -1211,11 +1249,27 @@ export const devicesMixin = {
     this._displayTemplateOrientation = config.orientation === "landscape" ? "landscape" : "portrait";
     this._displayTemplateLargeLayout = ["single", "side-by-side", "stacked"].includes(config.layout) ? config.layout : "single";
     this._displayTemplateBindings = structuredClone(config.bindings || {});
-    this._templateEditorElements = Array.isArray(config.editor_elements)
-      ? structuredClone(config.editor_elements).map((item) => this._normalizeTemplateEditorElement(item))
-      : [];
-    this._selectedTemplateEditorElementId = "";
-    this._templateElementAdjustments = structuredClone(config.element_adjustments || {});
+    this._templateEditorStates = {};
+    if (config.template_states && typeof config.template_states === "object" && !Array.isArray(config.template_states)) {
+      for (const [templateId, state] of Object.entries(config.template_states)) {
+        if (!templateId || !state || typeof state !== "object") continue;
+        this._templateEditorStates[templateId] = {
+          editor_elements: Array.isArray(state.editor_elements) ? structuredClone(state.editor_elements) : [],
+          element_adjustments: structuredClone(state.element_adjustments || {}),
+        };
+      }
+    }
+    const restoredTemplateId = this._selectedDisplayTemplateId || assignments[0] || "";
+    if (restoredTemplateId && !this._templateEditorStates[restoredTemplateId]
+      && (Array.isArray(config.editor_elements) || config.element_adjustments)) {
+      // Legacy drafts had one global editor state. It belongs only to the
+      // template that was selected when that draft was saved.
+      this._templateEditorStates[restoredTemplateId] = {
+        editor_elements: Array.isArray(config.editor_elements) ? structuredClone(config.editor_elements) : [],
+        element_adjustments: structuredClone(config.element_adjustments || {}),
+      };
+    }
+    this._restoreTemplateEditorState(restoredTemplateId);
     const embeddedUserTemplates = Array.isArray(config.user_templates)
       ? structuredClone(config.user_templates).filter((template) => template && String(template.id || "").startsWith("user-template-"))
       : [];
@@ -1286,6 +1340,8 @@ export const devicesMixin = {
         .map((templateId) => templateId === selectedId ? id : templateId);
     }
     this._selectedDisplayTemplateId = id;
+    this._rememberActiveTemplateEditorState(id);
+    if (selectedId === "blank" && id !== selectedId) delete this._templateEditorStates.blank;
     this._projectName = title;
     this._selectedTemplateEditorElementId = "";
     return stored;
@@ -1299,10 +1355,7 @@ export const devicesMixin = {
     this._pushHistory();
     this._objects = [];
     this._variables = {};
-    this._templateEditorElements = Array.isArray(template.editor_elements)
-      ? structuredClone(template.editor_elements).map((item) => this._normalizeTemplateEditorElement(item))
-      : [];
-    this._templateElementAdjustments = structuredClone(template.element_adjustments || {});
+    this._restoreTemplateEditorState(template.id, template);
     this._displayTemplateFormats = { primary: "narrow", secondary: "narrow", ...(template.formats || {}) };
     this._displayTemplateSizes = { primary: "large", secondary: "small", ...(template.sizes || {}) };
     this._templateCanvasPlacements = {

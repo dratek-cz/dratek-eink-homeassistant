@@ -152,9 +152,9 @@ class AutomationBindingTests(unittest.TestCase):
 
         self.assertEqual([("FF:FF:92:81:46:32", None)], calls)
 
-    def test_successful_upload_installs_new_automation_or_clears_it(self):
-        # A queued write clears the old schedule before transfer. Once the image
-        # is physically present, the bindings belonging to that image replace it.
+    def test_queued_upload_installs_automation_before_transfer_starts(self):
+        # E-ink writes are slow. The listener must already exist before the job
+        # enters the queue or an entity change during that wait is lost forever.
         for name in (
             "websocket_send_design",
             "websocket_commit_design_upload",
@@ -170,15 +170,48 @@ class AutomationBindingTests(unittest.TestCase):
                 self.assertEqual(1, len(runners), f"{name} has no queued runner")
                 installed = [
                     call
-                    for call in ast.walk(runners[0])
+                    for call in ast.walk(handler)
                     if isinstance(call, ast.Call)
                     and getattr(call.func, "id", "") == "_install_entity_automation"
+                    and call not in set(ast.walk(runners[0]))
                 ]
                 self.assertTrue(
                     installed,
-                    f"{name} finishes a transfer without installing the bindings "
-                    "that belong to the newly written image.",
+                    f"{name} does not listen for entity changes until its slow "
+                    "display write has already finished.",
                 )
+                rolled_back = any(
+                    isinstance(call, ast.Call)
+                    and getattr(call.func, "id", "")
+                    == "_clear_entity_automation_if_matches"
+                    for call in ast.walk(runners[0])
+                )
+                self.assertTrue(rolled_back, f"{name} leaves automation active after a failed write")
+                reconciled = any(
+                    isinstance(call, ast.Call)
+                    and getattr(call.func, "id", "")
+                    == "_request_entity_automation_refresh"
+                    for call in ast.walk(runners[0])
+                )
+                self.assertTrue(
+                    reconciled,
+                    f"{name} loses HA changes made while the image was uploading",
+                )
+
+    def test_failed_old_upload_does_not_clear_newer_automation(self):
+        address = "FF:FF:92:81:46:32"
+        old = {"enabled": True, "bindings": [{"id": "old"}]}
+        newer = {"enabled": True, "bindings": [{"id": "new"}], "refresh_interval_seconds": 2}
+        manager = automation.EntityAutoUpdateManager.__new__(automation.EntityAutoUpdateManager)
+        manager._initialized = True
+        manager._configs = {address: newer}
+        manager._store = _Store()
+        manager._refresh_listener = lambda: None
+
+        asyncio.run(manager.async_clear_config_if_matches(address, old))
+
+        self.assertEqual(newer, manager._configs[address])
+        self.assertIsNone(manager._store.saved)
 
     def test_disabling_automation_clears_pending_refresh_and_timer(self):
         address = "FF:FF:92:81:46:32"

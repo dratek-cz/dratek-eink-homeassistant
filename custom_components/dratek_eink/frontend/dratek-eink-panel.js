@@ -44,6 +44,7 @@ class DratekEinkPanel extends HTMLElement {
     this._displayTemplateBindings = {};
     this._templateOrientationMenuOpen = false;
     this._templateEditorElements = [];
+    this._templateEditorStates = {};
     this._userDisplayTemplates = [];
     this._selectedTemplateEditorElementId = "";
     this._templateElementPaletteCategory = "";

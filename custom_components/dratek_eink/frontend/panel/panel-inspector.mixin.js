@@ -271,6 +271,7 @@ export const inspectorMixin = {
     const openDisplayTemplate = (templateId, replaceIndex = null, stayInCatalog = false) => {
       const device = this._device();
       const template = this._displayTemplateCards().find((item) => item.id === templateId);
+      this._rememberActiveTemplateEditorState?.();
       this._prepareDisplayTemplateBindings(template);
       const previousAssigned = this._assignedDisplayTemplates(device);
       const assigned = this._assignDisplayTemplate(device, templateId, replaceIndex);

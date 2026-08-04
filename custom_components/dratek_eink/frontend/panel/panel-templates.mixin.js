@@ -324,6 +324,7 @@ export const templatesMixin = {
         secondary: { x: 9, y: 9 },
       };
       this._selectedTemplatePart = "";
+      this._restoreTemplateEditorState?.("blank");
       this._invertColors = false;
       this._backgroundColor = "white";
       this._selectedIds = [];
@@ -370,6 +371,7 @@ export const templatesMixin = {
       return next;
     });
     this._variables = variables;
+    this._restoreTemplateEditorState?.(templateId, template);
     this._invertColors = false;
     this._backgroundColor = "white";
     this._selectedIds = [];

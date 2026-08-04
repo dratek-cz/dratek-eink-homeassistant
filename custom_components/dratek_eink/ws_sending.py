@@ -17,7 +17,12 @@ from .display_preview import async_save_display_preview
 from .render import render_text_image
 from .queue import get_transfer_queue
 from .transfer import DratekTransfer
-from .ws_shared import _clear_previous_entity_automation, _install_entity_automation
+from .ws_shared import (
+    _clear_entity_automation_if_matches,
+    _clear_previous_entity_automation,
+    _install_entity_automation,
+    _request_entity_automation_refresh,
+)
 
 DESIGN_UPLOADS_KEY = "design_uploads"
 DESIGN_UPLOAD_CHUNK_BYTES = 64 * 1024
@@ -61,29 +66,35 @@ async def websocket_send_design(
         raw = base64.b64decode(image_data)
         image = Image.open(io.BytesIO(raw)).convert("RGB")
         await _clear_previous_entity_automation(hass, address)
+        automation = msg.get("automation")
+        automation = await _install_entity_automation(hass, address, automation)
 
         async def run_transfer(add_log) -> dict[str, Any]:
-            add_log(f"Sending editor design {image.width}x{image.height} to SDK type {sdk_type}.")
-            if transform:
-                add_log(f"Using display transform: {transform}.")
-            transfer = DratekTransfer(log=add_log, hass=hass)
-            await transfer.send_image(
-                address,
-                sdk_type,
-                image,
-                transform,
-                orientation,
-                msg.get("software_version"),
-            )
-            add_log("Design sent.")
-            await _install_entity_automation(hass, address, msg.get("automation"))
             try:
-                await async_save_display_preview(
-                    hass, address, image, orientation, list(msg.get("template_ids") or [])
+                add_log(f"Sending editor design {image.width}x{image.height} to SDK type {sdk_type}.")
+                if transform:
+                    add_log(f"Using display transform: {transform}.")
+                transfer = DratekTransfer(log=add_log, hass=hass)
+                await transfer.send_image(
+                    address,
+                    sdk_type,
+                    image,
+                    transform,
+                    orientation,
+                    msg.get("software_version"),
                 )
-            except Exception as exc:
-                add_log(f"Display updated, but its preview could not be saved: {exc}")
-            return {"ok": True, "address": address, "log": []}
+                add_log("Design sent.")
+                try:
+                    await async_save_display_preview(
+                        hass, address, image, orientation, list(msg.get("template_ids") or [])
+                    )
+                except Exception as exc:
+                    add_log(f"Display updated, but its preview could not be saved: {exc}")
+                await _request_entity_automation_refresh(hass, address, automation)
+                return {"ok": True, "address": address, "log": []}
+            except BaseException:
+                await _clear_entity_automation_if_matches(hass, address, automation)
+                raise
 
         result = await get_transfer_queue(hass).async_submit(
             resource="local",
@@ -214,34 +225,43 @@ async def websocket_commit_design_upload(
         address = msg["address"]
         sdk_type = msg["sdk_type"]
         await _clear_previous_entity_automation(hass, address)
+        automation = msg.get("automation")
+        # Start listening while this slow e-ink write is still queued. The
+        # transfer queue defers an entity refresh until the manual job finishes,
+        # so a Home Assistant state change in the meantime is not lost.
+        automation = await _install_entity_automation(hass, address, automation)
 
         async def run_transfer(add_log) -> dict[str, Any]:
-            add_log(
-                f"Chunked editor design {image.width}x{image.height} "
-                f"({total} parts) received for SDK type {sdk_type}."
-            )
-            transfer = DratekTransfer(log=add_log, hass=hass)
-            await transfer.send_image(
-                address,
-                sdk_type,
-                image,
-                msg.get("transform"),
-                msg.get("orientation", "landscape"),
-                msg.get("software_version"),
-            )
-            add_log("Design sent.")
-            await _install_entity_automation(hass, address, msg.get("automation"))
             try:
-                await async_save_display_preview(
-                    hass,
-                    address,
-                    image,
-                    msg.get("orientation", "landscape"),
-                    list(msg.get("template_ids") or []),
+                add_log(
+                    f"Chunked editor design {image.width}x{image.height} "
+                    f"({total} parts) received for SDK type {sdk_type}."
                 )
-            except Exception as exc:
-                add_log(f"Display updated, but its preview could not be saved: {exc}")
-            return {"ok": True, "address": address, "log": []}
+                transfer = DratekTransfer(log=add_log, hass=hass)
+                await transfer.send_image(
+                    address,
+                    sdk_type,
+                    image,
+                    msg.get("transform"),
+                    msg.get("orientation", "landscape"),
+                    msg.get("software_version"),
+                )
+                add_log("Design sent.")
+                try:
+                    await async_save_display_preview(
+                        hass,
+                        address,
+                        image,
+                        msg.get("orientation", "landscape"),
+                        list(msg.get("template_ids") or []),
+                    )
+                except Exception as exc:
+                    add_log(f"Display updated, but its preview could not be saved: {exc}")
+                await _request_entity_automation_refresh(hass, address, automation)
+                return {"ok": True, "address": address, "log": []}
+            except BaseException:
+                await _clear_entity_automation_if_matches(hass, address, automation)
+                raise
 
         result = await get_transfer_queue(hass).async_submit(
             resource="local",

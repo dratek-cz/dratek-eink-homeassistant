@@ -31,6 +31,7 @@ from .ws_shared import (
     _load_project_data,
     _normalize_address,
     _project_store,
+    _save_gateway_preferences,
 )
 
 @websocket_api.websocket_command(
@@ -436,6 +437,7 @@ async def websocket_set_device_gateway(
     else:
         data["device_gateway_preferences"].pop(address, None)
     await _project_store(hass).async_save(data)
+    await _save_gateway_preferences(hass, data["device_gateway_preferences"])
 
     transport_name = "Home Assistant Bluetooth" if local_route else str(
         (gateway or {}).get("name")

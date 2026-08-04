@@ -196,6 +196,29 @@ class EntityAutoUpdateManager:
         await self._store.async_save({"configs": self._configs})
         self._refresh_listener()
 
+    async def async_clear_config_if_matches(
+        self,
+        address: str,
+        config: dict[str, Any] | None,
+    ) -> None:
+        """Clear a failed upload's automation without deleting a newer design."""
+        if not isinstance(config, dict):
+            return
+        await self.async_initialize()
+        normalized = address.upper()
+        expected = dict(config)
+        expected["enabled"] = True
+        expected["refresh_interval_seconds"] = self._refresh_interval(expected)
+        if self._configs.get(normalized) == expected:
+            await self.async_set_config(normalized, None)
+
+    async def async_request_refresh(self, address: str) -> None:
+        """Reconcile values that may have changed while a design was uploading."""
+        await self.async_initialize()
+        normalized = address.upper()
+        if normalized in self._configs:
+            self._schedule_refresh(normalized)
+
     async def async_set_refresh_interval(self, address: str, seconds: Any) -> None:
         """Update the safety interval without requiring another display upload."""
         await self.async_initialize()

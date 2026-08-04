@@ -60,6 +60,14 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('if (template?.id === "blank" || template?.user_created) return [];', self.source)
         self.assertNotIn('Prázdná plocha od nuly</text>', self.source)
 
+    def test_each_template_has_an_isolated_editor_state(self):
+        self.assertIn("this._templateEditorStates = {};", self.source)
+        self.assertIn("_rememberActiveTemplateEditorState(", self.source)
+        self.assertIn("_restoreTemplateEditorState(templateId", self.source)
+        self.assertIn("template_states: structuredClone(this._templateEditorStates || {})", self.source)
+        self.assertIn("this._rememberActiveTemplateEditorState?.();", self.source)
+        self.assertIn("this._restoreTemplateEditorState?.(templateId, template);", self.source)
+
     def test_sent_template_state_is_persistent_and_fully_green(self):
         self.assertIn("_sentDisplayTemplates(device = this._device())", self.source)
         self.assertIn("sent_template_ids", self.source)
