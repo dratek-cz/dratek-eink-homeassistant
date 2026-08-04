@@ -86,6 +86,23 @@ export const historyMixin = {
       return;
     }
     if (this._isTypingEvent(event)) return;
+    if (this._activeTab === "display-settings" && this._displaySettingsView === "designer") {
+      if ((event.key === "Delete" || event.key === "Backspace") && this._selectedTemplateEditorElementId) {
+        event.preventDefault();
+        this._deleteSelectedTemplateElement?.();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !event.shiftKey) {
+        event.preventDefault();
+        this._undoTemplateHistory?.();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z"))) {
+        event.preventDefault();
+        this._redoTemplateHistory?.();
+      }
+      return;
+    }
     if (this._activeTab !== "designer" || !this._device()) return;
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key) && this._selectedIds.length) {
       event.preventDefault();

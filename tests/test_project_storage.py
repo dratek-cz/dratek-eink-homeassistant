@@ -116,6 +116,24 @@ class ProjectStorageCompatibilityTests(unittest.TestCase):
             data["device_gateway_preferences"],
         )
 
+    def test_normalizes_shared_user_template_library(self) -> None:
+        data = PROJECT_STORAGE.normalize_project_data(
+            {
+                "user_templates": {
+                    "0": {
+                        "id": "user-template-workshop",
+                        "title": "Dílna",
+                        "editor_elements": {"0": {"id": "shape-1", "type": "rect"}},
+                    },
+                    "1": {"id": "invalid-template", "title": "Přeskočit"},
+                }
+            }
+        )
+
+        self.assertEqual(["user-template-workshop"], [item["id"] for item in data["user_templates"]])
+        self.assertEqual("shape-1", data["user_templates"][0]["editor_elements"][0]["id"])
+        self.assertTrue(data["user_templates"][0]["user_created"])
+
 
 if __name__ == "__main__":
     unittest.main()

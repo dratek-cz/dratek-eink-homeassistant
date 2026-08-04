@@ -17,6 +17,53 @@ from .ws_shared import (
     _project_store,
 )
 
+
+@websocket_api.websocket_command({"type": "dratek_eink/user_templates/list"})
+@websocket_api.async_response
+async def websocket_list_user_templates(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return templates shared by every eInk display in this integration."""
+    data = await _load_project_data(hass)
+    connection.send_result(msg["id"], {"templates": data["user_templates"]})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/user_templates/save",
+        "template": dict,
+    }
+)
+@websocket_api.async_response
+async def websocket_save_user_template(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Create or update one template in the integration-wide library."""
+    template = dict(msg["template"])
+    template_id = str(template.get("id") or f"user-template-{uuid.uuid4()}")
+    if not template_id.startswith("user-template-"):
+        connection.send_error(msg["id"], "invalid_id", "Invalid user template id.")
+        return
+    template.update(
+        {
+            "id": template_id,
+            "title": str(template.get("title") or "Vlastní šablona"),
+            "user_created": True,
+            "updated_at": template.get("updated_at") or int(time.time()),
+        }
+    )
+    data = await _load_project_data(hass)
+    data["user_templates"] = [
+        item for item in data["user_templates"] if item.get("id") != template_id
+    ]
+    data["user_templates"].append(template)
+    await _project_store(hass).async_save(data)
+    connection.send_result(msg["id"], {"template": template})
+
 @websocket_api.websocket_command({"type": "dratek_eink/projects/list"})
 @websocket_api.async_response
 async def websocket_list_projects(

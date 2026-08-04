@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.183] - 2026-08-04
+
+### Vylepšeno – zamčený designer a datové prvky
+- Horní lišta eInk Studia, levá paleta nástrojů a náhled displeje zůstávají při posouvání stránky na místě; pravý panel nastavení lze dál samostatně posouvat.
+- Grafy, ukazatele, průběhy a signalizace lze napojit na entity Home Assistantu. Graf uchovává 1 až 20 posledních hodnot, podporuje časové vzorkování a automatické mazání historie.
+- Prvky vlastních šablon používají pouze černou, červenou a bílou barvu.
+
 ## [0.1.182] - 2026-08-03
 
 ### Vylepšeno – šablony, náhledy a gateway fronta

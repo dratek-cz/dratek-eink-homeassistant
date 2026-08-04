@@ -215,15 +215,9 @@ export const templateSvgMixin = {
   // so return whatever is cached now and re-render once the rest arrive.
   _templateSvgPreviewMarkup(template, width, height) {
     if (!template) return "";
-    if (template.id === "blank") {
-      const cx = width / 2;
-      const cy = height / 2 - 12;
-      return `<rect x="6" y="6" width="${width - 12}" height="${height - 12}" rx="10" fill="none" stroke="#00a2a5" stroke-width="2" stroke-dasharray="6,4"></rect>`
-        + `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="20" fill="#00a2a5" opacity="0.14"></circle>`
-        + `<path d="M${(cx - 9).toFixed(2)} ${cy.toFixed(2)} H${(cx + 9).toFixed(2)} M${cx.toFixed(2)} ${(cy - 9).toFixed(2)} V${(cy + 9).toFixed(2)}" stroke="#00a2a5" stroke-width="3" stroke-linecap="round"></path>`
-        + `<text x="${cx.toFixed(2)}" y="${(cy + 34).toFixed(2)}" font-family="${FONT}" font-size="13" font-weight="bold" fill="#172127" text-anchor="middle">Vytvořit vlastní šablonu</text>`
-        + `<text x="${cx.toFixed(2)}" y="${(cy + 49).toFixed(2)}" font-family="${FONT}" font-size="10" fill="#64727b" text-anchor="middle">Prázdná plocha od nuly</text>`;
-    }
+    // The catalog may decorate the "create" tile, but the actual designer and
+    // exported image must start as a completely white canvas.
+    if (template.id === "blank" || template.user_created) return "";
     const rows = this._templateSvgRows(template);
     this._requestTemplateIcons(rows);
     this._warmTemplateIcons();
@@ -244,11 +238,10 @@ export const templateSvgMixin = {
       + `</svg>`;
   },
 
-  // The catalog tile. Same drawing, one difference: a tile is a fixed box in a
-  // grid, so the panel letterboxes inside it rather than stretching to fill it.
+  // The catalog tile is a fixed box, so the panel letterboxes inside it rather
+  // than stretching to fill it. A blank template stays blank here as well.
   _templateSvgThumbnail(template, width, height) {
     const markup = this._templateSvgPreviewMarkup(template, width, height);
-    if (!markup) return "";
     return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"`
       + ` viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">`
       + `<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>`
@@ -1251,6 +1244,7 @@ export const templateSvgMixin = {
   },
 
   _templateSvgRows(template) {
+    if (template?.id === "blank" || template?.user_created) return [];
     const build = this._templateSvgSpecs(template)[template?.id];
     return build ? build() : [
       { icon: "shape-outline", h: 0.22 },

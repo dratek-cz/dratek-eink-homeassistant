@@ -894,8 +894,19 @@ export const devicesMixin = {
   },
 
   _displayTemplateCards() {
+    const userTemplates = (this._userDisplayTemplates || [])
+      .filter((template) => template && String(template.id || "").startsWith("user-template-"))
+      .map((template) => ({
+        ...structuredClone(template),
+        id: String(template.id),
+        title: String(template.title || "Vlastní šablona"),
+        variables: Array.isArray(template.variables) ? template.variables : [],
+        user_created: true,
+        kind: "custom",
+      }));
     const templates = [
       { id: "blank", number: "00", category: "custom", title: "Prázdná šablona", variables: [] },
+      ...userTemplates,
       { id: "weather", number: "01", category: "nature", title: "Počasí", variables: [["thermometer", "Teplota"], ["weather-partly-cloudy", "Stav počasí"], ["clock-outline", "Čas"], ["calendar-outline", "Datum"], ["weather-rainy", "Předpověď"]] },
       { id: "energy", number: "02", category: "energy", title: "Cena elektřiny", variables: [["currency-usd", "Aktuální cena"], ["clock-outline", "Cenový interval"], ["chart-line", "Denní průběh"], ["tag-outline", "Minimum dne"]] },
       { id: "home", number: "03", category: "home", title: "Dům", variables: [["thermometer", "Teplota"], ["water-percent", "Vlhkost"], ["lightbulb-on-outline", "Světla"], ["lock-outline", "Zámky"]] },
@@ -921,7 +932,7 @@ export const devicesMixin = {
     const prepared = new Set(["blank", "weather", "home", "solar", "living", "calendar", "security", "air", "thermostat", "server", "garden", "price"]);
     return templates.map((template) => ({
       ...template,
-      kind: prepared.has(template.id) ? "prepared" : "custom",
+      kind: template.user_created ? "custom" : prepared.has(template.id) ? "prepared" : "custom",
     }));
   },
 
@@ -955,7 +966,27 @@ export const devicesMixin = {
     const short = Math.min(base.width, base.height);
     const width = orientation === "landscape" ? long : short;
     const height = orientation === "landscape" ? short : long;
+    if (template?.user_created) return this._renderUserDisplayTemplateCatalogPreview(template, orientation);
     return this._templateSvgThumbnail(template, width, height);
+  },
+
+  _renderUserDisplayTemplateCatalogPreview(template, orientation = template?.orientation) {
+    const elements = Array.isArray(template?.editor_elements) ? template.editor_elements : [];
+    const canvasRotation = this._userTemplateCanvasRotationStyle(template, orientation);
+    const markup = elements.map((source) => {
+      const item = this._orientedUserTemplateElement(source, template, orientation);
+      const style = `left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;transform:rotate(${item.rotation}deg);--element-color:${item.color};--element-fill:${item.fill};--element-stroke:${item.stroke};--element-stroke-width:${item.strokeWidth}px;--element-radius:${item.radius}px;--element-font-size:${item.fontSize}px;--element-font-weight:${item.fontWeight};--element-text-align:${item.textAlign};--element-value:${Math.max(0, Math.min(100, item.value))}%`;
+      let content = "";
+      if (item.type === "image") content = `<img src="${this._escape(item.src || "")}" alt="">`;
+      else if (["text", "button"].includes(item.type)) content = `<span>${this._escape(item.text || item.label)}</span>`;
+      else if (item.type === "icon") content = `<ha-icon icon="mdi:${this._escape(item.icon || "star")}"></ha-icon>`;
+      else if (item.type === "slider") content = this._renderTemplateProgressVisual(item);
+      else if (item.type === "chart") content = this._renderTemplateChartVisual(item);
+      else if (item.type === "gauge") content = this._renderTemplateGaugeVisual(item);
+      else if (item.type === "signal") content = this._renderTemplateSignalVisual(item);
+      return `<span class="template-overlay template-overlay-${item.type} variant-${this._escape(item.variant || "default")}" style="${style}" aria-hidden="true">${content}</span>`;
+    }).join("");
+    return `<span class="user-template-catalog-canvas"><span class="user-template-rotated-canvas ${canvasRotation.turn ? "is-whole-canvas-rotated" : ""}" style="${canvasRotation.style}">${markup}</span></span>`;
   },
 
   _renderDisplayTemplatesSection(device) {
@@ -981,7 +1012,7 @@ export const devicesMixin = {
       ? this._displayTemplateCategory
       : "prepared";
     const visibleCards = cards.filter((template) => {
-      if (template.id === "blank") return true;
+      if (template.id === "blank" || template.user_created) return true;
       if (template.kind !== activeCategory) return false;
       if (!query) return true;
       const searchable = [template.title, ...template.variables.map(([, label]) => label)].join(" ").toLocaleLowerCase("cs");
@@ -1055,6 +1086,7 @@ export const devicesMixin = {
           ${visibleCards.length ? `<div class="display-template-grid">${visibleCards.map((template) => {
             const used = assignedTemplates.includes(template.id);
             const onDisplay = sentTemplates.includes(template.id);
+            const userCreated = !!template.user_created;
             if (template.id === "blank") {
               return `<article class="display-template-card display-template-drag-card display-template-blank-card ${onDisplay ? "is-on-display" : ""}" data-display-template-open="blank" aria-label="Vytvořit vlastní šablonu od nuly. Kliknutím otevřete designer.">
                 <header class="display-template-tile-header">
@@ -1070,22 +1102,22 @@ export const devicesMixin = {
                 </div>
               </article>`;
             }
-            return `<article class="display-template-card display-template-drag-card ${used ? "is-used" : ""} ${onDisplay ? "is-on-display" : ""}" draggable="true" data-display-template-drag="${template.id}" aria-label="${this._escape(template.title)}. Přetáhněte na displej.">
+            return `<article class="display-template-card display-template-drag-card ${userCreated ? "is-user-created" : ""} ${used ? "is-used" : ""} ${onDisplay ? "is-on-display" : ""}" draggable="true" data-display-template-drag="${template.id}" aria-label="${this._escape(template.title)}. Přetáhněte na displej.">
               <header class="display-template-tile-header">
-                <span class="display-template-kind-icon"><ha-icon icon="mdi:${template.kind === "prepared" ? "auto-fix" : "tune-variant"}"></ha-icon></span>
-                <span class="display-template-tile-identity"><strong>${this._escape(template.title)}</strong><small>${template.kind === "prepared" ? "Automatické nastavení" : "Vlastní zdroje dat"}</small></span>
-                <span class="display-template-variable-count">${template.variables.length} údajů</span>
-                <button type="button" class="display-template-help" data-display-template-setup="${this._escape(template.id)}" title="Jak zprovoznit šablonu ${this._escape(template.title)}" aria-label="Jak zprovoznit šablonu ${this._escape(template.title)}"><ha-icon icon="mdi:help-circle-outline"></ha-icon></button>
+                <span class="display-template-kind-icon"><ha-icon icon="mdi:${userCreated ? "palette-outline" : template.kind === "prepared" ? "auto-fix" : "tune-variant"}"></ha-icon></span>
+                <span class="display-template-tile-identity"><strong>${this._escape(template.title)}</strong><small>${userCreated ? "Vytvořeno uživatelem" : template.kind === "prepared" ? "Automatické nastavení" : "Vlastní zdroje dat"}</small></span>
+                ${userCreated ? `<span class="display-template-variable-count is-user-template-badge">Moje</span>` : `<span class="display-template-variable-count">${template.variables.length} údajů</span>`}
+                ${userCreated ? `<span class="user-template-owner-mark" title="Uživatelská šablona"><ha-icon icon="mdi:check-circle"></ha-icon></span>` : `<button type="button" class="display-template-help" data-display-template-setup="${this._escape(template.id)}" title="Jak zprovoznit šablonu ${this._escape(template.title)}" aria-label="Jak zprovoznit šablonu ${this._escape(template.title)}"><ha-icon icon="mdi:help-circle-outline"></ha-icon></button>`}
               </header>
               <div class="display-template-tile-preview is-${orientation}" data-display-template-select="${template.id}" role="button" tabindex="0" aria-label="Vybrat šablonu ${this._escape(template.title)} pro displej">
                 <span class="display-template-drag-handle"><ha-icon icon="mdi:drag"></ha-icon>Přetáhnout na displej</span>
-                <span class="display-template-preview" style="aspect-ratio:${previewAspect};min-height:0">${this._renderDisplayTemplateCatalogPreview(template, orientation, size)}</span>
+                <span class="display-template-preview ${userCreated ? "has-user-template" : ""}" style="aspect-ratio:${previewAspect};min-height:0">${this._renderDisplayTemplateCatalogPreview(template, orientation, size)}</span>
               </div>
               <div class="display-template-tile-meta">
-                <span class="display-template-variables" aria-label="Použité údaje">${template.variables.map(([iconName, label]) => `<span><ha-icon icon="mdi:${iconName}"></ha-icon>${this._escape(label)}</span>`).join("")}</span>
+                ${userCreated ? `<span class="user-template-created-note"><ha-icon icon="mdi:palette-outline"></ha-icon>Vytvořeno v eInk Studiu</span>` : `<span class="display-template-variables" aria-label="Použité údaje">${template.variables.map(([iconName, label]) => `<span><ha-icon icon="mdi:${iconName}"></ha-icon>${this._escape(label)}</span>`).join("")}</span>`}
               </div>
               <div class="display-template-tile-actions">
-                <button type="button" class="display-template-card-action" data-display-template-open="${template.id}"><ha-icon icon="mdi:${onDisplay ? "check-circle" : "tune-variant"}"></ha-icon>${onDisplay ? "Na displeji · upravit" : used ? "Upravit nastavení" : "Nastavit šablonu"}</button>
+                <button type="button" class="display-template-card-action" data-display-template-open="${template.id}"><ha-icon icon="mdi:${onDisplay ? "check-circle" : "tune-variant"}"></ha-icon>${onDisplay ? "Na displeji · upravit" : userCreated ? "Otevřít vlastní šablonu" : used ? "Upravit nastavení" : "Nastavit šablonu"}</button>
               </div>
             </article>`;
           }).join("")}</div>` : `<div class="display-template-empty"><ha-icon icon="mdi:magnify-close"></ha-icon><strong>Žádná šablona neodpovídá filtru</strong><span>Zkuste jiný název nebo druh šablony.</span></div>`}
@@ -1146,10 +1178,14 @@ export const devicesMixin = {
       formats: structuredClone(this._displayTemplateFormats || {}),
       sizes: structuredClone(this._displayTemplateSizes || {}),
       placements: structuredClone(this._templateCanvasPlacements || {}),
+      image_library: structuredClone(this._templateImageLibrary || []),
     };
   },
 
   _restoreDisplayTemplateConfig(config) {
+    this._templateUndoStack = [];
+    this._templateRedoStack = [];
+    this._templatePropertyHistoryKey = "";
     const address = String(this._selectedDeviceAddress || "").toUpperCase();
     if (!config || typeof config !== "object") {
       if (address) {
@@ -1160,7 +1196,10 @@ export const devicesMixin = {
       this._selectedDisplayTemplateSecondaryId = "";
       this._displayTemplateBindings = {};
       this._templateEditorElements = [];
+      this._selectedTemplateEditorElementId = "";
+      this._templateOverlayDrag = null;
       this._templateElementAdjustments = {};
+      this._templateImageLibrary = [];
       this._selectedTemplatePart = "";
       return;
     }
@@ -1172,8 +1211,27 @@ export const devicesMixin = {
     this._displayTemplateOrientation = config.orientation === "landscape" ? "landscape" : "portrait";
     this._displayTemplateLargeLayout = ["single", "side-by-side", "stacked"].includes(config.layout) ? config.layout : "single";
     this._displayTemplateBindings = structuredClone(config.bindings || {});
-    this._templateEditorElements = Array.isArray(config.editor_elements) ? structuredClone(config.editor_elements) : [];
+    this._templateEditorElements = Array.isArray(config.editor_elements)
+      ? structuredClone(config.editor_elements).map((item) => this._normalizeTemplateEditorElement(item))
+      : [];
+    this._selectedTemplateEditorElementId = "";
     this._templateElementAdjustments = structuredClone(config.element_adjustments || {});
+    const embeddedUserTemplates = Array.isArray(config.user_templates)
+      ? structuredClone(config.user_templates).filter((template) => template && String(template.id || "").startsWith("user-template-"))
+      : [];
+    const sharedTemplatesBeforeMigration = [...(this._userDisplayTemplates || [])];
+    this._userDisplayTemplates = this._mergeUserDisplayTemplates
+      ? this._mergeUserDisplayTemplates(this._userDisplayTemplates, embeddedUserTemplates)
+      : embeddedUserTemplates;
+    for (const template of embeddedUserTemplates) {
+      const shared = sharedTemplatesBeforeMigration.find((item) => item.id === template.id);
+      const embeddedUpdated = Date.parse(template.updated_at || "") || Number(template.updated_at || 0);
+      const sharedUpdated = Date.parse(shared?.updated_at || "") || Number(shared?.updated_at || 0);
+      if (!shared || embeddedUpdated > sharedUpdated) this._saveUserDisplayTemplate?.(template).catch(() => {});
+    }
+    this._templateImageLibrary = Array.isArray(config.image_library)
+      ? structuredClone(config.image_library).filter((asset) => asset?.id && String(asset.src || "").startsWith("data:image/"))
+      : [];
     this._displayTemplateFormats = { primary: "narrow", secondary: "narrow", ...(config.formats || {}) };
     this._displayTemplateSizes = { primary: "large", secondary: "small", ...(config.sizes || {}) };
     this._templateCanvasPlacements = {
@@ -1182,6 +1240,134 @@ export const devicesMixin = {
       ...(config.placements || {}),
     };
     this._selectedTemplatePart = "";
+    this._refreshTemplateEntityElements?.();
+  },
+
+  _nextUserDisplayTemplateTitle() {
+    const names = new Set((this._userDisplayTemplates || []).map((template) => String(template.title || "").trim()));
+    if (!names.has("Vlastní šablona")) return "Vlastní šablona";
+    let index = 2;
+    while (names.has(`Vlastní šablona ${index}`)) index += 1;
+    return `Vlastní šablona ${index}`;
+  },
+
+  _storeCurrentUserDisplayTemplate(device = this._device()) {
+    const selectedId = String(this._selectedDisplayTemplateId || "");
+    const existing = (this._userDisplayTemplates || []).find((template) => template.id === selectedId);
+    if (selectedId !== "blank" && !existing) return null;
+    const id = existing?.id || `user-template-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
+    const title = existing?.title || this._nextUserDisplayTemplateTitle();
+    const now = new Date().toISOString();
+    const stored = {
+      ...(existing || {}),
+      id,
+      title,
+      user_created: true,
+      variables: [],
+      editor_elements: structuredClone(this._templateEditorElements || []),
+      element_adjustments: structuredClone(this._templateElementAdjustments || {}),
+      orientation: this._displayTemplateOrientation === "landscape" ? "landscape" : "portrait",
+      design_orientation: existing?.design_orientation || existing?.orientation || (this._displayTemplateOrientation === "landscape" ? "landscape" : "portrait"),
+      design_width: existing?.design_width || this._devicePreviewSize(device).width,
+      design_height: existing?.design_height || this._devicePreviewSize(device).height,
+      formats: structuredClone(this._displayTemplateFormats || {}),
+      sizes: structuredClone(this._displayTemplateSizes || {}),
+      placements: structuredClone(this._templateCanvasPlacements || {}),
+      created_at: existing?.created_at || now,
+      updated_at: now,
+    };
+    this._userDisplayTemplates = existing
+      ? this._userDisplayTemplates.map((template) => template.id === id ? stored : template)
+      : [...(this._userDisplayTemplates || []), stored];
+    const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
+    if (address) {
+      this._displayTemplateAssignments ||= {};
+      this._displayTemplateAssignments[address] = this._assignedDisplayTemplates(device)
+        .map((templateId) => templateId === selectedId ? id : templateId);
+    }
+    this._selectedDisplayTemplateId = id;
+    this._projectName = title;
+    this._selectedTemplateEditorElementId = "";
+    return stored;
+  },
+
+  _applyUserDisplayTemplate(template) {
+    if (!template?.user_created) return;
+    this._templateUndoStack = [];
+    this._templateRedoStack = [];
+    this._templatePropertyHistoryKey = "";
+    this._pushHistory();
+    this._objects = [];
+    this._variables = {};
+    this._templateEditorElements = Array.isArray(template.editor_elements)
+      ? structuredClone(template.editor_elements).map((item) => this._normalizeTemplateEditorElement(item))
+      : [];
+    this._templateElementAdjustments = structuredClone(template.element_adjustments || {});
+    this._displayTemplateFormats = { primary: "narrow", secondary: "narrow", ...(template.formats || {}) };
+    this._displayTemplateSizes = { primary: "large", secondary: "small", ...(template.sizes || {}) };
+    this._templateCanvasPlacements = {
+      primary: { x: 9, y: 9 },
+      secondary: { x: 9, y: 9 },
+      ...(template.placements || {}),
+    };
+    this._selectedTemplateEditorElementId = "";
+    this._selectedTemplatePart = "";
+    this._selectedProjectId = "";
+    this._projectName = template.title || "Vlastní šablona";
+    this._nextId = 1;
+    this._refreshTemplateEntityElements?.();
+  },
+
+  _currentUserDisplayTemplate() {
+    const selectedId = String(this._selectedDisplayTemplateId || "");
+    return (this._userDisplayTemplates || []).find((template) => template?.user_created && template.id === selectedId) || null;
+  },
+
+  _userTemplateQuarterTurn(template, targetOrientation = this._displayTemplateOrientation) {
+    if (!template?.user_created) return 0;
+    const sourceOrientation = ["portrait", "landscape"].includes(template.design_orientation)
+      ? template.design_orientation
+      : template.orientation;
+    const source = sourceOrientation === "landscape" ? "landscape" : "portrait";
+    const target = targetOrientation === "landscape" ? "landscape" : "portrait";
+    if (source === target) return 0;
+    return source === "portrait" ? 1 : -1;
+  },
+
+  // Stored elements always remain in their authored coordinate system. The live
+  // preview rotates one wrapper around the complete canvas instead of rewriting
+  // every child, so text, images and charts behave like one finished picture.
+  _orientedUserTemplateElement(source, template = this._currentUserDisplayTemplate(), targetOrientation = this._displayTemplateOrientation) {
+    return this._normalizeTemplateEditorElement(source);
+  },
+
+  _quarterTurnedUserTemplateElement(source, template = this._currentUserDisplayTemplate(), targetOrientation = this._displayTemplateOrientation) {
+    const item = this._normalizeTemplateEditorElement(source);
+    const turn = this._userTemplateQuarterTurn(template, targetOrientation);
+    if (turn === 1) {
+      return { ...item, x: 100 - item.y - item.h, y: item.x, w: item.h, h: item.w, rotation: item.rotation + 90 };
+    }
+    if (turn === -1) {
+      return { ...item, x: item.y, y: 100 - item.x - item.w, w: item.h, h: item.w, rotation: item.rotation - 90 };
+    }
+    return item;
+  },
+
+  _userTemplateElementFromView(source, template = this._currentUserDisplayTemplate()) {
+    return this._normalizeTemplateEditorElement(source);
+  },
+
+  _userTemplateCanvasRotationStyle(template = this._currentUserDisplayTemplate(), targetOrientation = this._displayTemplateOrientation, targetRatio = 0) {
+    const turn = this._userTemplateQuarterTurn(template, targetOrientation);
+    if (!turn) return { turn: 0, style: "" };
+    const base = this._baseDisplaySize?.(this._device?.()) || { width: 296, height: 128 };
+    const long = Math.max(1, Number(base.width || 296), Number(base.height || 128));
+    const short = Math.max(1, Math.min(Number(base.width || 296), Number(base.height || 128)));
+    const ratio = Number(targetRatio) > 0 ? Number(targetRatio) : targetOrientation === "landscape" ? long / short : short / long;
+    return {
+      turn,
+      style: `left:50%;top:50%;right:auto;bottom:auto;width:${100 / ratio}%;height:${100 * ratio}%;transform:translate(-50%,-50%) rotate(${turn * 90}deg)`,
+    };
   },
 
   async _saveDisplayTemplateDraft() {
@@ -1218,18 +1404,17 @@ export const devicesMixin = {
     return `<section class="display-template-editor-page studio-pro-workspace">
       ${this._renderStudioHeader(activeTemplate, device, orientation, previewZoom)}
       <div class="display-template-editor-layout">
-        <aside class="card display-template-editor-panel display-template-editor-left studio-pro-sidebar" aria-label="Nástroje a vrstvy">
-          <div class="photoshop-tab-header">
-            <button type="button" class="${(this._photoshopSidebarTab || "layers") === "layers" ? "is-active" : ""}" data-photoshop-tab="layers"><ha-icon icon="mdi:layers-outline"></ha-icon> Vrstvy</button>
-            <button type="button" class="${this._photoshopSidebarTab === "tools" ? "is-active" : ""}" data-photoshop-tab="tools"><ha-icon icon="mdi:tools"></ha-icon> Nástroje</button>
-          </div>
-          <div class="photoshop-tab-content">
-            ${(this._photoshopSidebarTab || "layers") === "layers" ? this._renderPhotoshopLayersPanel(activeTemplate) : this._renderTemplateEditorTools()}
-          </div>
+        <aside class="card display-template-editor-panel display-template-editor-left studio-pro-sidebar" aria-label="Kategorie prvků">
+          ${this._renderTemplateEditorTools()}
+          ${this._renderTemplateElementPalette()}
         </aside>
 
         <main class="display-template-editor-canvas" data-photoshop-canvas>
           <div class="display-template-preview-card photoshop-canvas-card">
+            <div class="template-preview-history-actions" role="group" aria-label="Historie úprav">
+              <button type="button" data-template-history="undo" title="Zpět (Ctrl+Z)" aria-label="Zpět" ${this._templateUndoStack?.length ? "" : "disabled"}><ha-icon icon="mdi:undo"></ha-icon></button>
+              <button type="button" data-template-history="redo" title="Vpřed (Ctrl+Y)" aria-label="Vpřed" ${this._templateRedoStack?.length ? "" : "disabled"}><ha-icon icon="mdi:redo"></ha-icon></button>
+            </div>
             <div class="display-template-editor-stage">
               ${this._renderTemplatePhysicalDevicePreview(device, template, secondaryTemplate, orientation, layout)}
             </div>
@@ -1242,7 +1427,8 @@ export const devicesMixin = {
         <div class="display-template-editor-right-column">
           ${this._templateSendResult ? `<div class="template-send-result ${this._templateSendResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSendResult.ok ? "check-circle-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSendResult.message)}</span></div>` : ""}
           ${this._templateSaveResult ? `<div class="template-send-result ${this._templateSaveResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSaveResult.ok ? "content-save-check-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSaveResult.message)}</span></div>` : ""}
-          <aside class="card display-template-editor-panel display-template-editor-right" aria-label="Nastavení šablony">
+          <aside class="card display-template-editor-panel display-template-editor-right" aria-label="Nastavení prvku nebo šablony">
+            ${this._selectedTemplateEditorElementId ? this._renderTemplateElementInspector() : `
             <div class="template-editor-panel-heading"><ha-icon icon="mdi:tune-variant"></ha-icon><span><strong>Nastavení šablony</strong><small>${this._escape(activeTemplate.title)}</small></span></div>
             <div class="template-layout-options template-size-options" style="display:none">
               <button type="button" class="${selectedSize === "large" ? "is-active" : ""}" data-template-size="large" ${largeDisplay ? "" : "disabled"}><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon>Velká</button>
@@ -1254,7 +1440,7 @@ export const devicesMixin = {
             <button type="button" class="secondary template-setup-open" data-display-template-setup="${this._escape(activeTemplate.id)}"><ha-icon icon="mdi:help-circle-outline"></ha-icon>Jak zprovoznit tuto šablonu</button>
             ${this._renderTemplateOptionSettings(activeTemplate)}
             <p class="template-settings-intro">Vyberte, ze kterých entit Home Assistantu se mají načítat hodnoty. Systémové údaje jsou nastavené automaticky.</p>
-            <div class="template-variable-settings">${activeTemplate.variables.map((variable, index) => this._renderTemplateVariableSetting(activeTemplate, variable, index)).join("")}</div>
+            <div class="template-variable-settings">${activeTemplate.variables.map((variable, index) => this._renderTemplateVariableSetting(activeTemplate, variable, index)).join("")}</div>`}
           </aside>
         </div>
       </div>
@@ -1465,19 +1651,27 @@ export const devicesMixin = {
     const frame = surface?.getBoundingClientRect();
     if (!frame?.width || !frame?.height) return [];
     return [...surface.querySelectorAll(".template-overlay")].map((element) => {
-      const box = element.getBoundingClientRect();
       const image = element.querySelector("img");
+      const source = (this._templateEditorElements || []).find((item) => item.id === element.dataset.templateOverlayId) || {};
+      const model = this._quarterTurnedUserTemplateElement(source);
       return {
-        kind: element.classList.contains("template-overlay-image") ? "image"
-          : element.classList.contains("template-overlay-text") ? "text"
-            : element.classList.contains("template-overlay-line") ? "line"
-              : element.classList.contains("is-circle") ? "circle" : "rect",
-        x: (box.left - frame.left) / frame.width,
-        y: (box.top - frame.top) / frame.height,
-        w: box.width / frame.width,
-        h: box.height / frame.height,
-        text: element.textContent.trim(),
+        kind: model.type || "rect",
+        x: Number(model.x || 0) / 100,
+        y: Number(model.y || 0) / 100,
+        w: Number(model.w || 2) / 100,
+        h: Number(model.h || 2) / 100,
+        text: model.text || element.textContent.trim(),
         src: image?.getAttribute("src") || "",
+        icon: model.icon || "star", color: model.color || "#111111", fill: model.fill || "transparent",
+        variant: model.variant || "default",
+        stroke: model.stroke || "#111111", strokeWidth: Number(model.strokeWidth ?? 2), radius: Number(model.radius || 0),
+        fontSize: Number(model.fontSize || 16), fontWeight: String(model.fontWeight || "700"), textAlign: model.textAlign || "center",
+        value: Math.max(0, Math.min(100, Number(model.value ?? 50))), rotation: Number(model.rotation || 0),
+        showValue: model.showValue !== false, showPercent: model.showPercent !== false, showLabel: model.showLabel !== false,
+        showGrid: model.showGrid !== false, showPoints: model.showPoints !== false, showFill: model.showFill !== false,
+        showTrack: model.showTrack !== false, showScale: model.showScale !== false, showIcon: model.showIcon !== false, showState: model.showState !== false,
+        historyLimit: Number(model.historyLimit || 10), historyValues: structuredClone(model.historyValues || []),
+        resolvedActive: typeof model.resolvedActive === "boolean" ? model.resolvedActive : undefined,
       };
     });
   },
@@ -1489,31 +1683,115 @@ export const devicesMixin = {
       const y = item.y * height;
       const w = Math.max(1, item.w * width);
       const h = Math.max(1, item.h * height);
-      context.fillStyle = "#000000";
-      context.strokeStyle = "#000000";
-      context.lineWidth = Math.max(1, Math.round(Math.min(width, height) * 0.008));
+      context.save();
+      context.translate(x + w / 2, y + h / 2);
+      context.rotate((item.rotation || 0) * Math.PI / 180);
+      context.translate(-(x + w / 2), -(y + h / 2));
+      context.fillStyle = item.color || "#111111";
+      context.strokeStyle = item.stroke || "#111111";
+      context.lineWidth = Math.max(1, item.strokeWidth * Math.min(width, height) / 300);
       if (item.kind === "image" && item.src.startsWith("data:image/")) {
         const bitmap = new Image();
         bitmap.src = item.src;
         // Already decoded: the element is on screen, so the browser has it.
-        if (bitmap.complete) context.drawImage(bitmap, x, y, w, h);
+        if (bitmap.complete) {
+          const smoothing = context.imageSmoothingEnabled;
+          // The source is already exactly black/white/red. Interpolation would
+          // invent warm edge colours and the final quantizer could turn those
+          // into false red pixels, so scale it like actual eInk pixels.
+          context.imageSmoothingEnabled = false;
+          context.drawImage(bitmap, x, y, w, h);
+          context.imageSmoothingEnabled = smoothing;
+        }
       } else if (item.kind === "text") {
-        const size = Math.max(7, h * 0.8);
-        context.font = `700 ${size}px Arial, Helvetica, sans-serif`;
-        context.textBaseline = "top";
-        context.fillText(item.text, x, y);
+        const size = Math.max(7, item.fontSize * Math.min(width, height) / 300);
+        context.font = `${item.fontWeight} ${size}px Arial, Helvetica, sans-serif`;
+        context.textBaseline = "middle";
+        context.textAlign = item.textAlign || "center";
+        context.fillText(item.text, item.textAlign === "left" ? x : item.textAlign === "right" ? x + w : x + w / 2, y + h / 2, w);
       } else if (item.kind === "line") {
         context.beginPath();
         context.moveTo(x, y + h / 2);
         context.lineTo(x + w, y + h / 2);
         context.stroke();
       } else if (item.kind === "circle") {
+        if (item.fill !== "transparent") { context.fillStyle = item.fill; context.beginPath(); context.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2); context.fill(); }
         context.beginPath();
         context.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
         context.stroke();
+      } else if (item.kind === "button") {
+        if (item.fill !== "transparent") { context.fillStyle = item.fill; context.fillRect(x, y, w, h); }
+        context.strokeRect(x, y, w, h);
+        context.fillStyle = item.color; context.font = `${item.fontWeight} ${Math.max(7, item.fontSize * Math.min(width, height) / 300)}px Arial`; context.textAlign = item.textAlign || "center"; context.textBaseline = "middle";
+        context.fillText(item.text, item.textAlign === "left" ? x + 3 : item.textAlign === "right" ? x + w - 3 : x + w / 2, y + h / 2, w - 6);
+      } else if (item.kind === "slider") {
+        const trackH = Math.max(3, h * .18); const trackY = y + h * .5;
+        if (item.showTrack) { context.strokeStyle = "#111111"; context.lineWidth = Math.max(1, trackH * .28); context.strokeRect(x, trackY, w, trackH); }
+        context.fillStyle = "#d71912"; context.fillRect(x, trackY, w * item.value / 100, trackH);
+        if (item.showValue) { context.fillStyle = "#111111"; context.font = `900 ${Math.max(7, h * .3)}px Arial`; context.textAlign = "right"; context.textBaseline = "top"; context.fillText(`${Math.round(item.value)}${item.showPercent ? "%" : ""}`, x + w, y, w * .4); }
+        if (item.showScale) { context.font = `700 ${Math.max(4, h * .16)}px Arial`; context.textBaseline = "bottom"; context.textAlign = "left"; context.fillText("0", x, y + h); context.textAlign = "center"; context.fillText("50", x + w / 2, y + h); context.textAlign = "right"; context.fillText("100", x + w, y + h); }
+      } else if (item.kind === "chart") {
+        const labels = { line: "VÝVOJ", area: "PLOCHA", bar: "PŘEHLED", steps: "ZMĚNY", donut: "PODÍL", sparkline: "TREND" };
+        const gx = x + 2, gy = y + 2, gw = Math.max(1, w - 4), gh = Math.max(1, h - 4);
+        const points = this._templateChartNormalizedPoints(item).map((point) => [point.x / 100, point.y / 60]);
+        context.strokeStyle = "#111111"; context.lineWidth = Math.max(1, Math.min(width, height) / 140);
+        if (item.showGrid && item.variant !== "donut" && item.variant !== "sparkline") { context.save(); context.strokeStyle = "#111111"; context.lineWidth = 1; context.setLineDash([2, 3]); [.2,.5,.8].forEach((line) => { context.beginPath(); context.moveTo(gx, gy + gh * line); context.lineTo(gx + gw, gy + gh * line); context.stroke(); }); context.restore(); }
+        if (item.variant === "bar") {
+          const slot = .92 / Math.max(1, points.length);
+          const barWidth = Math.min(.14, slot * .62);
+          points.forEach(([px, py], index) => {
+            context.fillStyle = index % 3 === 0 ? "#d71912" : "#111111";
+            context.fillRect(gx + gw * Math.max(.02, px - barWidth / 2), gy + gh * py, gw * barWidth, gh * (1 - py));
+          });
+        } else if (item.variant === "donut") {
+          const radius = Math.min(gw, gh) * .34;
+          context.lineWidth = Math.max(3, radius * .28); if (item.showTrack) { context.strokeStyle = "#111111"; context.beginPath(); context.arc(gx + gw / 2, gy + gh / 2, radius, 0, Math.PI * 2); context.stroke(); }
+          context.strokeStyle = "#d71912"; context.lineCap = "butt"; context.beginPath(); context.arc(gx + gw / 2, gy + gh / 2, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * item.value / 100); context.stroke();
+        } else if (item.variant === "steps") {
+          const steps = points.flatMap((point, index) => index ? [[point[0], points[index - 1][1]], point] : [point]);
+          context.beginPath(); steps.forEach(([px, py], index) => index ? context.lineTo(gx + gw * px, gy + gh * py) : context.moveTo(gx + gw * px, gy + gh * py)); context.stroke();
+        } else {
+          if (item.variant === "area" && item.showFill) {
+            context.fillStyle = "#d71912"; context.beginPath(); points.forEach(([px, py], index) => index ? context.lineTo(gx + gw * px, gy + gh * py) : context.moveTo(gx + gw * px, gy + gh * py)); context.lineTo(gx + gw * points.at(-1)[0], gy + gh); context.lineTo(gx + gw * points[0][0], gy + gh); context.closePath(); context.fill();
+          }
+          context.beginPath(); points.forEach(([px, py], index) => index ? context.lineTo(gx + gw * px, gy + gh * py) : context.moveTo(gx + gw * px, gy + gh * py)); context.stroke();
+          if (item.variant !== "sparkline" && item.showPoints) points.filter((_, index) => points.length <= 10 || index % 2 === 0).forEach(([px, py]) => { context.fillStyle = "#fff"; context.strokeStyle = "#d71912"; context.beginPath(); context.arc(gx + gw * px, gy + gh * py, Math.max(1.5, context.lineWidth * 1.25), 0, Math.PI * 2); context.fill(); context.stroke(); });
+        }
+        if (item.showValue) { context.fillStyle = "#111111"; context.font = `900 ${Math.max(7, Math.min(w, h) * .22)}px Arial`; context.textAlign = item.variant === "donut" ? "center" : "right"; context.textBaseline = "middle"; context.fillText(`${Math.round(item.value)}${item.showPercent ? "%" : ""}`, item.variant === "donut" ? x + w / 2 : x + w, item.variant === "donut" ? y + h / 2 : y + h * .14, w * .42); }
+        if (item.showLabel) { context.font = `900 ${Math.max(4, h * .12)}px Arial`; context.textAlign = "left"; context.textBaseline = "bottom"; context.fillText(labels[item.variant] || "DATA", x, y + h, w * .45); }
+      } else if (item.kind === "gauge") {
+        const labels = { battery: "BATERIE", thermometer: "TEPLOTA", semicircle: "ROZSAH", ring: "HODNOTA" };
+        const vx = x, vy = y, vw = w, vh = h;
+        if (item.variant === "battery") {
+          context.strokeStyle = "#111111"; context.lineWidth = Math.max(1, vh * .07); context.strokeRect(vx + vw * .05, vy + vh * .2, vw * .78, vh * .6); context.fillStyle = "#111111"; context.fillRect(vx + vw * .84, vy + vh * .38, vw * .08, vh * .24); context.fillStyle = "#d71912"; context.fillRect(vx + vw * .09, vy + vh * .27, vw * .68 * item.value / 100, vh * .46);
+        } else if (item.variant === "thermometer") {
+          context.strokeStyle = "#111111"; context.lineWidth = Math.max(2, vw * .08); context.beginPath(); context.moveTo(vx + vw / 2, vy + vh * .76); context.lineTo(vx + vw / 2, vy + vh * .14); context.stroke(); context.strokeStyle = "#d71912"; context.beginPath(); context.moveTo(vx + vw / 2, vy + vh * .82); context.lineTo(vx + vw / 2, vy + vh * (.76 - .56 * item.value / 100)); context.stroke();
+        } else {
+          const semicircle = item.variant === "semicircle";
+          const start = semicircle ? Math.PI : -Math.PI / 2;
+          const extent = semicircle ? Math.PI : Math.PI * 2;
+          const radius = Math.min(vw, vh) * .34; context.lineWidth = Math.max(2, radius * .24); if (item.showTrack) { context.strokeStyle = "#111111"; context.beginPath(); context.arc(vx + vw / 2, vy + vh / 2, radius, start, start + extent); context.stroke(); }
+          context.strokeStyle = "#d71912"; context.beginPath(); context.arc(vx + vw / 2, vy + vh / 2, radius, start, start + extent * item.value / 100); context.stroke();
+        }
+        if (item.showValue) { context.fillStyle = "#111111"; context.font = `900 ${Math.max(7, Math.min(w, h) * .2)}px Arial`; context.textAlign = "center"; context.textBaseline = "middle"; context.fillText(`${Math.round(item.value)}${item.showPercent ? (item.variant === "thermometer" ? "°" : "%") : ""}`, x + w / 2, y + h / 2, w * .7); }
+        if (item.showLabel) { context.font = `900 ${Math.max(4, h * .1)}px Arial`; context.textAlign = "center"; context.textBaseline = "bottom"; context.fillText(labels[item.variant] || "HODNOTA", x + w / 2, y + h, w); }
+      } else if (item.kind === "signal") {
+        const active = typeof item.resolvedActive === "boolean" ? item.resolvedActive : !["off", "inactive"].includes(item.variant);
+        const inactive = !active;
+        context.fillStyle = "#ffffff"; context.fillRect(x, y, w, h); context.strokeStyle = "#111111"; context.lineWidth = Math.max(1, h * .07); context.strokeRect(x, y, w, h); context.fillStyle = inactive ? "#111111" : "#d71912"; context.fillRect(x, y, Math.max(3, w * .06), h);
+        let cursorX = x + Math.max(5, w * .1);
+        if (item.showIcon) { const iconSize = Math.max(4, h * .38); context.fillRect(cursorX, y + (h - iconSize) / 2, iconSize, iconSize); cursorX += iconSize + 4; }
+        if (item.showLabel) { context.fillStyle = "#111111"; context.font = `900 ${Math.max(6, h * .32)}px Arial`; context.textAlign = "left"; context.textBaseline = "middle"; context.fillText(item.text || "Stav", cursorX, y + h / 2, w - (cursorX - x) - (item.showState ? w * .22 : 3)); }
+        if (item.showState && ["on", "off"].includes(item.variant)) { const tw = Math.max(14, w * .2); const th = Math.max(7, h * .45); const tx = x + w - tw - 3; const ty = y + (h - th) / 2; context.strokeStyle = "#111111"; context.strokeRect(tx, ty, tw, th); context.fillStyle = active ? "#d71912" : "#111111"; context.fillRect(active ? tx + tw * .58 : tx + 2, ty + 2, tw * .28, Math.max(2, th - 4)); }
+      } else if (item.kind === "icon") {
+        // MDI web components cannot be drawn directly onto a bitmap; use a clear,
+        // palette-safe symbol fallback while preserving the selected icon in preview.
+        context.fillStyle = item.color; context.font = `700 ${Math.max(10, Math.min(w, h) * .72)}px Arial`; context.textAlign = "center"; context.textBaseline = "middle"; context.fillText("◆", x + w / 2, y + h / 2);
       } else {
+        if (item.fill !== "transparent") { context.fillStyle = item.fill; context.fillRect(x, y, w, h); }
         context.strokeRect(x, y, w, h);
       }
+      context.restore();
     }
     context.restore();
   },
@@ -1753,8 +2031,8 @@ export const devicesMixin = {
                 <div class="designer-device-bezel ${pe29Layout ? "designer-device-pe29" : ""} ${large400Layout ? "designer-device-large400" : ""} designer-device-landscape">${large400Layout ? `<span class="device-large400-top-band"></span><span class="device-large400-bottom-band"><span class="device-large400-label">${this._renderDeviceBarcode(address, true)}<span class="device-large400-mac">${this._escape(address)}</span></span></span>` : pe29Layout ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, false)}</span>` : `<span class="designer-device-code">${this._escape(physicalCode)}</span>`}</div>
                 <div class="designer-device-screen template-designer-screen">
                   <div class="template-device-layout layout-${layout} ${large400Layout ? "is-large-display" : "is-small-display"}">
-                    ${this._renderDisplayTemplateSurface(template, large400Layout ? (autoFit ? autoFormat : (this._displayTemplateFormats?.primary || "narrow")) : (orientation === "landscape" ? "wide" : "narrow"), true, "primary", autoFit || !large400Layout, large400Layout ? (this._displayTemplateSizes?.primary || "large") : "large", autoFit, primaryFillsDisplay ? autoSlotWidth : 0, primaryFillsDisplay ? autoSlotHeight : 0)}
-                    ${large400Layout && layout !== "single" ? this._renderDisplayTemplateSurface(secondaryTemplate, autoFit ? autoFormat : (this._displayTemplateFormats?.secondary || "narrow"), false, "secondary", autoFit, "small", autoFit, autoFit ? autoSlotWidth : 0, autoFit ? autoSlotHeight : 0) : ""}
+                    ${this._renderDisplayTemplateSurface(template, large400Layout ? (autoFit ? autoFormat : template?.user_created ? (orientation === "landscape" ? "wide" : "narrow") : (this._displayTemplateFormats?.primary || "narrow")) : (orientation === "landscape" ? "wide" : "narrow"), true, "primary", autoFit || !large400Layout, large400Layout ? (this._displayTemplateSizes?.primary || "large") : "large", autoFit, primaryFillsDisplay ? autoSlotWidth : 0, primaryFillsDisplay ? autoSlotHeight : 0)}
+                    ${large400Layout && layout !== "single" ? this._renderDisplayTemplateSurface(secondaryTemplate, autoFit ? autoFormat : secondaryTemplate?.user_created ? (orientation === "landscape" ? "wide" : "narrow") : (this._displayTemplateFormats?.secondary || "narrow"), false, "secondary", autoFit, "small", autoFit, autoFit ? autoSlotWidth : 0, autoFit ? autoSlotHeight : 0) : ""}
                   </div>
                   ${autoFit ? `<canvas class="template-dithered-preview" data-dithered-preview="${ditherKey}" data-dithered-address="${this._escape(address)}" width="${sourceWidth}" height="${sourceHeight}"></canvas>` : ""}
                 </div>
@@ -1770,16 +2048,129 @@ export const devicesMixin = {
   },
 
   _renderTemplateEditorTools() {
-    const tool = (type, icon, title) => `<button type="button" data-template-editor-tool="${type}" data-template-editor-icon="${icon}"><ha-icon icon="mdi:${icon}"></ha-icon><span>${title}</span></button>`;
-    const icons = [["weather-sunny", "Slunce"], ["home", "Dům"], ["thermometer", "Teplota"], ["water-percent", "Vlhkost"], ["wifi", "Wi-Fi"], ["lightning-bolt", "Energie"], ["calendar", "Kalendář"], ["lock", "Zámek"]];
-    return `<div class="template-editor-tools">
-      <div class="template-editor-panel-heading"><ha-icon icon="mdi:shape-plus"></ha-icon><span><strong>Editor prvků</strong><small>Přidejte vlastní obsah nad šablonu</small></span></div>
-      <div class="template-editor-tool-group"><small>Základní prvky</small><div class="template-editor-tool-grid">
-        ${tool("text", "format-text", "Text")}${tool("rect", "rectangle-outline", "Obdélník")}${tool("circle", "circle-outline", "Kruh")}${tool("line", "vector-line", "Čára")}
-        <button type="button" data-template-editor-import><ha-icon icon="mdi:image-plus"></ha-icon><span>Obrázek</span></button><input id="templateEditorImage" type="file" accept="image/*" hidden>
-      </div></div>
-      <div class="template-editor-tool-group"><small>Přednastavené ikony</small><div class="template-editor-icon-grid">${icons.map(([icon, title]) => `<button type="button" title="${title}" data-template-editor-tool="icon" data-template-editor-icon="${icon}"><ha-icon icon="mdi:${icon}"></ha-icon></button>`).join("")}</div></div>
-      ${(this._templateEditorElements || []).length ? `<div class="template-editor-layers"><small>Přidané prvky</small>${this._templateEditorElements.map((item) => `<div><ha-icon icon="mdi:${item.type === "image" ? "image-outline" : item.icon || "shape-outline"}"></ha-icon><span>${this._escape(item.label)}</span><button type="button" data-template-editor-remove="${item.id}" title="Odstranit"><ha-icon icon="mdi:close"></ha-icon></button></div>`).join("")}</div>` : ""}
+    const categories = [
+      ["text", "format-text", "Text"], ["shapes", "shape-outline", "Tvary"], ["icons", "emoticon-outline", "Ikony"],
+      ["charts", "chart-box-outline", "Grafy"], ["gauges", "gauge", "Ukazatele"], ["controls", "toggle-switch-outline", "Signalizace"],
+      ["images", "image-outline", "Obrázky"], ["layers", "layers-triple-outline", "Vrstvy"],
+    ];
+    const active = String(this._templateElementPaletteCategory || "");
+    return `<nav class="template-tool-rail" aria-label="Kategorie prvků">${categories.map(([id, icon, title]) => `<button type="button" class="${active === id ? "is-active" : ""}" data-template-palette-category="${id}" title="${title}" aria-label="${title}" aria-pressed="${active === id}"><ha-icon icon="mdi:${icon}"></ha-icon></button>`).join("")}</nav>`;
+  },
+
+  _renderTemplateElementPalette() {
+    const category = String(this._templateElementPaletteCategory || "");
+    if (!category) return "";
+    const meta = {
+      text: ["Text", "Texty a popisky"], shapes: ["Tvary", "Základní geometrické prvky"], icons: ["Ikony", "Symboly Material Design"],
+      charts: ["Grafy", "Vizuální průběhy, sloupce a podíly"], gauges: ["Ukazatele", "Hodnoty, kapacita a průběh"], controls: ["Signalizace", "Stavy zapnuto, vypnuto a aktivita"],
+      images: ["Obrázky", "Vlastní soubor z počítače"], layers: ["Vrstvy", "Pořadí objektů na displeji"],
+    };
+    const [title, description] = meta[category] || meta.shapes;
+    const anchorIndex = ["text", "shapes", "icons", "charts", "gauges", "controls", "images", "layers"].indexOf(category);
+    const tool = (type, icon, label, preset = {}) => {
+      const settings = typeof preset === "string" ? { icon: preset } : { ...preset };
+      settings.label ||= label;
+      return `<button type="button" class="template-palette-item variant-${this._escape(settings.variant || type)}" draggable="true" data-template-editor-tool="${type}" data-template-editor-icon="${this._escape(settings.icon || "")}" data-template-editor-preset="${this._escape(JSON.stringify(settings))}" title="Vložit ${this._escape(label)}"><span class="template-palette-visual"><ha-icon icon="mdi:${icon}"></ha-icon></span><span>${this._escape(label)}</span></button>`;
+    };
+    const iconNames = [
+      ["star", "Hvězda"], ["heart", "Srdce"], ["home", "Dům"], ["account", "Osoba"],
+      ["weather-sunny", "Slunce"], ["weather-cloudy", "Mrak"], ["thermometer", "Teplota"], ["water-percent", "Vlhkost"],
+      ["wifi", "Wi-Fi"], ["bluetooth", "Bluetooth"], ["lightning-bolt", "Energie"], ["battery", "Baterie"],
+      ["calendar", "Kalendář"], ["clock-outline", "Čas"], ["lock-outline", "Zámek"], ["shield-lock-outline", "Zabezpečení"],
+      ["lightbulb-on-outline", "Světlo"], ["power", "Napájení"], ["check-circle-outline", "Hotovo"], ["alert-circle-outline", "Upozornění"],
+      ["information-outline", "Informace"], ["cart-outline", "Košík"], ["currency-usd", "Cena"], ["map-marker-outline", "Místo"],
+      ["door-open", "Dveře"], ["window-open-variant", "Okno"], ["fan", "Ventilátor"], ["radiator", "Topení"],
+      ["water-pump", "Čerpadlo"], ["sprinkler-variant", "Zavlažování"], ["solar-power", "Fotovoltaika"], ["ev-station", "Nabíjení"],
+      ["bell-outline", "Zvonek"], ["camera-outline", "Kamera"], ["package-variant-closed", "Zásilka"], ["tools", "Dílna"],
+    ];
+    let content = "";
+    if (category === "text") content = [
+      tool("text", "format-title", "Nadpis", { text: "Nadpis", fontSize: 28, fontWeight: "900", h: 13, variant: "heading" }),
+      tool("text", "format-text", "Běžný text", { text: "Vlastní text", fontSize: 17, fontWeight: "400", variant: "body" }),
+      tool("text", "numeric", "Velká hodnota", { text: "24,5 °C", fontSize: 32, fontWeight: "900", h: 16, variant: "value" }),
+      tool("button", "label-outline", "Text v rámečku", { text: "Popisek", fontSize: 14, radius: 7, variant: "label" }),
+    ].join("");
+    else if (category === "shapes") content = [
+      tool("rect", "rectangle-outline", "Obdélník", { variant: "outline" }),
+      tool("rect", "rectangle", "Plný blok", { fill: "#111111", stroke: "#111111", variant: "filled" }),
+      tool("rect", "rectangle-rounded-outline", "Zaoblený blok", { radius: 12, variant: "rounded" }),
+      tool("circle", "circle-outline", "Kruh", { variant: "circle" }),
+      tool("circle", "circle", "Plný kruh", { fill: "#111111", variant: "circle-filled" }),
+      tool("line", "vector-line", "Čára", { variant: "line" }),
+    ].join("");
+    else if (category === "icons") content = iconNames.map(([icon, label]) => tool("icon", icon, label, icon)).join("");
+    else if (category === "charts") content = [
+      tool("chart", "chart-line", "Čárový", { variant: "line" }),
+      tool("chart", "chart-areaspline", "Plošný", { variant: "area" }),
+      tool("chart", "chart-bar", "Sloupcový", { variant: "bar" }),
+      tool("chart", "chart-timeline-variant-shimmer", "Schodový", { variant: "steps" }),
+      tool("chart", "chart-donut", "Prstencový", { variant: "donut", value: 68 }),
+      tool("chart", "chart-line-variant", "Mini trend", { variant: "sparkline", fill: "transparent", strokeWidth: 3, h: 18 }),
+    ].join("");
+    else if (category === "gauges") content = [
+      tool("gauge", "gauge", "Kruhový", { variant: "ring", value: 72 }),
+      tool("gauge", "gauge-low", "Půlkruhový", { variant: "semicircle", value: 54 }),
+      tool("gauge", "battery-70", "Baterie", { variant: "battery", value: 72 }),
+      tool("gauge", "thermometer", "Teploměr", { variant: "thermometer", value: 64 }),
+      tool("slider", "progress-check", "Průběh", { variant: "progress", value: 68 }),
+    ].join("");
+    else if (category === "controls") content = [
+      tool("signal", "toggle-switch", "Zapnuto", { variant: "on", text: "Zapnuto", icon: "power", value: 100, fill: "#ffffff", color: "#111111" }),
+      tool("signal", "toggle-switch-off-outline", "Vypnuto", { variant: "off", text: "Vypnuto", icon: "power-off", value: 0 }),
+      tool("signal", "check-circle", "Aktivní", { variant: "active", text: "Aktivní", icon: "check-circle", value: 100 }),
+      tool("signal", "minus-circle-outline", "Neaktivní", { variant: "inactive", text: "Neaktivní", icon: "minus-circle-outline", value: 0 }),
+      tool("signal", "alert-circle", "Výstraha", { variant: "warning", text: "Výstraha", icon: "alert-circle", color: "#d71912", stroke: "#d71912" }),
+      tool("signal", "image-outline", "Obrázková", { variant: "picture", text: "Stav", icon: "lightbulb-on-outline", w: 28, h: 24 }),
+    ].join("");
+    else if (category === "images") {
+      const assets = this._templateImageLibrary || [];
+      content = `<button type="button" class="template-palette-item is-import" data-template-editor-import><ha-icon icon="mdi:image-plus"></ha-icon><span>Nahrát obrázek</span></button><input id="templateEditorImage" type="file" accept="image/*" hidden>${assets.map((asset) => `<span class="template-library-image"><button type="button" data-template-library-image="${this._escape(asset.id)}" title="Vložit ${this._escape(asset.name || "obrázek")}"><img src="${this._escape(asset.src)}" alt=""><span>${this._escape(asset.name || "Obrázek")}</span></button><button type="button" class="template-library-image-remove" data-template-library-remove="${this._escape(asset.id)}" title="Odstranit z knihovny" aria-label="Odstranit ${this._escape(asset.name || "obrázek")} z knihovny"><ha-icon icon="mdi:close"></ha-icon></button></span>`).join("")}`;
+    }
+    else if (category === "layers") {
+      const selected = String(this._selectedTemplateEditorElementId || "");
+      content = `<div class="template-palette-layers">${(this._templateEditorElements || []).length ? [...this._templateEditorElements].reverse().map((item) => `<div class="${selected === item.id ? "is-selected" : ""}" data-template-editor-select="${this._escape(item.id)}"><ha-icon icon="mdi:${item.type === "image" ? "image-outline" : item.icon || ({ text: "format-text", rect: "rectangle-outline", circle: "circle-outline", line: "vector-line", button: "label-outline", slider: "progress-check", chart: "chart-box-outline", gauge: "gauge", signal: "toggle-switch-outline" }[item.type] || "shape-outline")}"></ha-icon><button type="button" class="template-layer-name" data-template-editor-select="${this._escape(item.id)}">${this._escape(item.label)}</button><button type="button" data-template-editor-remove="${this._escape(item.id)}" title="Odstranit"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button></div>`).join("") : `<p class="template-layers-empty">Na plátně zatím nejsou žádné vlastní prvky.</p>`}</div>`;
+    }
+    return `<section class="card template-bottom-palette is-${category}" aria-label="Paleta ${this._escape(title)}" style="--palette-anchor:${Math.max(0, anchorIndex)}"><header><span><strong>${this._escape(title)}</strong><small>${this._escape(description)}</small></span><button type="button" data-template-palette-close title="Zavřít paletu" aria-label="Zavřít paletu"><ha-icon icon="mdi:close"></ha-icon></button></header><div class="template-palette-items ${category === "layers" ? "is-layers" : ""}">${content}</div></section>`;
+  },
+
+  _templateEditorElement() {
+    return (this._templateEditorElements || []).find((item) => item.id === this._selectedTemplateEditorElementId) || null;
+  },
+
+  _renderTemplateElementInspector() {
+    const item = this._templateEditorElement();
+    if (!item) {
+      this._selectedTemplateEditorElementId = "";
+      return "";
+    }
+    const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+    const field = (title, prop, value, min = 0, max = 100, step = 1, suffix = "%") => `<label class="template-property-field"><span>${title}</span><div><input type="number" min="${min}" max="${max}" step="${step}" value="${number(value)}" data-template-element-prop="${prop}"><small>${suffix}</small></div></label>`;
+    const colors = (prop, value, allowTransparent = false) => `<div class="template-property-colors" data-template-color-group="${prop}">${allowTransparent ? `<button type="button" class="is-transparent ${value === "transparent" ? "is-selected" : ""}" data-template-element-color="${prop}:transparent" title="Bez barvy"><ha-icon icon="mdi:water-off-outline"></ha-icon></button>` : ""}${[["#111111", "Černá"], ["#d71912", "Červená"], ["#ffffff", "Bílá"]].map(([color, title]) => `<button type="button" style="--swatch:${color}" class="${value === color ? "is-selected" : ""}" data-template-element-color="${prop}:${color}" title="${title}"></button>`).join("")}</div>`;
+    const toggles = (items) => `<div class="template-component-toggles">${items.map(([prop, label]) => `<label><input type="checkbox" data-template-element-toggle="${prop}" ${item[prop] !== false ? "checked" : ""}><span><i></i>${label}</span></label>`).join("")}</div>`;
+    const intervalOptions = [["change", "Při každé změně"], ["minute", "Nejvýše 1× za minutu"], ["hour", "Nejvýše 1× za hodinu"], ["day", "Nejvýše 1× denně"], ["week", "Nejvýše 1× týdně"]];
+    const resetOptions = [["never", "Nemazat automaticky"], ["hour", "Vymazat po hodině"], ["day", "Vymazat po dni"], ["week", "Vymazat po týdnu"]];
+    const select = (title, prop, value, options) => `<label class="template-property-wide"><span>${title}</span><select data-template-element-prop="${prop}">${options.map(([key, label]) => `<option value="${key}" ${value === key ? "selected" : ""}>${label}</option>`).join("")}</select></label>`;
+    const entity = item.entityId ? this._hass?.states?.[item.entityId] : null;
+    const entityValue = this._templateElementEntityRaw?.(item);
+    const entityBinding = ["chart", "gauge", "signal", "slider"].includes(item.type) ? `<section class="template-property-section template-ha-binding"><h4>Home Assistant</h4><label class="template-property-wide"><span>Entita nebo pomocník</span><ha-selector data-template-element-entity-picker="${this._escape(item.id)}"></ha-selector></label><label class="template-property-wide"><span>Entity ID</span><input type="text" value="${this._escape(item.entityId || "")}" data-template-element-entity-id placeholder="sensor.teplota"></label><label class="template-property-wide"><span>Atribut (volitelné)</span><input type="text" value="${this._escape(item.entityAttribute || "")}" data-template-element-prop="entityAttribute" placeholder="Například prices"></label>${item.entityId ? `<div class="template-entity-current"><ha-icon icon="mdi:home-assistant"></ha-icon><span><strong>${this._escape(entity?.attributes?.friendly_name || item.entityId)}</strong><small>${this._escape(entityValue === undefined ? "Entita nemá hodnotu" : String(entityValue))}</small></span></div>` : `<p class="template-entity-help">Bez vybrané entity se používá ručně nastavená hodnota.</p>`}</section>` : "";
+    const textTypes = ["text", "button", "signal"];
+    const shapeTypes = ["rect", "circle", "button", "signal"];
+    return `<div class="template-element-inspector">
+      <div class="template-editor-panel-heading"><ha-icon icon="mdi:tune-vertical-variant"></ha-icon><span><strong>Vlastnosti prvku</strong><small>${this._escape(item.label)}</small></span></div>
+      <div class="template-inspector-actions"><button type="button" data-template-element-duplicate><ha-icon icon="mdi:content-duplicate"></ha-icon>Duplikovat</button><button type="button" class="is-danger" data-template-element-delete><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat</button></div>
+      ${textTypes.includes(item.type) ? `<section class="template-property-section"><h4>Text</h4><label class="template-property-wide"><span>Obsah</span><input type="text" value="${this._escape(item.text || "")}" data-template-element-prop="text"></label><div class="template-property-row">${field("Velikost", "fontSize", item.fontSize, 6, 72, 1, "px")}<label class="template-property-field"><span>Řez</span><select data-template-element-prop="fontWeight"><option value="400" ${String(item.fontWeight) === "400" ? "selected" : ""}>Normální</option><option value="700" ${String(item.fontWeight) === "700" ? "selected" : ""}>Tučný</option><option value="900" ${String(item.fontWeight) === "900" ? "selected" : ""}>Extra tučný</option></select></label></div><label class="template-property-wide"><span>Zarovnání</span><div class="template-align-buttons">${[["left", "format-align-left"], ["center", "format-align-center"], ["right", "format-align-right"]].map(([value, icon]) => `<button type="button" class="${item.textAlign === value ? "is-selected" : ""}" data-template-element-align="${value}"><ha-icon icon="mdi:${icon}"></ha-icon></button>`).join("")}</div></label><label class="template-property-wide"><span>Barva textu</span>${colors("color", item.color)}</label></section>` : ""}
+      ${["icon", "signal"].includes(item.type) ? `<section class="template-property-section"><h4>Ikona</h4><label class="template-property-wide"><span>Název MDI ikony</span><input type="text" value="${this._escape(item.icon || "star")}" data-template-element-prop="icon"></label><label class="template-property-wide"><span>Barva</span>${colors("color", item.color)}</label></section>` : ""}
+      ${shapeTypes.includes(item.type) ? `<section class="template-property-section"><h4>Vzhled</h4><label class="template-property-wide"><span>Výplň</span>${colors("fill", item.fill, true)}</label><label class="template-property-wide"><span>Rámeček</span>${colors("stroke", item.stroke)}</label><div class="template-property-row">${field("Tloušťka", "strokeWidth", item.strokeWidth, 0, 12, 1, "px")}${field("Zaoblení", "radius", item.radius, 0, 50, 1, "px")}</div></section>` : ""}
+      ${item.type === "slider" ? `<section class="template-property-section"><h4>Hodnota slideru</h4>${field("Hodnota", "value", item.value, 0, 100, 1, "%")}<label class="template-property-wide"><span>Aktivní barva</span>${colors("color", item.color)}</label></section>` : ""}
+      ${["chart", "gauge"].includes(item.type) ? `<section class="template-property-section"><h4>Data</h4>${field("Hodnota", "value", item.value, 0, 100, 1, "%")}<label class="template-property-wide"><span>Barva</span>${colors("color", item.color)}</label></section>` : ""}
+      ${entityBinding}
+      ${item.type === "chart" ? `<section class="template-property-section"><h4>Historie grafu</h4>${field("Počet posledních hodnot", "historyLimit", item.historyLimit, 1, 20, 1, "")} ${select("Interval ukládání hodnot", "sampleInterval", item.sampleInterval, intervalOptions)}${select("Automatické mazání historie", "resetInterval", item.resetInterval, resetOptions)}<button type="button" class="template-history-clear" data-template-element-history-clear><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vymazat uložené hodnoty</button><small class="template-history-count">Uloženo ${(item.historyValues || []).length} z ${item.historyLimit} hodnot</small></section>` : ""}
+      ${item.type === "chart" ? `<section class="template-property-section"><h4>Části grafu</h4>${toggles([["showValue", "Hodnota"], ["showPercent", "Znak %"], ["showLabel", "Popisek"], ["showGrid", "Mřížka"], ["showPoints", "Body grafu"], ["showFill", "Barevná plocha"], ["showTrack", "Podklad kruhu"]])}</section>` : ""}
+      ${item.type === "gauge" ? `<section class="template-property-section"><h4>Části ukazatele</h4>${toggles([["showValue", "Hodnota"], ["showPercent", "Jednotka"], ["showLabel", "Popisek"], ["showTrack", "Podkladová stupnice"]])}</section>` : ""}
+      ${item.type === "signal" ? `<section class="template-property-section"><h4>Části signalizace</h4>${toggles([["showIcon", "Ikona"], ["showLabel", "Text"], ["showState", "Stav / přepínač"]])}</section>` : ""}
+      ${item.type === "slider" ? `<section class="template-property-section"><h4>Části průběhu</h4>${toggles([["showValue", "Hodnota"], ["showPercent", "Znak %"], ["showScale", "Číselná stupnice"], ["showTrack", "Podkladová čára"]])}</section>` : ""}
+      <section class="template-property-section"><h4>Transformace</h4><div class="template-property-grid">${field("X", "x", item.x)}${field("Y", "y", item.y)}${field("Šířka", "w", item.w, 2)}${field("Výška", "h", item.h, 2)}${field("Otočení", "rotation", item.rotation, -180, 180, 1, "°")}</div><div class="template-layer-order"><button type="button" data-template-element-order="back"><ha-icon icon="mdi:arrange-send-backward"></ha-icon>Dozadu</button><button type="button" data-template-element-order="front"><ha-icon icon="mdi:arrange-bring-forward"></ha-icon>Dopředu</button></div></section>
+      <button type="button" class="template-inspector-close" data-template-element-deselect><ha-icon icon="mdi:arrow-left"></ha-icon>Zpět k nastavení šablony</button>
     </div>`;
   },
 
@@ -1879,22 +2270,201 @@ export const devicesMixin = {
     });
   },
 
-  _addTemplateEditorElement(type, icon = "") {
-    const labels = { text: "Vlastní text", rect: "Obdélník", circle: "Kruh", line: "Čára", icon: "Ikona" };
-    this._templateEditorElements ||= [];
-    this._templateEditorElements.push({
-      id: `template-element-${Date.now()}-${this._templateEditorElements.length}`,
-      type,
-      icon,
-      label: type === "icon" ? `Ikona ${icon}` : labels[type] || "Prvek",
-      x: 50 + (this._templateEditorElements.length % 3) * 8,
-      y: 42 + (this._templateEditorElements.length % 4) * 8,
-    });
+  _normalizeTemplateEditorElement(source = {}) {
+    const type = String(source.type || "rect");
+    const defaults = {
+      text: { w: 42, h: 10, text: "Vlastní text", fontSize: 18, fill: "transparent" },
+      rect: { w: 36, h: 22, fill: "transparent" }, circle: { w: 25, h: 25, fill: "transparent" },
+      line: { w: 42, h: 4, fill: "#111111" }, icon: { w: 18, h: 18, icon: "star", fill: "transparent" },
+      image: { w: 34, h: 28, fill: "transparent" }, button: { w: 42, h: 14, text: "Popisek", fontSize: 15, fill: "#ffffff", radius: 6 },
+      slider: { w: 48, h: 15, value: 60, fill: "transparent", radius: 0, strokeWidth: 2, entityId: "", entityAttribute: "", showValue: true, showPercent: true, showScale: true, showTrack: true },
+      chart: { w: 52, h: 30, value: 68, fill: "transparent", radius: 0, strokeWidth: 2, entityId: "", entityAttribute: "", historyLimit: 10, sampleInterval: "change", resetInterval: "never", historyValues: [], historyUpdatedAt: 0, historyResetAt: 0, showValue: true, showPercent: true, showLabel: false, showGrid: true, showPoints: true, showFill: true, showTrack: true },
+      gauge: { w: 26, h: 34, value: 72, fill: "transparent", radius: 0, strokeWidth: 2, entityId: "", entityAttribute: "", variant: "ring", showValue: true, showPercent: true, showLabel: false, showTrack: true },
+      signal: { w: 40, h: 14, value: 100, text: "Aktivní", icon: "check-circle", fontSize: 9, fill: "#ffffff", radius: 6, strokeWidth: 2, entityId: "", entityAttribute: "", variant: "active", showIcon: true, showLabel: true, showState: true },
+    }[type] || { w: 30, h: 20, fill: "transparent" };
+    const legacy = source.w === undefined || source.h === undefined;
+    const w = Math.max(2, Math.min(100, Number(source.w ?? defaults.w)));
+    const h = Math.max(2, Math.min(100, Number(source.h ?? defaults.h)));
+    const sourceX = Number(source.x ?? 50);
+    const sourceY = Number(source.y ?? 50);
+    const paletteColor = (value, fallback, transparent = false) => {
+      const normalized = String(value ?? fallback).toLowerCase();
+      if (transparent && normalized === "transparent") return "transparent";
+      if (["#fff", "#ffffff", "white"].includes(normalized)) return "#ffffff";
+      if (["#e31b1b", "#d71912", "#f00", "#ff0000", "red"].includes(normalized)) return "#d71912";
+      return "#111111";
+    };
+    return {
+      ...defaults, ...source, type, w, h,
+      x: Math.max(0, Math.min(100 - w, legacy ? sourceX - w / 2 : sourceX)),
+      y: Math.max(0, Math.min(100 - h, legacy ? sourceY - h / 2 : sourceY)),
+      rotation: Number(source.rotation || 0), color: paletteColor(source.color, "#111111"), fill: paletteColor(source.fill, defaults.fill ?? "transparent", true),
+      stroke: paletteColor(source.stroke, "#111111"), strokeWidth: Number(source.strokeWidth ?? 2), radius: Number(source.radius ?? defaults.radius ?? 0),
+      fontSize: Number(source.fontSize ?? defaults.fontSize ?? 16), fontWeight: String(source.fontWeight || "700"), textAlign: source.textAlign || "center",
+      value: Number(source.value ?? defaults.value ?? 50), historyLimit: Math.max(1, Math.min(20, Number(source.historyLimit ?? defaults.historyLimit ?? 10))),
+    };
+  },
+
+  _templateHistorySnapshot() {
+    return {
+      elements: structuredClone(this._templateEditorElements || []),
+      adjustments: structuredClone(this._templateElementAdjustments || {}),
+      selectedElementId: String(this._selectedTemplateEditorElementId || ""),
+      selectedPart: String(this._selectedTemplatePart || ""),
+    };
+  },
+
+  _pushTemplateHistory() {
+    this._templateUndoStack ||= [];
+    this._templateRedoStack ||= [];
+    const snapshot = this._templateHistorySnapshot();
+    const last = this._templateUndoStack.at(-1);
+    if (last && JSON.stringify(last) === JSON.stringify(snapshot)) return;
+    this._templateUndoStack.push(snapshot);
+    if (this._templateUndoStack.length > (this._templateHistoryLimit || 60)) this._templateUndoStack.shift();
+    this._templateRedoStack = [];
+  },
+
+  _restoreTemplateHistory(snapshot) {
+    if (!snapshot) return;
+    this._templateEditorElements = structuredClone(snapshot.elements || []);
+    this._templateElementAdjustments = structuredClone(snapshot.adjustments || {});
+    this._selectedTemplateEditorElementId = String(snapshot.selectedElementId || "");
+    this._selectedTemplatePart = String(snapshot.selectedPart || "");
+    this._templateOverlayDrag = null;
+    this._templatePropertyHistoryKey = "";
+    this._templateSaveResult = null;
     this._render();
     this._paint();
   },
 
-  _importTemplateEditorImage(file) {
+  _undoTemplateHistory() {
+    if (!this._templateUndoStack?.length) return;
+    this._templateRedoStack ||= [];
+    this._templateRedoStack.push(this._templateHistorySnapshot());
+    this._restoreTemplateHistory(this._templateUndoStack.pop());
+  },
+
+  _redoTemplateHistory() {
+    if (!this._templateRedoStack?.length) return;
+    this._templateUndoStack ||= [];
+    this._templateUndoStack.push(this._templateHistorySnapshot());
+    this._restoreTemplateHistory(this._templateRedoStack.pop());
+  },
+
+  _deleteSelectedTemplateElement() {
+    const id = String(this._selectedTemplateEditorElementId || "");
+    if (!id || !(this._templateEditorElements || []).some((item) => item.id === id)) return;
+    this._pushTemplateHistory();
+    this._templateEditorElements = this._templateEditorElements.filter((item) => item.id !== id);
+    this._selectedTemplateEditorElementId = "";
+    this._templateSaveResult = null;
+    this._render();
+    this._paint();
+  },
+
+  _addTemplateEditorElement(type, icon = "", position = null, preset = {}) {
+    const settings = preset && typeof preset === "object" && !Array.isArray(preset) ? preset : {};
+    const labels = { text: "Vlastní text", rect: "Obdélník", circle: "Kruh", line: "Čára", icon: "Ikona", button: "Text v rámečku", slider: "Stupnice", chart: "Graf", gauge: "Ukazatel", signal: "Signalizace" };
+    this._templateEditorElements ||= [];
+    this._pushTemplateHistory();
+    const item = this._normalizeTemplateEditorElement({
+      ...settings,
+      id: `template-element-${Date.now()}-${this._templateEditorElements.length}`,
+      type, icon: settings.icon || icon || undefined, label: settings.label || (type === "icon" ? `Ikona ${icon || "star"}` : labels[type] || "Prvek"),
+      x: position?.x, y: position?.y,
+    });
+    // Circular primitives start with an exact visual selection. Users can still
+    // resize width and height independently afterwards.
+    if (["icon", "circle"].includes(type) || (type === "chart" && item.variant === "donut") || (type === "gauge" && ["ring", "semicircle"].includes(item.variant))) this._fitTemplateElementVisualAspect(item, 1);
+    const centerX = Number(position?.x ?? 50);
+    const centerY = Number(position?.y ?? 50);
+    item.x = Math.max(0, Math.min(100 - item.w, centerX - item.w / 2));
+    item.y = Math.max(0, Math.min(100 - item.h, centerY - item.h / 2));
+    this._templateEditorElements.push(item);
+    this._selectedTemplateEditorElementId = item.id;
+    this._selectedTemplatePart = "";
+    this._templateSaveResult = null;
+    this._render();
+    this._paint();
+  },
+
+  _quantizeImportedTemplatePixel(red, green, blue, alpha = 255) {
+    if (alpha < 40) return [255, 255, 255, 255];
+    // Restore the colour classifier used by the original canvas designer.
+    // A nearest-palette calculation turns beige, brown and warm greys red even
+    // though the source is not red.  The physical panel has a separate red
+    // pigment, so only pixels with a genuinely dominant red channel may use it.
+    const redScore = red - Math.max(green, blue);
+    const luminance = (38 * red + 75 * green + 15 * blue) >> 7;
+    // The extra channel ratios keep skin, beige and warm paper tones out of the
+    // red plane while still mapping saturated red, orange and magenta correctly.
+    if (redScore > 45 && red > 120 && green < red * 0.68 && blue < red * 0.72) {
+      return [220, 20, 12, 255];
+    }
+    if (luminance < 160) return [0, 0, 0, 255];
+    return [255, 255, 255, 255];
+  },
+
+  _templateEditorSurfaceRatio() {
+    const surface = this.shadowRoot?.querySelector(".display-template-editor-stage .display-template-surface");
+    const bounds = surface?.getBoundingClientRect?.();
+    if (bounds?.width > 0 && bounds?.height > 0) return bounds.width / bounds.height;
+    const size = this._devicePreviewSize?.(this._device?.()) || { width: 296, height: 128 };
+    const long = Math.max(1, Number(size.width || 296), Number(size.height || 128));
+    const short = Math.max(1, Math.min(Number(size.width || 296), Number(size.height || 128)));
+    return this._displayTemplateOrientation === "portrait" ? short / long : long / short;
+  },
+
+  _fitTemplateElementVisualAspect(item, visualAspect = 1) {
+    const surfaceRatio = Math.max(.05, this._templateEditorSurfaceRatio());
+    const aspect = Math.max(.05, Number(visualAspect || 1));
+    let width = Math.max(2, Number(item.w || 2));
+    let height = Math.max(2, Number(item.h || 2));
+    const currentAspect = width * surfaceRatio / height;
+    if (currentAspect > aspect) width = height * aspect / surfaceRatio;
+    else height = width * surfaceRatio / aspect;
+    item.w = Math.round(Math.max(2, Math.min(100, width)) * 100) / 100;
+    item.h = Math.round(Math.max(2, Math.min(100, height)) * 100) / 100;
+    item.visualAspect = aspect;
+    return item;
+  },
+
+  _rememberTemplateImageAsset(src, name = "Obrázek", aspect = 1) {
+    this._templateImageLibrary ||= [];
+    const existing = this._templateImageLibrary.find((asset) => asset.src === src);
+    if (existing) return existing;
+    const asset = {
+      id: `template-library-image-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`,
+      name: String(name || "Obrázek"),
+      src,
+      aspect: Math.max(.05, Number(aspect || 1)),
+      created_at: new Date().toISOString(),
+    };
+    this._templateImageLibrary = [asset, ...this._templateImageLibrary].slice(0, 30);
+    return asset;
+  },
+
+  _insertTemplateLibraryImage(asset, position = null) {
+    if (!asset?.src) return null;
+    this._templateEditorElements ||= [];
+    this._pushTemplateHistory();
+    const aspect = Math.max(.05, Number(asset.aspect || 1));
+    const item = this._normalizeTemplateEditorElement({ id: `template-image-${Date.now()}-${this._templateEditorElements.length}`, type: "image", label: asset.name || "Obrázek", src: asset.src });
+    item.w = Math.min(55, Math.max(18, aspect >= 1 ? 38 : 26));
+    item.h = Math.min(55, Math.max(14, item.w / Math.max(.3, aspect)));
+    this._fitTemplateElementVisualAspect(item, aspect);
+    item.x = Math.max(0, Math.min(100 - item.w, Number(position?.x ?? 50) - item.w / 2));
+    item.y = Math.max(0, Math.min(100 - item.h, Number(position?.y ?? 50) - item.h / 2));
+    this._templateEditorElements.push(item);
+    this._selectedTemplateEditorElementId = item.id;
+    this._templateSaveResult = null;
+    this._render();
+    this._paint();
+    return item;
+  },
+
+  _importTemplateEditorImage(file, position = null) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
@@ -1907,38 +2477,288 @@ export const devicesMixin = {
         const context = canvas.getContext("2d", { willReadFrequently: true });
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
         const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
-        const palette = [[255, 255, 255], [10, 10, 10], [227, 27, 27]];
         for (let index = 0; index < pixels.data.length; index += 4) {
-          if (pixels.data[index + 3] < 40) {
-            [pixels.data[index], pixels.data[index + 1], pixels.data[index + 2], pixels.data[index + 3]] = [255, 255, 255, 255];
-            continue;
-          }
-          const color = palette.reduce((best, candidate) => {
-            const distance = (pixels.data[index] - candidate[0]) ** 2 + (pixels.data[index + 1] - candidate[1]) ** 2 + (pixels.data[index + 2] - candidate[2]) ** 2;
-            return distance < best.distance ? { candidate, distance } : best;
-          }, { candidate: palette[0], distance: Infinity }).candidate;
-          [pixels.data[index], pixels.data[index + 1], pixels.data[index + 2]] = color;
+          const color = this._quantizeImportedTemplatePixel(
+            pixels.data[index], pixels.data[index + 1], pixels.data[index + 2], pixels.data[index + 3]
+          );
+          [pixels.data[index], pixels.data[index + 1], pixels.data[index + 2], pixels.data[index + 3]] = color;
         }
         context.putImageData(pixels, 0, 0);
-        this._templateEditorElements ||= [];
-        this._templateEditorElements.push({ id: `template-image-${Date.now()}`, type: "image", label: file.name || "Obrázek", src: canvas.toDataURL("image/png"), x: 50, y: 50 });
-        this._render();
-        this._paint();
+        const aspect = canvas.width / Math.max(1, canvas.height);
+        const asset = this._rememberTemplateImageAsset(canvas.toDataURL("image/png"), file.name || "Obrázek", aspect);
+        this._templateElementPaletteCategory = "";
+        this._insertTemplateLibraryImage(asset, position);
+        this._saveDisplayTemplateDraft?.().catch(() => {});
       };
       image.src = reader.result;
     };
     reader.readAsDataURL(file);
   },
 
-  _renderTemplateEditorOverlays() {
-    return `<div class="template-editor-overlays">${(this._templateEditorElements || []).map((item) => {
-      const style = `left:${item.x}%;top:${item.y}%`;
-      if (item.type === "image") return `<span class="template-overlay template-overlay-image" style="${style}"><img src="${item.src}" alt="${this._escape(item.label)}"></span>`;
-      if (item.type === "text") return `<span class="template-overlay template-overlay-text" style="${style}">Vlastní text</span>`;
-      if (item.type === "rect" || item.type === "circle") return `<span class="template-overlay template-overlay-shape is-${item.type}" style="${style}"></span>`;
-      if (item.type === "line") return `<span class="template-overlay template-overlay-line" style="${style}"></span>`;
-      return `<span class="template-overlay template-overlay-icon" style="${style}"><ha-icon icon="mdi:${item.icon || "star"}"></ha-icon></span>`;
+  _templateElementEntityRaw(item) {
+    const entityId = String(item?.entityId || "").trim();
+    if (!entityId) return undefined;
+    const state = this._hass?.states?.[entityId];
+    if (!state) return undefined;
+    const attribute = String(item.entityAttribute || "").trim();
+    return attribute ? state.attributes?.[attribute] : state.state;
+  },
+
+  _templateEntityIntervalMs(interval) {
+    return { minute: 60_000, hour: 3_600_000, day: 86_400_000, week: 604_800_000 }[interval] || 0;
+  },
+
+  _templateEntityIsActive(value) {
+    const normalized = String(value ?? "").trim().toLowerCase();
+    return !["", "0", "off", "false", "no", "closed", "unavailable", "unknown", "none", "null"].includes(normalized);
+  },
+
+  _refreshTemplateEntityElements(now = Date.now()) {
+    let changed = false;
+    for (const item of this._templateEditorElements || []) {
+      if (!["chart", "gauge", "signal", "slider"].includes(item.type) || !item.entityId) continue;
+      const raw = this._templateElementEntityRaw(item);
+      if (raw === undefined || raw === null) continue;
+      if (item.type === "signal") {
+        const active = this._templateEntityIsActive(raw);
+        if (item.resolvedActive !== active || item.value !== (active ? 100 : 0)) {
+          item.resolvedActive = active; item.value = active ? 100 : 0; changed = true;
+        }
+        continue;
+      }
+      const array = Array.isArray(raw) ? raw : typeof raw === "object" && raw ? Object.values(raw) : null;
+      if (item.type === "chart" && array) {
+        const values = array.map(Number).filter(Number.isFinite).slice(-item.historyLimit);
+        if (values.length && JSON.stringify(values) !== JSON.stringify(item.historyValues || [])) {
+          item.historyValues = values; item.value = values.at(-1); item.historyUpdatedAt = now; changed = true;
+        }
+        continue;
+      }
+      const numeric = Number(String(raw).replace(",", "."));
+      if (!Number.isFinite(numeric)) continue;
+      if (item.type !== "chart") {
+        const next = Math.max(0, Math.min(100, numeric));
+        if (item.value !== next) { item.value = next; changed = true; }
+        continue;
+      }
+      item.historyValues = Array.isArray(item.historyValues) ? item.historyValues.map(Number).filter(Number.isFinite) : [];
+      const resetMs = this._templateEntityIntervalMs(item.resetInterval);
+      const resetAt = Number(item.historyResetAt || item.historyUpdatedAt || now);
+      if (resetMs && now - resetAt >= resetMs) {
+        item.historyValues = []; item.historyResetAt = now; changed = true;
+      } else if (!item.historyResetAt) item.historyResetAt = now;
+      const sampleMs = this._templateEntityIntervalMs(item.sampleInterval);
+      const last = item.historyValues.at(-1);
+      const due = !item.historyValues.length || (sampleMs ? now - Number(item.historyUpdatedAt || 0) >= sampleMs : numeric !== last);
+      if (due) {
+        item.historyValues = [...item.historyValues, numeric].slice(-item.historyLimit);
+        item.historyUpdatedAt = now; changed = true;
+      }
+      if (item.value !== numeric) { item.value = numeric; changed = true; }
+    }
+    if (changed && this._rendered) {
+      window.clearTimeout(this._templateEntityHistorySaveTimer);
+      this._templateEntityHistorySaveTimer = window.setTimeout(() => this._saveDisplayTemplateDraft?.().catch(() => {}), 1200);
+    }
+    return changed;
+  },
+
+  _templateElementSeries(item) {
+    const values = (Array.isArray(item?.historyValues) ? item.historyValues : []).map(Number).filter(Number.isFinite).slice(-Math.max(1, Math.min(20, Number(item?.historyLimit || 10))));
+    return values.length ? values : [18, 34, 27, 58, 43, 76, Number(item?.value ?? 68)];
+  },
+
+  _templateChartNormalizedPoints(item) {
+    const values = this._templateElementSeries(item);
+    const min = Math.min(...values); const max = Math.max(...values); const span = Math.max(1, max - min);
+    return values.map((value, index) => ({ value, x: values.length === 1 ? 50 : 2 + (index / (values.length - 1)) * 96, y: 54 - ((value - min) / span) * 44 }));
+  },
+
+  _renderTemplateChartVisual(item) {
+    const variant = String(item.variant || "line");
+    const names = { line: "Vývoj", area: "Plocha", bar: "Přehled", steps: "Změny", donut: "Podíl", sparkline: "Trend" };
+    const label = item.showLabel !== false ? `<small class="eink-component-label">${names[variant] || "Data"}</small>` : "";
+    const value = item.showValue !== false ? `<strong class="eink-component-value">${Math.round(item.value)}${item.showPercent !== false ? "<em>%</em>" : ""}</strong>` : "";
+    const grid = item.showGrid !== false && variant !== "sparkline" && variant !== "donut" ? `<g class="chart-grid"><path d="M4 12H96M4 30H96M4 48H96"></path></g>` : "";
+    const points = this._templateChartNormalizedPoints(item);
+    const pointText = points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(" ");
+    let svg = "";
+    if (variant === "bar") { const barWidth = Math.max(2, Math.min(14, 78 / points.length)); svg = `<svg viewBox="0 0 100 60" preserveAspectRatio="none">${grid}<g class="chart-bars">${points.map((point, index) => `<rect x="${(5 + index * (90 / points.length)).toFixed(2)}" y="${point.y.toFixed(2)}" width="${barWidth.toFixed(2)}" height="${(56 - point.y).toFixed(2)}"></rect>`).join("")}</g></svg>`; }
+    else if (variant === "donut") svg = `<svg class="chart-donut" viewBox="0 0 60 60" preserveAspectRatio="none">${item.showTrack !== false ? `<circle class="donut-track" cx="30" cy="30" r="21"></circle>` : ""}<circle class="donut-value" cx="30" cy="30" r="21" pathLength="100" stroke-dasharray="${Math.max(0, Math.min(100, item.value))} 100"></circle></svg>`;
+    else if (variant === "steps") { const steps = points.flatMap((point, index) => index ? [{ x: point.x, y: points[index - 1].y }, point] : [point]); svg = `<svg viewBox="0 0 100 60" preserveAspectRatio="none">${grid}<polyline points="${steps.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(" ")}"></polyline></svg>`; }
+    else {
+      const area = variant === "area" && item.showFill !== false ? `<path class="chart-area" d="M${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)} ${points.slice(1).map((point) => `L${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ")} L${points.at(-1).x.toFixed(2)} 56 L${points[0].x.toFixed(2)} 56Z"></path>` : "";
+      const dots = variant !== "sparkline" && item.showPoints !== false ? `<g class="chart-points">${points.map((point) => `<circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="2"></circle>`).join("")}</g>` : "";
+      svg = `<svg viewBox="0 0 100 60" preserveAspectRatio="none">${grid}${area}<polyline points="${pointText}"></polyline>${dots}</svg>`;
+    }
+    return `<span class="eink-chart-visual variant-${this._escape(variant)}">${label}${svg}${value}</span>`;
+  },
+
+  _renderTemplateProgressVisual(item) {
+    const value = item.showValue !== false ? `<strong>${Math.round(item.value)}${item.showPercent !== false ? "<em>%</em>" : ""}</strong>` : "";
+    const scale = item.showScale !== false ? `<span class="eink-progress-scale"><b>0</b><b>50</b><b>100</b></span>` : "";
+    return `<span class="eink-progress-visual">${value}<span class="template-slider-track ${item.showTrack === false ? "without-track" : ""}"><i></i></span>${scale}</span>`;
+  },
+
+  _renderTemplateGaugeVisual(item) {
+    const variant = String(item.variant || "ring");
+    const names = { battery: "Baterie", thermometer: "Teplota", semicircle: "Rozsah", ring: "Hodnota" };
+    const unit = variant === "thermometer" ? "°" : "%";
+    const value = item.showValue !== false ? `<span class="eink-gauge-value"><strong>${Math.round(item.value)}</strong>${item.showPercent !== false ? `<em>${unit}</em>` : ""}</span>` : "";
+    const label = item.showLabel !== false ? `<small class="eink-component-label">${names[variant] || "Hodnota"}</small>` : "";
+    let visual = `<span class="template-gauge-ring ${item.showTrack === false ? "without-track" : ""}" style="--gauge-value:${Math.max(0, Math.min(100, item.value)) * 3.6}deg"></span>`;
+    if (variant === "battery") visual = `<span class="template-battery-gauge"><i style="width:${Math.max(4, Math.min(100, item.value))}%"></i></span>`;
+    else if (variant === "thermometer") visual = `<span class="template-thermometer-gauge"><i style="height:${Math.max(6, Math.min(100, item.value))}%"></i></span>`;
+    else if (variant === "semicircle") visual = `<span class="template-semicircle-gauge"><i style="--gauge-value:${Math.max(0, Math.min(100, item.value)) * 1.8}deg"></i></span>`;
+    return `<span class="eink-gauge-visual variant-${this._escape(variant)}">${label}${visual}${value}</span>`;
+  },
+
+  _renderTemplateSignalVisual(item) {
+    const active = typeof item.resolvedActive === "boolean" ? item.resolvedActive : !["off", "inactive"].includes(String(item.variant || ""));
+    const icon = item.showIcon !== false ? `<ha-icon icon="mdi:${this._escape(item.icon || (active ? "check-circle" : "minus-circle-outline"))}"></ha-icon>` : "";
+    const label = item.showLabel !== false ? `<span class="eink-signal-label">${this._escape(item.text || item.label || "Stav")}</span>` : "";
+    const state = item.showState !== false && ["on", "off"].includes(item.variant) ? `<i><em></em></i>` : item.showState !== false ? `<small>${active ? "ON" : "OFF"}</small>` : "";
+    return `<span class="template-signal-visual ${active ? "is-active" : "is-inactive"}">${icon}${label}${state}</span>`;
+  },
+
+  _renderTemplateEditorOverlays(template = this._currentUserDisplayTemplate(), targetOrientation = this._displayTemplateOrientation, targetRatio = 0) {
+    const handles = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+    const canvasRotation = this._userTemplateCanvasRotationStyle(template, targetOrientation, targetRatio);
+    return `<div class="template-editor-overlays ${canvasRotation.turn ? "is-whole-canvas-rotated" : ""}" style="${canvasRotation.style}">${(this._templateEditorElements || []).map((raw) => {
+      const normalized = this._normalizeTemplateEditorElement(raw);
+      Object.assign(raw, normalized);
+      const item = this._orientedUserTemplateElement(normalized);
+      const selected = item.id === this._selectedTemplateEditorElementId;
+      const style = `left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;transform:rotate(${item.rotation}deg);--element-color:${item.color};--element-fill:${item.fill};--element-stroke:${item.stroke};--element-stroke-width:${item.strokeWidth}px;--element-radius:${item.radius}px;--element-font-size:${item.fontSize}px;--element-font-weight:${item.fontWeight};--element-text-align:${item.textAlign};--element-value:${Math.max(0, Math.min(100, item.value))}%`;
+      let content = "";
+      if (item.type === "image") content = `<img src="${item.src}" alt="${this._escape(item.label)}">`;
+      else if (["text", "button"].includes(item.type)) content = `<span>${this._escape(item.text || item.label)}</span>`;
+      else if (item.type === "icon") content = `<ha-icon icon="mdi:${this._escape(item.icon || "star")}"></ha-icon>`;
+      else if (item.type === "slider") content = this._renderTemplateProgressVisual(item);
+      else if (item.type === "chart") content = this._renderTemplateChartVisual(item);
+      else if (item.type === "gauge") content = this._renderTemplateGaugeVisual(item);
+      else if (item.type === "signal") content = this._renderTemplateSignalVisual(item);
+      return `<span class="template-overlay template-overlay-${item.type} variant-${this._escape(item.variant || "default")} ${selected ? "is-selected" : ""}" data-template-overlay-id="${this._escape(item.id)}" style="${style}" role="button" tabindex="0" aria-label="${this._escape(item.label)}">${content}${selected ? `<span class="template-overlay-selection">${handles.map((name) => `<i class="template-resize-handle is-${name}" data-template-resize-handle="${name}"></i>`).join("")}</span>` : ""}</span>`;
     }).join("")}</div>`;
+  },
+
+  _bindTemplateEditorOverlays() {
+    if (this._activeTab !== "display-settings" || this._displaySettingsView !== "designer") return;
+    const surfaces = [...this.shadowRoot.querySelectorAll(".display-template-editor-stage .display-template-surface")];
+    const pointInSurface = (event, surface) => {
+      const box = surface.getBoundingClientRect();
+      const targetX = ((event.clientX - box.left) / Math.max(1, box.width)) * 100;
+      const targetY = ((event.clientY - box.top) / Math.max(1, box.height)) * 100;
+      const surfaceOrientation = surface.classList.contains("format-wide") ? "landscape" : "portrait";
+      const turn = this._userTemplateQuarterTurn(this._currentUserDisplayTemplate(), surfaceOrientation);
+      if (turn === 1) return { x: targetY, y: 100 - targetX, box };
+      if (turn === -1) return { x: 100 - targetY, y: targetX, box };
+      return { x: targetX, y: targetY, box };
+    };
+    this.shadowRoot.querySelectorAll("[data-template-editor-tool]").forEach((button) => {
+      button.addEventListener("dragstart", (event) => {
+        event.dataTransfer.effectAllowed = "copy";
+        let preset = {};
+        try { preset = JSON.parse(button.dataset.templateEditorPreset || "{}"); } catch (_err) { /* Invalid third-party preset. */ }
+        event.dataTransfer.setData("application/x-dratek-template-element", JSON.stringify({ type: button.dataset.templateEditorTool, icon: button.dataset.templateEditorIcon || "", preset }));
+      });
+    });
+    surfaces.forEach((surface) => {
+      surface.addEventListener("dragover", (event) => {
+        if ([...(event.dataTransfer?.types || [])].some((type) => type === "Files" || type === "application/x-dratek-template-element")) {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+          surface.classList.add("is-element-drag-over");
+        }
+      });
+      surface.addEventListener("dragleave", () => surface.classList.remove("is-element-drag-over"));
+      surface.addEventListener("drop", (event) => {
+        event.preventDefault();
+        surface.classList.remove("is-element-drag-over");
+        const position = pointInSurface(event, surface);
+        const file = [...(event.dataTransfer?.files || [])].find((item) => item.type.startsWith("image/"));
+        if (file) return this._importTemplateEditorImage(file, position);
+        try {
+          const payload = JSON.parse(event.dataTransfer.getData("application/x-dratek-template-element") || "{}");
+          if (payload.type) this._addTemplateEditorElement(payload.type, payload.icon || "", position, payload.preset || {});
+        } catch (_err) { /* Ignore foreign drag data. */ }
+      });
+      surface.addEventListener("pointerdown", (event) => {
+        if (event.target.closest(".template-overlay") || event.target.closest(".template-editable-part")) return;
+        if (this._selectedTemplateEditorElementId) {
+          this._selectedTemplateEditorElementId = "";
+          this._render();
+          this._paint();
+        }
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-template-overlay-id]").forEach((element) => {
+      element.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const id = element.dataset.templateOverlayId;
+        const item = (this._templateEditorElements || []).find((entry) => entry.id === id);
+        const surface = element.closest(".display-template-surface");
+        if (!item || !surface) return;
+        const handle = event.target.closest("[data-template-resize-handle]")?.dataset.templateResizeHandle || "";
+        this._selectedTemplateEditorElementId = id;
+        this._selectedTemplatePart = "";
+        const position = pointInSurface(event, surface);
+        const viewItem = this._normalizeTemplateEditorElement(item);
+        this._templateOverlayDrag = { id, pointerId: event.pointerId, mode: handle ? "resize" : "move", handle, startX: position.x, startY: position.y, origin: { x: viewItem.x, y: viewItem.y, w: viewItem.w, h: viewItem.h }, historyPushed: false };
+        element.setPointerCapture?.(event.pointerId);
+        if (!element.classList.contains("is-selected")) {
+          element.classList.add("is-selected");
+          this.shadowRoot.querySelectorAll("[data-template-overlay-id].is-selected").forEach((other) => { if (other !== element) other.classList.remove("is-selected"); });
+        }
+      });
+      element.addEventListener("pointermove", (event) => {
+        const drag = this._templateOverlayDrag;
+        if (!drag || drag.id !== element.dataset.templateOverlayId || drag.pointerId !== event.pointerId) return;
+        const item = (this._templateEditorElements || []).find((entry) => entry.id === drag.id);
+        const surface = element.closest(".display-template-surface");
+        if (!item || !surface) return;
+        if (!drag.historyPushed) {
+          this._pushTemplateHistory();
+          drag.historyPushed = true;
+        }
+        const point = pointInSurface(event, surface);
+        const dx = point.x - drag.startX;
+        const dy = point.y - drag.startY;
+        let viewItem;
+        if (drag.mode === "move") {
+          viewItem = { ...this._normalizeTemplateEditorElement(item), x: Math.max(0, Math.min(100 - drag.origin.w, drag.origin.x + dx)), y: Math.max(0, Math.min(100 - drag.origin.h, drag.origin.y + dy)), w: drag.origin.w, h: drag.origin.h };
+        } else {
+          let { x, y, w, h } = drag.origin;
+          if (drag.handle.includes("w")) { x += dx; w -= dx; }
+          if (drag.handle.includes("e")) w += dx;
+          if (drag.handle.includes("n")) { y += dy; h -= dy; }
+          if (drag.handle.includes("s")) h += dy;
+          if (w < 2) { if (drag.handle.includes("w")) x -= 2 - w; w = 2; }
+          if (h < 2) { if (drag.handle.includes("n")) y -= 2 - h; h = 2; }
+          x = Math.max(0, Math.min(98, x)); y = Math.max(0, Math.min(98, y));
+          w = Math.max(2, Math.min(100 - x, w)); h = Math.max(2, Math.min(100 - y, h));
+          viewItem = { ...this._normalizeTemplateEditorElement(item), x, y, w, h };
+        }
+        Object.assign(item, { x: viewItem.x, y: viewItem.y, w: viewItem.w, h: viewItem.h });
+        element.style.left = `${viewItem.x}%`; element.style.top = `${viewItem.y}%`; element.style.width = `${viewItem.w}%`; element.style.height = `${viewItem.h}%`;
+      });
+      const finish = (event) => {
+        const drag = this._templateOverlayDrag;
+        if (!drag || drag.id !== element.dataset.templateOverlayId || drag.pointerId !== event.pointerId) return;
+        this._templateOverlayDrag = null;
+        element.releasePointerCapture?.(event.pointerId);
+        this._templateSaveResult = null;
+        this._render(); this._paint();
+      };
+      element.addEventListener("pointerup", finish);
+      element.addEventListener("pointercancel", finish);
+      element.addEventListener("keydown", (event) => {
+        if (!["Enter", " "].includes(event.key)) return;
+        event.preventDefault(); this._selectedTemplateEditorElementId = element.dataset.templateOverlayId; this._render(); this._paint();
+      });
+    });
   },
 
   // --------------------------------------------------- template switches ---
@@ -2448,7 +3268,7 @@ export const devicesMixin = {
             <div xmlns="http://www.w3.org/1999/xhtml" class="template-responsive-preview-body">${this._templateSvgPreviewBody(template, templateWidth, templateHeight)}</div>
           </foreignObject>
         </svg>
-        ${primary && !autoFit ? this._renderTemplateEditorOverlays() : ""}
+        ${primary && (!autoFit || template.user_created) ? this._renderTemplateEditorOverlays(template, orientation, templateWidth / Math.max(1, templateHeight)) : ""}
         ${placeable ? `<span class="template-canvas-selection-label">${this._escape(template.title)}</span>` : ""}
       </div>
     </div>`;

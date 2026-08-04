@@ -1,19 +1,19 @@
 import { storageMixin } from "./panel/panel-storage.mixin.js";
 import { queueMixin } from "./panel/panel-queue.mixin.js";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js";
-import { devicesMixin } from "./panel/panel-devices.mixin.js";
-import { projectsMixin } from "./panel/panel-projects.mixin.js";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=studio-designer-17";
+import { projectsMixin } from "./panel/panel-projects.mixin.js?v=shared-templates-1";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
-import { historyMixin } from "./panel/panel-history.mixin.js";
-import { templatesMixin } from "./panel/panel-templates.mixin.js";
+import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-1";
+import { templatesMixin } from "./panel/panel-templates.mixin.js?v=blank-canvas-2";
 import { variablesMixin } from "./panel/panel-variables.mixin.js";
 import { previewMixin } from "./panel/panel-preview.mixin.js";
-import { renderUiMixin } from "./panel/panel-render-ui.mixin.js";
+import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=studio-designer-17";
 import { i18nMixin } from "./panel/panel-i18n.mixin.js";
-import { inspectorMixin } from "./panel/panel-inspector.mixin.js";
+import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=studio-designer-10";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js";
-import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js";
+import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=blank-canvas-1";
 
 import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js";
 
@@ -44,6 +44,16 @@ class DratekEinkPanel extends HTMLElement {
     this._displayTemplateBindings = {};
     this._templateOrientationMenuOpen = false;
     this._templateEditorElements = [];
+    this._userDisplayTemplates = [];
+    this._selectedTemplateEditorElementId = "";
+    this._templateElementPaletteCategory = "";
+    this._templateImageLibrary = [];
+    this._templateOverlayDrag = null;
+    this._templateUndoStack = [];
+    this._templateRedoStack = [];
+    this._templateHistoryLimit = 60;
+    this._templatePropertyHistoryKey = "";
+    this._templateLibraryCategory = "all";
     this._templateElementAdjustments = {};
     this._selectedTemplatePart = "";
     this._templatePartDrag = null;
@@ -146,12 +156,24 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   connectedCallback() {
+    // Keyboard shortcuts must also work after a pointer click on the canvas.
+    // Such a click does not necessarily focus the custom element, so a listener
+    // attached only to `this` never sees Delete/Backspace in that common case.
+    if (!this._designerGlobalKeyHandler) {
+      this._designerGlobalKeyHandler = (event) => this._onKeyDown?.(event);
+      window.addEventListener("keydown", this._designerGlobalKeyHandler, true);
+    }
     this._render();
     this._paint();
   }
 
   disconnectedCallback() {
+    if (this._designerGlobalKeyHandler) {
+      window.removeEventListener("keydown", this._designerGlobalKeyHandler, true);
+      this._designerGlobalKeyHandler = null;
+    }
     window.clearTimeout(this._propertyEditTimer);
+    window.clearTimeout(this._templateEntityHistorySaveTimer);
     window.clearTimeout(this._flashPollTimer);
     window.clearTimeout(this._otaPollTimer);
     window.clearTimeout(this._queuePollTimer);
@@ -171,12 +193,16 @@ class DratekEinkPanel extends HTMLElement {
       this._render();
       this._paint();
       this._loadQueue(false);
+      this._loadUserDisplayTemplates?.();
       if (this._result?.devices?.length) {
         this._loadDevicePreviewDrafts(this._result.devices).then(() => {
           this._render();
           this._paint();
         });
       }
+    } else if (this._refreshTemplateEntityElements?.()) {
+      this._render();
+      this._paint();
     }
   }
 

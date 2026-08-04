@@ -302,7 +302,8 @@ export const inspectorMixin = {
       this._displaySettingsView = stayInCatalog ? "templates" : "designer";
 
       // Load template objects into canvas state
-      this._applyTemplate(templateId, true);
+      if (template?.user_created) this._applyUserDisplayTemplate(template);
+      else this._applyTemplate(templateId, true);
 
       this._render();
       this._paint();
@@ -467,10 +468,11 @@ export const inspectorMixin = {
     }));
     this.shadowRoot.querySelectorAll("[data-template-orientation]").forEach((button) => button.addEventListener("click", () => {
       this._displayTemplateOrientation = button.dataset.templateOrientation === "landscape" ? "landscape" : "portrait";
+      const userTemplate = this._currentUserDisplayTemplate?.();
       const device = this._device();
       const size = this._devicePreviewSize(device);
       const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
-      if (!largeDisplay) {
+      if (!largeDisplay && !userTemplate) {
         const format = this._displayTemplateOrientation === "landscape" ? "wide" : "narrow";
         this._displayTemplateFormats.primary = format;
         this._displayTemplateFormats.secondary = format;
@@ -628,8 +630,22 @@ export const inspectorMixin = {
       this._render();
       this._paint();
     }));
+    this.shadowRoot.querySelectorAll("[data-template-palette-category]").forEach((button) => button.addEventListener("click", () => {
+      const category = button.dataset.templatePaletteCategory || "";
+      this._templateElementPaletteCategory = this._templateElementPaletteCategory === category ? "" : category;
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelector("[data-template-palette-close]")?.addEventListener("click", () => {
+      this._templateElementPaletteCategory = "";
+      this._render();
+      this._paint();
+    });
     this.shadowRoot.querySelectorAll("[data-template-editor-tool]").forEach((button) => button.addEventListener("click", () => {
-      this._addTemplateEditorElement(button.dataset.templateEditorTool, button.dataset.templateEditorIcon || "");
+      this._templateElementPaletteCategory = "";
+      let preset = {};
+      try { preset = JSON.parse(button.dataset.templateEditorPreset || "{}"); } catch (_err) { /* Invalid third-party preset. */ }
+      this._addTemplateEditorElement(button.dataset.templateEditorTool, button.dataset.templateEditorIcon || "", null, preset);
     }));
     this.shadowRoot.querySelector("#templateEditorImage")?.addEventListener("change", (event) => {
       this._importTemplateEditorImage(event.target.files?.[0]);
@@ -637,12 +653,158 @@ export const inspectorMixin = {
     this.shadowRoot.querySelector("[data-template-editor-import]")?.addEventListener("click", () => {
       this.shadowRoot.querySelector("#templateEditorImage")?.click();
     });
+    this.shadowRoot.querySelectorAll("[data-template-library-image]").forEach((button) => button.addEventListener("click", () => {
+      const asset = (this._templateImageLibrary || []).find((item) => item.id === button.dataset.templateLibraryImage);
+      if (asset) {
+        this._templateElementPaletteCategory = "";
+        this._insertTemplateLibraryImage(asset);
+      }
+    }));
+    this.shadowRoot.querySelectorAll("[data-template-library-remove]").forEach((button) => button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this._templateImageLibrary = (this._templateImageLibrary || []).filter((asset) => asset.id !== button.dataset.templateLibraryRemove);
+      this._render();
+      this._paint();
+      this._saveDisplayTemplateDraft?.().catch(() => {});
+    }));
     this.shadowRoot.querySelectorAll("[data-template-editor-remove]").forEach((button) => button.addEventListener("click", () => {
+      this._pushTemplateHistory?.();
       this._templateEditorElements = (this._templateEditorElements || []).filter((item) => item.id !== button.dataset.templateEditorRemove);
+      if (this._selectedTemplateEditorElementId === button.dataset.templateEditorRemove) this._selectedTemplateEditorElementId = "";
       this._render();
       this._paint();
     }));
+    this.shadowRoot.querySelectorAll("[data-template-editor-select]").forEach((button) => button.addEventListener("click", (event) => {
+      if (event.target.closest("[data-template-editor-remove]")) return;
+      event.stopPropagation();
+      this._selectedTemplateEditorElementId = button.dataset.templateEditorSelect || "";
+      this._selectedTemplatePart = "";
+      this._render();
+      this._paint();
+    }));
+    const updateTemplateElement = (prop, rawValue, shouldRender = true) => {
+      const item = this._templateEditorElement?.();
+      if (!item || !prop) return;
+      const numeric = ["x", "y", "w", "h", "rotation", "fontSize", "strokeWidth", "radius", "value", "historyLimit"].includes(prop);
+      item[prop] = numeric ? Number(rawValue) : rawValue;
+      if (prop === "historyLimit") {
+        item.historyLimit = Math.max(1, Math.min(20, Number(item.historyLimit || 10)));
+        item.historyValues = (item.historyValues || []).slice(-item.historyLimit);
+      }
+      item.w = Math.max(2, Math.min(100, Number(item.w || 2)));
+      item.h = Math.max(2, Math.min(100, Number(item.h || 2)));
+      item.x = Math.max(0, Math.min(100 - item.w, Number(item.x || 0)));
+      item.y = Math.max(0, Math.min(100 - item.h, Number(item.y || 0)));
+      this._templateSaveResult = null;
+      if (prop === "entityAttribute" || prop === "sampleInterval" || prop === "resetInterval") this._refreshTemplateEntityElements?.();
+      if (shouldRender) {
+        this._render(); this._paint();
+        return;
+      }
+      const element = this.shadowRoot.querySelector(`[data-template-overlay-id="${CSS.escape(item.id)}"]`);
+      if (!element) return;
+      element.style.left = `${item.x}%`; element.style.top = `${item.y}%`; element.style.width = `${item.w}%`; element.style.height = `${item.h}%`;
+      element.style.transform = `rotate(${item.rotation}deg)`;
+      element.style.setProperty("--element-color", item.color); element.style.setProperty("--element-fill", item.fill); element.style.setProperty("--element-stroke", item.stroke);
+      element.style.setProperty("--element-stroke-width", `${item.strokeWidth}px`); element.style.setProperty("--element-radius", `${item.radius}px`); element.style.setProperty("--element-font-size", `${item.fontSize}px`); element.style.setProperty("--element-font-weight", item.fontWeight); element.style.setProperty("--element-text-align", item.textAlign); element.style.setProperty("--element-value", `${item.value}%`);
+      if (["text", "button"].includes(item.type)) element.querySelector(":scope > span:not(.template-overlay-selection)")?.replaceChildren(document.createTextNode(item.text || item.label));
+      if (item.type === "icon") element.querySelector("ha-icon")?.setAttribute("icon", `mdi:${item.icon || "star-outline"}`);
+      if (item.type === "signal") {
+        const label = element.querySelector(".template-signal-visual .eink-signal-label");
+        if (label) label.textContent = item.text || item.label;
+        element.querySelector(".template-signal-visual ha-icon")?.setAttribute("icon", `mdi:${item.icon || "check-circle"}`);
+      }
+    };
+    this.shadowRoot.querySelectorAll("[data-template-element-prop]").forEach((input) => {
+      const historyKey = `${this._selectedTemplateEditorElementId}:${input.dataset.templateElementProp}`;
+      input.addEventListener("input", () => {
+        if (this._templatePropertyHistoryKey !== historyKey) {
+          this._pushTemplateHistory?.();
+          this._templatePropertyHistoryKey = historyKey;
+        }
+        updateTemplateElement(input.dataset.templateElementProp, input.value, false);
+      });
+      input.addEventListener("change", () => {
+        if (this._templatePropertyHistoryKey !== historyKey) this._pushTemplateHistory?.();
+        this._templatePropertyHistoryKey = "";
+        updateTemplateElement(input.dataset.templateElementProp, input.value);
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-template-element-toggle]").forEach((input) => input.addEventListener("change", () => {
+      this._pushTemplateHistory?.();
+      updateTemplateElement(input.dataset.templateElementToggle, input.checked);
+    }));
+    const setTemplateElementEntity = (rawValue) => {
+      const item = this._templateEditorElement?.();
+      if (!item) return;
+      const entityId = String(rawValue || "").trim();
+      if (item.entityId === entityId) return;
+      this._pushTemplateHistory?.();
+      item.entityId = entityId;
+      item.historyValues = [];
+      item.historyUpdatedAt = 0;
+      item.historyResetAt = 0;
+      item.resolvedActive = undefined;
+      this._refreshTemplateEntityElements?.();
+      this._render(); this._paint();
+      this._saveDisplayTemplateDraft?.().catch(() => {});
+    };
+    this.shadowRoot.querySelectorAll("[data-template-element-entity-picker]").forEach((picker) => {
+      const item = this._templateEditorElement?.();
+      if (!item || item.id !== picker.dataset.templateElementEntityPicker) return;
+      picker.hass = this._hass;
+      picker.selector = { entity: {} };
+      picker.value = item.entityId || "";
+      picker.required = false;
+      picker.addEventListener("value-changed", (event) => setTemplateElementEntity(event.detail?.value));
+    });
+    this.shadowRoot.querySelectorAll("[data-template-element-entity-id]").forEach((input) => {
+      input.addEventListener("change", () => setTemplateElementEntity(input.value));
+      input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); setTemplateElementEntity(input.value); } });
+    });
+    this.shadowRoot.querySelector("[data-template-element-history-clear]")?.addEventListener("click", () => {
+      const item = this._templateEditorElement?.();
+      if (!item) return;
+      this._pushTemplateHistory?.();
+      item.historyValues = []; item.historyUpdatedAt = 0; item.historyResetAt = Date.now();
+      this._render(); this._paint();
+      this._saveDisplayTemplateDraft?.().catch(() => {});
+    });
+    this.shadowRoot.querySelectorAll("[data-template-element-color]").forEach((button) => button.addEventListener("click", () => {
+      const [prop, value] = String(button.dataset.templateElementColor || "").split(":");
+      this._pushTemplateHistory?.();
+      updateTemplateElement(prop, value);
+    }));
+    this.shadowRoot.querySelectorAll("[data-template-element-align]").forEach((button) => button.addEventListener("click", () => {
+      this._pushTemplateHistory?.();
+      updateTemplateElement("textAlign", button.dataset.templateElementAlign);
+    }));
+    this.shadowRoot.querySelector("[data-template-element-deselect]")?.addEventListener("click", () => { this._selectedTemplateEditorElementId = ""; this._render(); this._paint(); });
+    this.shadowRoot.querySelector("[data-template-element-delete]")?.addEventListener("click", () => {
+      this._deleteSelectedTemplateElement?.();
+    });
+    this.shadowRoot.querySelector("[data-template-element-duplicate]")?.addEventListener("click", () => {
+      const item = this._templateEditorElement?.();
+      if (!item) return;
+      this._pushTemplateHistory?.();
+      const clone = structuredClone(item); clone.id = `template-element-${Date.now()}-${this._templateEditorElements.length}`; clone.label = `${item.label} kopie`; clone.x = Math.min(100 - clone.w, clone.x + 4); clone.y = Math.min(100 - clone.h, clone.y + 4);
+      this._templateEditorElements.push(clone); this._selectedTemplateEditorElementId = clone.id; this._render(); this._paint();
+    });
+    this.shadowRoot.querySelectorAll("[data-template-element-order]").forEach((button) => button.addEventListener("click", () => {
+      const index = (this._templateEditorElements || []).findIndex((item) => item.id === this._selectedTemplateEditorElementId);
+      if (index < 0) return;
+      this._pushTemplateHistory?.();
+      const [item] = this._templateEditorElements.splice(index, 1);
+      if (button.dataset.templateElementOrder === "front") this._templateEditorElements.push(item); else this._templateEditorElements.unshift(item);
+      this._render(); this._paint();
+    }));
+    this.shadowRoot.querySelectorAll("[data-template-history]").forEach((button) => button.addEventListener("click", () => {
+      if (button.dataset.templateHistory === "undo") this._undoTemplateHistory?.();
+      else this._redoTemplateHistory?.();
+    }));
     this._bindTemplatePartEditor?.();
+    this._bindTemplateEditorOverlays?.();
     this.shadowRoot.querySelectorAll("[data-template-part-scale]").forEach((input) => input.addEventListener("input", () => {
       const key = input.dataset.templatePartScale || "";
       const adjustment = this._templateElementAdjustments?.[key];
@@ -663,8 +825,16 @@ export const inspectorMixin = {
     }));
     this.shadowRoot.querySelector("[data-template-save]")?.addEventListener("click", async () => {
       try {
+        const savedUserTemplate = this._storeCurrentUserDisplayTemplate();
+        if (savedUserTemplate) await this._saveUserDisplayTemplate(savedUserTemplate);
         await this._saveDisplayTemplateDraft();
-        this._templateSaveResult = { ok: true, message: "Šablona a její úpravy byly uloženy pro tento displej." };
+        this._templateSaveResult = savedUserTemplate
+          ? { ok: true, message: `Šablona „${savedUserTemplate.title}“ byla uložena do seznamu.` }
+          : { ok: true, message: "Šablona a její úpravy byly uloženy pro tento displej." };
+        if (savedUserTemplate) {
+          this._displayTemplateCategory = "prepared";
+          this._displaySettingsView = "templates";
+        }
       } catch (err) {
         this._templateSaveResult = { ok: false, message: `Uložení selhalo: ${this._message(err)}` };
       }

@@ -53,7 +53,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
     def test_blank_template_opens_a_truly_empty_designer(self):
         self.assertIn('if (templateId === "blank") {', self.source)
         self.assertIn('this._objects = [];', self.source)
+        self.assertIn('this._templateEditorElements = [];', self.source)
+        self.assertIn('this._templateElementAdjustments = {};', self.source)
         self.assertIn('this._projectName = "Vlastní šablona";', self.source)
+        self.assertIn('if (template.id === "blank" || template.user_created) return "";', self.source)
+        self.assertIn('if (template?.id === "blank" || template?.user_created) return [];', self.source)
+        self.assertNotIn('Prázdná plocha od nuly</text>', self.source)
 
     def test_sent_template_state_is_persistent_and_fully_green(self):
         self.assertIn("_sentDisplayTemplates(device = this._device())", self.source)
@@ -210,11 +215,92 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('class="display-health-item display-signal-item"', self.source)
         self.assertIn(".display-template-device-info{display:flex", self.source)
         self.assertIn(".display-template-device-info-health{display:flex", self.source)
+        self.assertIn(".display-template-device-info .display-battery-item .battery-segments{width:34px", self.source)
+        self.assertIn(".display-template-device-info .display-signal-item .signal-bars{width:26px", self.source)
         self.assertNotIn("<header>\n            <span><small>Váš displej</small>", self.source)
         self.assertNotIn('class="display-settings-actions"', self.source)
         self.assertNotIn('class="display-settings-action ${activeMode === option.id ? "is-active" : ""}', self.source)
         self.assertIn('class="display-template-workspace"', self.source)
         self.assertIn('_displayDesignMode(device = this._device())', self.source)
+
+    def test_saved_blank_design_becomes_a_user_template_card(self):
+        self.assertIn('this._userDisplayTemplates = [];', self.source)
+        self.assertIn('...userTemplates,', self.source)
+        self.assertNotIn('user_templates: structuredClone(this._userDisplayTemplates || [])', self.source)
+        self.assertIn('type: "dratek_eink/user_templates/list"', self.source)
+        self.assertIn('type: "dratek_eink/user_templates/save"', self.source)
+        self.assertIn('_mergeUserDisplayTemplates(...collections)', self.source)
+        self.assertIn('await this._saveUserDisplayTemplate(savedUserTemplate)', self.source)
+        self.assertIn('const embeddedUserTemplates = Array.isArray(config.user_templates)', self.source)
+        self.assertIn('_storeCurrentUserDisplayTemplate(device = this._device())', self.source)
+        self.assertIn('if (template?.user_created) this._applyUserDisplayTemplate(template);', self.source)
+        self.assertIn('class="display-template-card display-template-drag-card ${userCreated ? "is-user-created"', self.source)
+        self.assertIn('Vytvořeno uživatelem', self.source)
+        self.assertIn('Vytvořeno v eInk Studiu', self.source)
+        self.assertIn('.display-template-library .display-template-card.is-user-created{', self.source)
+        self.assertIn('if (template.id === "blank" || template.user_created) return "";', self.source)
+
+    def test_user_template_orientation_is_a_quarter_turn_without_reflow(self):
+        self.assertIn('design_orientation: existing?.design_orientation || existing?.orientation', self.source)
+        self.assertIn('_userTemplateQuarterTurn(template, targetOrientation = this._displayTemplateOrientation)', self.source)
+        self.assertIn('_userTemplateCanvasRotationStyle(template = this._currentUserDisplayTemplate()', self.source)
+        self.assertIn('is-whole-canvas-rotated', self.source)
+        self.assertIn('transform:translate(-50%,-50%) rotate(${turn * 90}deg)', self.source)
+        self.assertIn('return this._normalizeTemplateEditorElement(source);', self.source)
+        self.assertIn('x: 100 - item.y - item.h, y: item.x, w: item.h, h: item.w, rotation: item.rotation + 90', self.source)
+        self.assertIn('x: item.y, y: 100 - item.x - item.w, w: item.h, h: item.w, rotation: item.rotation - 90', self.source)
+        self.assertIn('const model = this._quarterTurnedUserTemplateElement(source);', self.source)
+        self.assertIn('if (!largeDisplay && !userTemplate)', self.source)
+        self.assertNotIn('this._displayTemplateOrientation = template.orientation === "landscape" ? "landscape" : "portrait";', self.source)
+
+    def test_every_studio_category_has_richer_visual_variants(self):
+        self.assertIn('["controls", "toggle-switch-outline", "Signalizace"]', self.source)
+        for variant in ('"line"', '"area"', '"bar"', '"steps"', '"donut"', '"sparkline"'):
+            self.assertIn(f'tool("chart",', self.source)
+            self.assertIn(f'variant: {variant}', self.source)
+        for variant in ('"ring"', '"semicircle"', '"battery"', '"thermometer"'):
+            self.assertIn(f'variant: {variant}', self.source)
+        for label in ("Zapnuto", "Vypnuto", "Aktivní", "Neaktivní", "Výstraha", "Obrázková"):
+            self.assertIn(label, self.source)
+        self.assertIn('_renderTemplateChartVisual(item)', self.source)
+        self.assertIn('_renderTemplateGaugeVisual(item)', self.source)
+        self.assertIn('_renderTemplateSignalVisual(item)', self.source)
+        for component_class in ('eink-chart-visual', 'eink-gauge-visual', 'eink-progress-visual', 'template-component-toggles'):
+            self.assertIn(component_class, self.source)
+        self.assertNotIn('paintEditorialCard(', self.source)
+        self.assertIn('data-template-element-toggle=', self.source)
+        self.assertIn('"#d71912"', self.source)
+
+    def test_designer_uses_category_rail_and_visual_selection_uses_real_aspect(self):
+        self.assertIn('class="template-tool-rail" aria-label="Kategorie prvků"', self.source)
+        self.assertIn('data-template-palette-category="${id}"', self.source)
+        self.assertIn('_renderTemplateElementPalette()', self.source)
+        self.assertIn('class="card template-bottom-palette is-${category}"', self.source)
+        self.assertIn('position:absolute;z-index:90;left:68px;', self.source)
+        self.assertIn('top:clamp(0px,calc(var(--palette-anchor,0) * 50px),260px)', self.source)
+        self.assertIn('.template-palette-items{display:grid;', self.source)
+        self.assertIn('["icons", "emoticon-outline", "Ikony"]', self.source)
+        self.assertIn('["layers", "layers-triple-outline", "Vrstvy"]', self.source)
+        self.assertIn('this._templateElementPaletteCategory = this._templateElementPaletteCategory === category ? "" : category;', self.source)
+        self.assertIn('.template-overlay-image img{object-fit:fill}', self.source)
+        self.assertIn('_fitTemplateElementVisualAspect(item, visualAspect = 1)', self.source)
+        self.assertIn('type === "chart" && item.variant === "donut"', self.source)
+        self.assertIn('type === "gauge" && ["ring", "semicircle"].includes(item.variant)', self.source)
+        self.assertIn('this._fitTemplateElementVisualAspect(item, aspect);', self.source)
+
+    def test_uploaded_template_images_are_kept_in_a_reusable_library(self):
+        self.assertIn('this._templateImageLibrary = [];', self.source)
+        self.assertIn('image_library: structuredClone(this._templateImageLibrary || [])', self.source)
+        self.assertIn('Array.isArray(config.image_library)', self.source)
+        self.assertIn('_rememberTemplateImageAsset(src, name = "Obrázek", aspect = 1)', self.source)
+        self.assertIn('_insertTemplateLibraryImage(asset, position = null)', self.source)
+        self.assertIn('data-template-library-image="${this._escape(asset.id)}"', self.source)
+        self.assertIn('data-template-library-remove="${this._escape(asset.id)}"', self.source)
+        self.assertIn('.template-library-image-remove{position:absolute;', self.source)
+
+    def test_settings_status_cluster_is_pulled_toward_device_name(self):
+        self.assertIn('.display-template-device-info{gap:6px!important;padding-left:0!important}', self.source)
+        self.assertIn('.display-template-device-info-health{gap:5px!important}', self.source)
 
     def test_templates_button_opens_outline_and_filled_icon_gallery(self):
         self.assertIn('this._displaySettingsView = "templates";', self.source)
@@ -306,7 +392,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn("!this._findSvgDeep(el.shadowRoot)", self.source)
         self.assertIn('data-display-template-open="${template.id}"', self.source)
         self.assertIn(
-            'class="display-template-card display-template-drag-card ${used ? "is-used" : ""} ${onDisplay ? "is-on-display" : ""}"',
+            'class="display-template-card display-template-drag-card ${userCreated ? "is-user-created" : ""} ${used ? "is-used" : ""} ${onDisplay ? "is-on-display" : ""}"',
             self.source,
         )
         self.assertIn("Přetáhněte sem šablonu", self.source)
@@ -410,7 +496,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn('class="tpl ', self.source)
         self.assertNotIn('id="displayTemplateEditorBack"', self.source)
         self.assertNotIn("Zavřít designer", self.source)
-        self.assertIn('class="template-editor-tools"', self.source)
+        self.assertIn('class="template-tool-rail"', self.source)
         self.assertIn("context.putImageData(pixels, 0, 0)", self.source)
         self.assertIn('this._displaySettingsView = stayInCatalog ? "templates" : "designer";', self.source)
         self.assertIn('this._displayDesignerReturnView = "templates";', self.source)
@@ -852,6 +938,77 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("...(this._queue ||", self.source)
         self.assertIn("Náhled byl zařazen do fronty", self.source)
         self.assertIn('let image = "";', self.source)
+
+
+    def test_template_studio_has_contextual_component_editor(self):
+        """The display template studio exposes a real three-panel object editor."""
+        for component in ("text", "rect", "circle", "line", "icon", "button", "slider", "chart", "gauge"):
+            self.assertIn(f'tool("{component}"', self.source)
+        self.assertIn('draggable="true" data-template-editor-tool', self.source)
+        self.assertIn('application/x-dratek-template-element', self.source)
+        self.assertIn('data-template-overlay-id', self.source)
+        self.assertIn('data-template-resize-handle', self.source)
+        self.assertIn('["nw", "n", "ne", "e", "se", "s", "sw", "w"]', self.source)
+        self.assertIn('_renderTemplateElementInspector()', self.source)
+        self.assertIn('field("Velikost", "fontSize"', self.source)
+        self.assertIn('field("Otočení", "rotation"', self.source)
+        self.assertIn('_paintTemplateOverlays(context, overlays, width, height)', self.source)
+
+    def test_template_studio_keeps_the_header_tools_and_preview_locked(self):
+        self.assertIn('.studio-pro-workspace .studio-pro-header{position:sticky;top:10px;z-index:110}', self.source)
+        self.assertIn('.studio-pro-workspace .display-template-editor-left{position:sticky;top:var(--studio-locked-top)', self.source)
+        self.assertIn('.studio-pro-workspace .display-template-editor-canvas{position:sticky;top:var(--studio-locked-top)', self.source)
+        self.assertIn('.studio-pro-workspace .studio-pro-header,.studio-pro-workspace .display-template-editor-left,.studio-pro-workspace .display-template-editor-canvas{position:relative;top:auto}', self.source)
+
+    def test_template_image_import_uses_the_original_colour_classifier(self):
+        """Warm neutral colours must not be mistaken for the panel's red pigment."""
+        self.assertIn("_quantizeImportedTemplatePixel(red, green, blue, alpha = 255)", self.source)
+        self.assertIn("const redScore = red - Math.max(green, blue);", self.source)
+        self.assertIn("const luminance = (38 * red + 75 * green + 15 * blue) >> 7;", self.source)
+        self.assertIn("green < red * 0.68 && blue < red * 0.72", self.source)
+        self.assertIn("context.imageSmoothingEnabled = false;", self.source)
+        self.assertNotIn("const palette = [[255, 255, 255], [10, 10, 10], [227, 27, 27]]", self.source)
+
+    def test_template_studio_has_undo_redo_and_keyboard_editing(self):
+        self.assertIn('data-template-history="undo"', self.source)
+        self.assertIn('data-template-history="redo"', self.source)
+        self.assertIn("_templateHistorySnapshot()", self.source)
+        self.assertIn("_undoTemplateHistory()", self.source)
+        self.assertIn("_redoTemplateHistory()", self.source)
+        self.assertIn("_deleteSelectedTemplateElement()", self.source)
+        self.assertIn('event.key === "Delete" || event.key === "Backspace"', self.source)
+        self.assertIn('event.key.toLowerCase() === "z"', self.source)
+        self.assertIn('event.key.toLowerCase() === "y"', self.source)
+        self.assertIn('this._templateElementPaletteCategory = "";', self.source)
+        self.assertIn('window.addEventListener("keydown", this._designerGlobalKeyHandler, true);', self.source)
+        self.assertIn('window.removeEventListener("keydown", this._designerGlobalKeyHandler, true);', self.source)
+        self.assertNotIn('this.addEventListener("keydown", (event) => this._onKeyDown?.(event));', self.source)
+
+    def test_template_data_components_bind_to_home_assistant_with_rolling_history(self):
+        for marker in (
+            "data-template-element-entity-picker",
+            "data-template-element-entity-id",
+            'historyLimit: 10',
+            'sampleInterval: "change"',
+            'resetInterval: "never"',
+            "_refreshTemplateEntityElements(now = Date.now())",
+            "_templateElementEntityRaw(item)",
+            "data-template-element-history-clear",
+        ):
+            self.assertIn(marker, self.source)
+        self.assertIn(".slice(-item.historyLimit)", self.source)
+        self.assertIn("Math.max(1, Math.min(20", self.source)
+        for interval in ("minute", "hour", "day", "week"):
+            self.assertIn(f'{interval}:', self.source)
+
+    def test_template_visuals_are_restricted_to_the_eink_palette(self):
+        self.assertIn('paletteColor(source.color, "#111111")', self.source)
+        self.assertIn('paletteColor(source.fill, defaults.fill ?? "transparent", true)', self.source)
+        self.assertIn('fill:#d71912;stroke:none', self.source)
+        self.assertIn('conic-gradient(#d71912 var(--gauge-value),#111 0)', self.source)
+        self.assertNotIn('fill:color-mix(in srgb,var(--element-color) 18%,transparent)', self.source)
+        self.assertNotIn('background:rgba(255,255,255,.82)', self.source)
+        self.assertNotIn('context.globalAlpha = .18', self.source)
 
 
 if __name__ == "__main__":

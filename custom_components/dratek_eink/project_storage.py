@@ -90,6 +90,26 @@ def normalize_custom_elements(value: Any) -> list[dict[str, Any]]:
     return elements
 
 
+def normalize_user_templates(value: Any) -> list[dict[str, Any]]:
+    """Keep valid user-created display templates in the shared library."""
+    templates: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for source in _record_list(value):
+        template_id = str(source.get("id") or "").strip()
+        if not template_id.startswith("user-template-") or template_id in seen:
+            continue
+        seen.add(template_id)
+        template = dict(source)
+        template["id"] = template_id
+        template["title"] = str(template.get("title") or "Vlastní šablona")
+        template["user_created"] = True
+        template["editor_elements"] = _record_list(template.get("editor_elements"))
+        adjustments = template.get("element_adjustments")
+        template["element_adjustments"] = adjustments if isinstance(adjustments, dict) else {}
+        templates.append(template)
+    return templates
+
+
 def normalize_project_data(value: Any) -> dict[str, Any]:
     """Return a safe, current-shaped project store from any historical payload."""
     source = dict(value) if isinstance(value, dict) else {}
@@ -117,5 +137,8 @@ def normalize_project_data(value: Any) -> dict[str, Any]:
     } if isinstance(gateway_preferences, dict) else {}
     normalized["custom_elements"] = normalize_custom_elements(
         source.get("custom_elements")
+    )
+    normalized["user_templates"] = normalize_user_templates(
+        source.get("user_templates")
     )
     return normalized

@@ -242,6 +242,7 @@
         ],
       },
     };
+    const userTemplates = [];
 
     const panel = document.querySelector("#panel");
     const renderCanonicalHarness = async (automation) => {
@@ -335,6 +336,14 @@
         if (type === "dratek_eink/device_drafts/save") {
           drafts[String(msg.address || "").toUpperCase()] = msg.draft;
           return { draft:msg.draft };
+        }
+        if (type === "dratek_eink/user_templates/list") return { templates:userTemplates };
+        if (type === "dratek_eink/user_templates/save") {
+          const template = { ...msg.template, user_created:true };
+          const index = userTemplates.findIndex((item) => item.id === template.id);
+          if (index >= 0) userTemplates[index] = template;
+          else userTemplates.push(template);
+          return { template };
         }
         if (type === "dratek_eink/render_preview") return renderCanonicalHarness(msg.automation);
         if (type === "dratek_eink/gateways/list" || type === "dratek_eink/gateways/refresh") return { gateways };

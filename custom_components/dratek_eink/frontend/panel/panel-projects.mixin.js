@@ -1,6 +1,57 @@
 export const projectsMixin = {
 
 
+  _mergeUserDisplayTemplates(...collections) {
+    const templates = new Map();
+    for (const collection of collections) {
+      for (const source of Array.isArray(collection) ? collection : []) {
+        const id = String(source?.id || "");
+        if (!id.startsWith("user-template-")) continue;
+        const candidate = { ...structuredClone(source), id, user_created: true };
+        const current = templates.get(id);
+        const candidateUpdated = Date.parse(candidate.updated_at || "") || Number(candidate.updated_at || 0);
+        const currentUpdated = Date.parse(current?.updated_at || "") || Number(current?.updated_at || 0);
+        if (!current || candidateUpdated >= currentUpdated) templates.set(id, candidate);
+      }
+    }
+    return [...templates.values()].sort((left, right) => {
+      const leftCreated = Date.parse(left.created_at || "") || Number(left.created_at || 0);
+      const rightCreated = Date.parse(right.created_at || "") || Number(right.created_at || 0);
+      return leftCreated - rightCreated || String(left.title || "").localeCompare(String(right.title || ""), "cs");
+    });
+  },
+
+  async _loadUserDisplayTemplates() {
+    if (!this._hass) return;
+    try {
+      const result = await this._hass.callWS({ type: "dratek_eink/user_templates/list" });
+      this._userDisplayTemplates = this._mergeUserDisplayTemplates(
+        this._userDisplayTemplates,
+        result?.templates,
+      );
+      this._render();
+      this._paint();
+    } catch (_err) {
+      // Older integration backends do not expose the shared library yet. The
+      // embedded copy in a device draft remains available for migration.
+    }
+  },
+
+  async _saveUserDisplayTemplate(template) {
+    if (!this._hass || !template) return template;
+    const result = await this._hass.callWS({
+      type: "dratek_eink/user_templates/save",
+      template: structuredClone(template),
+    });
+    const saved = result?.template || template;
+    this._userDisplayTemplates = this._mergeUserDisplayTemplates(
+      this._userDisplayTemplates,
+      [saved],
+    );
+    return saved;
+  },
+
+
   async _loadProjects() {
     if (!this._hass) return;
     try {

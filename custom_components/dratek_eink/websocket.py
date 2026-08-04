@@ -49,6 +49,8 @@ from .ws_projects import (
     websocket_load_project,
     websocket_save_device_draft,
     websocket_save_project,
+    websocket_list_user_templates,
+    websocket_save_user_template,
 )
 from .ws_queue import websocket_clear_queue, websocket_transfer_queue
 from .ws_sending import (
@@ -81,6 +83,8 @@ COMMANDS = (
     websocket_load_device_draft,
     websocket_list_device_drafts,
     websocket_save_device_draft,
+    websocket_list_user_templates,
+    websocket_save_user_template,
     websocket_set_device_name,
     websocket_set_device_gateway,
     websocket_list_projects,

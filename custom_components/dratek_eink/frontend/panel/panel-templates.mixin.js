@@ -303,6 +303,9 @@ export const templatesMixin = {
   },
 
   _applyTemplate(templateId, skipConfirm = false) {
+    this._templateUndoStack = [];
+    this._templateRedoStack = [];
+    this._templatePropertyHistoryKey = "";
     if (templateId === "blank") {
       if (!skipConfirm && this._objects.length && !confirm("Nahradit aktuální návrh prázdnou šablonou?")) return;
       this._pushHistory();
@@ -311,6 +314,16 @@ export const templatesMixin = {
       this._orientation = device?.orientation || (size.width > size.height ? "landscape" : "portrait");
       this._objects = [];
       this._variables = {};
+      this._templateEditorElements = [];
+      this._selectedTemplateEditorElementId = "";
+      this._templateOverlayDrag = null;
+      this._templateElementAdjustments = {};
+      this._displayTemplateBindings = {};
+      this._templateCanvasPlacements = {
+        primary: { x: 9, y: 9 },
+        secondary: { x: 9, y: 9 },
+      };
+      this._selectedTemplatePart = "";
       this._invertColors = false;
       this._backgroundColor = "white";
       this._selectedIds = [];
