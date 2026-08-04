@@ -947,6 +947,15 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("Náhled byl zařazen do fronty", self.source)
         self.assertIn('let image = "";', self.source)
 
+    def test_prepared_template_variables_are_sent_as_entity_automation(self):
+        self.assertIn("_preparedTemplateEntityBindings", self.source)
+        self.assertIn("_templateAutomationBindingOverrides", self.source)
+        self.assertIn("bindings.push(...await this._preparedTemplateEntityBindings", self.source)
+        self.assertIn(
+            "payload.automation = await this._displayTemplateEntityAutomation",
+            self.source,
+        )
+
 
     def test_template_studio_has_contextual_component_editor(self):
         """The display template studio exposes a real three-panel object editor."""

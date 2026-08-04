@@ -47,7 +47,11 @@ def _load_automation_module():
     )
 
     local_modules = {
-        "const": {"DOMAIN": "dratek_eink", "LOCAL_ROUTE_ID": "local"},
+        "const": {
+            "DOMAIN": "dratek_eink",
+            "LOCAL_ROUTE_ID": "local",
+            "PARTIAL_UPDATE_CONFIRMED_SDK_TYPES": {2635},
+        },
         "gateway": {
             "async_gateway_status": lambda *_args, **_kwargs: None,
             "async_load_gateways": lambda *_args, **_kwargs: None,
@@ -412,6 +416,61 @@ class AutomationBindingTests(unittest.TestCase):
 
 
 class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_unconfirmed_display_uses_reliable_full_automatic_write(self):
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(automation.EntityAutoUpdateManager)
+
+        async def executor(function, *args):
+            return function(*args)
+
+        manager.hass = types.SimpleNamespace(async_add_executor_job=executor)
+        manager._configs = {
+            address: {
+                "route_type": "local",
+                "gateway_selection": "manual",
+                "manual_gateway_id": "local",
+                "sdk_type": 64,
+                "software_version": 145,
+                "bindings": [{"type": "text"}],
+            }
+        }
+        manager.async_render_preview = lambda *_args: asyncio.sleep(
+            0, result=Image.new("RGB", (10, 8), "white")
+        )
+        manager._changed_region = lambda _previous, _current: (1, 0, 4, 8)
+        manager._remember_rendered_image = lambda *_args: asyncio.sleep(0)
+        sent = {}
+
+        class _Queue:
+            async def async_submit(self, **kwargs):
+                return await kwargs["runner"](lambda line: sent.setdefault("log", []).append(line))
+
+        class _Transfer:
+            def __init__(self, **_kwargs):
+                pass
+
+            async def send_image(self, *args):
+                sent["full"] = args
+
+            async def send_partial_image(self, *args, **kwargs):
+                sent["partial"] = (args, kwargs)
+
+        original_queue = automation.get_transfer_queue
+        original_transfer = automation.DratekTransfer
+        automation.get_transfer_queue = lambda _hass: _Queue()
+        automation.DratekTransfer = _Transfer
+        try:
+            result = await manager._async_refresh(address)
+        finally:
+            automation.get_transfer_queue = original_queue
+            automation.DratekTransfer = original_transfer
+
+        self.assertTrue(result["ok"])
+        self.assertIn("full", sent)
+        self.assertNotIn("partial", sent)
+        self.assertEqual(145, sent["full"][-1])
+        self.assertTrue(any("complete image" in line for line in sent["log"]))
+
     async def test_selects_gateway_with_strongest_display_signal(self):
         manager = automation.EntityAutoUpdateManager.__new__(
             automation.EntityAutoUpdateManager

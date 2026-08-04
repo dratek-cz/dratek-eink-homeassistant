@@ -1849,13 +1849,132 @@ export const devicesMixin = {
     context.restore();
   },
 
-  _displayTemplateEntityAutomation(image, device, gatewayId = "") {
+  _templateAutomationNodeOffset(node) {
+    let x = 0;
+    let y = 0;
+    for (let parent = node?.parentElement; parent; parent = parent.parentElement) {
+      const transform = String(parent.getAttribute?.("transform") || "");
+      const match = transform.match(/translate\(\s*(-?[\d.]+)(?:[ ,]+(-?[\d.]+))?\s*\)/);
+      if (match) {
+        x += Number(match[1] || 0);
+        y += Number(match[2] || 0);
+      }
+    }
+    return { x, y };
+  },
+
+  _templateAutomationPalette(value, fallback = "black") {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (["#fff", "#ffffff", "white", "rgb(255,255,255)"].includes(normalized.replace(/\s/g, ""))) return "white";
+    if (["#e31b1b", "#d71912", "#dc140c", "red", "rgb(220,20,12)"].includes(normalized.replace(/\s/g, ""))) return "red";
+    if (["#000", "#000000", "black", "#111", "#111111"].includes(normalized.replace(/\s/g, ""))) return "black";
+    return fallback;
+  },
+
+  _templateAutomationTextBinding(documentNode, textNode, entityId, meta, occurrence, width, height) {
+    const offset = this._templateAutomationNodeOffset(textNode);
+    const centerX = offset.x + Number(textNode.getAttribute("x") || 0);
+    const centerY = offset.y + Number(textNode.getAttribute("y") || 0);
+    const fontSize = Math.max(6, Number(textNode.getAttribute("font-size") || 12));
+    const anchor = String(textNode.getAttribute("text-anchor") || "middle");
+    const maxWidth = anchor === "middle"
+      ? Math.max(1, Math.min(width, 2 * Math.min(centerX, width - centerX)))
+      : Math.max(1, anchor === "end" ? centerX : width - centerX);
+    const boxWidth = Math.max(8, Math.min(maxWidth, fontSize * 13));
+    const boxHeight = Math.max(8, Math.min(height, Math.ceil(fontSize * 1.65)));
+    const x = Math.max(0, Math.min(width - boxWidth,
+      anchor === "middle" ? centerX - boxWidth / 2 : anchor === "end" ? centerX - boxWidth : centerX));
+    const y = Math.max(0, Math.min(height - boxHeight, centerY - boxHeight / 2));
+    const color = this._templateAutomationPalette(textNode.getAttribute("fill"), "black");
+
+    let backgroundColor = "white";
+    const allNodes = [...documentNode.querySelectorAll("rect, text")];
+    const textIndex = allNodes.indexOf(textNode);
+    for (let index = textIndex - 1; index >= 0; index -= 1) {
+      const rect = allNodes[index];
+      if (rect.tagName?.toLowerCase() !== "rect") continue;
+      const rectOffset = this._templateAutomationNodeOffset(rect);
+      const rx = rectOffset.x + Number(rect.getAttribute("x") || 0);
+      const ry = rectOffset.y + Number(rect.getAttribute("y") || 0);
+      const rw = Number(rect.getAttribute("width") || 0);
+      const rh = Number(rect.getAttribute("height") || 0);
+      if (centerX >= rx && centerX <= rx + rw && centerY >= ry && centerY <= ry + rh) {
+        backgroundColor = this._templateAutomationPalette(rect.getAttribute("fill"), "white");
+        break;
+      }
+    }
+
+    const state = this._hass?.states?.[entityId];
+    const kind = this._templateSlotKind(meta.label, meta.icon);
+    const weatherTemperature = String(entityId).startsWith("weather.") && kind === "temperature";
+    return {
+      id: `template-${String(meta.templateId || "slot")}-${meta.key}-${occurrence}`,
+      type: "text",
+      entity_id: entityId,
+      entity_attribute: weatherTemperature ? "temperature" : "",
+      x: Math.round(x), y: Math.round(y), w: Math.round(boxWidth), h: Math.round(boxHeight),
+      fallback: String(textNode.textContent || ""),
+      include_unit: !weatherTemperature,
+      value_suffix: weatherTemperature ? ` ${state?.attributes?.temperature_unit || "°C"}` : "",
+      backgroundColor,
+      color,
+      fontSize: Math.round(fontSize),
+      minFontSize: 6,
+      bold: Number(textNode.getAttribute("font-weight") || 400) >= 600,
+      autoFit: true,
+      textAlign: anchor === "end" ? "right" : anchor === "start" ? "left" : "center",
+      verticalAlign: "middle",
+    };
+  },
+
+  async _preparedTemplateEntityBindings(device, width, height) {
+    const request = this._currentDisplayTemplateSvgRequest(device);
+    if (!request?.templates?.length || typeof DOMParser === "undefined") return [];
+    const currentSvg = await this._buildDisplayTemplateSvg(request.templates, width, height, request.layout);
+    const currentDocument = new DOMParser().parseFromString(currentSvg, "image/svg+xml");
+    const currentTexts = [...currentDocument.querySelectorAll("text")];
+    const bindings = [];
+    this._templateAutomationBindingOverrides ||= {};
+
+    for (const template of request.templates) {
+      for (let index = 0; index < (template.variables || []).length; index += 1) {
+        const meta = { ...this._templateVariableMeta(template.variables[index], index), templateId: template.id };
+        const entityId = String(this._templateBinding(template, meta) || "").trim();
+        if (!entityId.includes(".") || entityId.startsWith("internal:")) continue;
+        const bindingKey = `${template.id}:${meta.key}`;
+        const marker = `QZ${index}X`;
+        this._templateAutomationBindingOverrides[bindingKey] = marker;
+        let markedSvg = "";
+        try {
+          markedSvg = await this._buildDisplayTemplateSvg(request.templates, width, height, request.layout);
+        } finally {
+          delete this._templateAutomationBindingOverrides[bindingKey];
+        }
+        const markedDocument = new DOMParser().parseFromString(markedSvg, "image/svg+xml");
+        const markedTexts = [...markedDocument.querySelectorAll("text")];
+        let occurrence = 0;
+        for (let textIndex = 0; textIndex < markedTexts.length; textIndex += 1) {
+          if (!String(markedTexts[textIndex]?.textContent || "").includes(marker)) continue;
+          const currentText = currentTexts[textIndex];
+          if (!currentText) continue;
+          bindings.push(this._templateAutomationTextBinding(
+            currentDocument, currentText, entityId, meta, occurrence++, width, height
+          ));
+        }
+      }
+    }
+    return bindings;
+  },
+
+  async _displayTemplateEntityAutomation(image, device, gatewayId = "") {
     const size = this._devicePreviewSize(device);
     const landscape = this._displayTemplateOrientation !== "portrait";
     const width = landscape ? Math.max(size.width, size.height) : Math.min(size.width, size.height);
     const height = landscape ? Math.min(size.width, size.height) : Math.max(size.width, size.height);
     const px = (value, extent, minimum = 0) => Math.max(minimum, Math.round(Number(value || 0) * extent / 100));
     const bindings = [];
+
+    bindings.push(...await this._preparedTemplateEntityBindings(device, width, height));
 
     for (const source of this._templateEditorElements || []) {
       const item = this._quarterTurnedUserTemplateElement(source);
@@ -1947,6 +2066,7 @@ export const devicesMixin = {
       bindings,
       sdk_type: Number(device.sdk_type),
       software_version: Number(device.sw || 0),
+      software_version: Number(device.sw || 0),
       orientation: landscape ? "landscape" : "portrait",
       transform: this._displayTransform || "rotate_cw",
       refresh_interval_seconds: 1,
@@ -2024,7 +2144,7 @@ export const devicesMixin = {
         transform: this._displayTransform || "rotate_cw",
         template_ids: [...this._assignedDisplayTemplates(device)],
       };
-      payload.automation = this._displayTemplateEntityAutomation(image, device, gatewayId);
+      payload.automation = await this._displayTemplateEntityAutomation(image, device, gatewayId);
       const result = gatewayId
         ? await this._hass.callWS({
           type: "dratek_eink/gateways/send_design",
@@ -3371,6 +3491,10 @@ export const devicesMixin = {
   },
 
   _templateBinding(template, meta) {
+    const overrideKey = `${template?.id}:${meta.key}`;
+    if (Object.prototype.hasOwnProperty.call(this._templateAutomationBindingOverrides || {}, overrideKey)) {
+      return this._templateAutomationBindingOverrides[overrideKey];
+    }
     const device = (typeof this._device === "function" ? this._device() : null);
     const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
     const draftBindings = this._deviceDrafts?.[address]?.bindings || {};

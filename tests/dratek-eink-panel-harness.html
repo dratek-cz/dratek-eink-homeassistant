@@ -329,6 +329,14 @@
         "input_number.cilova_teplota": { state:"22.5", attributes:{ friendly_name:"Cílová teplota", unit_of_measurement:"°C" } },
       },
       callWS: async (msg) => {
+        window.__dratekHarnessLastWs = structuredClone(msg);
+        if (["dratek_eink/commit_design_upload", "dratek_eink/gateways/send_design"].includes(msg.type)) {
+          panel.setAttribute("data-last-automation", JSON.stringify({
+            type:msg.type,
+            bindingCount:msg.automation?.bindings?.length || 0,
+            entities:(msg.automation?.bindings || []).map((binding) => binding.entity_id),
+          }));
+        }
         const { type } = msg;
         if (type === "dratek_eink/scan") return { ok:true, devices };
         if (type === "dratek_eink/device_drafts/list") return { drafts };

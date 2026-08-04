@@ -117,6 +117,7 @@ class DratekTransfer:
         height: int,
         clear_screen: int = 0,
         transform: str | None = None,
+        software_version: int | None = None,
     ) -> None:
         if int(sdk_type) not in PARTIAL_UPDATE_CONFIRMED_SDK_TYPES:
             self.log(
@@ -131,7 +132,14 @@ class DratekTransfer:
         if image.size != (width, height):
             raise ValueError(f"Partial image size {image.width}x{image.height} does not match area {width}x{height}.")
         partial = (int(x), int(y), int(width), int(height), int(clear_screen))
-        await self._send_with_retries(address, sdk_type, image, transform, partial=partial)
+        await self._send_with_retries(
+            address,
+            sdk_type,
+            image,
+            transform,
+            partial=partial,
+            software_version=software_version,
+        )
 
     async def set_rgb_led(
         self,

@@ -19,7 +19,8 @@ class GatewayQueueLoggingTests(unittest.TestCase):
         self.assertIn("log_callback(line)", gateway)
         self.assertIn("msg.get(\"software_version\"),", websocket)
         self.assertIn("log_callback=add_log,", websocket)
-        self.assertIn("orientation,\n                    log_callback=add_log,", automation)
+        self.assertIn("orientation,", automation)
+        self.assertIn("log_callback=add_log,", automation)
 
 
 if __name__ == "__main__":

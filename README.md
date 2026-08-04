@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.186
+
+- proměnné předpřipravených šablon se nyní skutečně ukládají jako automatické vazby na entity Home Assistantu, takže jejich změna vytvoří položku „Změna entity“ ve Frontě zápisu
+- backend překreslí hodnotu na její skutečné pozici ve výsledném SVG návrhu a zachová zarovnání, barvu i pozadí daného bloku
+- automatické aktualizace na modelech bez hardwarově potvrzeného dílčího překreslení použijí spolehlivý kompletní zápis, aby displej přijatou změnu opravdu zobrazil
+- automatický přenos dostává správnou verzi firmwaru displeje pro volbu odpovídajícího Bluetooth režimu
+
 ## Novinky ve verzi 0.1.185
 
 - změna hodnoty navázané entity Home Assistantu se spolehlivě zařadí do Fronty zápisu i tehdy, když nastane během čekání nebo probíhajícího zápisu šablony

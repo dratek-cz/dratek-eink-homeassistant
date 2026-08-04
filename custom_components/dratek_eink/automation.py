@@ -13,7 +13,7 @@ from homeassistant.helpers.event import async_call_later, async_track_state_chan
 from homeassistant.helpers.storage import Store
 from PIL import Image, ImageChops
 
-from .const import DOMAIN, LOCAL_ROUTE_ID
+from .const import DOMAIN, LOCAL_ROUTE_ID, PARTIAL_UPDATE_CONFIRMED_SDK_TYPES
 from .gateway import async_gateway_status, async_load_gateways, async_scan_gateway, async_send_gateway_payload
 from .queue import get_transfer_queue
 from .render import prepare_image_for_display, render_entity_bound_image
@@ -575,6 +575,7 @@ class EntityAutoUpdateManager:
                 gateway_id = str(best_gateway["id"])
                 transport_name = str(best_gateway["name"])
         sdk_type = int(config["sdk_type"])
+        software_version = int(config.get("software_version") or 0)
         transform = config.get("transform")
         orientation = config.get("orientation")
         queue = get_transfer_queue(self.hass)
@@ -599,6 +600,8 @@ class EntityAutoUpdateManager:
         partial = (x0, y0, x1 - x0, y1 - y0)
         region = current_hardware.crop((x0, y0, x1, y1))
         use_partial = (
+            sdk_type in PARTIAL_UPDATE_CONFIRMED_SDK_TYPES
+            and
             partial[1] % 8 == 0
             and partial[3] % 8 == 0
             and partial[2] * partial[3]
@@ -629,6 +632,7 @@ class EntityAutoUpdateManager:
                     region if gateway_partial else image,
                     None if gateway_partial else transform,
                     None if gateway_partial else orientation,
+                    software_version,
                     log_callback=add_log,
                     partial=partial if gateway_partial else None,
                 )
@@ -655,10 +659,29 @@ class EntityAutoUpdateManager:
             if use_partial:
                 add_log(f"Sending only changed area x={x0}, y={y0}, width={partial[2]}, height={partial[3]}.")
                 await transfer.send_partial_image(
-                    address, sdk_type, region, x0, y0, partial[2], partial[3]
+                    address,
+                    sdk_type,
+                    region,
+                    x0,
+                    y0,
+                    partial[2],
+                    partial[3],
+                    software_version=software_version,
                 )
             else:
-                await transfer.send_image(address, sdk_type, image, transform, orientation)
+                if partial[2] * partial[3] < current_hardware.width * current_hardware.height * 0.85:
+                    add_log(
+                        f"SDK type {sdk_type} has no hardware-confirmed partial refresh; "
+                        "sending the complete image so the display really redraws."
+                    )
+                await transfer.send_image(
+                    address,
+                    sdk_type,
+                    image,
+                    transform,
+                    orientation,
+                    software_version,
+                )
             await self._remember_rendered_image(address, image)
             try:
                 await async_save_display_preview(self.hass, address, image, orientation)
