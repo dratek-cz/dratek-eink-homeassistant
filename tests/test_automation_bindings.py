@@ -117,6 +117,41 @@ class _States:
 
 
 class AutomationBindingTests(unittest.TestCase):
+    def test_refresh_interval_clamps_old_one_second_configs(self):
+        refresh_interval = automation.EntityAutoUpdateManager._refresh_interval
+
+        self.assertEqual(60, refresh_interval({}))
+        self.assertEqual(30, refresh_interval({"refresh_interval_seconds": 1}))
+        self.assertEqual(45, refresh_interval({"refresh_interval_seconds": 45}))
+
+    def test_skipped_refresh_does_not_requeue_itself(self):
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager._configs = {
+            address: {
+                "enabled": True,
+                "bindings": [{"type": "text", "entity_id": "sensor.time"}],
+                "refresh_interval_seconds": 1,
+            }
+        }
+        manager._pending_refreshes = {address}
+        manager._refresh_tasks = {}
+        manager._last_refresh_at = {}
+        refreshes = []
+
+        async def skipped_refresh(current_address):
+            refreshes.append(current_address)
+            return {"ok": True, "skipped": True}
+
+        manager._async_refresh = skipped_refresh
+        asyncio.run(manager._async_refresh_loop(address))
+
+        self.assertEqual([address], refreshes)
+        self.assertNotIn(address, manager._pending_refreshes)
+        self.assertIn(address, manager._last_refresh_at)
+
     def test_changed_region_is_small_and_vertically_byte_aligned(self):
         previous = Image.new("RGB", (296, 128), "white")
         current = previous.copy()

@@ -24,9 +24,8 @@ STORE_KEY = "dratek_eink.entity_automations"
 STORE_VERSION = 1
 DATA_KEY = "entity_auto_update_manager"
 DEBOUNCE_SECONDS = 0.15
-RETRY_AFTER_BUSY_SECONDS = 1.0
-DEFAULT_REFRESH_INTERVAL_SECONDS = 2
-MIN_REFRESH_INTERVAL_SECONDS = 1
+DEFAULT_REFRESH_INTERVAL_SECONDS = 60
+MIN_REFRESH_INTERVAL_SECONDS = 30
 MAX_REFRESH_INTERVAL_SECONDS = 86400
 BATTERY_SAVER_THRESHOLD_PERCENT = 15
 BATTERY_SAVER_MIN_INTERVAL_SECONDS = 3600
@@ -495,14 +494,15 @@ class EntityAutoUpdateManager:
                 # Values are read only after the wait. Changes that arrived
                 # during the interval are therefore already part of this image.
                 self._pending_refreshes.discard(address)
-                result = await self._async_refresh(address)
-                if isinstance(result, dict) and result.get("skipped"):
-                    self._pending_refreshes.add(address)
-                    await asyncio.sleep(RETRY_AFTER_BUSY_SECONDS)
-                else:
-                    # Count completed attempts, including failures, to protect
-                    # the panel and battery from a rapid retry loop.
-                    self._last_refresh_at[address] = time.monotonic()
+                await self._async_refresh(address)
+                # A skipped/merged queue entry must not schedule itself again.
+                # A manual upload explicitly requests one reconciliation after
+                # it finishes, while genuine later state changes set pending
+                # through _handle_state_change. Re-adding here created an
+                # endless queue loop for the whole duration of a slow upload.
+                # Count every attempt, including skips and failures, so old
+                # one-second configurations are protected by the safety limit.
+                self._last_refresh_at[address] = time.monotonic()
         finally:
             self._refresh_tasks.pop(address, None)
 

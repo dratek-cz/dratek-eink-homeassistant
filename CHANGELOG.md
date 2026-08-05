@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.190] - 2026-08-05
+
+### Opraveno – smyčka automatických zápisů
+- Přeskočený nebo sloučený automatický zápis už znovu nenastavuje vlastní příznak čekající aktualizace, takže během dlouhého uploadu nevznikají nové položky fronty v nekonečné smyčce.
+- Backend omezuje také staré uložené jednosekundové konfigurace na minimálně 30 sekund; výchozí bezpečný interval je 60 sekund.
+- Předpřipravené šablony ukládají uživatelem nastavený interval v rozsahu 30 sekund až 24 hodin namísto pevné jedné sekundy.
+- Změny entit během probíhajícího zápisu zůstávají sloučené a ruční upload po dokončení vyžádá jedinou kontrolní aktualizaci.
+
 ## [0.1.189] - 2026-08-05
 
 ### Opraveno – potvrzovaný přenos a jednodenní spotový graf

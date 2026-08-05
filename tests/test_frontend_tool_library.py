@@ -1076,6 +1076,13 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('_templateLiveDataChanged(previousHass, nextHass)', self.source)
         self.assertIn('const templateLiveDataChanged = this._templateLiveDataChanged?.(this._hass, hass) || false;', self.source)
 
+    def test_prepared_template_automation_uses_safe_refresh_interval(self):
+        self.assertIn(
+            "refresh_interval_seconds: Math.max(30, Math.min(86400, Number(this._refreshIntervalSeconds) || 60))",
+            self.source,
+        )
+        self.assertNotIn("refresh_interval_seconds: 1,", self.source)
+
     def test_template_studio_keeps_the_header_tools_and_preview_locked(self):
         self.assertIn('.studio-pro-top-row{position:sticky;top:10px;z-index:110;', self.source)
         self.assertIn('class="studio-pro-detached-actions"', self.source)

@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.190
+
+- automatický zápis přeskočený nebo sloučený během aktivního uploadu už sám sebe znovu nezařazuje a nevytváří nekonečnou smyčku ve frontě
+- dříve uložené jednosekundové intervaly se na backendu automaticky omezí na bezpečné minimum 30 sekund
+- nové předpřipravené šablony používají nastavený interval uživatele, standardně 60 sekund, místo pevné jedné sekundy
+- skutečné změny entit vzniklé během uploadu se dál sloučí a po jeho dokončení proběhne nejvýše jeden následný zápis
+
 ## Novinky ve verzi 0.1.189
 
 - přenos obrazu už neposílá další blok, dokud displej nepotvrdí předchozí GATT zápis; starší displeje pokračují až po vlastní blokové notifikaci
