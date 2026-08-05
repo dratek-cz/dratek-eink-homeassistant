@@ -1,7 +1,7 @@
 import { storageMixin } from "./panel/panel-storage.mixin.js";
 import { queueMixin } from "./panel/panel-queue.mixin.js";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js";
-import { devicesMixin } from "./panel/panel-devices.mixin.js?v=cz-spot-bindings-2";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=cz-spot-series-3";
 import { projectsMixin } from "./panel/panel-projects.mixin.js?v=template-save-queue-1";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
 import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-3";

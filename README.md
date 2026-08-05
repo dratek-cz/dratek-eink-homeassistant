@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.189
+
+- přenos obrazu už neposílá další blok, dokud displej nepotvrdí předchozí GATT zápis; starší displeje pokračují až po vlastní blokové notifikaci
+- nebezpečný nepotvrzovaný BLE stream byl odstraněn z Home Assistantu i gatewaye, aby displej nepřišel o bloky při zahlcení
+- gateway firmware 0.1.50 přidává stejné potvrzované řízení toku pro ESP32 i ESP32-S3
+- hodinový graf českých spotových cen zobrazuje jen dnešních 24 hodnot, i když integrace po poledni zpřístupní také zítřek; 15minutový režim zobrazuje 96 hodnot
+- pořadí aktuální ceny správně používá rozsah 24 nebo 96 podle skutečného časového intervalu dat
+
 ## Novinky ve verzi 0.1.188
 
 - proměnné šablony českých spotových cen se automaticky párují podle oficiálních ID entit i českých názvů z integrace Czech Energy Spot Prices; neplatné staré vazby se samy obnoví

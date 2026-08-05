@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.49-gateway";
+static const char* FIRMWARE_VERSION = "0.1.50-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -487,11 +487,16 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
     uniqueSent++;
   }
   bool streamingMode = (softwareVersion & 0x80) == 0x80;
-  bool blockWriteWithResponse = !writeChar->canWriteNoResponse();
-  bool unconfirmedStream = streamingMode && !blockWriteWithResponse;
+  bool blockWriteWithResponse = writeChar->canWrite();
+  if (streamingMode && !blockWriteWithResponse) {
+    client->disconnect();
+    NimBLEDevice::deleteClient(client);
+    addLog(log, "Display does not expose acknowledged block writes; refusing an unsafe unconfirmed stream.");
+    return false;
+  }
   addLog(
     log,
-    "Transfer mode: " + String(unconfirmedStream ? "paced fast stream" : streamingMode ? "GATT-confirmed stream" : "notification-paced legacy") +
+    "Transfer mode: " + String(streamingMode ? "display-acknowledged GATT stream" : "display-notification-paced legacy") +
       " (software version " + String(softwareVersion) + ")."
   );
 
@@ -532,9 +537,6 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
         addLog(log, "Display did not acknowledge image block " + String(blockNumber) + ".");
         return false;
       }
-      // A short fixed cadence mirrors the vendor client and keeps the NimBLE
-      // command queue bounded without paying an ATT round trip for every block.
-      if (unconfirmedStream) delay(40);
       if (!sentBlocks[blockNumber]) {
         sentBlocks[blockNumber] = true;
         uniqueSent++;

@@ -2,6 +2,15 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.189] - 2026-08-05
+
+### Opraveno – potvrzovaný přenos a jednodenní spotový graf
+- Streamovací displeje čekají po každém obrazovém bloku na potvrzený GATT response. Starší protokol dál postupuje až po blokové notifikaci displeje.
+- Home Assistant ani gateway už nepoužívají pevně zpožděný nepotvrzovaný stream, který mohl zahltit řadič displeje a ztratit část obrazu.
+- Gateway firmware 0.1.50 používá potvrzované řízení toku na ESP32 i ESP32-S3 a nepodporovaný nebezpečný režim odmítne.
+- Šablona českých spotových cen rozpozná interval podle rozestupu časových bodů. Pro 60 minut vykreslí dnešních 24 hodnot, pro 15 minut dnešních 96 hodnot, bez připojeného zítřka.
+- Pořadí ceny se zobrazuje vůči správnému počtu intervalů i tehdy, když atributy senzoru obsahují dnešek a zítřek současně.
+
 ## [0.1.188] - 2026-08-05
 
 ### Opraveno – spotové ceny, čitelnost a rychlost přenosu

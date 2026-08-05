@@ -29,7 +29,7 @@ FLASH_IDENTIFY_COMMAND = 0x22
 FULL_REFRESH_MODE = 0x01
 BLOCK_REQUEST_TIMEOUT = 12
 OPTIONAL_COMPLETION_TIMEOUT = 2
-UNCONFIRMED_WRITE_DRAIN_TIMEOUT = 2
+UNCONFIRMED_WRITE_DRAIN_TIMEOUT = 10
 MAX_BLOCK_REQUEST_RETRIES = 5
 GATT_OPERATION_TIMEOUT = 8
 STREAM_WRITE_DELAY = 0.04
@@ -391,29 +391,25 @@ class DratekTransfer:
             # after each control-point notification and ignores its block index
             # after the initial request.
             streaming_mode = bool(int(software_version or 0) & 0x80)
-            # Streaming Picksmart firmware consumes an ordered command stream.
-            # Waiting for a separate ATT response after every 244-byte block
-            # turns a normal write into a multi-minute operation on large tags.
-            # Use the vendor's paced no-response flow when the characteristic
-            # exposes it; legacy firmware remains notification-paced and models
-            # without command writes retain confirmed delivery.
-            write_without_response = "write-without-response" in write_char.properties
-            unconfirmed_stream = streaming_mode and write_without_response
-            require_gatt_response = (
-                not write_without_response
-                and (
-                    int(sdk_type) in WRITE_ACK_SDK_TYPES
-                    or "write" in write_char.properties
+            # The next block must not be sent until the display has acknowledged
+            # the current GATT write. A successful no-response enqueue only
+            # proves that BlueZ accepted the bytes locally and can overrun the
+            # display controller. Legacy firmware is paced by its per-block
+            # control-point notification below.
+            if streaming_mode and "write" not in write_char.properties:
+                raise RuntimeError(
+                    "Display does not expose acknowledged block writes; "
+                    "refusing an unsafe unconfirmed stream."
                 )
+            require_gatt_response = (
+                int(sdk_type) in WRITE_ACK_SDK_TYPES
+                or streaming_mode
+                or "write-without-response" not in write_char.properties
             )
             write_mode = (
-                "uniform paced write without response"
-                if unconfirmed_stream
-                else "notification-paced write without response"
-                if write_without_response
-                else "vendor write-complete flow control"
+                "display-acknowledged GATT flow control"
                 if require_gatt_response
-                else "paced write without response"
+                else "display-notification flow control"
             )
             self.log(
                 f"Transfer mode: {'streaming' if streaming_mode else 'notification-paced legacy'}, "
@@ -445,7 +441,6 @@ class DratekTransfer:
                             block_data,
                             block_number,
                             require_response=block_requires_response,
-                            pace_without_response=streaming_mode,
                             operation_timeout=(
                                 FINAL_BLOCK_RESPONSE_TIMEOUT
                                 if streaming_mode and block_number == total_blocks - 1
@@ -689,7 +684,6 @@ class DratekTransfer:
         block_number: int,
         *,
         require_response: bool,
-        pace_without_response: bool,
         operation_timeout: float = GATT_OPERATION_TIMEOUT,
     ) -> None:
         max_attempts = 3 if require_response else 1
@@ -705,7 +699,7 @@ class DratekTransfer:
                 )
                 # A successful ATT response is already the flow-control gate;
                 # adding another delay only slows large displays down.
-                if not require_response and pace_without_response:
+                if not require_response:
                     await asyncio.sleep(STREAM_WRITE_DELAY)
                 return
             except Exception as exc:  # BLE stacks expose platform-specific write errors

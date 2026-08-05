@@ -3624,7 +3624,7 @@ export const devicesMixin = {
     let raw = state?.state;
     let forcedUnit = "";
     if (template?.id === "cz_spot_prices" && variableIndex === 5 && Number.isFinite(Number(raw))) {
-      const intervals = /15min/i.test(binding) || Object.keys(state?.attributes || {}).filter((key) => !Number.isNaN(Date.parse(key))).length > 24 ? 96 : 24;
+      const intervals = this._czSpotIntervalCount(binding, state);
       return `${Math.round(Number(raw))} / ${intervals}`;
     }
     if (weatherState && normalized.includes("teplot")) {
@@ -3653,6 +3653,20 @@ export const devicesMixin = {
     return unit && !String(text).toLowerCase().endsWith(unit.toLowerCase()) ? `${text} ${unit}` : text;
   },
 
+  _czSpotIntervalCount(binding, state) {
+    if (/15min/i.test(String(binding || ""))) return 96;
+    const timestamps = Object.keys(state?.attributes || {})
+      .map((key) => Date.parse(key))
+      .filter(Number.isFinite)
+      .sort((left, right) => left - right);
+    const gaps = timestamps.slice(1)
+      .map((value, index) => (value - timestamps[index]) / 60000)
+      .filter((minutes) => minutes > 0 && minutes <= 120)
+      .sort((left, right) => left - right);
+    const typicalGap = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 60;
+    return typicalGap < 45 ? 96 : 24;
+  },
+
   _templateSeries(template, variableIndex, fallback) {
     const variable = template?.variables?.[variableIndex];
     if (!variable) return fallback;
@@ -3664,15 +3678,19 @@ export const devicesMixin = {
     const timestampPrices = Object.fromEntries(Object.entries(state.attributes || {}).filter(([key, value]) => !Number.isNaN(Date.parse(key)) && Number.isFinite(Number(value))));
     if (template?.id === "cz_spot_prices") {
       const entries = Object.entries(timestampPrices).sort(([left], [right]) => Date.parse(left) - Date.parse(right));
+      const intervalCount = this._czSpotIntervalCount(binding, state);
       const today = new Date();
       const sameLocalDay = (value) => {
         const date = new Date(value);
         return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
       };
       const todayPrices = entries.filter(([timestamp]) => sameLocalDay(timestamp)).map(([, value]) => Number(value)).filter(Number.isFinite);
-      if (todayPrices.length > 1) return todayPrices.slice(0, 96);
+      if (todayPrices.length > 1) return todayPrices.slice(0, intervalCount);
       const allPrices = entries.map(([, value]) => Number(value)).filter(Number.isFinite);
-      if (allPrices.length > 1) return allPrices.slice(-96);
+      // The integration exposes today and, after noon, tomorrow in the same
+      // attribute dictionary. If the browser timezone prevents matching the
+      // local day, the first complete interval set is still today's data.
+      if (allPrices.length > 1) return allPrices.slice(0, intervalCount);
     }
     const candidates = [timestampPrices, state.attributes?.values, state.attributes?.prices, state.attributes?.data, state.attributes?.history, state.state];
     for (const candidate of candidates) {
