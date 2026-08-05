@@ -616,7 +616,17 @@ export const devicesMixin = {
           {
             name: "Czech Energy Spot Prices",
             domain: "sensor",
-            entityPrefixes: ["sensor.current_buy_electricity_price", "sensor.current_spot_electricity_price"],
+            entityPrefixes: ["sensor.current_buy_electricity_price", "sensor.current_spot_electricity_price", "sensor.aktualni_spotova_cena_elektriny"],
+            entityFriendlyNames: [
+              "Aktuální spotová cena elektřiny",
+              "Dnešní nejdražší spotová cena elektřiny",
+              "Dnešní nejlevnější spotová cena elektřiny",
+              "Dnešní pořadí hodin spotových cen elektřiny",
+              "K dispozici zítřejší spotové ceny elektřiny",
+              "Zítřejší nejdražší spotová cena elektřiny",
+              "Zítřejší nejlevnější spotová cena elektřiny",
+              "Zítřejší pořadí hodin spotových cen elektřiny",
+            ],
             url: "https://github.com/rnovacek/homeassistant_cz_energy_spot_prices",
             linkLabel: "GitHub a instalace",
             why: "Komunitní integrace pro ceny elektřiny z OTE. Podporuje hodinové i 15minutové ceny a volitelnou skutečnou nákupní cenu včetně poplatků a DPH.",
@@ -872,8 +882,13 @@ export const devicesMixin = {
     const recipe = this._templateSetupRecipe(template);
     const integrations = (recipe.integrations || []).map((item) => {
       const states = this._hass?.states || {};
-      const found = Array.isArray(item.entityPrefixes) && item.entityPrefixes.length
-        ? Object.keys(states).some((entityId) => item.entityPrefixes.some((prefix) => entityId.startsWith(prefix)))
+      const normalize = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const friendlyNames = new Set((item.entityFriendlyNames || []).map(normalize));
+      const foundByPrefix = Array.isArray(item.entityPrefixes) && item.entityPrefixes.length
+        && Object.keys(states).some((entityId) => item.entityPrefixes.some((prefix) => entityId.startsWith(prefix)));
+      const foundByName = friendlyNames.size > 0 && Object.values(states).some((state) => friendlyNames.has(normalize(state?.attributes?.friendly_name)));
+      const found = (item.entityPrefixes || []).length || friendlyNames.size
+        ? foundByPrefix || foundByName
         : this._hasEntityDomain(item.domain);
       const documentationUrl = item.url || (item.core && !item.helper ? `https://www.home-assistant.io/integrations/${item.domain}/` : "");
       const link = documentationUrl
@@ -1022,7 +1037,20 @@ export const devicesMixin = {
   _czSpotTemplateBindings() {
     const states = this._hass?.states || {};
     const entityIds = Object.keys(states);
+    const normalize = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     const usable = (entityId) => entityId && states[entityId] && !["unavailable", "unknown"].includes(String(states[entityId].state).toLowerCase());
+    const sensorEntries = entityIds.filter((entityId) => entityId.startsWith("sensor.") && usable(entityId)).map((entityId) => {
+      const friendlyName = normalize(states[entityId]?.attributes?.friendly_name);
+      return { entityId, friendlyName, searchable: normalize(`${entityId} ${friendlyName}`) };
+    });
+    const findNamedEntity = (aliases, excluded = []) => {
+      const wanted = aliases.map(normalize);
+      const rejected = excluded.map(normalize);
+      const allowed = (entry) => !rejected.some((term) => entry.searchable.includes(term));
+      return sensorEntries.find((entry) => allowed(entry) && wanted.includes(entry.friendlyName))?.entityId
+        || sensorEntries.find((entry) => allowed(entry) && wanted.some((term) => entry.searchable.includes(term)))?.entityId
+        || "";
+    };
     const findEntity = (base, duplicate = "") => {
       const preferred = duplicate ? `${base}${duplicate}` : base;
       if (usable(preferred)) return preferred;
@@ -1036,6 +1064,7 @@ export const devicesMixin = {
       "sensor.current_spot_electricity_price",
     ];
     let current = currentCandidates.map((base) => findEntity(base)).find(Boolean) || "";
+    if (!current) current = findNamedEntity(["Aktuální spotová cena elektřiny", "Current spot electricity price"], ["je nejlevnější", "is cheapest"]);
     if (!current) {
       current = entityIds.find((entityId) => {
         const state = states[entityId];
@@ -1045,8 +1074,14 @@ export const devicesMixin = {
         return entityId.startsWith("sensor.") && timestampCount >= 20 && name.includes("electric") && name.includes("price");
       }) || "";
     }
+    const named = {
+      todayMin: findNamedEntity(["Dnešní nejlevnější spotová cena elektřiny", "Spot cheapest electricity today"]),
+      todayMax: findNamedEntity(["Dnešní nejdražší spotová cena elektřiny", "Spot most expensive electricity today"]),
+      tomorrowMin: findNamedEntity(["Zítřejší nejlevnější spotová cena elektřiny", "Spot cheapest electricity tomorrow"]),
+      todayOrder: findNamedEntity(["Dnešní pořadí hodin spotových cen elektřiny", "Current spot electricity hour order", "Current spot electricity 15min order"]),
+    };
     const match = current.match(/^sensor\.current_(buy|spot)_electricity_price(_15min)?(_\d+)?$/);
-    if (!match) return current ? { 0: current, 1: current } : {};
+    if (!match) return { 0: current, 1: current, 2: named.todayMin, 3: named.todayMax, 4: named.tomorrowMin, 5: named.todayOrder };
     const trade = match[1];
     const interval = match[2] || "";
     const duplicate = match[3] || "";
@@ -1054,10 +1089,10 @@ export const devicesMixin = {
     return {
       0: current,
       1: current,
-      2: findEntity(`sensor.${trade}_cheapest_electricity_today${interval}`, duplicate),
-      3: findEntity(`sensor.${trade}_most_expensive_electricity_today${interval}`, duplicate),
-      4: findEntity(`sensor.${trade}_cheapest_electricity_tomorrow${interval}`, duplicate),
-      5: findEntity(`sensor.current_${trade}_electricity_${orderInterval}_order`, duplicate),
+      2: findEntity(`sensor.${trade}_cheapest_electricity_today${interval}`, duplicate) || named.todayMin,
+      3: findEntity(`sensor.${trade}_most_expensive_electricity_today${interval}`, duplicate) || named.todayMax,
+      4: findEntity(`sensor.${trade}_cheapest_electricity_tomorrow${interval}`, duplicate) || named.tomorrowMin,
+      5: findEntity(`sensor.current_${trade}_electricity_${orderInterval}_order`, duplicate) || named.todayOrder,
     };
   },
 
@@ -3588,6 +3623,10 @@ export const devicesMixin = {
     const weatherAttributes = state?.attributes || {};
     let raw = state?.state;
     let forcedUnit = "";
+    if (template?.id === "cz_spot_prices" && variableIndex === 5 && Number.isFinite(Number(raw))) {
+      const intervals = /15min/i.test(binding) || Object.keys(state?.attributes || {}).filter((key) => !Number.isNaN(Date.parse(key))).length > 24 ? 96 : 24;
+      return `${Math.round(Number(raw))} / ${intervals}`;
+    }
     if (weatherState && normalized.includes("teplot")) {
       raw = weatherAttributes.temperature;
       forcedUnit = weatherAttributes.temperature_unit || "°C";
@@ -3623,6 +3662,18 @@ export const devicesMixin = {
     const state = this._hass?.states?.[binding];
     if (!state) return fallback;
     const timestampPrices = Object.fromEntries(Object.entries(state.attributes || {}).filter(([key, value]) => !Number.isNaN(Date.parse(key)) && Number.isFinite(Number(value))));
+    if (template?.id === "cz_spot_prices") {
+      const entries = Object.entries(timestampPrices).sort(([left], [right]) => Date.parse(left) - Date.parse(right));
+      const today = new Date();
+      const sameLocalDay = (value) => {
+        const date = new Date(value);
+        return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
+      };
+      const todayPrices = entries.filter(([timestamp]) => sameLocalDay(timestamp)).map(([, value]) => Number(value)).filter(Number.isFinite);
+      if (todayPrices.length > 1) return todayPrices.slice(0, 96);
+      const allPrices = entries.map(([, value]) => Number(value)).filter(Number.isFinite);
+      if (allPrices.length > 1) return allPrices.slice(-96);
+    }
     const candidates = [timestampPrices, state.attributes?.values, state.attributes?.prices, state.attributes?.data, state.attributes?.history, state.state];
     for (const candidate of candidates) {
       let value = candidate;
@@ -3632,7 +3683,7 @@ export const devicesMixin = {
       if (value && !Array.isArray(value) && typeof value === "object") value = Object.values(value);
       if (!Array.isArray(value)) continue;
       const numbers = value.map((item) => Number(typeof item === "object" ? item.value ?? item.price ?? item.state : item)).filter(Number.isFinite);
-      if (numbers.length > 1) return numbers.slice(-48);
+      if (numbers.length > 1) return numbers.slice(-96);
     }
     return fallback;
   },
@@ -3795,7 +3846,12 @@ export const devicesMixin = {
     if (draftBindings[`${template?.id}:${meta.key}`] !== undefined) return draftBindings[`${template?.id}:${meta.key}`];
 
     const key = `${template?.id}:${meta.key}`;
-    if (Object.prototype.hasOwnProperty.call(this._displayTemplateBindings || {}, key)) return this._displayTemplateBindings[key];
+    if (Object.prototype.hasOwnProperty.call(this._displayTemplateBindings || {}, key)) {
+      const stored = this._displayTemplateBindings[key];
+      if (template?.id !== "cz_spot_prices" || !stored || this._hass?.states?.[stored]) return stored;
+      // Entity ids can change when the integration is recreated or translated.
+      // A stale saved id must not permanently suppress fresh auto-discovery.
+    }
     if (template?.id === "cz_spot_prices") {
       const index = Number(String(meta.key || "").split("-", 1)[0]);
       return this._czSpotTemplateBindings()[index] || "";

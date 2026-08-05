@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.188] - 2026-08-05
+
+### Opraveno – spotové ceny, čitelnost a rychlost přenosu
+- Automatické vazby šablony českých spotových cen rozpoznají oficiální ID entit i jejich české názvy a obnoví neplatné dříve uložené vazby.
+- Graf používá seřazené časové atributy aktuálního dne pro hodinová i čtvrthodinová data; pořadí ceny se zobrazuje vůči 24 nebo 96 intervalům.
+- Přenos z Home Assistantu a gateway opět používá rychlou BLE cestu s odpovídajícím řízením toku. Součástí vydání je gateway firmware 0.1.49 pro ESP32 a ESP32-S3.
+- Minimální velikosti textů a čísel v šablonách a grafech byly upraveny pro čitelnost bez zbytečně tučného písma.
+
 ## [0.1.183] - 2026-08-04
 
 ### Vylepšeno – zamčený designer a datové prvky

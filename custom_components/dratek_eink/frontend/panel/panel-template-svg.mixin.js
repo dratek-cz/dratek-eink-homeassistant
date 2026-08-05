@@ -20,6 +20,11 @@ import qrcode from "../qrcode-generator.js";
 const RED = "#e31b1b";
 const BLACK = "#000000";
 const FONT = "Arial, Helvetica, sans-serif";
+// Ten native device pixels are the practical lower limit for Czech diacritics
+// and numerals on the supported e-ink panels. Preview scaling can make a 6–7 px
+// font look acceptable on a monitor even though it becomes only a few broken
+// dots after the physical panel's three-colour quantisation.
+const MIN_READABLE_FONT_SIZE = 10;
 
 // Advance width of one glyph as a fraction of the font size, per character class,
 // measured off the Arial/Helvetica stack above.
@@ -312,22 +317,34 @@ export const templateSvgMixin = {
     return ems * size;
   },
 
-  _svgFitFontSize(value, size, maxWidth, bold) {
+  _svgFitFontSize(value, size, maxWidth, bold, minSize = MIN_READABLE_FONT_SIZE) {
     const text = String(value ?? "");
-    if (!maxWidth || !text) return size;
-    const estimated = this._svgTextWidth(text, size, bold);
-    return estimated > maxWidth ? Math.max(5, size * (maxWidth / estimated)) : size;
+    const requested = Math.max(minSize, Number(size) || minSize);
+    if (!maxWidth || !text) return requested;
+    const estimated = this._svgTextWidth(text, requested, bold);
+    return estimated > maxWidth ? Math.max(minSize, requested * (maxWidth / estimated)) : requested;
+  },
+
+  _svgReadableText(value, size, maxWidth, bold, minSize = MIN_READABLE_FONT_SIZE) {
+    const original = String(value ?? "");
+    const fontSize = this._svgFitFontSize(original, size, maxWidth, bold, minSize);
+    if (!maxWidth || this._svgTextWidth(original, fontSize, bold) <= maxWidth) return { text: original, fontSize };
+    const ellipsis = "…";
+    let clipped = original;
+    while (clipped.length > 1 && this._svgTextWidth(`${clipped}${ellipsis}`, fontSize, bold) > maxWidth) clipped = clipped.slice(0, -1);
+    return { text: clipped.length < original.length ? `${clipped.trimEnd()}${ellipsis}` : original, fontSize };
   },
 
   _svgText(value, x, y, size, options = {}) {
     const text = String(value ?? "");
     if (!text) return "";
     const bold = !!options.bold;
-    const fontSize = this._svgFitFontSize(text, size, options.maxWidth, bold);
+    const fitted = this._svgReadableText(text, size, options.maxWidth, bold, options.minSize);
+    const fontSize = fitted.fontSize;
     const anchor = options.anchor || "middle";
     return `<text x="${x.toFixed(2)}" y="${y.toFixed(2)}" font-family="${FONT}" font-size="${fontSize.toFixed(2)}"`
       + ` font-weight="${bold ? 700 : 400}" fill="${options.color || BLACK}" text-anchor="${anchor}"`
-      + ` dominant-baseline="central" xml:space="preserve">${this._escape(text)}</text>`;
+      + ` dominant-baseline="central" xml:space="preserve">${this._escape(fitted.text)}</text>`;
   },
 
   _svgIcon(name, cx, cy, size, color = BLACK) {
@@ -458,8 +475,8 @@ export const templateSvgMixin = {
       if (index > 0) {
         parts.push(`<rect x="${(cellWidth * index).toFixed(2)}" y="${(top + footerHeight * 0.15).toFixed(2)}" width="1" height="${(footerHeight * 0.7).toFixed(2)}" fill="#ffffff" opacity="0.5"></rect>`);
       }
-      const labelSize = Math.max(6, footerHeight * 0.26);
-      const valueSize = Math.max(7, footerHeight * 0.3);
+      const labelSize = Math.max(7, footerHeight * 0.3);
+      const valueSize = Math.max(8, footerHeight * 0.36);
       if (cell.icon) {
         parts.push(this._svgText(cell.label, cx, top + footerHeight * 0.2, labelSize, { color: "#ffffff", bold: true, maxWidth: cellWidth * 0.9 }));
         parts.push(this._svgIcon(cell.icon, cx, top + footerHeight * 0.5, footerHeight * 0.3, "#ffffff"));
@@ -544,7 +561,7 @@ export const templateSvgMixin = {
   // to keep its full font size and collide with the line under it.
   _blockText(row, box) {
     const ratio = row.h ? (row.size || row.h * 0.62) / row.h : 0.62;
-    const fontSize = Math.max(6, Math.min(box.h * ratio, box.h * 0.92));
+    const fontSize = Math.max(7, Math.min(box.h * ratio, box.h * 0.92));
     return this._svgText(row.text, box.x + box.w / 2, box.y + box.h / 2, fontSize, {
       bold: !!row.bold,
       color: this._templateInk(row.color),
@@ -555,7 +572,7 @@ export const templateSvgMixin = {
   _blockList(row, box) {
     const cells = row.list;
     const lineHeight = box.h / (cells.length || 1);
-    const fontSize = Math.max(6, Math.min(lineHeight * 0.62, box.w * 0.11));
+    const fontSize = Math.max(7, Math.min(lineHeight * 0.68, box.w * 0.12));
     const right = box.x + box.w;
     const parts = [];
     cells.forEach((cell, index) => {
@@ -599,7 +616,7 @@ export const templateSvgMixin = {
       }));
     }
     if (stat.caption != null) {
-      parts.push(this._svgText(stat.caption, box.x + box.w / 2, box.y + valueHeight + captionHeight * 0.5, Math.max(6, captionHeight * 0.6), {
+      parts.push(this._svgText(stat.caption, box.x + box.w / 2, box.y + valueHeight + captionHeight * 0.5, Math.max(7, captionHeight * 0.68), {
         color: this._templateInk(stat.captionColor), maxWidth: box.w,
       }));
     }
@@ -616,10 +633,10 @@ export const templateSvgMixin = {
     const parts = [`<rect x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}" fill="${fill}"></rect>`];
     const cx = x + w / 2;
     if (band.label != null && band.value != null) {
-      parts.push(this._svgText(band.label, cx, box.y + box.h * 0.3, Math.max(6, box.h * 0.26), { color: "#ffffff", bold: true, maxWidth: w * 0.92 }));
-      parts.push(this._svgText(band.value, cx, box.y + box.h * 0.7, Math.max(7, box.h * 0.38), { color: "#ffffff", bold: true, maxWidth: w * 0.92 }));
+      parts.push(this._svgText(band.label, cx, box.y + box.h * 0.3, Math.max(7, box.h * 0.3), { color: "#ffffff", bold: true, maxWidth: w * 0.92 }));
+      parts.push(this._svgText(band.value, cx, box.y + box.h * 0.7, Math.max(8, box.h * 0.42), { color: "#ffffff", bold: true, maxWidth: w * 0.92 }));
     } else {
-      parts.push(this._svgText(band.value ?? band.label, cx, box.y + box.h * 0.5, Math.max(7, box.h * 0.52), { color: "#ffffff", bold: true, maxWidth: w * 0.92 }));
+      parts.push(this._svgText(band.value ?? band.label, cx, box.y + box.h * 0.5, Math.max(8, box.h * 0.56), { color: "#ffffff", bold: true, maxWidth: w * 0.92 }));
     }
     return parts.join("");
   },
@@ -629,7 +646,7 @@ export const templateSvgMixin = {
     const values = (row.bars.values || []).map(Number).filter(Number.isFinite);
     if (!values.length) return "";
     const labels = row.bars.labels || [];
-    const labelHeight = labels.length ? Math.min(box.h * 0.24, 11) : 0;
+    const labelHeight = labels.length ? Math.min(box.h * 0.28, 13) : 0;
     const chartHeight = Math.max(1, box.h - labelHeight);
     const top = Math.max(...values);
     const bottom = Math.min(...values, 0);
@@ -647,7 +664,13 @@ export const templateSvgMixin = {
     });
     labels.forEach((label, index) => {
       if (label == null || label === "") return;
-      parts.push(this._svgText(label, box.x + step * (index + 0.5), box.y + chartHeight + labelHeight * 0.6, Math.max(5, labelHeight * 0.62), { maxWidth: step * 0.95 }));
+      // Only selected ticks carry a label (typically 0, 6, 12 and 18). They may
+      // use the empty neighbouring intervals instead of being squeezed into the
+      // width of one narrow bar.
+      const labelWidth = Math.min(box.w, Math.max(step * 0.95, step * 3.5));
+      const rawX = box.x + step * (index + 0.5);
+      const labelX = Math.max(box.x + labelWidth / 2, Math.min(box.x + box.w - labelWidth / 2, rawX));
+      parts.push(this._svgText(label, labelX, box.y + chartHeight + labelHeight * 0.58, Math.max(7, labelHeight * 0.7), { maxWidth: labelWidth }));
     });
     return parts.join("");
   },
@@ -660,7 +683,7 @@ export const templateSvgMixin = {
     const parts = [];
     meters.forEach((meter, index) => {
       const top = box.y + lineHeight * index;
-      const labelSize = Math.max(5, Math.min(lineHeight * 0.36, box.w * 0.09));
+      const labelSize = Math.max(7, Math.min(lineHeight * 0.42, box.w * 0.1));
       const barHeight = Math.max(2, lineHeight * 0.28);
       const barY = top + lineHeight * 0.55;
       const percent = Math.max(0, Math.min(1, Number(meter.percent) || 0));
@@ -728,10 +751,10 @@ export const templateSvgMixin = {
       const cx = box.x + cellWidth * (index % columns) + cellWidth / 2;
       const top = box.y + cellHeight * Math.floor(index / columns) + (cellHeight - contentHeight) / 2;
       if (cell.icon) parts.push(this._svgIcon(cell.icon, cx, top + contentHeight * 0.26, Math.min(contentHeight * 0.32, cellWidth * 0.32), this._templateInk(cell.color)));
-      parts.push(this._svgText(cell.value, cx, top + contentHeight * (cell.icon ? 0.6 : 0.42), Math.max(6, Math.min(contentHeight * (cell.icon ? 0.26 : 0.34), cellWidth * 0.3)), {
+      parts.push(this._svgText(cell.value, cx, top + contentHeight * (cell.icon ? 0.6 : 0.42), Math.max(8, Math.min(contentHeight * (cell.icon ? 0.29 : 0.38), cellWidth * 0.32)), {
         bold: true, color: this._templateInk(cell.color), maxWidth: cellWidth * 0.9,
       }));
-      parts.push(this._svgText(cell.label, cx, top + contentHeight * (cell.icon ? 0.85 : 0.74), Math.max(5, Math.min(contentHeight * 0.17, cellWidth * 0.19)), { maxWidth: cellWidth * 0.9 }));
+      parts.push(this._svgText(cell.label, cx, top + contentHeight * (cell.icon ? 0.85 : 0.74), Math.max(7, Math.min(contentHeight * 0.2, cellWidth * 0.21)), { maxWidth: cellWidth * 0.9 }));
     });
     return parts.join("");
   },
@@ -752,7 +775,7 @@ export const templateSvgMixin = {
         parts.push(item.done
           ? `<circle cx="${cx.toFixed(2)}" cy="${lineY.toFixed(2)}" r="${dot.toFixed(2)}" fill="${this._templateInk(item.color)}"></circle>`
           : `<circle cx="${cx.toFixed(2)}" cy="${lineY.toFixed(2)}" r="${dot.toFixed(2)}" fill="#ffffff" stroke="${BLACK}" stroke-width="1"></circle>`);
-        parts.push(this._svgText(item.label, cx, box.y + box.h * 0.75, Math.max(5, box.h * 0.22), { bold: !!item.done, color: this._templateInk(item.color), maxWidth: step * 0.96 }));
+        parts.push(this._svgText(item.label, cx, box.y + box.h * 0.75, Math.max(7, box.h * 0.25), { bold: !!item.done, color: this._templateInk(item.color), maxWidth: step * 0.96 }));
       });
       return parts.join("");
     }
@@ -766,7 +789,7 @@ export const templateSvgMixin = {
         ? `<circle cx="${railX.toFixed(2)}" cy="${cy.toFixed(2)}" r="${dot.toFixed(2)}" fill="${this._templateInk(item.color)}"></circle>`
         : `<circle cx="${railX.toFixed(2)}" cy="${cy.toFixed(2)}" r="${dot.toFixed(2)}" fill="#ffffff" stroke="${BLACK}" stroke-width="1"></circle>`);
       const textX = railX + dot * 1.8;
-      parts.push(this._svgText(item.label, textX, cy, Math.max(6, Math.min(lineHeight * 0.5, box.w * 0.1)), {
+      parts.push(this._svgText(item.label, textX, cy, Math.max(7, Math.min(lineHeight * 0.56, box.w * 0.11)), {
         anchor: "start", bold: !!item.done, color: this._templateInk(item.color), maxWidth: box.x + box.w - textX,
       }));
     });
@@ -777,7 +800,7 @@ export const templateSvgMixin = {
     const items = row.checklist;
     const lineHeight = box.h / (items.length || 1);
     const mark = Math.min(lineHeight * 0.5, box.w * 0.11);
-    const fontSize = Math.max(6, Math.min(lineHeight * 0.52, box.w * 0.1));
+    const fontSize = Math.max(7, Math.min(lineHeight * 0.58, box.w * 0.11));
     const parts = [];
     items.forEach((item, index) => {
       const cy = box.y + lineHeight * (index + 0.5);
@@ -821,9 +844,9 @@ export const templateSvgMixin = {
     cells.forEach((cell, index) => {
       const cx = box.x + cellWidth * (index + 0.5);
       if (index > 0) parts.push(this._svgHairline(box.x + cellWidth * index, box.y + box.h * 0.12, 1, box.h * 0.76));
-      parts.push(this._svgText(cell.label, cx, labelY, Math.max(5, Math.min(box.h * 0.19, cellWidth * 0.28)), { bold: true, maxWidth: cellWidth * 0.9 }));
+      parts.push(this._svgText(cell.label, cx, labelY, Math.max(7, Math.min(box.h * 0.23, cellWidth * 0.3)), { bold: true, maxWidth: cellWidth * 0.9 }));
       if (cell.icon) parts.push(this._svgIcon(cell.icon, cx, box.y + box.h * 0.5, Math.min(box.h * 0.34, cellWidth * 0.5), this._templateInk(cell.color)));
-      parts.push(this._svgText(cell.value, cx, valueY, Math.max(6, Math.min(box.h * 0.26, cellWidth * 0.32)), { bold: true, color: this._templateInk(cell.color), maxWidth: cellWidth * 0.9 }));
+      parts.push(this._svgText(cell.value, cx, valueY, Math.max(8, Math.min(box.h * 0.3, cellWidth * 0.34)), { bold: true, color: this._templateInk(cell.color), maxWidth: cellWidth * 0.9 }));
     });
     return parts.join("");
   },

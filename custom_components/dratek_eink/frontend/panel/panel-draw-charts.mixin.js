@@ -258,7 +258,7 @@ export const drawChartsMixin = {
     const values = this._chartValues(object);
     const color = this._color(object.color || "black");
     const graphColor = this._color(object.graphColor || "black");
-    const legendFontSize = Math.max(6, Math.min(18, Number(object.legendFontSize || 8)));
+    const legendFontSize = Math.max(10, Math.min(24, Number(object.legendFontSize || 12)));
     const title = String(object.chartTitle || "").trim();
     const showAxes = object.showAxes !== false;
     const left = showAxes ? Math.max(object.yLabel ? 46 : 25, Math.round(legendFontSize * 3.4)) : 5;
@@ -269,12 +269,12 @@ export const drawChartsMixin = {
     const plotH = Math.max(8, box.h - top - bottom);
 
     ctx.fillStyle = graphColor;
-    ctx.font = '700 10px "DRATEK eInk Sans",Arial,sans-serif';
+    ctx.font = `700 ${Math.min(24, legendFontSize + 2)}px "DRATEK eInk Sans",Arial,sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     if (title) ctx.fillText(title, box.w / 2, 2, Math.max(10, box.w - 8));
     if (!values.length) {
-      ctx.font = '600 9px "DRATEK eInk Sans",Arial,sans-serif';
+      ctx.font = '700 11px "DRATEK eInk Sans",Arial,sans-serif';
       ctx.textBaseline = "middle";
       ctx.fillText("Zadejte data grafu", box.w / 2, box.h / 2);
       ctx.restore();
@@ -320,7 +320,7 @@ export const drawChartsMixin = {
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(left, top); ctx.lineTo(left, top + plotH); ctx.lineTo(left + plotW, top + plotH); ctx.stroke();
       ctx.fillStyle = graphColor;
-      ctx.font = `600 ${legendFontSize}px "DRATEK eInk Sans",Arial,sans-serif`;
+      ctx.font = `400 ${legendFontSize}px "DRATEK eInk Sans",Arial,sans-serif`;
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
       ctx.fillText(this._formatChartNumber(max), left - 3, top + 2);
@@ -330,7 +330,7 @@ export const drawChartsMixin = {
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       for (const index of [...new Set(labelIndexes)]) ctx.fillText(labels[index] || String(index + 1), xFor(index), top + plotH + 3, 34);
-      ctx.font = `700 ${Math.min(18, legendFontSize + 1)}px "DRATEK eInk Sans",Arial,sans-serif`;
+      ctx.font = `600 ${Math.min(18, legendFontSize + 1)}px "DRATEK eInk Sans",Arial,sans-serif`;
       if (object.xLabel) ctx.fillText(String(object.xLabel), left + plotW / 2, box.h - legendFontSize - 2, plotW);
       if (object.yLabel) {
         ctx.save();

@@ -459,7 +459,7 @@ export const templatesMixin = {
       object.showValues = false;
       object.barColor = "red";
       object.graphColor = "black";
-      object.legendFontSize = 8;
+      object.legendFontSize = 12;
       object.variable = true;
       object.variableName = this._uniqueVariableName("ceny_spot_24h", object.id);
     }

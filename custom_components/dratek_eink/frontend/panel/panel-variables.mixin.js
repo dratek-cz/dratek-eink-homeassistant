@@ -57,7 +57,7 @@ export const variablesMixin = {
       object.variableName = this._uniqueVariableName(object.variableName || "data_grafu", object.id);
       if (this._variables[object.variableName] === undefined) this._variables[object.variableName] = object.data || "";
       if (!object.barColor) object.barColor = "red";
-      if (!Number(object.legendFontSize)) object.legendFontSize = 8;
+      if (!Number(object.legendFontSize)) object.legendFontSize = 12;
     }
     return this._objects
       .filter((object) => ["text", "chart"].includes(object.type) && object.variable && object.variableName)

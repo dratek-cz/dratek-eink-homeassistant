@@ -909,6 +909,15 @@ class FrontendToolLibraryTests(unittest.TestCase):
         ):
             self.assertIn(field, self.source)
         self.assertIn("return { enabled: false };", self.source)
+        self.assertIn("Math.max(10, Math.min(24, Number(object.legendFontSize || 12)))", self.source)
+
+    def test_template_typography_keeps_a_readable_device_pixel_floor(self):
+        self.assertIn("const MIN_READABLE_FONT_SIZE = 10;", self.source)
+        self.assertIn('font-weight="${bold ? 700 : 400}"', self.source)
+        self.assertIn('_svgReadableText(value, size, maxWidth, bold', self.source)
+        self.assertIn("Math.max(7, labelHeight * 0.7)", self.source)
+        self.assertIn("step * 3.5", self.source)
+        self.assertIn("Math.max(8, Math.min(box.h * 0.3, cellWidth * 0.34))", self.source)
 
     def test_device_cards_do_not_request_background_backend_previews(self):
         self.assertNotIn('type: "dratek_eink/render_preview"', self.source)
@@ -1045,13 +1054,18 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('title: "České spotové ceny"', self.source)
         self.assertIn('cz_spot_prices: () => {', self.source)
         self.assertIn('https://github.com/rnovacek/homeassistant_cz_energy_spot_prices', self.source)
-        self.assertIn('entityPrefixes: ["sensor.current_buy_electricity_price", "sensor.current_spot_electricity_price"]', self.source)
+        self.assertIn('"sensor.aktualni_spotova_cena_elektriny"', self.source)
+        self.assertIn('"Aktuální spotová cena elektřiny"', self.source)
+        self.assertIn('findNamedEntity(["Dnešní nejlevnější spotová cena elektřiny"', self.source)
         self.assertIn('const czSpotBindings = template.id === "cz_spot_prices" ? this._czSpotTemplateBindings() : {};', self.source)
         self.assertIn('(template.id === "cz_spot_prices" ? "" : this._suggestTemplateEntity(meta))', self.source)
         self.assertIn('if (template?.id === "cz_spot_prices") {', self.source)
         self.assertIn('"sensor.current_buy_electricity_price_15min"', self.source)
         self.assertIn('"sensor.current_spot_electricity_price"', self.source)
         self.assertIn('sensor.${trade}_cheapest_electricity_today${interval}', self.source)
+        self.assertIn("return `${Math.round(Number(raw))} / ${intervals}`;", self.source)
+        self.assertIn("if (todayPrices.length > 1) return todayPrices.slice(0, 96);", self.source)
+        self.assertIn("A stale saved id must not permanently suppress fresh auto-discovery", self.source)
         self.assertIn('const timestampPrices = Object.fromEntries(', self.source)
         self.assertIn('group: "chart"', self.source)
         self.assertIn('<g data-template-block="${this._escape(row.group)}">${markup}</g>', self.source)

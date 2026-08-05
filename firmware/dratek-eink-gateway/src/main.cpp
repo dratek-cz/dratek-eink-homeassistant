@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.48-gateway";
+static const char* FIRMWARE_VERSION = "0.1.49-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -487,10 +487,11 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
     uniqueSent++;
   }
   bool streamingMode = (softwareVersion & 0x80) == 0x80;
-  bool blockWriteWithResponse = writeChar->canWrite();
+  bool blockWriteWithResponse = !writeChar->canWriteNoResponse();
+  bool unconfirmedStream = streamingMode && !blockWriteWithResponse;
   addLog(
     log,
-    "Transfer mode: " + String(streamingMode ? "GATT-confirmed stream" : "notification-paced legacy") +
+    "Transfer mode: " + String(unconfirmedStream ? "paced fast stream" : streamingMode ? "GATT-confirmed stream" : "notification-paced legacy") +
       " (software version " + String(softwareVersion) + ")."
   );
 
@@ -531,6 +532,9 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
         addLog(log, "Display did not acknowledge image block " + String(blockNumber) + ".");
         return false;
       }
+      // A short fixed cadence mirrors the vendor client and keeps the NimBLE
+      // command queue bounded without paying an ATT round trip for every block.
+      if (unconfirmedStream) delay(40);
       if (!sentBlocks[blockNumber]) {
         sentBlocks[blockNumber] = true;
         uniqueSent++;

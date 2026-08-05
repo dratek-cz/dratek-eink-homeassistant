@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.188
+
+- proměnné šablony českých spotových cen se automaticky párují podle oficiálních ID entit i českých názvů z integrace Czech Energy Spot Prices; neplatné staré vazby se samy obnoví
+- graf spotových cen čte časové atributy aktuálního dne, podporuje 24 hodinových i 96 čtvrthodinových hodnot a pořadí zobrazuje jako hodnotu z 24 nebo 96
+- přenos do displeje z Home Assistantu i přes gateway je znovu rychlý díky správnému použití nepotvrzovaných BLE zápisů a řízení toku; gateway firmware byl zvýšen na 0.1.49
+- texty a čísla v šablonách a grafech mají čitelnější velikost a běžnou tloušťku písma
+
 ## Novinky ve verzi 0.1.187
 
 - designer šablon má sjednocené kompaktní rozhraní, samostatnou lištu nástrojů, přepínání formátu plátna a přehlednější vlastnosti vybraného prvku
