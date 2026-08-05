@@ -16,8 +16,9 @@ export const devicesMixin = {
       this._saveCachedScanResult(nextResult);
       const changed = this._deviceAddressSignature(this._result) !== this._deviceAddressSignature(nextResult);
       const presenceChanged = this._devicePresenceSignature(this._result) !== this._devicePresenceSignature(nextResult);
+      const statusChanged = this._deviceStatusSignature(this._result) !== this._deviceStatusSignature(nextResult);
       this._result = nextResult;
-      if (!background || changed || presenceChanged) {
+      if (!background || changed || presenceChanged || statusChanged) {
         this._renderKeepingSearchFocus();
         this._loadDevicePreviewDrafts(this._result.devices || []).then(() => {
           this._renderKeepingSearchFocus();
@@ -31,11 +32,23 @@ export const devicesMixin = {
     } finally {
       this._scanInProgress = false;
       if (!background) this._loading = false;
-      if (!background || this._deviceAddressSignature(this._result) !== this._lastRenderedDeviceSignature) {
-        this._lastRenderedDeviceSignature = this._deviceAddressSignature(this._result);
+      if (!background || this._deviceStatusSignature(this._result) !== this._lastRenderedDeviceSignature) {
+        this._lastRenderedDeviceSignature = this._deviceStatusSignature(this._result);
         this._renderKeepingSearchFocus();
       }
     }
+  },
+
+  _scheduleDeviceStatusPoll(delay = 30000) {
+    window.clearTimeout(this._deviceStatusPollTimer);
+    if (!this.isConnected || !this._hass) return;
+    this._deviceStatusPollTimer = window.setTimeout(async () => {
+      this._deviceStatusPollTimer = null;
+      if (this._activeTab === "devices") {
+        await this._scan({ background: true });
+      }
+      this._scheduleDeviceStatusPoll();
+    }, delay);
   },
 
   _deviceAddressSignature(result = this._result) {
@@ -49,6 +62,30 @@ export const devicesMixin = {
   _devicePresenceSignature(result = this._result) {
     return (result?.devices || [])
       .map((device) => `${String(device.address || "").toUpperCase()}:${device.temporarily_unseen ? "stale" : "seen"}`)
+      .sort()
+      .join("|");
+  },
+
+  _deviceStatusSignature(result = this._result) {
+    return (result?.devices || [])
+      .map((device) => {
+        const preferredPath = device.preferred_path || null;
+        return JSON.stringify({
+          address: String(device.address || "").toUpperCase(),
+          battery: device.battery ?? null,
+          battery_percent: device.battery_percent ?? null,
+          battery_voltage: device.battery_voltage ?? null,
+          rssi: device.rssi ?? null,
+          temporarily_unseen: !!device.temporarily_unseen,
+          gateway_selection: device.gateway_selection || "",
+          selected_gateway_id: device.selected_gateway_id || "",
+          path_type: preferredPath?.type || "",
+          path_id: preferredPath?.id || "",
+          path_name: preferredPath?.name || "",
+          path_rssi: preferredPath?.rssi ?? null,
+          path_unavailable: !!preferredPath?.unavailable,
+        });
+      })
       .sort()
       .join("|");
   },
@@ -573,6 +610,27 @@ export const devicesMixin = {
           "Sloupcový graf se vykreslí, pokud má senzor atribut s polem cen na celý den; jinak zůstane ukázkový průběh.",
         ],
       },
+      cz_spot_prices: {
+        summary: "České spotové ceny elektřiny z integrace Czech Energy Spot Prices podle dat OTE. Šablona automaticky načte aktuální cenu, celý denní průběh, minimum, maximum, cenu na zítřek a pořadí aktuálního intervalu.",
+        integrations: [
+          {
+            name: "Czech Energy Spot Prices",
+            domain: "sensor",
+            entityPrefixes: ["sensor.current_buy_electricity_price", "sensor.current_spot_electricity_price"],
+            url: "https://github.com/rnovacek/homeassistant_cz_energy_spot_prices",
+            linkLabel: "GitHub a instalace",
+            why: "Komunitní integrace pro ceny elektřiny z OTE. Podporuje hodinové i 15minutové ceny a volitelnou skutečnou nákupní cenu včetně poplatků a DPH.",
+          },
+        ],
+        steps: [
+          "V HACS otevřete Integrace, vyhledejte Czech Energy Spot Prices a integraci nainstalujte. Potom restartujte Home Assistant.",
+          "V Nastavení → Zařízení a služby → Přidat integraci vyberte Czech Energy Spot Prices.",
+          "Zvolte elektřinu, měnu CZK, jednotku kWh a hodinový nebo 15minutový interval.",
+          "Chcete-li zobrazovat skutečnou nákupní cenu, otevřete u integrace Konfigurovat a vyplňte šablonu nákupní ceny včetně distribuce, poplatků a DPH.",
+          "Otevřete tuto šablonu znovu. Senzory se přiřadí automaticky; pokud máte více instancí integrace, můžete zdroje ručně změnit v Upravit data.",
+        ],
+        note: "Šablona preferuje nákupní cenu, pokud je v integraci nakonfigurovaná. Jinak použije základní spotovou cenu. Při současné hodinové a 15minutové instanci preferuje podrobnější 15minutová data.",
+      },
       home: {
         summary: "Teplota, vlhkost, světla a zámky v jedné dlaždicové přehledce.",
         integrations: [
@@ -813,9 +871,13 @@ export const devicesMixin = {
     if (!template) return "";
     const recipe = this._templateSetupRecipe(template);
     const integrations = (recipe.integrations || []).map((item) => {
-      const found = this._hasEntityDomain(item.domain);
-      const link = item.core && !item.helper
-        ? `<a href="https://www.home-assistant.io/integrations/${this._escape(item.domain)}/" target="_blank" rel="noopener noreferrer">Dokumentace</a>`
+      const states = this._hass?.states || {};
+      const found = Array.isArray(item.entityPrefixes) && item.entityPrefixes.length
+        ? Object.keys(states).some((entityId) => item.entityPrefixes.some((prefix) => entityId.startsWith(prefix)))
+        : this._hasEntityDomain(item.domain);
+      const documentationUrl = item.url || (item.core && !item.helper ? `https://www.home-assistant.io/integrations/${item.domain}/` : "");
+      const link = documentationUrl
+        ? `<a href="${this._escape(documentationUrl)}" target="_blank" rel="noopener noreferrer">${this._escape(item.linkLabel || "Dokumentace")}</a>`
         : "";
       return `<li class="template-setup-integration ${found ? "is-found" : "is-missing"}">
         <span class="template-setup-status"><ha-icon icon="mdi:${found ? "check-circle" : "alert-circle-outline"}"></ha-icon></span>
@@ -909,6 +971,7 @@ export const devicesMixin = {
       ...userTemplates,
       { id: "weather", number: "01", category: "nature", title: "Počasí", variables: [["thermometer", "Teplota"], ["weather-partly-cloudy", "Stav počasí"], ["clock-outline", "Čas"], ["calendar-outline", "Datum"], ["weather-rainy", "Předpověď"]] },
       { id: "energy", number: "02", category: "energy", title: "Cena elektřiny", variables: [["currency-usd", "Aktuální cena"], ["clock-outline", "Cenový interval"], ["chart-line", "Denní průběh"], ["tag-outline", "Minimum dne"]] },
+      { id: "cz_spot_prices", number: "22", category: "energy", title: "České spotové ceny", variables: [["currency-usd", "Aktuální cena"], ["chart-line", "Cenový průběh dnes"], ["tray-arrow-down", "Minimum dnes"], ["arrow-up-down", "Maximum dnes"], ["weather-sunny", "Minimum zítra"], ["counter", "Aktuální pořadí"]] },
       { id: "home", number: "03", category: "home", title: "Dům", variables: [["thermometer", "Teplota"], ["water-percent", "Vlhkost"], ["lightbulb-on-outline", "Světla"], ["lock-outline", "Zámky"]] },
       { id: "waste", number: "04", category: "home", title: "Odpady", variables: [["trash-can-outline", "První svoz"], ["recycle", "Druhý svoz"], ["calendar-clock", "Termíny svozu"]] },
       { id: "solar", number: "05", category: "energy", title: "Fotovoltaika", variables: [["solar-power", "Aktuální výkon"], ["weather-sunny", "Výroba dnes"], ["calendar-month", "Výroba měsíc"], ["counter", "Výroba celkem"], ["leaf", "Úspora CO₂"]] },
@@ -929,7 +992,7 @@ export const devicesMixin = {
       { id: "garden", number: "20", category: "nature", title: "Zahrada", variables: [["sprout-outline", "Záhon"], ["water-percent", "Vlhkost půdy"], ["thermometer", "Teplota"], ["weather-windy", "Vítr"], ["sprinkler-variant", "Další zálivka"]] },
       { id: "price", number: "21", category: "shop", title: "Cenovka", options: [["sale", "Akce", "Zobrazí štítek AKCE, původní cenu přeškrtne a novou zvýrazní."]], variables: [["tag-outline", "Název zboží"], ["currency-usd", "Cena"], ["cash-multiple", "Původní cena"], ["barcode", "Kód zboží"]] },
     ];
-    const prepared = new Set(["blank", "weather", "home", "solar", "living", "calendar", "security", "air", "thermostat", "server", "garden", "price"]);
+    const prepared = new Set(["blank", "weather", "home", "solar", "living", "calendar", "security", "air", "thermostat", "server", "garden", "price", "cz_spot_prices"]);
     return templates.map((template) => ({
       ...template,
       kind: template.user_created ? "custom" : prepared.has(template.id) ? "prepared" : "custom",
@@ -942,6 +1005,7 @@ export const devicesMixin = {
     const weatherEntity = template.id === "weather"
       ? Object.keys(this._hass?.states || {}).find((entityId) => entityId.startsWith("weather."))
       : "";
+    const czSpotBindings = template.id === "cz_spot_prices" ? this._czSpotTemplateBindings() : {};
     template.variables.forEach((variable, index) => {
       const meta = this._templateVariableMeta(variable, index);
       const key = `${template.id}:${meta.key}`;
@@ -950,9 +1014,60 @@ export const devicesMixin = {
         this._displayTemplateBindings[key] = `internal:${meta.key}`;
         return;
       }
-      const suggested = weatherEntity || this._suggestTemplateEntity(meta);
+      const suggested = weatherEntity || czSpotBindings[index] || (template.id === "cz_spot_prices" ? "" : this._suggestTemplateEntity(meta));
       if (suggested) this._displayTemplateBindings[key] = suggested;
     });
+  },
+
+  _czSpotTemplateBindings() {
+    const states = this._hass?.states || {};
+    const entityIds = Object.keys(states);
+    const usable = (entityId) => entityId && states[entityId] && !["unavailable", "unknown"].includes(String(states[entityId].state).toLowerCase());
+    const findEntity = (base, duplicate = "") => {
+      const preferred = duplicate ? `${base}${duplicate}` : base;
+      if (usable(preferred)) return preferred;
+      if (usable(base)) return base;
+      return entityIds.find((entityId) => entityId === preferred || entityId.startsWith(`${base}_`)) || "";
+    };
+    const currentCandidates = [
+      "sensor.current_buy_electricity_price_15min",
+      "sensor.current_buy_electricity_price",
+      "sensor.current_spot_electricity_price_15min",
+      "sensor.current_spot_electricity_price",
+    ];
+    let current = currentCandidates.map((base) => findEntity(base)).find(Boolean) || "";
+    if (!current) {
+      current = entityIds.find((entityId) => {
+        const state = states[entityId];
+        const attributes = state?.attributes || {};
+        const timestampCount = Object.keys(attributes).filter((key) => !Number.isNaN(Date.parse(key))).length;
+        const name = `${entityId} ${attributes.friendly_name || ""}`.toLowerCase();
+        return entityId.startsWith("sensor.") && timestampCount >= 20 && name.includes("electric") && name.includes("price");
+      }) || "";
+    }
+    const match = current.match(/^sensor\.current_(buy|spot)_electricity_price(_15min)?(_\d+)?$/);
+    if (!match) return current ? { 0: current, 1: current } : {};
+    const trade = match[1];
+    const interval = match[2] || "";
+    const duplicate = match[3] || "";
+    const orderInterval = interval ? "15min" : "hour";
+    return {
+      0: current,
+      1: current,
+      2: findEntity(`sensor.${trade}_cheapest_electricity_today${interval}`, duplicate),
+      3: findEntity(`sensor.${trade}_most_expensive_electricity_today${interval}`, duplicate),
+      4: findEntity(`sensor.${trade}_cheapest_electricity_tomorrow${interval}`, duplicate),
+      5: findEntity(`sensor.current_${trade}_electricity_${orderInterval}_order`, duplicate),
+    };
+  },
+
+  _templateLiveDataChanged(previousHass, nextHass) {
+    if (!previousHass?.states || !nextHass?.states || this._activeTab !== "display-settings") return false;
+    const watched = new Set(Object.values(this._displayTemplateBindings || {}).filter((value) => typeof value === "string" && !value.startsWith("internal:")));
+    Object.keys(nextHass.states)
+      .filter((entityId) => /^(sensor|binary_sensor)\.(?:current_)?(?:buy|spot)_.*electricity|^sensor\.(?:buy|spot)_(?:cheapest|most_expensive)_electricity/.test(entityId))
+      .forEach((entityId) => watched.add(entityId));
+    return [...watched].some((entityId) => previousHass.states[entityId] !== nextHass.states[entityId]);
   },
 
   // The catalog tile shows the very drawing the display will get, laid out at the
@@ -966,16 +1081,17 @@ export const devicesMixin = {
     const short = Math.min(base.width, base.height);
     const width = orientation === "landscape" ? long : short;
     const height = orientation === "landscape" ? short : long;
-    if (template?.user_created) return this._renderUserDisplayTemplateCatalogPreview(template, orientation);
+    if (template?.user_created) return this._renderUserDisplayTemplateCatalogPreview(template, orientation, width, height);
     return this._templateSvgThumbnail(template, width, height);
   },
 
-  _renderUserDisplayTemplateCatalogPreview(template, orientation = template?.orientation) {
+  _renderUserDisplayTemplateCatalogPreview(template, orientation = template?.orientation, width = 250, height = 128) {
     const elements = Array.isArray(template?.editor_elements) ? template.editor_elements : [];
+    const baseMarkup = template?.base_template_id ? this._templateSvgThumbnail(template, width, height) : "";
     const canvasRotation = this._userTemplateCanvasRotationStyle(template, orientation);
     const markup = elements.map((source) => {
       const item = this._orientedUserTemplateElement(source, template, orientation);
-      const style = `left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;transform:rotate(${item.rotation}deg);--element-color:${item.color};--element-fill:${item.fill};--element-stroke:${item.stroke};--element-stroke-width:${item.strokeWidth}px;--element-radius:${item.radius}px;--element-font-size:${item.fontSize}px;--element-font-weight:${item.fontWeight};--element-text-align:${item.textAlign};--element-value:${Math.max(0, Math.min(100, item.value))}%`;
+      const style = `left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;transform:rotate(${item.rotation}deg);--element-color:${item.color};--element-fill:${item.fill};--element-stroke:${item.stroke};--element-stroke-width:${item.strokeWidth}px;--element-radius:${item.radius}px;--element-font-size:${item.fontSize}px;--element-font-weight:${item.fontWeight};--element-font-family:${item.fontFamily};--element-font-style:${item.fontStyle};--element-text-decoration:${item.textDecoration};--element-text-outline-width:${item.textOutlineWidth}px;--element-text-outline-color:${item.textOutlineColor};--element-text-border-width:${item.textBorderWidth}px;--element-text-border-color:${item.textBorderColor};--element-overlay-opacity:${item.overlayOpacity}%;--element-text-align:${item.textAlign};--element-value:${Math.max(0, Math.min(100, item.value))}%`;
       let content = "";
       if (item.type === "image") content = `<img src="${this._escape(item.src || "")}" alt="">`;
       else if (["text", "button"].includes(item.type)) content = `<span>${this._escape(item.text || item.label)}</span>`;
@@ -986,7 +1102,7 @@ export const devicesMixin = {
       else if (item.type === "signal") content = this._renderTemplateSignalVisual(item);
       return `<span class="template-overlay template-overlay-${item.type} variant-${this._escape(item.variant || "default")}" style="${style}" aria-hidden="true">${content}</span>`;
     }).join("");
-    return `<span class="user-template-catalog-canvas"><span class="user-template-rotated-canvas ${canvasRotation.turn ? "is-whole-canvas-rotated" : ""}" style="${canvasRotation.style}">${markup}</span></span>`;
+    return `<span class="user-template-catalog-canvas">${baseMarkup}<span class="user-template-rotated-canvas ${canvasRotation.turn ? "is-whole-canvas-rotated" : ""}" style="${canvasRotation.style}">${markup}</span></span>`;
   },
 
   _renderDisplayTemplatesSection(device) {
@@ -1007,6 +1123,7 @@ export const devicesMixin = {
       { id: "custom", icon: "tune-variant", title: "Vlastní nastavení" },
     ];
     const cards = this._displayTemplateCards();
+    const settingsTemplate = cards.find((item) => item.id === this._templateSettingsDialogTemplateId);
     const query = String(this._displayTemplateSearchQuery || "").trim().toLocaleLowerCase("cs");
     const activeCategory = categories.some((category) => category.id === this._displayTemplateCategory)
       ? this._displayTemplateCategory
@@ -1117,13 +1234,18 @@ export const devicesMixin = {
                 ${userCreated ? `<span class="user-template-created-note"><ha-icon icon="mdi:palette-outline"></ha-icon>Vytvořeno v eInk Studiu</span>` : `<span class="display-template-variables" aria-label="Použité údaje">${template.variables.map(([iconName, label]) => `<span><ha-icon icon="mdi:${iconName}"></ha-icon>${this._escape(label)}</span>`).join("")}</span>`}
               </div>
               <div class="display-template-tile-actions">
-                <button type="button" class="display-template-card-action" data-display-template-open="${template.id}"><ha-icon icon="mdi:${onDisplay ? "check-circle" : "tune-variant"}"></ha-icon>${onDisplay ? "Na displeji · upravit" : userCreated ? "Otevřít vlastní šablonu" : used ? "Upravit nastavení" : "Nastavit šablonu"}</button>
+                <button type="button" class="display-template-card-action" data-display-template-edit-menu="${template.id}" aria-expanded="${this._templateEditMenuId === template.id}"><ha-icon icon="mdi:${onDisplay ? "check-circle" : "tune-variant"}"></ha-icon>Upravit šablonu<ha-icon icon="mdi:chevron-down"></ha-icon></button>
+                ${this._templateEditMenuId === template.id ? `<div class="display-template-edit-menu" role="menu" aria-label="Možnosti úpravy šablony ${this._escape(template.title)}">
+                  <div class="display-template-edit-menu-head"><span><ha-icon icon="mdi:tune-variant"></ha-icon></span><div><strong>Co chcete upravit?</strong><small>${this._escape(template.title)}</small></div></div>
+                  <button type="button" role="menuitem" data-display-template-edit-choice="variables" data-display-template-id="${this._escape(template.id)}"><ha-icon icon="mdi:database-edit-outline"></ha-icon><span><strong>Upravit zdroje dat</strong><small>Napojení hodnot na entity Home Assistantu</small></span></button>
+                  <button type="button" role="menuitem" data-display-template-edit-choice="designer" data-display-template-id="${this._escape(template.id)}"><ha-icon icon="mdi:palette-outline"></ha-icon><span><strong>Designer displeje</strong><small>Rozložení, prvky a vzhled displeje</small></span></button>
+                </div>` : ""}
               </div>
             </article>`;
           }).join("")}</div>` : `<div class="display-template-empty"><ha-icon icon="mdi:magnify-close"></ha-icon><strong>Žádná šablona neodpovídá filtru</strong><span>Zkuste jiný název nebo druh šablony.</span></div>`}
         </section>
       </div>
-    </section>`;
+    </section>${settingsTemplate && this._templateSettingsDialogMode === "variables" ? this._renderTemplateSettingsDialog(settingsTemplate, largeDisplay ? "large" : "small", largeDisplay) : ""}`;
   },
 
   _assignedDisplayTemplates(device = this._device()) {
@@ -1179,6 +1301,7 @@ export const devicesMixin = {
     this._templateEditorStates[id] = {
       editor_elements: structuredClone(this._templateEditorElements || []),
       element_adjustments: structuredClone(this._templateElementAdjustments || {}),
+      designer_viewport: this._templateDesignerViewport || "wide",
     };
   },
 
@@ -1189,6 +1312,10 @@ export const devicesMixin = {
       ?? (template?.user_created ? template.editor_elements : []);
     const sourceAdjustments = saved?.element_adjustments
       ?? (template?.user_created ? template.element_adjustments : {});
+    const requestedViewport = saved?.designer_viewport || template?.designer_viewport || "wide";
+    this._templateDesignerViewport = ["narrow", "wide", "large", "large-portrait"].includes(requestedViewport)
+      ? requestedViewport
+      : "wide";
     this._templateEditorElements = Array.isArray(sourceElements)
       ? structuredClone(sourceElements).map((item) => this._normalizeTemplateEditorElement(item))
       : [];
@@ -1216,6 +1343,7 @@ export const devicesMixin = {
       sizes: structuredClone(this._displayTemplateSizes || {}),
       placements: structuredClone(this._templateCanvasPlacements || {}),
       image_library: structuredClone(this._templateImageLibrary || []),
+      designer_viewport: this._templateDesignerViewport || "wide",
     };
   },
 
@@ -1238,6 +1366,7 @@ export const devicesMixin = {
       this._templateOverlayDrag = null;
       this._templateElementAdjustments = {};
       this._templateImageLibrary = [];
+      this._templateDesignerViewport = "wide";
       this._selectedTemplatePart = "";
       return;
     }
@@ -1248,6 +1377,9 @@ export const devicesMixin = {
     this._selectedDisplayTemplateSecondaryId = String(config.selected_secondary || assignments[1] || "");
     this._displayTemplateOrientation = config.orientation === "landscape" ? "landscape" : "portrait";
     this._displayTemplateLargeLayout = ["single", "side-by-side", "stacked"].includes(config.layout) ? config.layout : "single";
+    this._templateDesignerViewport = ["narrow", "wide", "large", "large-portrait"].includes(config.designer_viewport)
+      ? config.designer_viewport
+      : "wide";
     this._displayTemplateBindings = structuredClone(config.bindings || {});
     this._templateEditorStates = {};
     if (config.template_states && typeof config.template_states === "object" && !Array.isArray(config.template_states)) {
@@ -1256,6 +1388,9 @@ export const devicesMixin = {
         this._templateEditorStates[templateId] = {
           editor_elements: Array.isArray(state.editor_elements) ? structuredClone(state.editor_elements) : [],
           element_adjustments: structuredClone(state.element_adjustments || {}),
+          designer_viewport: ["narrow", "wide", "large", "large-portrait"].includes(state.designer_viewport)
+            ? state.designer_viewport
+            : this._templateDesignerViewport,
         };
       }
     }
@@ -1267,6 +1402,7 @@ export const devicesMixin = {
       this._templateEditorStates[restoredTemplateId] = {
         editor_elements: Array.isArray(config.editor_elements) ? structuredClone(config.editor_elements) : [],
         element_adjustments: structuredClone(config.element_adjustments || {}),
+        designer_viewport: this._templateDesignerViewport,
       };
     }
     this._restoreTemplateEditorState(restoredTemplateId);
@@ -1308,22 +1444,37 @@ export const devicesMixin = {
   _storeCurrentUserDisplayTemplate(device = this._device()) {
     const selectedId = String(this._selectedDisplayTemplateId || "");
     const existing = (this._userDisplayTemplates || []).find((template) => template.id === selectedId);
-    if (selectedId !== "blank" && !existing) return null;
+    const sourceTemplate = this._displayTemplateCards().find((template) => template.id === selectedId);
+    if (!sourceTemplate) return null;
     const id = existing?.id || `user-template-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
-    const title = existing?.title || this._nextUserDisplayTemplateTitle();
+    const title = existing?.title || (selectedId === "blank" ? this._nextUserDisplayTemplateTitle() : `${sourceTemplate.title} – upravená`);
     const now = new Date().toISOString();
+    const viewport = this._templateDesignerViewport || "wide";
+    const viewportSize = {
+      narrow: { width: 128, height: 296 },
+      wide: { width: 296, height: 128 },
+      large: { width: 800, height: 480 },
+      "large-portrait": { width: 480, height: 800 },
+    }[viewport] || { width: 296, height: 128 };
+    const remappedAdjustments = Object.fromEntries(Object.entries(this._templateElementAdjustments || {}).map(([key, adjustment]) => [
+      key.replace(`:${selectedId}:`, `:${id}:`), structuredClone(adjustment),
+    ]));
+    this._templateElementAdjustments = remappedAdjustments;
     const stored = {
       ...(existing || {}),
       id,
       title,
       user_created: true,
-      variables: [],
+      base_template_id: existing?.base_template_id || (selectedId === "blank" ? "" : selectedId),
+      variables: structuredClone(existing?.variables || sourceTemplate.variables || []),
+      options: structuredClone(existing?.options || sourceTemplate.options || []),
       editor_elements: structuredClone(this._templateEditorElements || []),
-      element_adjustments: structuredClone(this._templateElementAdjustments || {}),
+      element_adjustments: structuredClone(remappedAdjustments),
       orientation: this._displayTemplateOrientation === "landscape" ? "landscape" : "portrait",
       design_orientation: existing?.design_orientation || existing?.orientation || (this._displayTemplateOrientation === "landscape" ? "landscape" : "portrait"),
-      design_width: existing?.design_width || this._devicePreviewSize(device).width,
-      design_height: existing?.design_height || this._devicePreviewSize(device).height,
+      designer_viewport: viewport,
+      design_width: viewportSize.width,
+      design_height: viewportSize.height,
       formats: structuredClone(this._displayTemplateFormats || {}),
       sizes: structuredClone(this._displayTemplateSizes || {}),
       placements: structuredClone(this._templateCanvasPlacements || {}),
@@ -1426,37 +1577,42 @@ export const devicesMixin = {
   async _saveDisplayTemplateDraft() {
     const device = this._device();
     if (!device || !this._hass) return false;
+    window.clearTimeout(this._draftSaveTimer);
+    this._draftSaveTimer = null;
     const payload = this._projectPayload(device);
-    const result = await this._hass.callWS({
-      type: "dratek_eink/device_drafts/save",
-      address: device.address,
-      draft: payload,
-    });
-    const address = String(device.address || "").toUpperCase();
-    this._deviceDrafts[address] = result?.draft || payload;
-    this._saveCachedDeviceDrafts?.();
-    return true;
+    return this._queueDeviceDraftSave(device, payload);
   },
 
   _renderDisplayTemplateEditor(device) {
     const templates = this._displayTemplateCards();
     const template = templates.find((item) => item.id === this._selectedDisplayTemplateId) || templates[0];
-    const secondaryTemplate = templates.find((item) => item.id === this._selectedDisplayTemplateSecondaryId)
-      || templates.find((item) => item.id !== template.id)
-      || template;
     const size = this._devicePreviewSize(device);
     const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
-    const orientation = this._displayTemplateOrientation === "landscape" ? "landscape" : "portrait";
-    const layout = largeDisplay && ["side-by-side", "stacked"].includes(this._displayTemplateLargeLayout)
-      ? this._displayTemplateLargeLayout
-      : "single";
-    const selectedSlot = this._selectedTemplateCanvasSlot === "secondary" && layout !== "single" ? "secondary" : "primary";
-    const selectedSize = largeDisplay && this._displayTemplateSizes?.[selectedSlot] === "small" ? "small" : "large";
-    const activeTemplate = selectedSlot === "secondary" ? secondaryTemplate : template;
+    const selectedSize = "large";
+    const activeTemplate = template;
     const previewZoom = Math.max(0.5, Math.min(1.8, Number(this._displayTemplatePreviewZoom || 1)));
+    const viewport = ["narrow", "wide", "large", "large-portrait"].includes(this._templateDesignerViewport)
+      ? this._templateDesignerViewport
+      : "wide";
+    const viewportSize = {
+      narrow: { width: 128, height: 296 },
+      wide: { width: 296, height: 128 },
+      large: { width: 800, height: 480 },
+      "large-portrait": { width: 480, height: 800 },
+    }[viewport];
+    const canvasWidth = viewportSize.width;
+    const canvasHeight = viewportSize.height;
+    const canvasScale = Math.min(760 / canvasWidth, 360 / canvasHeight);
+    const previewCanvasWidth = Math.round(canvasWidth * canvasScale);
+    const canvasFormat = canvasWidth >= canvasHeight ? "wide" : "narrow";
     return `<section class="display-template-editor-page studio-pro-workspace">
-      ${this._renderStudioHeader(activeTemplate, device, orientation, previewZoom)}
+      <div class="studio-pro-top-row">
+        ${this._renderStudioActions()}
+      </div>
       <div class="display-template-editor-layout">
+        <div class="studio-pro-selection-row">
+          ${this._renderTemplateSelectionBar(activeTemplate, previewZoom, viewport)}
+        </div>
         <aside class="card display-template-editor-panel display-template-editor-left studio-pro-sidebar" aria-label="Kategorie prvků">
           ${this._renderTemplateEditorTools()}
           ${this._renderTemplateElementPalette()}
@@ -1464,16 +1620,11 @@ export const devicesMixin = {
 
         <main class="display-template-editor-canvas" data-photoshop-canvas>
           <div class="display-template-preview-card photoshop-canvas-card">
-            <div class="template-preview-history-actions" role="group" aria-label="Historie úprav">
-              <button type="button" data-template-history="undo" title="Zpět (Ctrl+Z)" aria-label="Zpět" ${this._templateUndoStack?.length ? "" : "disabled"}><ha-icon icon="mdi:undo"></ha-icon></button>
-              <button type="button" data-template-history="redo" title="Vpřed (Ctrl+Y)" aria-label="Vpřed" ${this._templateRedoStack?.length ? "" : "disabled"}><ha-icon icon="mdi:redo"></ha-icon></button>
-            </div>
             <div class="display-template-editor-stage">
-              ${this._renderTemplatePhysicalDevicePreview(device, template, secondaryTemplate, orientation, layout)}
+              <div class="template-standalone-editor template-designer-screen viewport-${viewport}" style="--template-canvas-ratio:${canvasWidth}/${canvasHeight};--template-canvas-width:${previewCanvasWidth}px;--template-preview-zoom:${previewZoom}" aria-label="Plátno šablony ${this._escape(template.title)}">
+                ${this._renderDisplayTemplateSurface(template, canvasFormat, true, "primary", true, "large", false, canvasWidth, canvasHeight)}
+              </div>
             </div>
-          </div>
-          <div class="photoshop-context-bar">
-            ${this._renderPhotoshopContextBar(activeTemplate)}
           </div>
         </main>
 
@@ -1481,71 +1632,40 @@ export const devicesMixin = {
           ${this._templateSendResult ? `<div class="template-send-result ${this._templateSendResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSendResult.ok ? "check-circle-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSendResult.message)}</span></div>` : ""}
           ${this._templateSaveResult ? `<div class="template-send-result ${this._templateSaveResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSaveResult.ok ? "content-save-check-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSaveResult.message)}</span></div>` : ""}
           <aside class="card display-template-editor-panel display-template-editor-right" aria-label="Nastavení prvku nebo šablony">
-            ${this._selectedTemplateEditorElementId ? this._renderTemplateElementInspector() : `
-            <div class="template-editor-panel-heading"><ha-icon icon="mdi:tune-variant"></ha-icon><span><strong>Nastavení šablony</strong><small>${this._escape(activeTemplate.title)}</small></span></div>
-            <div class="template-layout-options template-size-options" style="display:none">
-              <button type="button" class="${selectedSize === "large" ? "is-active" : ""}" data-template-size="large" ${largeDisplay ? "" : "disabled"}><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon>Velká</button>
-              <button type="button" class="${selectedSize === "small" ? "is-active" : ""}" data-template-size="small" ${largeDisplay ? "" : "disabled"}><ha-icon icon="mdi:arrow-collapse-all"></ha-icon>Malá</button>
-            </div>
-            <p class="template-size-help" style="display:none">Velká šablona zabírá celý displej a uzamkne přidání druhé.</p>
-            ${this._renderTemplatePartControls(activeTemplate)}
-            <button type="button" class="secondary template-setup-open" data-display-template-canvas-open="${this._escape(activeTemplate.id)}"><ha-icon icon="mdi:vector-selection"></ha-icon>Posouvat a upravit prvky na plátně</button>
-            <button type="button" class="secondary template-setup-open" data-display-template-setup="${this._escape(activeTemplate.id)}"><ha-icon icon="mdi:help-circle-outline"></ha-icon>Jak zprovoznit tuto šablonu</button>
-            ${this._renderTemplateOptionSettings(activeTemplate)}
-            <p class="template-settings-intro">Vyberte, ze kterých entit Home Assistantu se mají načítat hodnoty. Systémové údaje jsou nastavené automaticky.</p>
-            <div class="template-variable-settings">${activeTemplate.variables.map((variable, index) => this._renderTemplateVariableSetting(activeTemplate, variable, index)).join("")}</div>`}
+            ${this._selectedTemplateEditorElementId ? this._renderTemplateElementInspector() : this._selectedTemplatePart ? this._renderTemplatePartInspector(activeTemplate) : `
+            <div class="template-properties-empty"><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon><strong>Vyberte prvek na plátně</strong><p>Zde se zobrazí všechny jeho barvy, text, podbarvení, orámování, data a další vlastnosti.</p><button type="button" class="secondary" data-template-settings-open><ha-icon icon="mdi:tune-variant"></ha-icon>Nastavení celé šablony</button></div>`}
           </aside>
         </div>
       </div>
+      ${this._renderTemplateSettingsDialog(activeTemplate, selectedSize, largeDisplay)}
     </section>`;
   },
 
-  _renderStudioHeader(activeTemplate, device, orientation, previewZoom) {
-    const key = String(this._selectedTemplatePart || "");
-    const adjustment = this._templateElementAdjustments?.[key];
-    const partNumber = key ? Number(key.split(":").at(-1)) + 1 : 0;
-    const selectedColor = adjustment?.color || "black";
-    const size = this._devicePreviewSize(device);
-
-    return `<header class="studio-pro-header">
-      <div class="studio-pro-brand">
-        <span class="studio-pro-logo"><ha-icon icon="mdi:palette-swatch-outline"></ha-icon></span>
-        <div class="studio-pro-title-wrap">
-          <small>Designer</small>
-          <h1>DRATEK eInk Studio</h1>
-          <p>${this._escape(device?.name || "Displej")} · <strong>${size.width} × ${size.height} px</strong></p>
+  _renderTemplateSettingsDialog(activeTemplate, selectedSize, largeDisplay) {
+    if (!this._templateSettingsDialogOpen) return "";
+    const variablesOnly = this._templateSettingsDialogMode === "variables";
+    const variableList = `<p class="template-settings-intro">Všechny zdroje dat použité v této šabloně. U každého můžete změnit napojenou entitu; systémové hodnoty doplňuje Home Assistant automaticky.</p><div class="template-variable-settings">${activeTemplate.variables.map((variable, index) => this._renderTemplateVariableSetting(activeTemplate, variable, index)).join("")}</div>`;
+    return `<div class="template-settings-backdrop" data-template-settings-close><section class="card template-settings-dialog" role="dialog" aria-modal="true" aria-label="${variablesOnly ? "Upravit zdroje dat" : "Nastavení šablony"}" data-template-settings-dialog>
+      <header><span><small>${variablesOnly ? "Zdroje dat šablony" : "Nastavení celé šablony"}</small><strong>${this._escape(activeTemplate.title)}</strong></span><button type="button" data-template-settings-close title="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button></header>
+      <div class="template-settings-dialog-content">
+        ${variablesOnly ? variableList : `
+        <div class="template-layout-options template-size-options" style="display:none">
+          <button type="button" class="${selectedSize === "large" ? "is-active" : ""}" data-template-size="large" ${largeDisplay ? "" : "disabled"}><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon>Velká</button>
+          <button type="button" class="${selectedSize === "small" ? "is-active" : ""}" data-template-size="small" ${largeDisplay ? "" : "disabled"}><ha-icon icon="mdi:arrow-collapse-all"></ha-icon>Malá</button>
         </div>
+        ${this._renderTemplatePartControls(activeTemplate)}
+        <button type="button" class="secondary template-setup-open" data-display-template-setup="${this._escape(activeTemplate.id)}"><ha-icon icon="mdi:help-circle-outline"></ha-icon>Jak zprovoznit tuto šablonu</button>
+        ${this._renderTemplateOptionSettings(activeTemplate)}
+        ${variableList}`}
       </div>
+    </section></div>`;
+  },
 
-      <div class="studio-pro-header-center">
-        ${key && adjustment ? `
-          <div class="photoshop-options-group">
-            <span class="photoshop-options-badge"><ha-icon icon="mdi:vector-selection"></ha-icon> Prvek ${partNumber}</span>
-            <div class="photoshop-options-colors">
-              <span class="photoshop-options-label">Barva:</span>
-              <button type="button" class="color-swatch is-black ${selectedColor === "black" ? "is-selected" : ""}" data-template-part-color="black" title="Černá barva"></button>
-              <button type="button" class="color-swatch is-red ${selectedColor === "red" ? "is-selected" : ""}" data-template-part-color="red" title="Červená barva"></button>
-              <button type="button" class="color-swatch is-white ${selectedColor === "white" ? "is-selected" : ""}" data-template-part-color="white" title="Bílá barva"></button>
-            </div>
-            <button type="button" class="photoshop-btn" data-template-part-reset="${this._escape(key)}"><ha-icon icon="mdi:restore"></ha-icon> Resetovat</button>
-          </div>
-        ` : `
-          <div class="template-preview-controls">
-            <div class="template-preview-zoom" role="group" aria-label="Přiblížení náhledu">
-              <button type="button" data-template-preview-zoom="out" title="Oddálit"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon></button>
-              <button type="button" class="template-preview-zoom-value" data-template-preview-zoom="reset" title="Obnovit">${Math.round(previewZoom * 100)} %</button>
-              <button type="button" data-template-preview-zoom="in" title="Přiblížit"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></button>
-            </div>
-            <div class="studio-pro-divider"></div>
-            <div class="display-template-orientation" role="group" aria-label="Orientace displeje">
-              <button type="button" class="${orientation === "portrait" ? "is-active" : ""}" data-template-orientation="portrait" title="Na výšku"><ha-icon icon="mdi:phone-rotate-portrait"></ha-icon></button>
-              <button type="button" class="${orientation === "landscape" ? "is-active" : ""}" data-template-orientation="landscape" title="Na šířku"><ha-icon icon="mdi:phone-rotate-landscape"></ha-icon></button>
-            </div>
-          </div>
-        `}
-      </div>
-
-      <div class="studio-pro-header-actions">
+  _renderStudioActions() {
+    return `<div class="studio-pro-detached-actions" aria-label="Akce návrhu">
+        <button type="button" class="studio-pro-btn secondary" data-template-settings-open>
+          <ha-icon icon="mdi:tune-variant"></ha-icon> Nastavení šablony
+        </button>
         <button type="button" class="display-template-save-button studio-pro-btn" data-template-save>
           <ha-icon icon="mdi:content-save-outline"></ha-icon> Uložit návrh
         </button>
@@ -1553,8 +1673,67 @@ export const devicesMixin = {
           <ha-icon icon="mdi:${this._templateSending ? "loading" : "send"}" ${this._templateSending ? 'class="spin"' : ""}></ha-icon>
           <span>${this._templateSending ? "Odesílám…" : "Odeslat do displeje"}</span>
         </button>
+      </div>`;
+  },
+
+  _renderTemplateSelectionBar(activeTemplate, previewZoom, viewport) {
+    const item = this._templateEditorElement();
+    const partKey = String(this._selectedTemplatePart || "");
+    const partAdjustment = partKey ? this._templateElementAdjustments?.[partKey] : null;
+    const hasSelection = !!(item || partAdjustment);
+    const disabled = hasSelection ? "" : "disabled";
+    const partQuarterTurn = Math.abs(Math.round(Number(partAdjustment?.rotation || 0) / 90)) % 2 === 1;
+    const partLandscape = Number(partAdjustment?.baseWidth || 0) >= Number(partAdjustment?.baseHeight || 0);
+    const areaOrientation = item
+      ? (Number(item.w || 0) >= Number(item.h || 0) ? "landscape" : "portrait")
+      : ((partQuarterTurn ? !partLandscape : partLandscape) ? "landscape" : "portrait");
+    const viewportOptions = [
+      ["narrow", "phone-rotate-portrait", "Úzká"],
+      ["wide", "phone-rotate-landscape", "Široká"],
+      ["large", "monitor", "Velký displej"],
+      ["large-portrait", "tablet", "Velký na výšku"],
+    ];
+    const activeViewport = viewportOptions.find(([value]) => value === viewport) || viewportOptions[1];
+    return `<section class="template-selection-bar is-locked-controls ${hasSelection ? "has-selection" : "has-no-selection"}" aria-label="Pevné ovládání designeru">
+      <div class="template-selection-fixed-tools">
+        <div class="template-toolbar-cluster is-view">
+        <div class="template-viewport-menu-wrap">
+          <button type="button" class="template-viewport-menu-trigger ${this._templateViewportMenuOpen ? "is-active" : ""}" data-template-viewport-menu aria-expanded="${this._templateViewportMenuOpen}" title="Formát náhledu: ${activeViewport[2]}"><ha-icon icon="mdi:${activeViewport[1]}"></ha-icon></button>
+          ${this._templateViewportMenuOpen ? `<div class="template-viewport-popup" role="dialog" aria-label="Formát náhledu šablony">
+            <header><span><strong>Formát náhledu</strong><small>${this._escape(activeTemplate?.title || "Šablona")}</small></span><button type="button" data-template-viewport-menu-close title="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button></header>
+            <div>${viewportOptions.map(([value, icon, label]) => `<button type="button" class="${viewport === value ? "is-active" : ""}" data-template-designer-viewport="${value}" aria-pressed="${viewport === value}"><ha-icon icon="mdi:${icon}"></ha-icon><span>${label}</span></button>`).join("")}</div>
+          </div>` : ""}
+        </div>
+        <span class="template-selection-divider"></span>
+        <div class="template-preview-zoom" role="group" aria-label="Přiblížení náhledu">
+          <button type="button" data-template-preview-zoom="out" title="Oddálit"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon></button>
+          <button type="button" class="template-preview-zoom-value" data-template-preview-zoom="reset" title="Obnovit přiblížení">${Math.round(previewZoom * 100)} %</button>
+          <button type="button" data-template-preview-zoom="in" title="Přiblížit"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></button>
+        </div>
+        </div>
+        <span class="template-selection-divider"></span>
+        <div class="template-toolbar-cluster is-transform">
+        <div class="template-selection-orientation" role="group" aria-label="Orientace vybrané oblasti">
+          <button type="button" class="${hasSelection && areaOrientation === "portrait" ? "is-active" : ""}" data-template-element-area-orientation="portrait" title="Oblast na výšku" aria-label="Oblast na výšku" ${disabled}><ha-icon icon="mdi:rectangle-outline"></ha-icon></button>
+          <button type="button" class="${hasSelection && areaOrientation === "landscape" ? "is-active" : ""}" data-template-element-area-orientation="landscape" title="Oblast na šířku" aria-label="Oblast na šířku" ${disabled}><ha-icon icon="mdi:rectangle-outline" class="is-landscape"></ha-icon></button>
+        </div>
+        </div>
+        <span class="template-selection-divider"></span>
+        <div class="template-selection-tool-group template-toolbar-cluster is-actions" role="toolbar" aria-label="Historie, transformace a vrstvy">
+          <button type="button" data-template-history="undo" title="Zpět" ${this._templateUndoStack?.length ? "" : "disabled"}><ha-icon icon="mdi:undo"></ha-icon></button>
+          <button type="button" data-template-history="redo" title="Vpřed" ${this._templateRedoStack?.length ? "" : "disabled"}><ha-icon icon="mdi:redo"></ha-icon></button>
+          <span class="template-selection-divider"></span>
+          <button type="button" data-template-element-rotate="-90" title="Otočit o 90° doleva" ${disabled}><ha-icon icon="mdi:rotate-left"></ha-icon></button>
+          <button type="button" data-template-element-rotate="90" title="Otočit o 90° doprava" ${disabled}><ha-icon icon="mdi:rotate-right"></ha-icon></button>
+          <span class="template-selection-divider"></span>
+          <button type="button" data-template-element-order="back" title="Přenést do pozadí" ${disabled}><ha-icon icon="mdi:arrange-send-backward"></ha-icon></button>
+          <button type="button" data-template-element-order="front" title="Přenést do popředí" ${disabled}><ha-icon icon="mdi:arrange-bring-forward"></ha-icon></button>
+          <span class="template-selection-divider"></span>
+          <button type="button" data-template-element-duplicate title="Duplikovat" ${disabled}><ha-icon icon="mdi:content-duplicate"></ha-icon></button>
+          <button type="button" class="is-danger" data-template-element-delete title="Smazat" ${disabled}><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>
+        </div>
       </div>
-    </header>`;
+    </section>`;
   },
 
   _renderPhotoshopOptionsBar(activeTemplate, device, orientation, previewZoom) {
@@ -1718,7 +1897,8 @@ export const devicesMixin = {
         icon: model.icon || "star", color: model.color || "#111111", fill: model.fill || "transparent",
         variant: model.variant || "default",
         stroke: model.stroke || "#111111", strokeWidth: Number(model.strokeWidth ?? 2), radius: Number(model.radius || 0),
-        fontSize: Number(model.fontSize || 16), fontWeight: String(model.fontWeight || "700"), textAlign: model.textAlign || "center",
+        fontSize: Number(model.fontSize || 16), fontWeight: String(model.fontWeight || "700"), fontFamily: String(model.fontFamily || "DRATEK eInk Sans"), fontStyle: model.fontStyle === "italic" ? "italic" : "normal", textDecoration: model.textDecoration || "none", textAlign: model.textAlign || "center",
+        textOutlineWidth: Number(model.textOutlineWidth || 0), textOutlineColor: model.textOutlineColor || "#ffffff", textBorderWidth: Number(model.textBorderWidth || 0), textBorderColor: model.textBorderColor || "#111111", overlayOpacity: Number(model.overlayOpacity ?? 100),
         value: Math.max(0, Math.min(100, Number(model.value ?? 50))), rotation: Number(model.rotation || 0),
         showValue: model.showValue !== false, showPercent: model.showPercent !== false, showLabel: model.showLabel !== false,
         showGrid: model.showGrid !== false, showPoints: model.showPoints !== false, showFill: model.showFill !== false,
@@ -1730,6 +1910,30 @@ export const devicesMixin = {
   },
 
   _paintTemplateOverlays(context, overlays, width, height) {
+    const paintRichText = (item, x, y, w, h, padding = 0) => {
+      const size = Math.max(7, item.fontSize * Math.min(width, height) / 300);
+      const family = String(item.fontFamily || "DRATEK eInk Sans").replace(/["']/g, "");
+      const textX = item.textAlign === "left" ? x + padding : item.textAlign === "right" ? x + w - padding : x + w / 2;
+      const textY = y + h / 2;
+      if (item.fill !== "transparent") {
+        context.save(); context.globalAlpha = Math.max(0, Math.min(1, Number(item.overlayOpacity ?? 100) / 100)); context.fillStyle = item.fill; context.fillRect(x, y, w, h); context.restore();
+      }
+      if (Number(item.textBorderWidth || 0) > 0) {
+        context.strokeStyle = item.textBorderColor || "#111111"; context.lineWidth = Math.max(1, Number(item.textBorderWidth) * Math.min(width, height) / 300); context.strokeRect(x, y, w, h);
+      }
+      context.font = `${item.fontStyle === "italic" ? "italic " : ""}${item.fontWeight} ${size}px "${family}", Arial, Helvetica, sans-serif`;
+      context.textBaseline = "middle"; context.textAlign = item.textAlign || "center";
+      if (Number(item.textOutlineWidth || 0) > 0) {
+        context.strokeStyle = item.textOutlineColor || "#ffffff"; context.lineWidth = Math.max(1, Number(item.textOutlineWidth) * Math.min(width, height) / 300); context.strokeText(item.text, textX, textY, Math.max(1, w - padding * 2));
+      }
+      context.fillStyle = item.color || "#111111"; context.fillText(item.text, textX, textY, Math.max(1, w - padding * 2));
+      if (["underline", "line-through"].includes(item.textDecoration)) {
+        const measured = Math.min(w - padding * 2, context.measureText(item.text).width);
+        const startX = item.textAlign === "left" ? textX : item.textAlign === "right" ? textX - measured : textX - measured / 2;
+        const lineY = item.textDecoration === "underline" ? textY + size * .42 : textY;
+        context.strokeStyle = item.color || "#111111"; context.lineWidth = Math.max(1, size * .07); context.beginPath(); context.moveTo(startX, lineY); context.lineTo(startX + measured, lineY); context.stroke();
+      }
+    };
     context.save();
     for (const item of overlays) {
       const x = item.x * width;
@@ -1757,11 +1961,7 @@ export const devicesMixin = {
           context.imageSmoothingEnabled = smoothing;
         }
       } else if (item.kind === "text") {
-        const size = Math.max(7, item.fontSize * Math.min(width, height) / 300);
-        context.font = `${item.fontWeight} ${size}px Arial, Helvetica, sans-serif`;
-        context.textBaseline = "middle";
-        context.textAlign = item.textAlign || "center";
-        context.fillText(item.text, item.textAlign === "left" ? x : item.textAlign === "right" ? x + w : x + w / 2, y + h / 2, w);
+        paintRichText(item, x, y, w, h);
       } else if (item.kind === "line") {
         context.beginPath();
         context.moveTo(x, y + h / 2);
@@ -1773,10 +1973,10 @@ export const devicesMixin = {
         context.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
         context.stroke();
       } else if (item.kind === "button") {
-        if (item.fill !== "transparent") { context.fillStyle = item.fill; context.fillRect(x, y, w, h); }
+        paintRichText(item, x, y, w, h, 3);
+        context.strokeStyle = item.stroke || "#111111";
+        context.lineWidth = Math.max(1, item.strokeWidth * Math.min(width, height) / 300);
         context.strokeRect(x, y, w, h);
-        context.fillStyle = item.color; context.font = `${item.fontWeight} ${Math.max(7, item.fontSize * Math.min(width, height) / 300)}px Arial`; context.textAlign = item.textAlign || "center"; context.textBaseline = "middle";
-        context.fillText(item.text, item.textAlign === "left" ? x + 3 : item.textAlign === "right" ? x + w - 3 : x + w / 2, y + h / 2, w - 6);
       } else if (item.kind === "slider") {
         const trackH = Math.max(3, h * .18); const trackY = y + h * .5;
         if (item.showTrack) { context.strokeStyle = "#111111"; context.lineWidth = Math.max(1, trackH * .28); context.strokeRect(x, trackY, w, trackH); }
@@ -2351,10 +2551,27 @@ export const devicesMixin = {
     };
     const [title, description] = meta[category] || meta.shapes;
     const anchorIndex = ["text", "shapes", "icons", "charts", "gauges", "controls", "images", "layers"].indexOf(category);
+    const toolPreview = (type, settings) => {
+      const item = this._normalizeTemplateEditorElement({ type, ...settings });
+      const style = `--element-color:${item.color};--element-fill:${item.fill};--element-stroke:${item.stroke};--element-stroke-width:${item.strokeWidth}px;--element-radius:${item.radius}px;--element-font-size:${item.fontSize}px;--element-font-weight:${item.fontWeight};--element-value:${Math.max(0, Math.min(100, item.value))}%`;
+      let preview = "";
+      if (item.type === "text") preview = `<b class="template-palette-text-sample">${this._escape(item.text || item.label)}</b>`;
+      else if (item.type === "button") preview = `<b class="template-palette-button-sample">${this._escape(item.text || item.label)}</b>`;
+      else if (item.type === "rect") preview = `<i class="template-palette-shape-sample is-rect"></i>`;
+      else if (item.type === "circle") preview = `<i class="template-palette-shape-sample is-circle"></i>`;
+      else if (item.type === "line") preview = `<i class="template-palette-line-sample"></i>`;
+      else if (item.type === "icon") preview = `<ha-icon icon="mdi:${this._escape(item.icon || "star")}"></ha-icon>`;
+      else if (item.type === "slider") preview = this._renderTemplateProgressVisual(item);
+      else if (item.type === "chart") preview = this._renderTemplateChartVisual(item);
+      else if (item.type === "gauge") preview = this._renderTemplateGaugeVisual(item);
+      else if (item.type === "signal") preview = this._renderTemplateSignalVisual(item);
+      const componentClass = ["chart", "gauge", "slider", "signal"].includes(item.type) ? ` template-overlay-${item.type}` : "";
+      return `<span class="template-palette-visual template-palette-preview${componentClass} variant-${this._escape(item.variant || item.type)}" style="${style}">${preview}</span>`;
+    };
     const tool = (type, icon, label, preset = {}) => {
       const settings = typeof preset === "string" ? { icon: preset } : { ...preset };
       settings.label ||= label;
-      return `<button type="button" class="template-palette-item variant-${this._escape(settings.variant || type)}" draggable="true" data-template-editor-tool="${type}" data-template-editor-icon="${this._escape(settings.icon || "")}" data-template-editor-preset="${this._escape(JSON.stringify(settings))}" title="Vložit ${this._escape(label)}"><span class="template-palette-visual"><ha-icon icon="mdi:${icon}"></ha-icon></span><span>${this._escape(label)}</span></button>`;
+      return `<button type="button" class="template-palette-item variant-${this._escape(settings.variant || type)}" draggable="true" data-template-editor-tool="${type}" data-template-editor-icon="${this._escape(settings.icon || "")}" data-template-editor-preset="${this._escape(JSON.stringify(settings))}" title="Vložit ${this._escape(label)}">${toolPreview(type, settings)}<span>${this._escape(label)}</span></button>`;
     };
     const iconNames = [
       ["star", "Hvězda"], ["heart", "Srdce"], ["home", "Dům"], ["account", "Osoba"],
@@ -2436,24 +2653,42 @@ export const devicesMixin = {
     const select = (title, prop, value, options) => `<label class="template-property-wide"><span>${title}</span><select data-template-element-prop="${prop}">${options.map(([key, label]) => `<option value="${key}" ${value === key ? "selected" : ""}>${label}</option>`).join("")}</select></label>`;
     const entity = item.entityId ? this._hass?.states?.[item.entityId] : null;
     const entityValue = this._templateElementEntityRaw?.(item);
-    const entityBinding = ["chart", "gauge", "signal", "slider"].includes(item.type) ? `<section class="template-property-section template-ha-binding"><h4>Home Assistant</h4><label class="template-property-wide"><span>Entita nebo pomocník</span><ha-selector data-template-element-entity-picker="${this._escape(item.id)}"></ha-selector></label><label class="template-property-wide"><span>Entity ID</span><input type="text" value="${this._escape(item.entityId || "")}" data-template-element-entity-id placeholder="sensor.teplota"></label><label class="template-property-wide"><span>Atribut (volitelné)</span><input type="text" value="${this._escape(item.entityAttribute || "")}" data-template-element-prop="entityAttribute" placeholder="Například prices"></label>${item.entityId ? `<div class="template-entity-current"><ha-icon icon="mdi:home-assistant"></ha-icon><span><strong>${this._escape(entity?.attributes?.friendly_name || item.entityId)}</strong><small>${this._escape(entityValue === undefined ? "Entita nemá hodnotu" : String(entityValue))}</small></span></div>` : `<p class="template-entity-help">Bez vybrané entity se používá ručně nastavená hodnota.</p>`}</section>` : "";
+    const propertyTab = (title, content, open = false, extraClass = "") => `<details class="template-property-section ${extraClass}" ${open ? "open" : ""}><summary><span>${title}</span><ha-icon icon="mdi:chevron-down"></ha-icon></summary><div class="template-property-section-body">${content}</div></details>`;
+    const entityBinding = ["chart", "gauge", "signal", "slider"].includes(item.type) ? propertyTab("Home Assistant", `<label class="template-property-wide"><span>Entita nebo pomocník</span><ha-selector data-template-element-entity-picker="${this._escape(item.id)}"></ha-selector></label><label class="template-property-wide"><span>Entity ID</span><input type="text" value="${this._escape(item.entityId || "")}" data-template-element-entity-id placeholder="sensor.teplota"></label><label class="template-property-wide"><span>Atribut (volitelné)</span><input type="text" value="${this._escape(item.entityAttribute || "")}" data-template-element-prop="entityAttribute" placeholder="Například prices"></label>${item.entityId ? `<div class="template-entity-current"><ha-icon icon="mdi:home-assistant"></ha-icon><span><strong>${this._escape(entity?.attributes?.friendly_name || item.entityId)}</strong><small>${this._escape(entityValue === undefined ? "Entita nemá hodnotu" : String(entityValue))}</small></span></div>` : `<p class="template-entity-help">Bez vybrané entity se používá ručně nastavená hodnota.</p>`}`, true, "template-ha-binding") : "";
     const textTypes = ["text", "button", "signal"];
     const shapeTypes = ["rect", "circle", "button", "signal"];
     return `<div class="template-element-inspector">
       <div class="template-editor-panel-heading"><ha-icon icon="mdi:tune-vertical-variant"></ha-icon><span><strong>Vlastnosti prvku</strong><small>${this._escape(item.label)}</small></span></div>
       <div class="template-inspector-actions"><button type="button" data-template-element-duplicate><ha-icon icon="mdi:content-duplicate"></ha-icon>Duplikovat</button><button type="button" class="is-danger" data-template-element-delete><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat</button></div>
-      ${textTypes.includes(item.type) ? `<section class="template-property-section"><h4>Text</h4><label class="template-property-wide"><span>Obsah</span><input type="text" value="${this._escape(item.text || "")}" data-template-element-prop="text"></label><div class="template-property-row">${field("Velikost", "fontSize", item.fontSize, 6, 72, 1, "px")}<label class="template-property-field"><span>Řez</span><select data-template-element-prop="fontWeight"><option value="400" ${String(item.fontWeight) === "400" ? "selected" : ""}>Normální</option><option value="700" ${String(item.fontWeight) === "700" ? "selected" : ""}>Tučný</option><option value="900" ${String(item.fontWeight) === "900" ? "selected" : ""}>Extra tučný</option></select></label></div><label class="template-property-wide"><span>Zarovnání</span><div class="template-align-buttons">${[["left", "format-align-left"], ["center", "format-align-center"], ["right", "format-align-right"]].map(([value, icon]) => `<button type="button" class="${item.textAlign === value ? "is-selected" : ""}" data-template-element-align="${value}"><ha-icon icon="mdi:${icon}"></ha-icon></button>`).join("")}</div></label><label class="template-property-wide"><span>Barva textu</span>${colors("color", item.color)}</label></section>` : ""}
-      ${["icon", "signal"].includes(item.type) ? `<section class="template-property-section"><h4>Ikona</h4><label class="template-property-wide"><span>Název MDI ikony</span><input type="text" value="${this._escape(item.icon || "star")}" data-template-element-prop="icon"></label><label class="template-property-wide"><span>Barva</span>${colors("color", item.color)}</label></section>` : ""}
-      ${shapeTypes.includes(item.type) ? `<section class="template-property-section"><h4>Vzhled</h4><label class="template-property-wide"><span>Výplň</span>${colors("fill", item.fill, true)}</label><label class="template-property-wide"><span>Rámeček</span>${colors("stroke", item.stroke)}</label><div class="template-property-row">${field("Tloušťka", "strokeWidth", item.strokeWidth, 0, 12, 1, "px")}${field("Zaoblení", "radius", item.radius, 0, 50, 1, "px")}</div></section>` : ""}
-      ${item.type === "slider" ? `<section class="template-property-section"><h4>Hodnota slideru</h4>${field("Hodnota", "value", item.value, 0, 100, 1, "%")}<label class="template-property-wide"><span>Aktivní barva</span>${colors("color", item.color)}</label></section>` : ""}
-      ${["chart", "gauge"].includes(item.type) ? `<section class="template-property-section"><h4>Data</h4>${field("Hodnota", "value", item.value, 0, 100, 1, "%")}<label class="template-property-wide"><span>Barva</span>${colors("color", item.color)}</label></section>` : ""}
+      ${textTypes.includes(item.type) ? `${propertyTab("Text a typografie", `
+        <label class="template-property-wide"><span>Obsah</span><input type="text" value="${this._escape(item.text || "")}" data-template-element-prop="text"></label>
+        ${select("Font", "fontFamily", item.fontFamily, [["DRATEK eInk Sans", "DRATEK eInk Sans"], ["Arial", "Arial"], ["Georgia", "Georgia / patkové"], ["Courier New", "Courier / monospace"]])}
+        <div class="template-property-row">${field("Velikost", "fontSize", item.fontSize, 6, 72, 1, "px")}${select("Řez", "fontWeight", String(item.fontWeight), [["400", "Normální"], ["700", "Tučný"], ["900", "Extra tučný"]])}</div>
+        <div class="template-property-row">${select("Styl", "fontStyle", item.fontStyle, [["normal", "Normální"], ["italic", "Kurzíva"]])}${select("Dekorace", "textDecoration", item.textDecoration, [["none", "Bez dekorace"], ["underline", "Podtržení"], ["line-through", "Přeškrtnutí"]])}</div>
+        <label class="template-property-wide"><span>Zarovnání</span><div class="template-align-buttons">${[["left", "format-align-left"], ["center", "format-align-center"], ["right", "format-align-right"]].map(([value, icon]) => `<button type="button" class="${item.textAlign === value ? "is-selected" : ""}" data-template-element-align="${value}"><ha-icon icon="mdi:${icon}"></ha-icon></button>`).join("")}</div></label>
+        <label class="template-property-wide"><span>Barva textu</span>${colors("color", item.color)}</label>
+      `, true)}
+      ${propertyTab("Podbarvení a overlay", `
+        <label class="template-property-wide"><span>Barva podkladu</span>${colors("fill", item.fill, true)}</label>
+        <div class="template-property-row">${field("Krytí overlay", "overlayOpacity", item.overlayOpacity, 0, 100, 5, "%")}${field("Zaoblení", "radius", item.radius, 0, 50, 1, "px")}</div>
+      `)}
+      ${propertyTab("Orámování textu", `
+        <label class="template-property-wide"><span>Barva rámečku oblasti</span>${colors("textBorderColor", item.textBorderColor)}</label>
+        ${field("Tloušťka rámečku", "textBorderWidth", item.textBorderWidth, 0, 12, 1, "px")}
+        <label class="template-property-wide"><span>Barva obrysu písma</span>${colors("textOutlineColor", item.textOutlineColor)}</label>
+        ${field("Obrys písma", "textOutlineWidth", item.textOutlineWidth, 0, 6, 1, "px")}
+      `)}` : ""}
+      ${["icon", "signal"].includes(item.type) ? propertyTab("Ikona", `<label class="template-property-wide"><span>Název MDI ikony</span><input type="text" value="${this._escape(item.icon || "star")}" data-template-element-prop="icon"></label><label class="template-property-wide"><span>Barva</span>${colors("color", item.color)}</label>`, true) : ""}
+      ${shapeTypes.includes(item.type) ? propertyTab("Vzhled", `<label class="template-property-wide"><span>Výplň</span>${colors("fill", item.fill, true)}</label><label class="template-property-wide"><span>Rámeček</span>${colors("stroke", item.stroke)}</label><div class="template-property-row">${field("Tloušťka", "strokeWidth", item.strokeWidth, 0, 12, 1, "px")}${field("Zaoblení", "radius", item.radius, 0, 50, 1, "px")}</div>`, true) : ""}
+      ${item.type === "slider" ? propertyTab("Hodnota slideru", `${field("Hodnota", "value", item.value, 0, 100, 1, "%")}<label class="template-property-wide"><span>Aktivní barva</span>${colors("color", item.color)}</label>`, true) : ""}
+      ${["chart", "gauge"].includes(item.type) ? propertyTab("Data", `${field("Hodnota", "value", item.value, 0, 100, 1, "%")}<label class="template-property-wide"><span>Barva</span>${colors("color", item.color)}</label>`, true) : ""}
       ${entityBinding}
-      ${item.type === "chart" ? `<section class="template-property-section"><h4>Historie grafu</h4>${field("Počet posledních hodnot", "historyLimit", item.historyLimit, 1, 20, 1, "")} ${select("Interval ukládání hodnot", "sampleInterval", item.sampleInterval, intervalOptions)}${select("Automatické mazání historie", "resetInterval", item.resetInterval, resetOptions)}<button type="button" class="template-history-clear" data-template-element-history-clear><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vymazat uložené hodnoty</button><small class="template-history-count">Uloženo ${(item.historyValues || []).length} z ${item.historyLimit} hodnot</small></section>` : ""}
-      ${item.type === "chart" ? `<section class="template-property-section"><h4>Části grafu</h4>${toggles([["showValue", "Hodnota"], ["showPercent", "Znak %"], ["showLabel", "Popisek"], ["showGrid", "Mřížka"], ["showPoints", "Body grafu"], ["showFill", "Barevná plocha"], ["showTrack", "Podklad kruhu"]])}</section>` : ""}
-      ${item.type === "gauge" ? `<section class="template-property-section"><h4>Části ukazatele</h4>${toggles([["showValue", "Hodnota"], ["showPercent", "Jednotka"], ["showLabel", "Popisek"], ["showTrack", "Podkladová stupnice"]])}</section>` : ""}
-      ${item.type === "signal" ? `<section class="template-property-section"><h4>Části signalizace</h4>${toggles([["showIcon", "Ikona"], ["showLabel", "Text"], ["showState", "Stav / přepínač"]])}</section>` : ""}
-      ${item.type === "slider" ? `<section class="template-property-section"><h4>Části průběhu</h4>${toggles([["showValue", "Hodnota"], ["showPercent", "Znak %"], ["showScale", "Číselná stupnice"], ["showTrack", "Podkladová čára"]])}</section>` : ""}
-      <section class="template-property-section"><h4>Transformace</h4><div class="template-property-grid">${field("X", "x", item.x)}${field("Y", "y", item.y)}${field("Šířka", "w", item.w, 2)}${field("Výška", "h", item.h, 2)}${field("Otočení", "rotation", item.rotation, -180, 180, 1, "°")}</div><div class="template-layer-order"><button type="button" data-template-element-order="back"><ha-icon icon="mdi:arrange-send-backward"></ha-icon>Dozadu</button><button type="button" data-template-element-order="front"><ha-icon icon="mdi:arrange-bring-forward"></ha-icon>Dopředu</button></div></section>
+      ${item.type === "chart" ? propertyTab("Historie grafu", `${field("Počet posledních hodnot", "historyLimit", item.historyLimit, 1, 20, 1, "")} ${select("Interval ukládání hodnot", "sampleInterval", item.sampleInterval, intervalOptions)}${select("Automatické mazání historie", "resetInterval", item.resetInterval, resetOptions)}<button type="button" class="template-history-clear" data-template-element-history-clear><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vymazat uložené hodnoty</button><small class="template-history-count">Uloženo ${(item.historyValues || []).length} z ${item.historyLimit} hodnot</small>`) : ""}
+      ${item.type === "chart" ? propertyTab("Části grafu", toggles([["showValue", "Hodnota"], ["showPercent", "Znak %"], ["showLabel", "Popisek"], ["showGrid", "Mřížka"], ["showPoints", "Body grafu"], ["showFill", "Barevná plocha"], ["showTrack", "Podklad kruhu"]])) : ""}
+      ${item.type === "gauge" ? propertyTab("Části ukazatele", toggles([["showValue", "Hodnota"], ["showPercent", "Jednotka"], ["showLabel", "Popisek"], ["showTrack", "Podkladová stupnice"]])) : ""}
+      ${item.type === "signal" ? propertyTab("Části signalizace", toggles([["showIcon", "Ikona"], ["showLabel", "Text"], ["showState", "Stav / přepínač"]])) : ""}
+      ${item.type === "slider" ? propertyTab("Části průběhu", toggles([["showValue", "Hodnota"], ["showPercent", "Znak %"], ["showScale", "Číselná stupnice"], ["showTrack", "Podkladová čára"]])) : ""}
+      ${propertyTab("Pořadí vrstev", `<div class="template-layer-order"><button type="button" data-template-element-order="back"><ha-icon icon="mdi:arrange-send-backward"></ha-icon>Dozadu</button><button type="button" data-template-element-order="front"><ha-icon icon="mdi:arrange-bring-forward"></ha-icon>Dopředu</button></div><p class="template-entity-help">Polohu, velikost a orientaci upravíte v úzkém panelu nad náhledem displeje.</p>`)}
       <button type="button" class="template-inspector-close" data-template-element-deselect><ha-icon icon="mdi:arrow-left"></ha-icon>Zpět k nastavení šablony</button>
     </div>`;
   },
@@ -2474,14 +2709,55 @@ export const devicesMixin = {
     </div>`;
   },
 
+  _renderTemplatePartInspector(activeTemplate) {
+    const key = String(this._selectedTemplatePart || "");
+    const adjustment = this._templateElementAdjustments?.[key];
+    if (!key || !adjustment) return "";
+    const partNumber = Number(key.split(":").at(-1)) + 1;
+    const field = (label, prop, value, min, max, suffix = "") => `<label class="template-property-field"><span>${label}</span><div><input type="number" min="${min}" max="${max}" step="1" value="${Math.round(Number(value || 0))}" data-template-part-prop="${prop}"><small>${suffix}</small></div></label>`;
+    const selectedColor = adjustment.color || "black";
+    return `<div class="template-element-inspector template-built-in-inspector">
+      <div class="template-editor-panel-heading"><ha-icon icon="mdi:vector-selection"></ha-icon><span><strong>Vlastnosti prvku šablony</strong><small>${this._escape(activeTemplate?.title || "Šablona")} · prvek ${partNumber}</small></span></div>
+      <div class="template-inspector-actions"><button type="button" data-template-element-duplicate><ha-icon icon="mdi:content-duplicate"></ha-icon>Duplikovat</button><button type="button" class="is-danger" data-template-element-delete><ha-icon icon="mdi:trash-can-outline"></ha-icon>Skrýt</button></div>
+      <details class="template-property-section" open><summary><span>Poloha a transformace</span><ha-icon icon="mdi:chevron-down"></ha-icon></summary><div class="template-property-section-body">
+        <div class="template-property-row">${field("Posun X", "x", adjustment.x, -1000, 1000, "px")}${field("Posun Y", "y", adjustment.y, -1000, 1000, "px")}</div>
+        <div class="template-property-row">${field("Velikost", "scale", Number(adjustment.scale ?? 1) * 100, 20, 300, "%")}${field("Otočení", "rotation", adjustment.rotation, -180, 180, "°")}</div>
+        <button type="button" class="template-history-clear" data-template-part-reset="${this._escape(key)}"><ha-icon icon="mdi:restore"></ha-icon>Obnovit původní stav</button>
+      </div></details>
+      <details class="template-property-section" open><summary><span>Vzhled a viditelnost</span><ha-icon icon="mdi:chevron-down"></ha-icon></summary><div class="template-property-section-body">
+        <label class="template-property-wide"><span>Barva prvku</span><div class="template-property-colors"><button type="button" style="--swatch:#111111" class="${selectedColor === "black" ? "is-selected" : ""}" data-template-part-color="black" title="Černá"></button><button type="button" style="--swatch:#d71912" class="${selectedColor === "red" ? "is-selected" : ""}" data-template-part-color="red" title="Červená"></button><button type="button" style="--swatch:#ffffff" class="${selectedColor === "white" ? "is-selected" : ""}" data-template-part-color="white" title="Bílá"></button></div></label>
+        <div class="template-component-toggles"><label><input type="checkbox" data-template-part-toggle="hidden" ${adjustment.hidden ? "" : "checked"}><span><i></i>Viditelný</span></label><label><input type="checkbox" data-template-part-toggle="locked" ${adjustment.locked ? "checked" : ""}><span><i></i>Zamknutý</span></label></div>
+      </div></details>
+      <details class="template-property-section"><summary><span>Pořadí vrstev</span><ha-icon icon="mdi:chevron-down"></ha-icon></summary><div class="template-property-section-body"><div class="template-layer-order"><button type="button" data-template-element-order="back"><ha-icon icon="mdi:arrange-send-backward"></ha-icon>Dozadu</button><button type="button" data-template-element-order="front"><ha-icon icon="mdi:arrange-bring-forward"></ha-icon>Dopředu</button></div></div></details>
+      <button type="button" class="template-inspector-close" data-template-part-deselect><ha-icon icon="mdi:arrow-left"></ha-icon>Zrušit výběr</button>
+    </div>`;
+  },
+
   _applyTemplatePartAdjustment(element, surface, adjustment) {
     const x = Number(adjustment.x || 0);
     const y = Number(adjustment.y || 0);
+    const scale = Math.max(.2, Math.min(3, Number(adjustment.scale ?? 1)));
+    const rotation = Number(adjustment.rotation || 0);
     if (typeof element.setAttribute === "function") {
-      element.setAttribute("transform", `translate(${x}, ${y})`);
+      element.setAttribute("transform", `translate(${x}, ${y}) rotate(${rotation}) scale(${scale})`);
     }
-    element.style.transform = `translate(${x}px, ${y}px)`;
+    element.style.transform = `translate(${x}px, ${y}px) rotate(${rotation}deg) scale(${scale})`;
     element.style.transformOrigin = "center";
+    element.style.display = adjustment.hidden ? "none" : "";
+    element.style.pointerEvents = adjustment.locked ? "none" : "";
+    element.style.position = "relative";
+    element.style.zIndex = String(Number(adjustment.order || 0));
+    element.classList.toggle("is-locked", !!adjustment.locked);
+    const color = { black: "#111111", red: "#d71912", white: "#ffffff" }[adjustment.color];
+    if (color) {
+      element.style.color = color;
+      [element, ...element.querySelectorAll("path,rect,circle,ellipse,line,polyline,polygon,text")].forEach((node) => {
+        const fill = node.getAttribute?.("fill");
+        const stroke = node.getAttribute?.("stroke");
+        if (fill && fill !== "none" && !["#fff", "#ffffff", "white"].includes(fill.toLowerCase())) node.style.fill = color;
+        if (stroke && stroke !== "none" && !["#fff", "#ffffff", "white"].includes(stroke.toLowerCase())) node.style.stroke = color;
+      });
+    }
   },
 
   _bindTemplatePartEditor() {
@@ -2495,17 +2771,24 @@ export const devicesMixin = {
       const parts = [...templateRoot.children].filter((child) => child.tagName !== "rect" || child.getAttribute("fill") !== "#ffffff");
       parts.forEach((element, index) => {
         const key = `${slot}:${templateId}:${index}`;
-        const adjustment = this._templateElementAdjustments[key] || { x: 0, y: 0, scale: 1 };
+        const adjustment = this._templateElementAdjustments[key] || { x: 0, y: 0, scale: 1, rotation: 0 };
         this._templateElementAdjustments[key] = adjustment;
+        const nativeBounds = element.getBBox?.();
+        const visualBounds = element.getBoundingClientRect?.();
+        adjustment.baseX ??= Number(nativeBounds?.x || 0);
+        adjustment.baseY ??= Number(nativeBounds?.y || 0);
+        adjustment.baseWidth ||= Number(nativeBounds?.width || visualBounds?.width || 1);
+        adjustment.baseHeight ||= Number(nativeBounds?.height || visualBounds?.height || 1);
         element.dataset.templateEditablePart = key;
         element.classList.add("template-editable-part");
         element.classList.toggle("is-selected", this._selectedTemplatePart === key);
         this._applyTemplatePartAdjustment(element, surface, adjustment);
         element.addEventListener("pointerdown", (event) => {
-          if (event.button !== 0) return;
+          if (event.button !== 0 || adjustment.locked) return;
           event.preventDefault();
           event.stopPropagation();
           this._selectedTemplatePart = key;
+          this._selectedTemplateEditorElementId = "";
           this.shadowRoot.querySelectorAll(".template-editable-part.is-selected").forEach((item) => item.classList.remove("is-selected"));
           element.classList.add("is-selected");
 
@@ -2527,12 +2810,17 @@ export const devicesMixin = {
             originY: Number(adjustment.y || 0),
             scaleX,
             scaleY,
+            historyPushed: false,
           };
           element.setPointerCapture?.(event.pointerId);
         });
         element.addEventListener("pointermove", (event) => {
           const drag = this._templatePartDrag;
           if (!drag || drag.key !== key || drag.pointerId !== event.pointerId) return;
+          if (!drag.historyPushed) {
+            this._pushTemplateHistory();
+            drag.historyPushed = true;
+          }
           const dxScreen = event.clientX - drag.startX;
           const dyScreen = event.clientY - drag.startY;
           adjustment.x = drag.originX + (dxScreen * drag.scaleX);
@@ -2557,7 +2845,7 @@ export const devicesMixin = {
   _normalizeTemplateEditorElement(source = {}) {
     const type = String(source.type || "rect");
     const defaults = {
-      text: { w: 42, h: 10, text: "Vlastní text", fontSize: 18, fill: "transparent" },
+      text: { w: 42, h: 10, text: "Vlastní text", fontSize: 18, fill: "transparent", fontFamily: "DRATEK eInk Sans", fontStyle: "normal", textDecoration: "none", textOutlineWidth: 0, textOutlineColor: "#ffffff", textBorderWidth: 0, textBorderColor: "#111111", overlayOpacity: 100 },
       rect: { w: 36, h: 22, fill: "transparent" }, circle: { w: 25, h: 25, fill: "transparent" },
       line: { w: 42, h: 4, fill: "#111111" }, icon: { w: 18, h: 18, icon: "star", fill: "transparent" },
       image: { w: 34, h: 28, fill: "transparent" }, button: { w: 42, h: 14, text: "Popisek", fontSize: 15, fill: "#ffffff", radius: 6 },
@@ -2584,7 +2872,8 @@ export const devicesMixin = {
       y: Math.max(0, Math.min(100 - h, legacy ? sourceY - h / 2 : sourceY)),
       rotation: Number(source.rotation || 0), color: paletteColor(source.color, "#111111"), fill: paletteColor(source.fill, defaults.fill ?? "transparent", true),
       stroke: paletteColor(source.stroke, "#111111"), strokeWidth: Number(source.strokeWidth ?? 2), radius: Number(source.radius ?? defaults.radius ?? 0),
-      fontSize: Number(source.fontSize ?? defaults.fontSize ?? 16), fontWeight: String(source.fontWeight || "700"), textAlign: source.textAlign || "center",
+      fontSize: Number(source.fontSize ?? defaults.fontSize ?? 16), fontWeight: String(source.fontWeight || "700"), fontFamily: ["DRATEK eInk Sans", "Arial", "Georgia", "Courier New"].includes(source.fontFamily) ? source.fontFamily : (defaults.fontFamily || "DRATEK eInk Sans"), fontStyle: source.fontStyle === "italic" ? "italic" : "normal", textDecoration: ["underline", "line-through"].includes(source.textDecoration) ? source.textDecoration : "none", textAlign: source.textAlign || "center",
+      textOutlineWidth: Math.max(0, Math.min(6, Number(source.textOutlineWidth ?? defaults.textOutlineWidth ?? 0))), textOutlineColor: paletteColor(source.textOutlineColor, defaults.textOutlineColor || "#ffffff"), textBorderWidth: Math.max(0, Math.min(12, Number(source.textBorderWidth ?? defaults.textBorderWidth ?? 0))), textBorderColor: paletteColor(source.textBorderColor, defaults.textBorderColor || "#111111"), overlayOpacity: Math.max(0, Math.min(100, Number(source.overlayOpacity ?? defaults.overlayOpacity ?? 100))),
       value: Number(source.value ?? defaults.value ?? 50), historyLimit: Math.max(1, Math.min(20, Number(source.historyLimit ?? defaults.historyLimit ?? 10))),
     };
   },
@@ -2661,10 +2950,8 @@ export const devicesMixin = {
     // Circular primitives start with an exact visual selection. Users can still
     // resize width and height independently afterwards.
     if (["icon", "circle"].includes(type) || (type === "chart" && item.variant === "donut") || (type === "gauge" && ["ring", "semicircle"].includes(item.variant))) this._fitTemplateElementVisualAspect(item, 1);
-    const centerX = Number(position?.x ?? 50);
-    const centerY = Number(position?.y ?? 50);
-    item.x = Math.max(0, Math.min(100 - item.w, centerX - item.w / 2));
-    item.y = Math.max(0, Math.min(100 - item.h, centerY - item.h / 2));
+    item.x = Math.max(0, Math.min(100 - item.w, Number(position?.x ?? 50) - item.w / 2));
+    item.y = Math.max(0, Math.min(100 - item.h, Number(position?.y ?? 50) - item.h / 2));
     this._templateEditorElements.push(item);
     this._selectedTemplateEditorElementId = item.id;
     this._selectedTemplatePart = "";
@@ -2908,12 +3195,15 @@ export const devicesMixin = {
   _renderTemplateEditorOverlays(template = this._currentUserDisplayTemplate(), targetOrientation = this._displayTemplateOrientation, targetRatio = 0) {
     const handles = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
     const canvasRotation = this._userTemplateCanvasRotationStyle(template, targetOrientation, targetRatio);
-    return `<div class="template-editor-overlays ${canvasRotation.turn ? "is-whole-canvas-rotated" : ""}" style="${canvasRotation.style}">${(this._templateEditorElements || []).map((raw) => {
+    const sourceElements = String(template?.id || "") === String(this._selectedDisplayTemplateId || "")
+      ? (this._templateEditorElements || [])
+      : (template?.editor_elements || this._templateEditorStates?.[template?.id]?.editor_elements || []);
+    return `<div class="template-editor-overlays ${canvasRotation.turn ? "is-whole-canvas-rotated" : ""}" style="${canvasRotation.style}">${sourceElements.map((raw) => {
       const normalized = this._normalizeTemplateEditorElement(raw);
-      Object.assign(raw, normalized);
-      const item = this._orientedUserTemplateElement(normalized);
+      if (String(template?.id || "") === String(this._selectedDisplayTemplateId || "")) Object.assign(raw, normalized);
+      const item = this._orientedUserTemplateElement(normalized, template, targetOrientation);
       const selected = item.id === this._selectedTemplateEditorElementId;
-      const style = `left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;transform:rotate(${item.rotation}deg);--element-color:${item.color};--element-fill:${item.fill};--element-stroke:${item.stroke};--element-stroke-width:${item.strokeWidth}px;--element-radius:${item.radius}px;--element-font-size:${item.fontSize}px;--element-font-weight:${item.fontWeight};--element-text-align:${item.textAlign};--element-value:${Math.max(0, Math.min(100, item.value))}%`;
+      const style = `left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;transform:rotate(${item.rotation}deg);--element-color:${item.color};--element-fill:${item.fill};--element-stroke:${item.stroke};--element-stroke-width:${item.strokeWidth}px;--element-radius:${item.radius}px;--element-font-size:${item.fontSize}px;--element-font-weight:${item.fontWeight};--element-font-family:${item.fontFamily};--element-font-style:${item.fontStyle};--element-text-decoration:${item.textDecoration};--element-text-outline-width:${item.textOutlineWidth}px;--element-text-outline-color:${item.textOutlineColor};--element-text-border-width:${item.textBorderWidth}px;--element-text-border-color:${item.textBorderColor};--element-overlay-opacity:${item.overlayOpacity}%;--element-text-align:${item.textAlign};--element-value:${Math.max(0, Math.min(100, item.value))}%`;
       let content = "";
       if (item.type === "image") content = `<img src="${item.src}" alt="${this._escape(item.label)}">`;
       else if (["text", "button"].includes(item.type)) content = `<span>${this._escape(item.text || item.label)}</span>`;
@@ -3012,7 +3302,9 @@ export const devicesMixin = {
         const dy = point.y - drag.startY;
         let viewItem;
         if (drag.mode === "move") {
-          viewItem = { ...this._normalizeTemplateEditorElement(item), x: Math.max(0, Math.min(100 - drag.origin.w, drag.origin.x + dx)), y: Math.max(0, Math.min(100 - drag.origin.h, drag.origin.y + dy)), w: drag.origin.w, h: drag.origin.h };
+          const x = Math.max(0, Math.min(100 - drag.origin.w, drag.origin.x + dx));
+          const y = Math.max(0, Math.min(100 - drag.origin.h, drag.origin.y + dy));
+          viewItem = { ...this._normalizeTemplateEditorElement(item), x, y, w: drag.origin.w, h: drag.origin.h };
         } else {
           let { x, y, w, h } = drag.origin;
           if (drag.handle.includes("w")) { x += dx; w -= dx; }
@@ -3330,7 +3622,8 @@ export const devicesMixin = {
     if (!binding || binding.startsWith("internal:")) return fallback;
     const state = this._hass?.states?.[binding];
     if (!state) return fallback;
-    const candidates = [state.attributes?.values, state.attributes?.prices, state.attributes?.data, state.attributes?.history, state.state];
+    const timestampPrices = Object.fromEntries(Object.entries(state.attributes || {}).filter(([key, value]) => !Number.isNaN(Date.parse(key)) && Number.isFinite(Number(value))));
+    const candidates = [timestampPrices, state.attributes?.values, state.attributes?.prices, state.attributes?.data, state.attributes?.history, state.state];
     for (const candidate of candidates) {
       let value = candidate;
       if (typeof value === "string") {
@@ -3503,18 +3796,28 @@ export const devicesMixin = {
 
     const key = `${template?.id}:${meta.key}`;
     if (Object.prototype.hasOwnProperty.call(this._displayTemplateBindings || {}, key)) return this._displayTemplateBindings[key];
+    if (template?.id === "cz_spot_prices") {
+      const index = Number(String(meta.key || "").split("-", 1)[0]);
+      return this._czSpotTemplateBindings()[index] || "";
+    }
     return meta.automatic ? `internal:${meta.key}` : this._suggestTemplateEntity(meta);
   },
 
   _renderTemplateVariableSetting(template, variable, index) {
     const meta = this._templateVariableMeta(variable, index);
     const binding = this._templateBinding(template, meta);
+    const sample = this._templateSampleValue(meta.label);
     return `<section class="template-variable-setting ${meta.automatic ? "is-automatic" : ""}">
-      <div class="template-variable-setting-head"><span><ha-icon icon="mdi:${meta.icon}"></ha-icon></span><div><strong>${this._escape(meta.label)}</strong><small>${this._escape(meta.description)}</small></div></div>
-      ${meta.automatic
-        ? `<div class="template-internal-value"><ha-icon icon="mdi:home-assistant"></ha-icon><span><strong>Automaticky z Home Assistantu</strong><small>Interní systémová proměnná</small></span><ha-icon icon="mdi:check-circle"></ha-icon></div>`
-        : `<ha-selector data-template-entity-picker="${this._escape(`${template.id}:${meta.key}`)}" data-template-default-entity="${this._escape(binding)}"></ha-selector>
-           <small class="template-picker-help">Vyberte senzor, pomocníka nebo jinou entitu odpovídající tomuto údaji.</small>`}
+      <div class="template-variable-preview ${meta.automatic ? "is-automatic" : ""}" aria-label="Náhled proměnné ${this._escape(meta.label)}">
+        <ha-icon icon="mdi:${meta.icon}"></ha-icon><strong>${this._escape(sample)}</strong><small>${this._escape(meta.label)}</small>
+      </div>
+      <div class="template-variable-setting-content">
+        <div class="template-variable-setting-head"><div><strong>${this._escape(meta.label)}</strong><small>${this._escape(meta.description)}</small></div></div>
+        ${meta.automatic
+          ? `<div class="template-internal-value"><ha-icon icon="mdi:home-assistant"></ha-icon><span><strong>Automaticky z Home Assistantu</strong><small>Interní systémová proměnná</small></span><ha-icon icon="mdi:check-circle"></ha-icon></div>`
+          : `<ha-selector data-template-entity-picker="${this._escape(`${template.id}:${meta.key}`)}" data-template-default-entity="${this._escape(binding)}"></ha-selector>
+             <small class="template-picker-help">Vyberte senzor, pomocníka nebo jinou entitu odpovídající tomuto údaji.</small>`}
+      </div>
     </section>`;
   },
 

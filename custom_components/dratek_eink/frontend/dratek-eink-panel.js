@@ -1,19 +1,19 @@
 import { storageMixin } from "./panel/panel-storage.mixin.js";
 import { queueMixin } from "./panel/panel-queue.mixin.js";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js";
-import { devicesMixin } from "./panel/panel-devices.mixin.js?v=studio-designer-17";
-import { projectsMixin } from "./panel/panel-projects.mixin.js?v=shared-templates-1";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=template-save-queue-1";
+import { projectsMixin } from "./panel/panel-projects.mixin.js?v=template-save-queue-1";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
-import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-1";
+import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-3";
 import { templatesMixin } from "./panel/panel-templates.mixin.js?v=blank-canvas-2";
 import { variablesMixin } from "./panel/panel-variables.mixin.js";
 import { previewMixin } from "./panel/panel-preview.mixin.js";
-import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=studio-designer-17";
+import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=studio-designer-37";
 import { i18nMixin } from "./panel/panel-i18n.mixin.js";
-import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=studio-designer-10";
+import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=studio-designer-19";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js";
-import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=blank-canvas-1";
+import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=cz-spot-prices-3";
 
 import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js";
 
@@ -59,6 +59,11 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedTemplatePart = "";
     this._templatePartDrag = null;
     this._templateSaveResult = null;
+    this._templateSettingsDialogOpen = false;
+    this._templateSettingsDialogMode = "settings";
+    this._templateSettingsDialogTemplateId = "";
+    this._templateEditMenuId = "";
+    this._templateViewportMenuOpen = false;
     this._selectedTemplateCanvasSlot = "";
     this._templateCanvasPlacements = {
       primary: { x: 9, y: 9 },
@@ -73,6 +78,7 @@ class DratekEinkPanel extends HTMLElement {
       secondary: "small",
     };
     this._displayTemplatePreviewZoom = 1;
+    this._templateDesignerViewport = "wide";
     this._templateCanvasDrag = null;
     this._displayTemplateAssignments = {};
     this._pendingDisplayTemplateConflict = null;
@@ -119,6 +125,7 @@ class DratekEinkPanel extends HTMLElement {
     this._topologyViewMode = this._loadUiPreference("topology-view-mode", "auto");
     this._queue = { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0 };
     this._queuePollTimer = null;
+    this._deviceStatusPollTimer = null;
     this._gateways = [];
     this._gatewayResult = null;
     this._gatewayBusy = false;
@@ -139,6 +146,10 @@ class DratekEinkPanel extends HTMLElement {
     this._otaPollTimer = null;
     this._serialResult = null;
     this._draftSaveTimer = null;
+    this._draftSavePromise = Promise.resolve();
+    this._draftSaveRevision = 0;
+    this._draftSavedRevision = 0;
+    this._userTemplateSavePromise = Promise.resolve();
     this._loadingDraft = false;
     this._loadedDraftAddress = "";
     this._restoringDraft = false;
@@ -166,6 +177,7 @@ class DratekEinkPanel extends HTMLElement {
     }
     this._render();
     this._paint();
+    this._scheduleDeviceStatusPoll(1000);
   }
 
   disconnectedCallback() {
@@ -178,6 +190,7 @@ class DratekEinkPanel extends HTMLElement {
     window.clearTimeout(this._flashPollTimer);
     window.clearTimeout(this._otaPollTimer);
     window.clearTimeout(this._queuePollTimer);
+    window.clearTimeout(this._deviceStatusPollTimer);
     // A draft save is debounced by 700 ms. Leaving the panel inside that window
     // used to drop the edit silently, so flush it instead of clearing it.
     if (this._draftSaveTimer) {
@@ -188,12 +201,14 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   set hass(hass) {
+    const templateLiveDataChanged = this._templateLiveDataChanged?.(this._hass, hass) || false;
     this._hass = hass;
     if (!this._rendered) {
       this._rendered = true;
       this._render();
       this._paint();
       this._loadQueue(false);
+      this._scheduleDeviceStatusPoll(1000);
       this._loadUserDisplayTemplates?.();
       if (this._result?.devices?.length) {
         this._loadDevicePreviewDrafts(this._result.devices).then(() => {
@@ -201,7 +216,7 @@ class DratekEinkPanel extends HTMLElement {
           this._paint();
         });
       }
-    } else if (this._refreshTemplateEntityElements?.()) {
+    } else if (this._refreshTemplateEntityElements?.() || templateLiveDataChanged) {
       this._render();
       this._paint();
     }

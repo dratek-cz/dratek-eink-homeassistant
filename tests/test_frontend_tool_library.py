@@ -56,8 +56,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('this._templateEditorElements = [];', self.source)
         self.assertIn('this._templateElementAdjustments = {};', self.source)
         self.assertIn('this._projectName = "Vlastní šablona";', self.source)
-        self.assertIn('if (template.id === "blank" || template.user_created) return "";', self.source)
-        self.assertIn('if (template?.id === "blank" || template?.user_created) return [];', self.source)
+        self.assertIn('if (template.id === "blank" || (template.user_created && !template.base_template_id)) return "";', self.source)
+        self.assertIn('if (baseTemplate?.id === "blank" || (baseTemplate?.user_created && !baseTemplate?.base_template_id)) return [];', self.source)
         self.assertNotIn('Prázdná plocha od nuly</text>', self.source)
 
     def test_each_template_has_an_isolated_editor_state(self):
@@ -76,8 +76,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".display-template-card.is-on-display{", self.source)
         self.assertIn("rgba(104,211,145,.3)", self.source)
 
-    def test_display_tile_hover_is_blue(self):
-        self.assertIn(".display-grid .display-tile:hover{border-color:#2563eb", self.source)
+    def test_display_tile_hover_uses_the_current_teal_accent(self):
+        self.assertIn(".display-grid .display-tile:hover,.display-grid .display-tile:focus-visible{border-color:var(--dratek-teal", self.source)
 
     def test_chart_and_status_have_reliable_entity_inputs(self):
         self.assertIn('data-entity-input=', self.source)
@@ -246,7 +246,9 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('Vytvořeno uživatelem', self.source)
         self.assertIn('Vytvořeno v eInk Studiu', self.source)
         self.assertIn('.display-template-library .display-template-card.is-user-created{', self.source)
-        self.assertIn('if (template.id === "blank" || template.user_created) return "";', self.source)
+        self.assertIn('if (template.id === "blank" || (template.user_created && !template.base_template_id)) return "";', self.source)
+        self.assertIn('base_template_id: existing?.base_template_id || (selectedId === "blank" ? "" : selectedId)', self.source)
+        self.assertIn('_applyTemplateAdjustmentsToSvgMarkup(markup, template', self.source)
 
     def test_user_template_orientation_is_a_quarter_turn_without_reflow(self):
         self.assertIn('design_orientation: existing?.design_orientation || existing?.orientation', self.source)
@@ -316,7 +318,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('${this._displaySettingsView === "templates" ? this._renderDisplayTemplatesSection(device) : ""}', self.source)
         self.assertNotIn('return this._renderDisplayTemplatesPage(device)', self.source)
         self.assertIn('class="display-template-grid"', self.source)
-        self.assertEqual(self.source.count('number: "'), 22)
+        self.assertEqual(self.source.count('number: "'), 23)
         self.assertIn("variables: [", self.source)
         # A promotion is a decision rather than a reading, so a price tag carries a
         # switch as well as its entity bindings - and the switch and a bound helper
@@ -398,7 +400,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
             self.source,
         )
         self.assertNotIn("!this._findSvgDeep(el.shadowRoot)", self.source)
-        self.assertIn('data-display-template-open="${template.id}"', self.source)
+        self.assertIn('data-display-template-open="blank"', self.source)
         self.assertIn(
             'class="display-template-card display-template-drag-card ${userCreated ? "is-user-created" : ""} ${used ? "is-used" : ""} ${onDisplay ? "is-on-display" : ""}"',
             self.source,
@@ -410,7 +412,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('${this._displaySettingsView === "designer" ? this._renderDisplayTemplateEditor(device) : ""}', self.source)
         self.assertIn("_renderDisplayTemplateEditor(device)", self.source)
         self.assertIn('class="display-template-editor-layout"', self.source)
-        self.assertIn("_renderTemplatePhysicalDevicePreview(device, template, secondaryTemplate, orientation, layout)", self.source)
+        self.assertIn('class="template-standalone-editor template-designer-screen viewport-${viewport}"', self.source)
+        self.assertIn('this._renderDisplayTemplateSurface(template, canvasFormat, true, "primary", true', self.source)
+        self.assertIn('const openTemplateDesigner = (templateId) => {', self.source)
+        self.assertIn('this._selectedDisplayTemplateId = templateId;', self.source)
+        self.assertIn("if (previousAssigned.includes(templateId)) {", self.source)
+        self.assertIn("// assignment itself stayed unchanged", self.source)
         self.assertIn('data-template-orientation="portrait"', self.source)
         self.assertIn('data-template-orientation="landscape"', self.source)
         self.assertNotIn("data-template-format", self.source)
@@ -440,7 +447,6 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn('data-template-layout="stacked"', self.source)
         self.assertIn('data-template-size="large"', self.source)
         self.assertIn('data-template-size="small"', self.source)
-        self.assertIn("Velká šablona zabírá celý displej", self.source)
         self.assertIn('data-template-conflict-action="shrink"', self.source)
         self.assertIn('data-template-conflict-action="replace"', self.source)
         self.assertIn("Zmenšit a přidat", self.source)
@@ -493,7 +499,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         # the bitmap actually sent. It used to be a separate HTML rendering laid
         # out by CSS, which is why previews never matched the panel.
         self.assertIn("_templateSvgPreviewBody(template, templateWidth, templateHeight)", self.source)
-        self.assertIn("return this._layoutTemplateSvg(rows, width, height);", self.source)
+        self.assertIn("return this._applyTemplateAdjustmentsToSvgMarkup(this._layoutTemplateSvg(rows, width, height), template);", self.source)
         # The catalog thumbnail comes from that same builder. It did not: the tiles
         # were a second, hand-written HTML rendering of all twenty templates, so the
         # tile you picked and the picture that arrived on the tag were two different
@@ -708,7 +714,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('type: "dratek_eink/devices/set_gateway"', self.source)
         self.assertIn('device.gateway_selection === "manual"', self.source)
         self.assertIn(".connection-device.is-locked", self.source)
-        self.assertIn("box-shadow:inset 3px 0 0 #2563eb", self.source)
+        self.assertIn("box-shadow:inset 3px 0 0 var(--dratek-teal,#00a2a5)", self.source)
         self.assertIn("Přetažení displeje na gateway ho tam rovnou zamkne", self.source)
 
     def test_connection_map_and_queue_auto_refresh_active_upload_status(self):
@@ -723,6 +729,19 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("window.clearTimeout(this._queuePollTimer)", self.source)
         self.assertIn('details[data-queue-log][open]', self.source)
         self.assertIn("details.open = openLogs.has", self.source)
+
+    def test_main_device_statuses_refresh_without_persisting_card_selection(self):
+        self.assertIn("_scheduleDeviceStatusPoll(delay = 30000)", self.source)
+        self.assertIn('if (this._activeTab === "devices") {', self.source)
+        self.assertIn("await this._scan({ background: true });", self.source)
+        self.assertIn("const statusChanged = this._deviceStatusSignature", self.source)
+        self.assertIn("battery_percent: device.battery_percent ?? null", self.source)
+        self.assertIn("path_rssi: preferredPath?.rssi ?? null", self.source)
+        self.assertIn("window.clearTimeout(this._deviceStatusPollTimer)", self.source)
+        self.assertIn('if (nextTab === "devices") {', self.source)
+        self.assertIn('this._selectedDeviceAddress = "";', self.source)
+        self.assertNotIn('const isSelected = String(device.address || "")', self.source)
+        self.assertNotIn('${isSelected ? "selected is-selected" : ""}', self.source)
 
     def test_400x300_display_uses_the_supplied_physical_frame(self):
         self.assertIn("_isLarge400Device", self.source)
@@ -848,7 +867,9 @@ class FrontendToolLibraryTests(unittest.TestCase):
     def test_device_card_selection_is_not_restored_from_designer(self):
         self.assertIn("this._renderDeviceCards(result.devices)", self.source)
         self.assertNotIn("device.address === selectedAddress", self.source)
-        self.assertIn(".display-tile:focus{outline:0;border-color:#16803c", self.source)
+        self.assertIn('if (nextTab === "devices") {', self.source)
+        self.assertIn('this._selectedDeviceAddress = "";', self.source)
+        self.assertNotIn('${isSelected ? "selected is-selected" : ""}', self.source)
         self.assertIn(".devices-toolbar-card{margin-bottom:12px", self.source)
 
     def test_device_catalog_is_not_exposed_as_a_plus_button(self):
@@ -968,14 +989,103 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('["nw", "n", "ne", "e", "se", "s", "sw", "w"]', self.source)
         self.assertIn('_renderTemplateElementInspector()', self.source)
         self.assertIn('field("Velikost", "fontSize"', self.source)
-        self.assertIn('field("Otočení", "rotation"', self.source)
+        self.assertNotIn('class="template-toolbar-number template-toolbar-rotation"', self.source)
+        self.assertNotIn('compactField("Šířka", "w"', self.source)
+        self.assertNotIn('compactField("Výška", "h"', self.source)
+        self.assertIn('data-template-element-area-orientation', self.source)
+        self.assertIn('class="template-selection-bar is-locked-controls ${hasSelection ?', self.source)
         self.assertIn('_paintTemplateOverlays(context, overlays, width, height)', self.source)
+        self.assertIn('_renderTemplatePartInspector(activeTemplate)', self.source)
+        self.assertIn('field("Otočení", "rotation"', self.source)
+        self.assertIn('this._selectedTemplatePart ? this._renderTemplatePartInspector(activeTemplate)', self.source)
+
+    def test_template_studio_uses_component_previews_without_empty_info_panels(self):
+        self.assertNotIn("_renderStudioHeader(activeTemplate, device)", self.source)
+        self.assertNotIn("DRATEK eInk Studio</h1>", self.source)
+        self.assertNotIn("Nastavení pracovní plochy", self.source)
+        self.assertNotIn("Vyberte oblast v náhledu pro úpravu rozměrů a orientace.", self.source)
+        self.assertIn("const toolPreview = (type, settings) =>", self.source)
+        self.assertIn("this._renderTemplateChartVisual(item)", self.source)
+        self.assertIn("this._renderTemplateGaugeVisual(item)", self.source)
+        self.assertIn("this._renderTemplateSignalVisual(item)", self.source)
+        self.assertIn("template-palette-shape-sample", self.source)
+        self.assertIn("template-palette-text-sample", self.source)
+        self.assertNotIn('class="template-selection-bar is-global-controls"', self.source)
+        self.assertIn('class="template-selection-fixed-tools"', self.source)
+        self.assertIn('class="template-toolbar-cluster is-view"', self.source)
+        self.assertIn('class="template-toolbar-cluster is-transform"', self.source)
+        self.assertIn('template-selection-tool-group template-toolbar-cluster is-actions', self.source)
+        self.assertNotIn('template-toolbar-cluster-label', self.source)
+        self.assertIn('.template-toolbar-cluster ha-icon{--mdc-icon-size:22px}', self.source)
+        self.assertIn('.template-selection-fixed-tools>.template-toolbar-cluster.is-actions ha-icon{--mdc-icon-size:22px}', self.source)
+        self.assertIn('data-template-viewport-menu aria-expanded=', self.source)
+        self.assertIn('class="template-viewport-popup"', self.source)
+        self.assertIn('data-template-designer-viewport="${value}"', self.source)
+        self.assertIn('["narrow", "phone-rotate-portrait", "Úzká"]', self.source)
+        self.assertIn('["wide", "phone-rotate-landscape", "Široká"]', self.source)
+        self.assertIn('["large", "monitor", "Velký displej"]', self.source)
+        self.assertNotIn('data-template-element-format="bold"', self.source)
+        self.assertIn('data-template-element-align="${value}"', self.source)
+        self.assertIn('data-template-history="undo"', self.source)
+        self.assertIn('data-template-history="redo"', self.source)
+        self.assertIn('data-template-element-rotate="-90"', self.source)
+        self.assertIn('data-template-element-order="back"', self.source)
+        self.assertIn('data-template-element-order="front"', self.source)
+        self.assertIn('data-template-element-duplicate', self.source)
+        self.assertIn('data-template-element-delete', self.source)
+        self.assertIn('data-template-settings-open', self.source)
+        self.assertIn('class="template-settings-backdrop"', self.source)
+        self.assertIn('select("Font", "fontFamily"', self.source)
+        self.assertIn('"overlayOpacity", item.overlayOpacity', self.source)
+        self.assertIn('"textOutlineWidth", item.textOutlineWidth', self.source)
+        self.assertIn('"textBorderWidth", item.textBorderWidth', self.source)
+
+    def test_czech_spot_price_template_autobinds_and_has_setup_guide(self):
+        self.assertIn('id: "cz_spot_prices"', self.source)
+        self.assertIn('title: "České spotové ceny"', self.source)
+        self.assertIn('cz_spot_prices: () => {', self.source)
+        self.assertIn('https://github.com/rnovacek/homeassistant_cz_energy_spot_prices', self.source)
+        self.assertIn('entityPrefixes: ["sensor.current_buy_electricity_price", "sensor.current_spot_electricity_price"]', self.source)
+        self.assertIn('const czSpotBindings = template.id === "cz_spot_prices" ? this._czSpotTemplateBindings() : {};', self.source)
+        self.assertIn('(template.id === "cz_spot_prices" ? "" : this._suggestTemplateEntity(meta))', self.source)
+        self.assertIn('if (template?.id === "cz_spot_prices") {', self.source)
+        self.assertIn('"sensor.current_buy_electricity_price_15min"', self.source)
+        self.assertIn('"sensor.current_spot_electricity_price"', self.source)
+        self.assertIn('sensor.${trade}_cheapest_electricity_today${interval}', self.source)
+        self.assertIn('const timestampPrices = Object.fromEntries(', self.source)
+        self.assertIn('group: "chart"', self.source)
+        self.assertIn('<g data-template-block="${this._escape(row.group)}">${markup}</g>', self.source)
+        self.assertIn('fill-opacity="0" pointer-events="all"', self.source)
+        self.assertIn('_templateLiveDataChanged(previousHass, nextHass)', self.source)
+        self.assertIn('const templateLiveDataChanged = this._templateLiveDataChanged?.(this._hass, hass) || false;', self.source)
 
     def test_template_studio_keeps_the_header_tools_and_preview_locked(self):
-        self.assertIn('.studio-pro-workspace .studio-pro-header{position:sticky;top:10px;z-index:110}', self.source)
-        self.assertIn('.studio-pro-workspace .display-template-editor-left{position:sticky;top:var(--studio-locked-top)', self.source)
-        self.assertIn('.studio-pro-workspace .display-template-editor-canvas{position:sticky;top:var(--studio-locked-top)', self.source)
-        self.assertIn('.studio-pro-workspace .studio-pro-header,.studio-pro-workspace .display-template-editor-left,.studio-pro-workspace .display-template-editor-canvas{position:relative;top:auto}', self.source)
+        self.assertIn('.studio-pro-top-row{position:sticky;top:10px;z-index:110;', self.source)
+        self.assertIn('class="studio-pro-detached-actions"', self.source)
+        self.assertIn('.studio-pro-detached-actions .display-template-send-button{border-color:var(--dratek-teal)!important;background:var(--dratek-teal)!important', self.source)
+        self.assertIn('.studio-pro-workspace .display-template-preview-card{box-sizing:border-box;overflow:hidden;border:1px solid var(--studio-line)', self.source)
+        self.assertIn('.studio-pro-workspace .display-template-editor-right{box-sizing:border-box;padding:9px;border:1px solid var(--studio-line)', self.source)
+        self.assertIn('.studio-pro-selection-row{position:sticky;top:var(--studio-locked-top)', self.source)
+        self.assertIn('grid-template-rows:54px auto;column-gap:12px;row-gap:6px', self.source)
+        self.assertIn('.studio-pro-workspace .display-template-editor-left{position:relative;top:auto', self.source)
+        self.assertIn('.studio-pro-workspace .display-template-editor-canvas{position:relative;top:auto', self.source)
+        self.assertIn('width:min(92%,var(--template-canvas-width,780px))', self.source)
+        self.assertIn('.studio-pro-selection-row{grid-column:1/3;grid-row:1', self.source)
+        self.assertIn('const propertyTab = (title, content, open = false', self.source)
+        self.assertNotIn('${this._renderPhotoshopContextBar(activeTemplate)}', self.source)
+        self.assertIn('data-display-template-edit-menu="${template.id}"', self.source)
+        self.assertIn('data-display-template-edit-choice="variables"', self.source)
+        self.assertIn('data-display-template-edit-choice="designer"', self.source)
+        self.assertIn('.display-template-edit-menu{position:absolute;z-index:40;left:14px;right:14px;bottom:calc(100% + 8px)', self.source)
+        self.assertIn('class="display-template-edit-menu-head"', self.source)
+        self.assertIn('class="template-variable-preview ${meta.automatic ? "is-automatic" : ""}"', self.source)
+        self.assertIn('const sample = this._templateSampleValue(meta.label);', self.source)
+        self.assertIn('this._templateSettingsDialogTemplateId = templateId;', self.source)
+        self.assertIn('this._displaySettingsView = "templates";', self.source)
+        self.assertIn('settingsTemplate && this._templateSettingsDialogMode === "variables"', self.source)
+        self.assertIn('const variablesOnly = this._templateSettingsDialogMode === "variables";', self.source)
+        self.assertIn('aria-label="${variablesOnly ?', self.source)
+        self.assertIn('@media(max-width:800px){.studio-pro-top-row{position:relative;top:auto', self.source)
 
     def test_template_image_import_uses_the_original_colour_classifier(self):
         """Warm neutral colours must not be mistaken for the panel's red pigment."""
@@ -1017,6 +1127,18 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("Math.max(1, Math.min(20", self.source)
         for interval in ("minute", "hour", "day", "week"):
             self.assertIn(f'{interval}:', self.source)
+
+    def test_template_saves_are_snapshotted_and_serialized(self):
+        projects = (PANEL_MODULES / "panel-projects.mixin.js").read_text(encoding="utf-8")
+        panel = (ROOT / "custom_components" / "dratek_eink" / "frontend" / "dratek-eink-panel.js").read_text(encoding="utf-8")
+        self.assertIn("_queueDeviceDraftSave(device, payload = this._projectPayload(device))", projects)
+        self.assertIn("const snapshot = structuredClone(payload);", projects)
+        self.assertIn("(this._draftSavePromise || Promise.resolve())", projects)
+        self.assertIn("revision >= Number(this._draftSavedRevision || 0)", projects)
+        self.assertIn("const snapshot = structuredClone(template);", projects)
+        self.assertIn("(this._userTemplateSavePromise || Promise.resolve())", projects)
+        self.assertIn("this._draftSavePromise = Promise.resolve();", panel)
+        self.assertIn("this._userTemplateSavePromise = Promise.resolve();", panel)
 
     def test_template_visuals_are_restricted_to_the_eink_palette(self):
         self.assertIn('paletteColor(source.color, "#111111")', self.source)

@@ -23,6 +23,7 @@ from .gateway import (
     async_scan_gateway,
 )
 from .queue import get_transfer_queue
+from .routing import paths_allowed_by_gateway_lock
 from .transfer import DratekTransfer
 from .ws_shared import (
     DISCOVERY_CACHE_KEY,
@@ -341,6 +342,12 @@ async def websocket_scan(
                 "rssi": None,
                 "unavailable": True,
             }
+            # A manual lock is exclusive.  Other gateway observations remain
+            # useful in the raw discovery cache, but must not be exposed as
+            # usable routes until the display is unlocked.
+            device["paths"] = paths_allowed_by_gateway_lock(
+                device["paths"], selected_gateway_id
+            ) or [device["preferred_path"]]
         elif selected_gateway:
             device["gateway_selection"] = "manual"
             device["selected_gateway_id"] = selected_gateway_id
@@ -352,6 +359,9 @@ async def websocket_scan(
                 "rssi": None,
                 "unavailable": True,
             }
+            device["paths"] = paths_allowed_by_gateway_lock(
+                device["paths"], selected_gateway_id
+            ) or [device["preferred_path"]]
         else:
             device["gateway_selection"] = "auto"
             device["selected_gateway_id"] = ""

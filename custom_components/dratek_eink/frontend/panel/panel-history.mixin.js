@@ -71,6 +71,13 @@ export const historyMixin = {
   },
 
   _onKeyDown(event) {
+    if (event.key === "Escape" && this._templateSettingsDialogOpen) {
+      event.preventDefault();
+      this._templateSettingsDialogOpen = false;
+      this._render();
+      this._paint();
+      return;
+    }
     if (event.key === "Escape" && this._symbolPickerOpen) {
       event.preventDefault();
       this._symbolPickerOpen = false;
@@ -90,6 +97,18 @@ export const historyMixin = {
       if ((event.key === "Delete" || event.key === "Backspace") && this._selectedTemplateEditorElementId) {
         event.preventDefault();
         this._deleteSelectedTemplateElement?.();
+        return;
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && this._selectedTemplatePart) {
+        event.preventDefault();
+        const adjustment = this._templateElementAdjustments?.[this._selectedTemplatePart];
+        if (adjustment) {
+          this._pushTemplateHistory?.();
+          adjustment.hidden = true;
+          this._selectedTemplatePart = "";
+          this._render();
+          this._paint();
+        }
         return;
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !event.shiftKey) {

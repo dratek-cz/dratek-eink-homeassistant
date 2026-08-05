@@ -39,16 +39,24 @@ export const projectsMixin = {
 
   async _saveUserDisplayTemplate(template) {
     if (!this._hass || !template) return template;
-    const result = await this._hass.callWS({
-      type: "dratek_eink/user_templates/save",
-      template: structuredClone(template),
-    });
-    const saved = result?.template || template;
-    this._userDisplayTemplates = this._mergeUserDisplayTemplates(
-      this._userDisplayTemplates,
-      [saved],
-    );
-    return saved;
+    const snapshot = structuredClone(template);
+    const save = async () => {
+      const result = await this._hass.callWS({
+        type: "dratek_eink/user_templates/save",
+        template: snapshot,
+      });
+      const saved = result?.template || snapshot;
+      this._userDisplayTemplates = this._mergeUserDisplayTemplates(
+        this._userDisplayTemplates,
+        [saved],
+      );
+      return saved;
+    };
+    const queued = (this._userTemplateSavePromise || Promise.resolve())
+      .catch(() => {})
+      .then(save);
+    this._userTemplateSavePromise = queued.catch(() => {});
+    return queued;
   },
 
 
@@ -191,6 +199,35 @@ export const projectsMixin = {
     this._draftSaveTimer = window.setTimeout(() => this._saveCurrentDeviceDraft(), 700);
   },
 
+  _queueDeviceDraftSave(device, payload = this._projectPayload(device)) {
+    if (!device || !this._hass) return Promise.resolve(false);
+    const address = String(device.address || "").toUpperCase();
+    const snapshot = structuredClone(payload);
+    const revision = Number(this._draftSaveRevision || 0) + 1;
+    this._draftSaveRevision = revision;
+    const save = async () => {
+      const result = await this._hass.callWS({
+        type: "dratek_eink/device_drafts/save",
+        address: device.address,
+        draft: snapshot,
+      });
+      // Draft writes are deliberately serialized. The revision guard also
+      // prevents an older response from replacing the local copy if a custom
+      // websocket implementation resolves requests out of order.
+      if (revision >= Number(this._draftSavedRevision || 0)) {
+        this._draftSavedRevision = revision;
+        this._deviceDrafts[address] = result?.draft || snapshot;
+        this._saveCachedDeviceDrafts?.();
+      }
+      return true;
+    };
+    const queued = (this._draftSavePromise || Promise.resolve())
+      .catch(() => {})
+      .then(save);
+    this._draftSavePromise = queued.catch(() => {});
+    return queued;
+  },
+
   async _saveCurrentDeviceDraft() {
     if (this._restoringDraft || !this._hass || !this._selectedDeviceAddress) return;
     if (!this._draftIsLoadedForSelectedDevice()) return;
@@ -199,13 +236,7 @@ export const projectsMixin = {
     const device = this._device();
     if (!device) return;
     try {
-      const result = await this._hass.callWS({
-        type: "dratek_eink/device_drafts/save",
-        address: device.address,
-        draft: this._projectPayload(device),
-      });
-      this._deviceDrafts[String(device.address).toUpperCase()] = result.draft || this._projectPayload(device);
-      this._saveCachedDeviceDrafts();
+      await this._queueDeviceDraftSave(device, this._projectPayload(device));
     } catch (err) {
       this._error = `Nepodarilo se ulozit pracovni navrh displeje: ${this._message(err)}`;
     }

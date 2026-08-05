@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.187
+
+- designer šablon má sjednocené kompaktní rozhraní, samostatnou lištu nástrojů, přepínání formátu plátna a přehlednější vlastnosti vybraného prvku
+- více změn jedné šablony se ukládá jako úplný snapshot a ve správném pořadí, takže starší automatické uložení už nepřepíše novější polohu, barvu, otočení ani typografii
+- přibyla šablona Českých spotových cen pro integraci Czech Energy Spot Prices; graf je jeden přesouvatelný celek a automaticky se překresluje podle dat Home Assistantu
+- katalog odděluje úpravu zdrojů dat od úpravy vzhledu, náhledy šablon zachovávají uložené změny a opakované vložení stejné šablony už náhled nesmaže
+- stav displejů se na hlavní stránce průběžně obnovuje bez ručního načtení a ruční zámek gatewaye skryje ostatní přenosové cesty
+
 ## Novinky ve verzi 0.1.186
 
 - proměnné předpřipravených šablon se nyní skutečně ukládají jako automatické vazby na entity Home Assistantu, takže jejich změna vytvoří položku „Změna entity“ ve Frontě zápisu

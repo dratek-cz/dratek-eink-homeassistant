@@ -213,15 +213,66 @@ export const templateSvgMixin = {
   // foreignObject, so preview and panel were two different drawings of the same
   // template and could not agree. Icons resolve asynchronously through ha-icon,
   // so return whatever is cached now and re-render once the rest arrive.
+  _templateBaseDefinition(template) {
+    if (!template?.base_template_id) return template;
+    return this._displayTemplateCards?.().find((item) => item.id === template.base_template_id) || template;
+  },
+
+  _templateAdjustmentsForRender(template) {
+    if (!template) return {};
+    if (String(this._selectedDisplayTemplateId || "") === String(template.id || "")) return this._templateElementAdjustments || {};
+    return template.element_adjustments || this._templateEditorStates?.[template.id]?.element_adjustments || {};
+  },
+
+  _applyTemplateAdjustmentsToSvgMarkup(markup, template, slot = "primary") {
+    const adjustments = this._templateAdjustmentsForRender(template);
+    if (!markup || !Object.keys(adjustments || {}).length || typeof DOMParser === "undefined") return markup;
+    try {
+      const documentNode = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg"><g id="template-adjustment-root">${markup}</g></svg>`, "image/svg+xml");
+      const root = documentNode.getElementById("template-adjustment-root");
+      if (!root) return markup;
+      const baseId = template?.base_template_id || template?.id || "";
+      const templateId = template?.id || baseId;
+      const entries = [...root.children].map((element, index) => {
+        const adjustment = adjustments[`${slot}:${templateId}:${index}`] || adjustments[`${slot}:${baseId}:${index}`] || {};
+        const x = Number(adjustment.x || 0), y = Number(adjustment.y || 0);
+        const scale = Math.max(.2, Math.min(3, Number(adjustment.scale ?? 1)));
+        const rotation = Number(adjustment.rotation || 0);
+        const cx = Number(adjustment.baseX || 0) + Number(adjustment.baseWidth || 0) / 2;
+        const cy = Number(adjustment.baseY || 0) + Number(adjustment.baseHeight || 0) / 2;
+        if (adjustment.hidden) element.remove();
+        else if (x || y || rotation || scale !== 1) {
+          const original = element.getAttribute("transform") || "";
+          element.setAttribute("transform", `${original} translate(${x} ${y}) translate(${cx} ${cy}) rotate(${rotation}) scale(${scale}) translate(${-cx} ${-cy})`.trim());
+        }
+        const color = { black: "#111111", red: "#d71912", white: "#ffffff" }[adjustment.color];
+        if (color && element.isConnected) {
+          [element, ...element.querySelectorAll("path,rect,circle,ellipse,line,polyline,polygon,text")].forEach((node) => {
+            const fill = node.getAttribute("fill"), stroke = node.getAttribute("stroke");
+            if (fill && fill !== "none" && !["#fff", "#ffffff", "white"].includes(fill.toLowerCase())) node.setAttribute("fill", color);
+            if (stroke && stroke !== "none" && !["#fff", "#ffffff", "white"].includes(stroke.toLowerCase())) node.setAttribute("stroke", color);
+          });
+        }
+        return { element, order: Number(adjustment.order || 0), index };
+      });
+      entries.filter(({ element }) => element.isConnected).sort((a, b) => a.order - b.order || a.index - b.index).forEach(({ element }) => root.appendChild(element));
+      const serializer = new XMLSerializer();
+      return [...root.children].map((element) => serializer.serializeToString(element)).join("");
+    } catch (_error) {
+      return markup;
+    }
+  },
+
   _templateSvgPreviewMarkup(template, width, height) {
     if (!template) return "";
     // The catalog may decorate the "create" tile, but the actual designer and
     // exported image must start as a completely white canvas.
-    if (template.id === "blank" || template.user_created) return "";
-    const rows = this._templateSvgRows(template);
+    if (template.id === "blank" || (template.user_created && !template.base_template_id)) return "";
+    const baseTemplate = this._templateBaseDefinition(template);
+    const rows = this._templateSvgRows(baseTemplate);
     this._requestTemplateIcons(rows);
     this._warmTemplateIcons();
-    return this._layoutTemplateSvg(rows, width, height);
+    return this._applyTemplateAdjustmentsToSvgMarkup(this._layoutTemplateSvg(rows, width, height), template);
   },
 
   // Wrapped as a standalone <svg> so it can sit inside the preview's
@@ -387,7 +438,8 @@ export const templateSvgMixin = {
     const parts = [];
     rows.forEach((row, index) => {
       const rowHeight = row.flex ? flexShare : fixed[index] * scale;
-      parts.push(this._renderTemplateBlock(row, { x: box.x, y, w: box.w, h: rowHeight, fullX: box.fullX, fullW: box.fullW }));
+      const markup = this._renderTemplateBlock(row, { x: box.x, y, w: box.w, h: rowHeight, fullX: box.fullX, fullW: box.fullW });
+      parts.push(row.group && markup ? `<g data-template-block="${this._escape(row.group)}">${markup}</g>` : markup);
       y += rowHeight;
     });
     return parts;
@@ -584,7 +636,10 @@ export const templateSvgMixin = {
     const span = top - bottom || 1;
     const step = box.w / values.length;
     const barWidth = Math.max(1, step * 0.68);
-    const parts = [this._svgHairline(box.x, box.y + chartHeight, box.w, 1)];
+    const parts = [
+      `<rect x="${box.x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${box.w.toFixed(2)}" height="${box.h.toFixed(2)}" fill="#ffffff" fill-opacity="0" pointer-events="all"></rect>`,
+      this._svgHairline(box.x, box.y + chartHeight, box.w, 1),
+    ];
     values.forEach((value, index) => {
       const barHeight = Math.max(1, ((value - bottom) / span) * (chartHeight - 1));
       parts.push(`<rect x="${(box.x + step * index + (step - barWidth) / 2).toFixed(2)}" y="${(box.y + chartHeight - barHeight).toFixed(2)}"`
@@ -989,6 +1044,27 @@ export const templateSvgMixin = {
         { flex: true },
         { footer: [{ label: "NEJLEVNĚJI DNES", value: v(3, "0,86 Kč") }], h: 0.14 },
       ],
+      cz_spot_prices: () => {
+        const prices = series(1, [1.62, 1.48, 1.36, 1.29, 1.34, 1.51, 1.88, 2.24, 2.06, 1.72, 1.38, 1.12, 0.86, 0.94, 1.08, 1.42, 1.96, 2.58, 2.74, 2.39, 2.05, 1.84, 1.71, 1.63]);
+        const labels = prices.map((_price, index) => {
+          const hour = Math.round((index * 24) / prices.length);
+          return [0, 6, 12, 18].includes(hour) && index === Math.round((hour * prices.length) / 24) ? String(hour) : "";
+        });
+        const now = new Date();
+        const highlight = Math.min(prices.length - 1, Math.floor((now.getHours() * 60 + now.getMinutes()) * prices.length / 1440));
+        return [
+          { text: "České spotové ceny", h: 0.075, size: 0.048, bold: true },
+          { stat: { value: v(0, "2,45 Kč/kWh"), caption: "aktuální interval", color: "red" }, h: 0.22 },
+          { bars: { values: prices, labels, highlight }, group: "chart", h: 0.36 },
+          { strip: [
+            { label: "MIN", value: v(2, "0,86 Kč") },
+            { label: "MAX", value: v(3, "2,74 Kč"), color: "red" },
+            { label: "POŘADÍ", value: v(5, "12 / 24") },
+          ], h: 0.16 },
+          { flex: true },
+          { footer: [{ label: "ZÍTRA MIN", value: v(4, "1,02 Kč") }], h: 0.13 },
+        ];
+      },
       home: () => [
         { icon: "home", h: 0.15, color: "red" },
         { text: "Dům", h: 0.08, size: 0.058, bold: true },
@@ -1244,11 +1320,12 @@ export const templateSvgMixin = {
   },
 
   _templateSvgRows(template) {
-    if (template?.id === "blank" || template?.user_created) return [];
-    const build = this._templateSvgSpecs(template)[template?.id];
+    const baseTemplate = this._templateBaseDefinition(template);
+    if (baseTemplate?.id === "blank" || (baseTemplate?.user_created && !baseTemplate?.base_template_id)) return [];
+    const build = this._templateSvgSpecs(baseTemplate)[baseTemplate?.id];
     return build ? build() : [
       { icon: "shape-outline", h: 0.22 },
-      { text: template?.title || "Šablona", h: 0.1, size: 0.07, bold: true },
+      { text: baseTemplate?.title || "Šablona", h: 0.1, size: 0.07, bold: true },
       { flex: true },
     ];
   },
@@ -1274,7 +1351,7 @@ export const templateSvgMixin = {
       const template = list[index] || list[0];
       const rows = this._templateSvgRows(template);
       await this._preloadTemplateIcons(rows);
-      const markup = this._layoutTemplateSvg(rows, slot.w, slot.h);
+      const markup = this._applyTemplateAdjustmentsToSvgMarkup(this._layoutTemplateSvg(rows, slot.w, slot.h), template, index ? "secondary" : "primary");
       bodies.push(`<g transform="translate(${slot.x.toFixed(2)},${slot.y.toFixed(2)})">`
         + `<rect x="0" y="0" width="${slot.w.toFixed(2)}" height="${slot.h.toFixed(2)}" fill="#ffffff"></rect>`
         + markup + `</g>`);
