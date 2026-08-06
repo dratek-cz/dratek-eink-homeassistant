@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.208
+
+- opraven stav, kdy Meteoradar zůstával navždy na "Načítám mapu…" bez jakékoli chyby – po neúspěšném pokusu (nejčastěji: HA po aktualizaci ještě neprošel restartem, takže kamerová entita zatím neexistuje) se nyní zobrazí konkrétní chybová hláška a další pokus proběhne mnohem dřív
+- hranice České republiky nahrazeny přesnými daty ČÚZK (221 bodů) místo hrubého 35bodového přiblížení – obrys je nyní na displeji skutečně rozpoznatelný
+
 ## Novinky ve verzi 0.1.207
 
 - šablona Meteoradar teď obsahuje jen samotnou mapu – bez nadpisu, popisku počasí a patičky – mapa vyplňuje celou plochu displeje

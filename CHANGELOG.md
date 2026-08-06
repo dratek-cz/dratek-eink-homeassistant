@@ -2,6 +2,15 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.208] - 2026-08-06
+
+### Opraveno – Meteoradar zůstával navždy na "Načítám mapu…"
+- Zdroj problému: `<dratek-eink-panel-harness.html>` nemá backend, takže lokální náhled nikdy nedostal odpověď na dotaz na mapu a zůstal trvale na placeholderu bez jakékoli chyby. Přidán mock, který lokální náhled skutečně vykreslí.
+- V ostrém HA se stejný stav nejčastěji stává, když integrace přibyla o novou kamerovou entitu (`camera.meteoradar`), ale Home Assistant od aktualizace ještě neproběhl restartem – entita tak zatím neexistuje. Panel teď rozlišuje "ještě se nezkusilo" od "zkusilo se a selhalo" a u druhého stavu ukáže konkrétní chybovou hlášku namísto věčného "Načítám…". Neúspěšný pokus se navíc zopakuje mnohem dřív (15 s místo 2 min), takže se mapa objeví sama krátce po vyřešení příčiny.
+
+### Opraveno – hranice České republiky byly hrubé a nepřesné
+- Nahrazen zjednodušený 35bodový obrys (jen orientační přiblížení) skutečnou hranicí ČÚZK (Český úřad zeměměřický a katastrální) staženou přes geoBoundaries.org, zjednodušenou na 221 bodů Douglas-Peucker algoritmem – dost detailů na to, aby byla hranice na displeji skutečně rozpoznatelná, aniž by rostla velikost integrace.
+
 ## [0.1.207] - 2026-08-06
 
 ### Zjednodušeno – šablona Meteoradar obsahuje už jen mapu

@@ -32,6 +32,11 @@ const MIN_READABLE_FONT_SIZE = 10;
 // slot, switching templates) still sees a fresh-ish image without hammering the
 // connection on every re-render tick.
 const METEORADAR_CACHE_MS = 2 * 60 * 1000;
+// A failed fetch (most commonly: camera.meteoradar does not exist yet because
+// Home Assistant has not restarted since this integration was updated) retries
+// far sooner than a success is cached for, so the map appears on its own shortly
+// after the underlying cause clears instead of waiting out the full success TTL.
+const METEORADAR_RETRY_MS = 15 * 1000;
 
 // Advance width of one glyph as a fraction of the font size, per character class,
 // measured off the Arial/Helvetica stack above.
@@ -178,10 +183,19 @@ export const templateSvgMixin = {
   // own resolution. The image is embedded with preserveAspectRatio, so it does
   // not need to match the radarMap row's exact sub-box - only be large enough
   // that scaling it down stays sharp.
+  //
+  // A failure is cached too, distinctly from "never tried yet" - the most common
+  // cause is camera.meteoradar not existing until Home Assistant restarts after
+  // an update, and silently leaving the "Loading…" placeholder up forever gave
+  // no hint that anything had actually gone wrong. Failures retry sooner than a
+  // successful fetch's own cache lifetime, so the map appears on its own shortly
+  // after the underlying cause (usually that restart) is resolved.
   async _ensureTemplateRadarImage(width, height) {
     const key = `${Math.round(width)}x${Math.round(height)}`;
     const cached = this._meteoradarImageCache;
-    if (cached && cached.key === key && Date.now() - cached.fetchedAt < METEORADAR_CACHE_MS) return false;
+    const age = cached ? Date.now() - cached.fetchedAt : Infinity;
+    const ttl = cached?.dataUrl ? METEORADAR_CACHE_MS : METEORADAR_RETRY_MS;
+    if (cached && cached.key === key && age < ttl) return false;
     if (!this._hass?.callWS) return false;
     try {
       const result = await this._hass.callWS({
@@ -189,11 +203,15 @@ export const templateSvgMixin = {
         width: Math.round(width),
         height: Math.round(height),
       });
-      if (!result?.ok || !result?.image) return false;
-      this._meteoradarImageCache = { key, dataUrl: result.image, fetchedAt: Date.now() };
+      if (!result?.ok || !result?.image) {
+        this._meteoradarImageCache = { key, dataUrl: "", fetchedAt: Date.now(), error: "Server nevrátil obrázek." };
+        return true;
+      }
+      this._meteoradarImageCache = { key, dataUrl: result.image, fetchedAt: Date.now(), error: "" };
       return true;
-    } catch (_error) {
-      return false;
+    } catch (error) {
+      this._meteoradarImageCache = { key, dataUrl: "", fetchedAt: Date.now(), error: this._message?.(error) || String(error?.message || error) };
+      return true;
     }
   },
 
@@ -1074,13 +1092,21 @@ export const templateSvgMixin = {
     const x = row.bleed ? box.fullX : box.x;
     const w = row.bleed ? box.fullW : box.w;
     const cached = this._meteoradarImageCache;
-    if (!cached?.dataUrl) {
-      return `<rect x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}"`
-        + ` fill="#ffffff" stroke="${BLACK}" stroke-width="1"></rect>`
-        + this._svgText("Načítám radarovou mapu…", x + w / 2, box.y + box.h / 2, Math.max(10, box.h * 0.11), { maxWidth: w * 0.9 });
+    if (cached?.dataUrl) {
+      return `<image x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}"`
+        + ` preserveAspectRatio="xMidYMid meet" href="${cached.dataUrl}"></image>`;
     }
-    return `<image x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}"`
-      + ` preserveAspectRatio="xMidYMid meet" href="${cached.dataUrl}"></image>`;
+    // Distinguishes "the first fetch has not come back yet" from "it came back
+    // and failed" - the two used to look identical, so a missing camera.meteoradar
+    // entity (most commonly: Home Assistant has not restarted since this
+    // integration updated) showed the same "Loading…" text forever with no hint
+    // anything was wrong.
+    const label = cached?.error
+      ? `Radarová mapa se nenačetla: ${cached.error}`
+      : "Načítám radarovou mapu…";
+    return `<rect x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}"`
+      + ` fill="#ffffff" stroke="${BLACK}" stroke-width="1"></rect>`
+      + this._svgText(label, x + w / 2, box.y + box.h / 2, Math.max(9, box.h * 0.09), { maxWidth: w * 0.92 });
   },
 
   // A departure board: the line number lives in a filled badge, so it is found by
