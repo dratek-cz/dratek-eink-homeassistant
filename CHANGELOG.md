@@ -2,7 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.209] - 2026-08-06
+
+### Opraveno – Celoplošné nativní vykreslování srážkového radaru a viditelnost aktualizace v HACS
+- Vydána verze 0.1.209 s přímou fallback cestou v `render.py` na `async_render_meteoradar(hass)`.
+- Zajištěno zobrazení celoplošné srážkové mapy v editoru i na e-Ink displeji bez nutnosti manuálního zakládání kamerových entit.
+
 ## [0.1.208] - 2026-08-06
+
 
 ### Opraveno – Meteoradar zůstával navždy na "Načítám mapu…"
 - Zdroj problému: `<dratek-eink-panel-harness.html>` nemá backend, takže lokální náhled nikdy nedostal odpověď na dotaz na mapu a zůstal trvale na placeholderu bez jakékoli chyby. Přidán mock, který lokální náhled skutečně vykreslí.
