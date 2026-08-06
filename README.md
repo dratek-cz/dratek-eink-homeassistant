@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.192
+
+- opraveno postupné zpomalování nahrávání do displeje po delším běhu Home Assistantu – ruční odeslání, které přerušilo běžící automatickou aktualizaci, po sobě nechávalo napůl otevřené Bluetooth spojení a postupně zabíralo volné spojovací sloty, až nahrávání trvalo místo pár sekund celých 10 minut
+- odpojení od displeje je nyní chráněné i před přerušením přenosu, takže se Bluetooth spojení vždy korektně uzavře
+
 ## Novinky ve verzi 0.1.191
 
 - automatická aktualizace textu v šablonách vypadá stejně jako ruční odeslání – stejná velikost, tučnost i poloha písma; zmizelo nafouknuté a posunuté písmo z dřívějšího přerenderování na pozadí

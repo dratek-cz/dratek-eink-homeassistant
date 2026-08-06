@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
 from bleak import BleakClient
@@ -60,6 +61,42 @@ class DratekTransfer:
 
     def log(self, message: str) -> None:
         self._log(message)
+
+    @asynccontextmanager
+    async def _connected_client(self, connection_target: Any) -> AsyncIterator[BleakClient]:
+        """Connect and guarantee a disconnect even if this task is cancelled mid-transfer.
+
+        A manual upload replaces a running automatic refresh's automation config
+        (EntityAutoUpdateManager.async_set_config) or preempts it
+        (TransferQueue._preempt_automatic_update), and Home Assistant itself
+        cancels outstanding tasks on integration reload and shutdown. Any of these
+        can land while this task is deep inside a block write, awaiting a GATT
+        response.
+
+        BleakClient's own async context manager already calls disconnect() from
+        its __aexit__, but that disconnect is just another await point: a
+        cancellation already pending on this task aborts it before the adapter
+        ever receives the disconnect request. The BLE connection - and the
+        adapter's limited connection slot - is left half-open. Repeated over
+        enough manual uploads, that is what turns a 5-second transfer into one
+        that eventually needs the 10-minute safety timeout: every slot is stuck
+        waiting on a peer that was never told to let go.
+
+        Shielding the disconnect from the outer cancellation gives it a real
+        chance to complete before the CancelledError is allowed through.
+        """
+        client = BleakClient(connection_target, timeout=20.0)
+        try:
+            await client.connect()
+            yield client
+        finally:
+            try:
+                await asyncio.shield(client.disconnect())
+            except Exception as exc:
+                self.log(
+                    f"Disconnect cleanup raised {exc}; the Bluetooth slot may take "
+                    "longer than usual to free."
+                )
 
     async def _async_pack(
         self,
@@ -199,7 +236,7 @@ class DratekTransfer:
 
         connection_target = self._connection_target(address)
         self.log(f"Connecting to {address} for RGB LED control...")
-        async with BleakClient(connection_target, timeout=20.0) as client:
+        async with self._connected_client(connection_target) as client:
             if not client.is_connected:
                 raise RuntimeError("Could not connect to the display.")
             service_uuid, control_char, _write_char = self._find_transfer_chars(client)
@@ -246,7 +283,7 @@ class DratekTransfer:
 
         connection_target = self._connection_target(address)
         self.log(f"Connecting to {address} for find-me flash...")
-        async with BleakClient(connection_target, timeout=20.0) as client:
+        async with self._connected_client(connection_target) as client:
             if not client.is_connected:
                 raise RuntimeError("Could not connect to the display.")
             service_uuid, control_char, _write_char = self._find_transfer_chars(client)
@@ -329,7 +366,7 @@ class DratekTransfer:
 
         connection_target = self._connection_target(address)
         self.log(f"Connecting to {address}...")
-        async with BleakClient(connection_target, timeout=20.0) as client:
+        async with self._connected_client(connection_target) as client:
             if not client.is_connected:
                 raise RuntimeError("Could not connect to the display.")
 

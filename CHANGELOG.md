@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.192] - 2026-08-06
+
+### Opraveno – nahrávání do displeje se postupně zpomalovalo
+- Nalezena a opravena příčina, proč nahrávání po delším běhu Home Assistantu (hodiny až dny) postupně zpomalovalo z jednotek sekund až na plné 10minutové bezpečnostní omezení: když ruční odeslání převzalo přednost před běžící automatickou aktualizací, přerušený přenos nestihl řádně odpojit Bluetooth spojení – zůstalo "napůl otevřené" a zabralo displeji nebo adaptéru spojovací slot navždy.
+- Odpojení od displeje je nyní chráněné i před přerušením běžícího přenosu, takže Bluetooth spojení se vždy korektně uzavře – ať už ho přeruší ruční odeslání, nebo restart/aktualizace Home Assistantu. Nové spojovací sloty se tak přestanou postupně "ucpávat".
+
 ## [0.1.191] - 2026-08-06
 
 ### Opraveno – automatická aktualizace šablon 1:1 s ručním odesláním
