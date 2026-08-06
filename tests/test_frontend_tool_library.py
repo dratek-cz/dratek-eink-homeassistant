@@ -318,7 +318,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('${this._displaySettingsView === "templates" ? this._renderDisplayTemplatesSection(device) : ""}', self.source)
         self.assertNotIn('return this._renderDisplayTemplatesPage(device)', self.source)
         self.assertIn('class="display-template-grid"', self.source)
-        self.assertEqual(self.source.count('number: "'), 23)
+        self.assertEqual(self.source.count('number: "'), 24)
+
         self.assertIn("variables: [", self.source)
         # A promotion is a decision rather than a reading, so a price tag carries a
         # switch as well as its entity bindings - and the switch and a bound helper

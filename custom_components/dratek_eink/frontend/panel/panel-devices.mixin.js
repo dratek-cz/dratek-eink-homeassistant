@@ -997,6 +997,8 @@ export const devicesMixin = {
       { id: "blank", number: "00", category: "custom", title: "Prázdná šablona", variables: [] },
       ...userTemplates,
       { id: "weather", number: "01", category: "nature", title: "Počasí", variables: [["thermometer", "Teplota"], ["weather-partly-cloudy", "Stav počasí"], ["clock-outline", "Čas"], ["calendar-outline", "Datum"], ["weather-rainy", "Předpověď"]] },
+      { id: "radar", number: "23", category: "nature", title: "Meteoradar", variables: [["map-marker", "Stát / Oblast"], ["radar", "Srážkový radar"], ["clock-outline", "Aktualizace"]] },
+
       { id: "energy", number: "02", category: "energy", title: "Cena elektřiny", variables: [["currency-usd", "Aktuální cena"], ["clock-outline", "Cenový interval"], ["chart-line", "Denní průběh"], ["tag-outline", "Minimum dne"]] },
       { id: "cz_spot_prices", number: "22", category: "energy", title: "České spotové ceny", variables: [["currency-usd", "Aktuální cena"], ["chart-line", "Cenový průběh dnes"], ["tray-arrow-down", "Minimum dnes"], ["arrow-up-down", "Maximum dnes"], ["weather-sunny", "Minimum zítra"], ["counter", "Aktuální pořadí"]] },
       { id: "home", number: "03", category: "home", title: "Dům", variables: [["thermometer", "Teplota"], ["water-percent", "Vlhkost"], ["lightbulb-on-outline", "Světla"], ["lock-outline", "Zámky"]] },
@@ -1019,7 +1021,8 @@ export const devicesMixin = {
       { id: "garden", number: "20", category: "nature", title: "Zahrada", variables: [["sprout-outline", "Záhon"], ["water-percent", "Vlhkost půdy"], ["thermometer", "Teplota"], ["weather-windy", "Vítr"], ["sprinkler-variant", "Další zálivka"]] },
       { id: "price", number: "21", category: "shop", title: "Cenovka", options: [["sale", "Akce", "Zobrazí štítek AKCE, původní cenu přeškrtne a novou zvýrazní."]], variables: [["tag-outline", "Název zboží"], ["currency-usd", "Cena"], ["cash-multiple", "Původní cena"], ["barcode", "Kód zboží"]] },
     ];
-    const prepared = new Set(["blank", "weather", "home", "solar", "living", "calendar", "security", "air", "thermostat", "server", "garden", "price", "cz_spot_prices"]);
+    const prepared = new Set(["blank", "weather", "radar", "home", "solar", "living", "calendar", "security", "air", "thermostat", "server", "garden", "price", "cz_spot_prices"]);
+
     return templates.map((template) => ({
       ...template,
       kind: template.user_created ? "custom" : prepared.has(template.id) ? "prepared" : "custom",

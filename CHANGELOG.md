@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.204] - 2026-08-06
+
+### Opraveno – Registrace Meteoradar šablony v katalogu předpřipravených šablon UI
+- Registrována šablona `radar` v seznamu `_displayTemplateCards()` a v množině `prepared` v `panel-devices.mixin.js`.
+- Šablona **Meteoradar** se nyní správně zobrazuje v nabídce **Šablony** v editoru i katalogu.
+
 ## [0.1.203] - 2026-08-06
 
 ### Přidáno – Nová vestavěná šablona Meteoradar s volbou státu
