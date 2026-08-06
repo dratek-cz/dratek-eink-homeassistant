@@ -1041,36 +1041,54 @@ async def async_render_camera_binding_data_url(
 
     Shared by the Meteoradar preview command (ws_meteoradar.py) and automatic
     refreshes (automation.py): both need the exact same "current camera frame,
-    ready for the three-colour panel" image, and camera.async_get_image needs
-    the event loop a synchronous compositor does not have, so this step has to
-    run before any executor dispatch.
+    ready for the three-colour panel" image.
 
-    Returns None on any fetch or decode failure so callers can fall back to
-    whatever was last successfully rendered, rather than raising into the
-    refresh loop over what is often a transient network hiccup.
+    If the camera entity does not exist (or fails to fetch), it falls back to
+    rendering the live RainViewer precipitation map directly (async_render_meteoradar).
     """
     from homeassistant.components.camera import async_get_image
+    from .meteoradar import async_render_meteoradar
 
+    camera_image = None
     try:
         camera_image = await async_get_image(hass, entity_id)
     except Exception:
-        return None
+        camera_image = None
 
-    def _prepare() -> bytes | None:
-        try:
-            source = Image.open(io.BytesIO(camera_image.content)).convert("RGB")
-        except Exception:
-            return None
-        fitted = fit_to_size(source, width, height)
-        quantized = quantize_bwr_preview(fitted)
-        buffer = io.BytesIO()
-        quantized.save(buffer, format="PNG")
-        return buffer.getvalue()
+    if camera_image is not None and getattr(camera_image, "content", None):
+        def _prepare_camera() -> bytes | None:
+            try:
+                source = Image.open(io.BytesIO(camera_image.content)).convert("RGB")
+            except Exception:
+                return None
+            fitted = fit_to_size(source, width, height)
+            quantized = quantize_bwr_preview(fitted)
+            buffer = io.BytesIO()
+            quantized.save(buffer, format="PNG")
+            return buffer.getvalue()
 
-    png_bytes = await hass.async_add_executor_job(_prepare)
-    if png_bytes is None:
-        return None
-    return "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
+        png_bytes = await hass.async_add_executor_job(_prepare_camera)
+        if png_bytes is not None:
+            return "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
+
+    # Fallback: render directly via RainViewer for camera.meteoradar or missing camera entity
+    try:
+        radar_img = await async_render_meteoradar(hass)
+        if radar_img is not None:
+            def _prepare_radar() -> bytes:
+                fitted = fit_to_size(radar_img, width, height)
+                quantized = quantize_bwr_preview(fitted)
+                buffer = io.BytesIO()
+                quantized.save(buffer, format="PNG")
+                return buffer.getvalue()
+
+            png_bytes = await hass.async_add_executor_job(_prepare_radar)
+            return "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
+    except Exception:
+        pass
+
+    return None
+
 
 
 def render_entity_bound_template_image(

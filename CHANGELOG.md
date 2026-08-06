@@ -26,6 +26,12 @@ Všechny významné změny a historie verzí v projektu DRATEK eInk.
 - RainViewer poskytuje nová data nejvýše jednou za 10 minut, takže se mapa (a automatická aktualizace displeje) přiměřeně aktualizuje ve stejném rytmu – rychlejší dotazování by beztak vracelo stejná data.
 - Odstraněn zastaralý pokyn "nastavte si kameru RainViewer/OpenStreetMap sami" ze setup průvodce – tento krok už není potřeba.
 
+## [0.1.206] - 2026-08-06
+
+### Opraveno – Nativní záložní generování srážkového radaru RainViewer při absenci kamerové entity
+- V `render.py` (`async_render_camera_binding_data_url`) přidán automatický záložní zdroj (fallback) na `async_render_meteoradar(hass)`.
+- Srážková mapa se nyní správně vykresluje a načítá, i když v Home Assistantu není ručně přidána žádná samostatná `camera.meteoradar` entita.
+
 ## [0.1.205] - 2026-08-06
 
 ### Přidáno – Celoplošný Meteoradar přes celý displej propojený s Met.no
