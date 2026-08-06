@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.194] - 2026-08-06
+
+### Opraveno – uvíznutí Bluetooth notifikací a zaciklení nahrávání do displejů
+- Všechna volání notifikací (`start_notify`) v BLE přenosu jsou nyní zabezpečena blokem `try ... finally`, takže při chybě, stornu nebo timeoutu nezůstávají v Bluetooth stacku (BlueZ / DBus) visící notifikace ucpávající spojovací sloty.
+- Odstup mezi odpojením a novým připojením k témuž displeji byl navýšen na 3,0 s pro spolehlivé uvolnění vnitřního BLE serveru na displeji.
+- Opravena retransmisní logika v `streaming_mode` při vyžádání chybějícího bloku displejem (promazání stavu již poslaných bloků nad vyžádaným indexem).
+- Ochrana v `automation.py` před hromaděním požadavků v obnovovací smyčce u pomalých nebo přerušených uploadů.
+
 ## [0.1.193] - 2026-08-06
 
 ### Opraveno – automatická aktualizace skutečně odpovídá ručnímu odeslání

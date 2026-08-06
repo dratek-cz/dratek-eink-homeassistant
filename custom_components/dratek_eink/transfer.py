@@ -34,7 +34,7 @@ UNCONFIRMED_WRITE_DRAIN_TIMEOUT = 10
 MAX_BLOCK_REQUEST_RETRIES = 5
 GATT_OPERATION_TIMEOUT = 8
 STREAM_WRITE_DELAY = 0.04
-MIN_RECONNECT_INTERVAL_SECONDS = 1.5
+MIN_RECONNECT_INTERVAL_SECONDS = 3.0
 
 # Keyed by normalised address, shared across every DratekTransfer instance for
 # the life of the process (a fresh instance is created per call, so per-address
@@ -268,16 +268,21 @@ class DratekTransfer:
                 raise RuntimeError("DRATEK eInk control characteristic was not found.")
             self.log(f"Using service {service_uuid}")
             await client.start_notify(control_char, notify_handler)
-            await asyncio.sleep(0.25)
-            await self._write_char(client, control_char, packet, "RGB LED")
-            await self._wait_for_response(
-                responses,
-                RGB_LED_COMMAND,
-                ok_values={0},
-                label="RGB LED setting",
-                timeout=5,
-            )
-            await client.stop_notify(control_char)
+            try:
+                await asyncio.sleep(0.25)
+                await self._write_char(client, control_char, packet, "RGB LED")
+                await self._wait_for_response(
+                    responses,
+                    RGB_LED_COMMAND,
+                    ok_values={0},
+                    label="RGB LED setting",
+                    timeout=5,
+                )
+            finally:
+                try:
+                    await client.stop_notify(control_char)
+                except Exception:
+                    pass
 
     async def flash_identify(self, address: str) -> None:
         """Blink the display's indicator once so it can be located ("find me")."""
@@ -315,16 +320,22 @@ class DratekTransfer:
                 raise RuntimeError("DRATEK eInk control characteristic was not found.")
             self.log(f"Using service {service_uuid}")
             await client.start_notify(control_char, notify_handler)
-            await asyncio.sleep(0.25)
-            await self._write_char(client, control_char, packet, "find me")
-            await self._wait_for_response(
-                responses,
-                FLASH_IDENTIFY_COMMAND,
-                ok_values={0},
-                label="find me",
-                timeout=5,
-            )
-            await client.stop_notify(control_char)
+            try:
+                await asyncio.sleep(0.25)
+                await self._write_char(client, control_char, packet, "find me")
+                await self._wait_for_response(
+                    responses,
+                    FLASH_IDENTIFY_COMMAND,
+                    ok_values={0},
+                    label="find me",
+                    timeout=5,
+                )
+            finally:
+                try:
+                    await client.stop_notify(control_char)
+                except Exception:
+                    pass
+
 
     async def _send_with_retries(
         self,
@@ -405,203 +416,213 @@ class DratekTransfer:
             if "notify" in write_char.properties or "indicate" in write_char.properties:
                 await client.start_notify(write_char, notify_handler)
                 write_notify_enabled = True
-            await asyncio.sleep(0.4)
+            try:
+                await asyncio.sleep(0.4)
 
-            block_size = await self._request_block_size(client, control_char, responses)
-            if block_size < 8:
-                raise RuntimeError(f"Invalid block size reported by display: {block_size}")
+                block_size = await self._request_block_size(client, control_char, responses)
+                if block_size < 8:
+                    raise RuntimeError(f"Invalid block size reported by display: {block_size}")
 
-            total_blocks = math.ceil(len(payload) / (block_size - 4))
-            self.log(f"Block size: {block_size}. Payload: {len(payload)} bytes, {total_blocks} blocks.")
+                total_blocks = math.ceil(len(payload) / (block_size - 4))
+                self.log(f"Block size: {block_size}. Payload: {len(payload)} bytes, {total_blocks} blocks.")
 
-            if partial is not None:
-                await self._write_partial_position(client, control_char, responses, partial)
+                if partial is not None:
+                    await self._write_partial_position(client, control_char, responses, partial)
 
-            # Refresh mode 0 in the vendor API maps to command byte 1 and causes
-            # a full-screen refresh. Partial refreshes use a separate 0x60 area
-            # command before this packet.
-            # Keep the six-byte packet used by the known-good integration.
-            # These displays acknowledge it directly and SDK type 51 then
-            # requires every image block to use an ATT write response.
-            command = bytes([2]) + len(payload).to_bytes(4, "little") + bytes([FULL_REFRESH_MODE])
-            await self._write_char(client, control_char, command, "prepare update")
-            await self._wait_for_response(responses, 2, ok_values={0}, label="screen update prepare")
+                # Refresh mode 0 in the vendor API maps to command byte 1 and causes
+                # a full-screen refresh. Partial refreshes use a separate 0x60 area
+                # command before this packet.
+                # Keep the six-byte packet used by the known-good integration.
+                # These displays acknowledge it directly and SDK type 51 then
+                # requires every image block to use an ATT write response.
+                command = bytes([2]) + len(payload).to_bytes(4, "little") + bytes([FULL_REFRESH_MODE])
+                await self._write_char(client, control_char, command, "prepare update")
+                await self._wait_for_response(responses, 2, ok_values={0}, label="screen update prepare")
 
-            self._clear_queue(responses)
-            await self._write_char(client, control_char, bytes([3]), "start process")
-            response = await self._wait_for_next_transfer_response(
-                responses,
-                timeout=BLOCK_REQUEST_TIMEOUT,
-            )
-            request_counts: dict[int, int] = {}
-            sent_blocks: set[int] = set()
-            confirmed_blocks: set[int] = set()
-            if len(response) >= 6 and response[0] == 5 and response[1] == 0:
-                resume_block = int.from_bytes(response[2:6], "little")
-                sent_blocks.update(range(min(resume_block, total_blocks)))
-                confirmed_blocks.update(range(min(resume_block, total_blocks)))
-                if resume_block:
-                    self.log(
-                        f"Display is resuming the prepared transfer at block "
-                        f"{resume_block + 1}/{total_blocks}."
-                    )
-            # Picksmart has two transfer implementations selected by bit 0x80
-            # of the software-version byte in manufacturer data. New firmware
-            # streams the remaining blocks after the first [05 00] request and
-            # advances on each GATT write callback. Legacy firmware advances
-            # after each control-point notification and ignores its block index
-            # after the initial request.
-            streaming_mode = bool(int(software_version or 0) & 0x80)
-            # The next block must not be sent until the display has acknowledged
-            # the current GATT write. A successful no-response enqueue only
-            # proves that BlueZ accepted the bytes locally and can overrun the
-            # display controller. Legacy firmware is paced by its per-block
-            # control-point notification below.
-            if streaming_mode and "write" not in write_char.properties:
-                raise RuntimeError(
-                    "Display does not expose acknowledged block writes; "
-                    "refusing an unsafe unconfirmed stream."
-                )
-            require_gatt_response = (
-                int(sdk_type) in WRITE_ACK_SDK_TYPES
-                or streaming_mode
-                or "write-without-response" not in write_char.properties
-            )
-            write_mode = (
-                "display-acknowledged GATT flow control"
-                if require_gatt_response
-                else "display-notification flow control"
-            )
-            self.log(
-                f"Transfer mode: {'streaming' if streaming_mode else 'notification-paced legacy'}, "
-                f"block writes: {write_mode} (software version {int(software_version or 0)})."
-            )
-            if len(response) < 6 or response[0] != 5 or response[1] != 0:
-                raise RuntimeError(f"Invalid first image-block request: {response.hex(' ').upper()}")
-            next_block = int.from_bytes(response[2:6], "little")
-
-            while True:
-                if next_block >= total_blocks:
-                    raise RuntimeError(f"Display requested invalid block {next_block}/{total_blocks}")
-                request_counts[next_block] = request_counts.get(next_block, 0) + 1
-                if request_counts[next_block] > MAX_BLOCK_REQUEST_RETRIES:
-                    raise RuntimeError(
-                        f"Display requested block {next_block} more than "
-                        f"{MAX_BLOCK_REQUEST_RETRIES} times."
-                    )
-
-                end_block = total_blocks if streaming_mode else next_block + 1
-                for block_number in range(next_block, end_block):
-                    block_requires_response = require_gatt_response
-                    final_response_missing = False
-                    try:
-                        block_data = _next_block(payload, block_size, block_number)
-                        await self._write_image_block(
-                            client,
-                            write_char,
-                            block_data,
-                            block_number,
-                            require_response=block_requires_response,
-                            operation_timeout=(
-                                FINAL_BLOCK_RESPONSE_TIMEOUT
-                                if streaming_mode and block_number == total_blocks - 1
-                                else GATT_OPERATION_TIMEOUT
-                            ),
-                        )
-                    except TimeoutError:
-                        confirmed_flow_complete = (
-                            require_gatt_response
-                            and len(confirmed_blocks) == total_blocks - 1
-                        )
-                        if (
-                            not streaming_mode
-                            or block_number != total_blocks - 1
-                            or not confirmed_flow_complete
-                        ):
-                            raise
-                        # Several Picksmart controllers consume the final block
-                        # and start refreshing but fail to return the ATT response.
-                        # Repeating it would append duplicate image bytes. Treat
-                        # only this terminal ambiguity as delivered, then still
-                        # wait below for the optional vendor completion packet.
-                        final_response_missing = True
-                        self.log(
-                            "The display did not return the final GATT response, "
-                            "but the complete payload was handed to the controller; "
-                            "waiting for the optional refresh confirmation."
-                        )
-                    else:
-                        if block_requires_response:
-                            confirmed_blocks.add(block_number)
-                    sent_blocks.add(block_number)
-                    if block_number == 0 or block_number % 10 == 0 or len(sent_blocks) == total_blocks:
-                        percent = int((len(sent_blocks) / total_blocks) * 100)
-                        if final_response_missing:
-                            delivery = "Final block handed off"
-                        elif block_requires_response:
-                            delivery = "Display acknowledged"
-                        else:
-                            delivery = "Bluetooth queued"
-                        self.log(
-                            f"{delivery} block {block_number + 1}/{total_blocks} "
-                            f"({percent}%)."
-                        )
-
-                if len(sent_blocks) == total_blocks:
-                    try:
-                        response = await self._wait_for_next_transfer_response(
-                            responses,
-                            timeout=(
-                                OPTIONAL_COMPLETION_TIMEOUT
-                                if require_gatt_response
-                                else UNCONFIRMED_WRITE_DRAIN_TIMEOUT
-                            ),
-                        )
-                    except TimeoutError:
-                        self.log(
-                            "All image blocks were handed off and the Bluetooth connection "
-                            "was kept open for the controller; no optional 05 08 "
-                            "confirmation was sent."
-                        )
-                        break
-                    if len(response) >= 2 and response[1] == 8:
-                        self.log("Display confirmed that the complete image was received.")
-                        break
-                    # A late explicit request is a retransmission request. New
-                    # firmware streams forward again, matching the vendor SDK.
-                    next_block = int.from_bytes(response[2:6], "little")
-                    self.log(
-                        f"Display requested retransmission from block "
-                        f"{next_block + 1}/{total_blocks}."
-                    )
-                    continue
-
+                self._clear_queue(responses)
+                await self._write_char(client, control_char, bytes([3]), "start process")
                 response = await self._wait_for_next_transfer_response(
                     responses,
                     timeout=BLOCK_REQUEST_TIMEOUT,
                 )
-                if len(response) >= 2 and response[1] == 8:
+                request_counts: dict[int, int] = {}
+                sent_blocks: set[int] = set()
+                confirmed_blocks: set[int] = set()
+                if len(response) >= 6 and response[0] == 5 and response[1] == 0:
+                    resume_block = int.from_bytes(response[2:6], "little")
+                    sent_blocks.update(range(min(resume_block, total_blocks)))
+                    confirmed_blocks.update(range(min(resume_block, total_blocks)))
+                    if resume_block:
+                        self.log(
+                            f"Display is resuming the prepared transfer at block "
+                            f"{resume_block + 1}/{total_blocks}."
+                        )
+                # Picksmart has two transfer implementations selected by bit 0x80
+                # of the software-version byte in manufacturer data. New firmware
+                # streams the remaining blocks after the first [05 00] request and
+                # advances on each GATT write callback. Legacy firmware advances
+                # after each control-point notification and ignores its block index
+                # after the initial request.
+                streaming_mode = bool(int(software_version or 0) & 0x80)
+                # The next block must not be sent until the display has acknowledged
+                # the current GATT write. A successful no-response enqueue only
+                # proves that BlueZ accepted the bytes locally and can overrun the
+                # display controller. Legacy firmware is paced by its per-block
+                # control-point notification below.
+                if streaming_mode and "write" not in write_char.properties:
+                    raise RuntimeError(
+                        "Display does not expose acknowledged block writes; "
+                        "refusing an unsafe unconfirmed stream."
+                    )
+                require_gatt_response = (
+                    int(sdk_type) in WRITE_ACK_SDK_TYPES
+                    or streaming_mode
+                    or "write-without-response" not in write_char.properties
+                )
+                write_mode = (
+                    "display-acknowledged GATT flow control"
+                    if require_gatt_response
+                    else "display-notification flow control"
+                )
+                self.log(
+                    f"Transfer mode: {'streaming' if streaming_mode else 'notification-paced legacy'}, "
+                    f"block writes: {write_mode} (software version {int(software_version or 0)})."
+                )
+                if len(response) < 6 or response[0] != 5 or response[1] != 0:
+                    raise RuntimeError(f"Invalid first image-block request: {response.hex(' ').upper()}")
+                next_block = int.from_bytes(response[2:6], "little")
+
+                while True:
+                    if next_block >= total_blocks:
+                        raise RuntimeError(f"Display requested invalid block {next_block}/{total_blocks}")
+                    request_counts[next_block] = request_counts.get(next_block, 0) + 1
+                    if request_counts[next_block] > MAX_BLOCK_REQUEST_RETRIES:
+                        raise RuntimeError(
+                            f"Display requested block {next_block} more than "
+                            f"{MAX_BLOCK_REQUEST_RETRIES} times."
+                        )
+
+                    end_block = total_blocks if streaming_mode else next_block + 1
+                    for block_number in range(next_block, end_block):
+                        block_requires_response = require_gatt_response
+                        final_response_missing = False
+                        try:
+                            block_data = _next_block(payload, block_size, block_number)
+                            await self._write_image_block(
+                                client,
+                                write_char,
+                                block_data,
+                                block_number,
+                                require_response=block_requires_response,
+                                operation_timeout=(
+                                    FINAL_BLOCK_RESPONSE_TIMEOUT
+                                    if streaming_mode and block_number == total_blocks - 1
+                                    else GATT_OPERATION_TIMEOUT
+                                ),
+                            )
+                        except TimeoutError:
+                            confirmed_flow_complete = (
+                                require_gatt_response
+                                and len(confirmed_blocks) == total_blocks - 1
+                            )
+                            if (
+                                not streaming_mode
+                                or block_number != total_blocks - 1
+                                or not confirmed_flow_complete
+                            ):
+                                raise
+                            # Several Picksmart controllers consume the final block
+                            # and start refreshing but fail to return the ATT response.
+                            # Repeating it would append duplicate image bytes. Treat
+                            # only this terminal ambiguity as delivered, then still
+                            # wait below for the optional vendor completion packet.
+                            final_response_missing = True
+                            self.log(
+                                "The display did not return the final GATT response, "
+                                "but the complete payload was handed to the controller; "
+                                "waiting for the optional refresh confirmation."
+                            )
+                        else:
+                            if block_requires_response:
+                                confirmed_blocks.add(block_number)
+                        sent_blocks.add(block_number)
+                        if block_number == 0 or block_number % 10 == 0 or len(sent_blocks) == total_blocks:
+                            percent = int((len(sent_blocks) / total_blocks) * 100)
+                            if final_response_missing:
+                                delivery = "Final block handed off"
+                            elif block_requires_response:
+                                delivery = "Display acknowledged"
+                            else:
+                                delivery = "Bluetooth queued"
+                            self.log(
+                                f"{delivery} block {block_number + 1}/{total_blocks} "
+                                f"({percent}%)."
+                            )
+
+                    if len(sent_blocks) == total_blocks:
+                        try:
+                            response = await self._wait_for_next_transfer_response(
+                                responses,
+                                timeout=(
+                                    OPTIONAL_COMPLETION_TIMEOUT
+                                    if require_gatt_response
+                                    else UNCONFIRMED_WRITE_DRAIN_TIMEOUT
+                                ),
+                            )
+                        except TimeoutError:
+                            self.log(
+                                "All image blocks were handed off and the Bluetooth connection "
+                                "was kept open for the controller; no optional 05 08 "
+                                "confirmation was sent."
+                            )
+                            break
+                        if len(response) >= 2 and response[1] == 8:
+                            self.log("Display confirmed that the complete image was received.")
+                            break
+                        # A late explicit request is a retransmission request. New
+                        # firmware streams forward again, matching the vendor SDK.
+                        next_block = int.from_bytes(response[2:6], "little")
+                        sent_blocks = {b for b in sent_blocks if b < next_block}
+                        confirmed_blocks = {b for b in confirmed_blocks if b < next_block}
+                        self.log(
+                            f"Display requested retransmission from block "
+                            f"{next_block + 1}/{total_blocks}."
+                        )
+                        continue
+
+                    response = await self._wait_for_next_transfer_response(
+                        responses,
+                        timeout=BLOCK_REQUEST_TIMEOUT,
+                    )
+                    if len(response) >= 2 and response[1] == 8:
+                        raise RuntimeError(
+                            f"Display ended transfer after only {len(sent_blocks)}/{total_blocks} blocks."
+                        )
+                    # The legacy vendor client uses the requested index only for
+                    # the first block. Every later notification advances exactly
+                    # one block, even when its payload repeats index zero.
+                    next_block += 1
+
+                if len(sent_blocks) != total_blocks:
                     raise RuntimeError(
                         f"Display ended transfer after only {len(sent_blocks)}/{total_blocks} blocks."
                     )
-                # The legacy vendor client uses the requested index only for
-                # the first block. Every later notification advances exactly
-                # one block, even when its payload repeats index zero.
-                next_block += 1
-
-            if len(sent_blocks) != total_blocks:
-                raise RuntimeError(
-                    f"Display ended transfer after only {len(sent_blocks)}/{total_blocks} blocks."
+                self.log(
+                    "Partial image transfer completed; releasing Bluetooth."
+                    if partial is not None
+                    else "Full-screen image transfer completed; releasing Bluetooth."
                 )
-            self.log(
-                "Partial image transfer completed; releasing Bluetooth."
-                if partial is not None
-                else "Full-screen image transfer completed; releasing Bluetooth."
-            )
+            finally:
+                if write_notify_enabled:
+                    try:
+                        await client.stop_notify(write_char)
+                    except Exception:
+                        pass
+                try:
+                    await client.stop_notify(control_char)
+                except Exception:
+                    pass
 
-            if write_notify_enabled:
-                await client.stop_notify(write_char)
-            await client.stop_notify(control_char)
 
     def _resolve_software_version(
         self,

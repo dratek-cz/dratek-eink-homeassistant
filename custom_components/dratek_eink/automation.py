@@ -495,17 +495,20 @@ class EntityAutoUpdateManager:
                 # Values are read only after the wait. Changes that arrived
                 # during the interval are therefore already part of this image.
                 self._pending_refreshes.discard(address)
-                await self._async_refresh(address)
-                # A skipped/merged queue entry must not schedule itself again.
-                # A manual upload explicitly requests one reconciliation after
-                # it finishes, while genuine later state changes set pending
-                # through _handle_state_change. Re-adding here created an
-                # endless queue loop for the whole duration of a slow upload.
-                # Count every attempt, including skips and failures, so old
-                # one-second configurations are protected by the safety limit.
-                self._last_refresh_at[address] = time.monotonic()
+                try:
+                    await self._async_refresh(address)
+                finally:
+                    # A skipped/merged queue entry must not schedule itself again.
+                    # A manual upload explicitly requests one reconciliation after
+                    # it finishes, while genuine later state changes set pending
+                    # through _handle_state_change. Re-adding here created an
+                    # endless queue loop for the whole duration of a slow upload.
+                    # Count every attempt, including skips and failures, so old
+                    # one-second configurations are protected by the safety limit.
+                    self._last_refresh_at[address] = time.monotonic()
         finally:
             self._refresh_tasks.pop(address, None)
+
 
     @staticmethod
     def _decode_base_image(value: str) -> Image.Image:
