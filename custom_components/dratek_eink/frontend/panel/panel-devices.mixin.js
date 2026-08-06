@@ -600,14 +600,11 @@ export const devicesMixin = {
         ],
       },
       radar: {
-        summary: "Živá srážková mapa České republiky – černý obrys státu, uvnitř červeně vyznačené srážky. Mapu integrace stahuje a vykresluje sama, žádná kamera se nastavovat nemusí.",
-        integrations: [
-          { name: "Met.no (Meteorologisk institutt)", domain: "weather", core: true, why: "Volitelné: dodá entitu weather.home s aktuální teplotou a stavem počasí do popisku pod mapou." },
-        ],
+        summary: "Živá srážková mapa České republiky přes celý displej – černý obrys státu, uvnitř červeně vyznačené srážky. Mapu integrace stahuje a vykresluje sama, nic se nemusí nastavovat.",
+        integrations: [],
         steps: [
-          "Přetáhněte šablonu Meteoradar na displej – mapa se roztáhne přes 100 % šířky.",
+          "Přetáhněte šablonu Meteoradar na displej – mapa vyplní celou plochu.",
           "Radarová data (RainViewer) se aktualizují nejvýše jednou za 10 minut, stejně často jako je skutečně měří.",
-          "Volitelně: v Nastavit propojte popisek s entitou weather.home, ať se pod mapou zobrazí i aktuální teplota.",
         ],
       },
 
@@ -998,7 +995,7 @@ export const devicesMixin = {
       { id: "blank", number: "00", category: "custom", title: "Prázdná šablona", variables: [] },
       ...userTemplates,
       { id: "weather", number: "01", category: "nature", title: "Počasí", variables: [["thermometer", "Teplota"], ["weather-partly-cloudy", "Stav počasí"], ["clock-outline", "Čas"], ["calendar-outline", "Datum"], ["weather-rainy", "Předpověď"]] },
-      { id: "radar", number: "23", category: "nature", title: "Meteoradar (Met.no)", variables: [["map-marker", "Stát / Oblast"], ["weather-partly-cloudy", "Met.no Počasí"], ["clock-outline", "Aktualizace"]] },
+      { id: "radar", number: "23", category: "nature", title: "Meteoradar", variables: [] },
 
 
       { id: "energy", number: "02", category: "energy", title: "Cena elektřiny", variables: [["currency-usd", "Aktuální cena"], ["clock-outline", "Cenový interval"], ["chart-line", "Denní průběh"], ["tag-outline", "Minimum dne"]] },

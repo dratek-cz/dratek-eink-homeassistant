@@ -1071,13 +1071,15 @@ export const templateSvgMixin = {
   // on a network round trip. The very first render of a fresh session draws the
   // placeholder box below and repaints once the fetch resolves.
   _blockRadarMap(row, box) {
+    const x = row.bleed ? box.fullX : box.x;
+    const w = row.bleed ? box.fullW : box.w;
     const cached = this._meteoradarImageCache;
     if (!cached?.dataUrl) {
-      return `<rect x="${box.x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${box.w.toFixed(2)}" height="${box.h.toFixed(2)}"`
+      return `<rect x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}"`
         + ` fill="#ffffff" stroke="${BLACK}" stroke-width="1"></rect>`
-        + this._svgText("Načítám radarovou mapu…", box.x + box.w / 2, box.y + box.h / 2, Math.max(10, box.h * 0.11), { maxWidth: box.w * 0.9 });
+        + this._svgText("Načítám radarovou mapu…", x + w / 2, box.y + box.h / 2, Math.max(10, box.h * 0.11), { maxWidth: w * 0.9 });
     }
-    return `<image x="${box.x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${box.w.toFixed(2)}" height="${box.h.toFixed(2)}"`
+    return `<image x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}"`
       + ` preserveAspectRatio="xMidYMid meet" href="${cached.dataUrl}"></image>`;
   },
 
@@ -1260,14 +1262,7 @@ export const templateSvgMixin = {
         { footer: [{ label: "SVÁTEK MÁ", value: v(2, "Jana") }], h: 0.14 },
       ],
       radar: () => [
-        { band: { label: "METEORADAR", value: v(0, "Česká republika"), color: "black" }, bleed: true, h: 0.16 },
-        { radarMap: true, h: 0.54 },
-        { strip: [
-          { label: "MET.NO STAV", value: v(1, "21,5 °C • Déšť"), color: "red" },
-          { label: "ZDROJ", value: "RainViewer" },
-        ], bleed: true, h: 0.17 },
-        { flex: true },
-        { footer: [{ label: "AKTUALIZOVÁNO", value: v(2, "12:40") }], h: 0.13 },
+        { radarMap: true, bleed: true, h: 1 },
       ],
 
 

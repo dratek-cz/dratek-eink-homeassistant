@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.207] - 2026-08-06
+
+### Zjednodušeno – šablona Meteoradar obsahuje už jen mapu
+- Odstraněny všechny doplňkové prvky šablony (nadpis, popisek se stavem počasí, patička s časem aktualizace) – šablona je nyní tvořená jediným blokem, radarovou mapou, která vyplňuje celou plochu displeje.
+- Katalogová položka už neuvádí proměnné k navázání, protože šablona žádné textové hodnoty nezobrazuje.
+
 ## [0.1.206] - 2026-08-06
 
 ### Opraveno – Meteoradar konečně vykresluje skutečnou mapu se srážkami

@@ -49,6 +49,16 @@ SKELETON = {"icon", "text", "rule", "footer"}
 
 MINIMUM_TEMPLATES = 20
 
+# A template built from a single full-bleed content block is already maximally
+# distinctive - there is nothing the old icon/title/rule/value/list/footer
+# skeleton could be confused with here, so the row-count floor below does not
+# apply to it. Each entry needs a reason, not just a name.
+SINGLE_ROW_TEMPLATES = {
+    # The whole panel is one live map image; anything else drawn over it would
+    # just cover the data it exists to show.
+    "radar",
+}
+
 
 def _template_shapes() -> dict[str, tuple[str, ...]]:
     source = SPECS.read_text(encoding="utf-8")
@@ -68,6 +78,8 @@ class DisplayTemplateShapeTests(unittest.TestCase):
     def test_the_scan_finds_every_template(self) -> None:
         self.assertGreaterEqual(len(self.shapes), MINIMUM_TEMPLATES)
         for name, shape in self.shapes.items():
+            if name in SINGLE_ROW_TEMPLATES:
+                continue
             with self.subTest(template=name):
                 self.assertGreaterEqual(len(shape), 3, "the row scan found almost nothing")
 
