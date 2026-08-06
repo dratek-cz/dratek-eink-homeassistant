@@ -35,7 +35,8 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertIn('"write-without-response" not in write_char.properties', source)
         self.assertIn('if streaming_mode and "write" not in write_char.properties:', source)
         self.assertIn("or streaming_mode", source)
-        self.assertIn("refusing an unsafe unconfirmed stream", source)
+        self.assertIn("using unconfirmed fallback stream", source)
+
         self.assertIn('"display-acknowledged GATT flow control"', source)
         self.assertIn('"display-notification flow control"', source)
         self.assertIn("block_number == total_blocks - 1", section)

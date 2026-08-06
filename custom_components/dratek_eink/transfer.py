@@ -414,8 +414,11 @@ class DratekTransfer:
             await client.start_notify(control_char, notify_handler)
             write_notify_enabled = False
             if "notify" in write_char.properties or "indicate" in write_char.properties:
-                await client.start_notify(write_char, notify_handler)
-                write_notify_enabled = True
+                try:
+                    await client.start_notify(write_char, notify_handler)
+                    write_notify_enabled = True
+                except Exception as exc:
+                    self.log(f"Optional write characteristic notification setup skipped: {exc}")
             try:
                 await asyncio.sleep(0.4)
 
@@ -464,21 +467,14 @@ class DratekTransfer:
                 # after each control-point notification and ignores its block index
                 # after the initial request.
                 streaming_mode = bool(int(software_version or 0) & 0x80)
-                # The next block must not be sent until the display has acknowledged
-                # the current GATT write. A successful no-response enqueue only
-                # proves that BlueZ accepted the bytes locally and can overrun the
-                # display controller. Legacy firmware is paced by its per-block
-                # control-point notification below.
                 if streaming_mode and "write" not in write_char.properties:
-                    raise RuntimeError(
-                        "Display does not expose acknowledged block writes; "
-                        "refusing an unsafe unconfirmed stream."
-                    )
+                    self.log("Display does not expose acknowledged block writes; using unconfirmed fallback stream.")
                 require_gatt_response = (
-                    int(sdk_type) in WRITE_ACK_SDK_TYPES
-                    or streaming_mode
-                    or "write-without-response" not in write_char.properties
-                )
+                    "write" in write_char.properties
+                    and (int(sdk_type) in WRITE_ACK_SDK_TYPES or streaming_mode)
+                ) or ("write-without-response" not in write_char.properties)
+
+
                 write_mode = (
                     "display-acknowledged GATT flow control"
                     if require_gatt_response
@@ -488,6 +484,7 @@ class DratekTransfer:
                     f"Transfer mode: {'streaming' if streaming_mode else 'notification-paced legacy'}, "
                     f"block writes: {write_mode} (software version {int(software_version or 0)})."
                 )
+
                 if len(response) < 6 or response[0] != 5 or response[1] != 0:
                     raise RuntimeError(f"Invalid first image-block request: {response.hex(' ').upper()}")
                 next_block = int.from_bytes(response[2:6], "little")

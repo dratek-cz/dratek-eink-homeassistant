@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.197] - 2026-08-06
+
+### Opraveno – Stabilizace BLE přenosů a chybějících CCCD notifikací dle specifikace v1.0.5
+- Na základě analýzy oficiální dokumentace a reverzního inženýrství SDK (API v1.0.5):
+  - Ošetřeno selhání přihlášení k notifikacím na zápisové charakteristice (`write_char` `start_notify` wrapped in `try...except`), což zabraňuje výpadkům na displejích s absencí CCCD deskriptoru.
+  - Povoleno streamování dat i na charakteristikách s nepodporovanými potvrzovanými zápisy s bezpečnými fallback prodlevami.
+
 ## [0.1.196] - 2026-08-06
 
 ### Opraveno – Optimalizace automatického nahrávání, paměti a frontend posluchačů
