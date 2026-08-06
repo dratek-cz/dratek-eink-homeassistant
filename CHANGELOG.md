@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.202] - 2026-08-06
+
+### Opraveno – Dynamická detekce/respektování zvolené gateway a zavedení prodlevy překreslení velkých displejů (400x300)
+- V `ws_sending.py` přidaná podpora dynamického směrování přes manuálně přiřazenou nebo nejsilnější auto-detekovanou gateway (redukován cache interval směrování na 5 sekund).
+- V `queue.py` přidána 15sekundová pauza mezi zápisy na velkých displejích (SDK type 75 / 400x300, 30 kB payload). Zamezuje zkoušení BLE připojení v době, kdy displej fyzicky přepumpovává náboj a má vypnuté BLE rádio.
+
 ## [0.1.201] - 2026-08-06
 
 ### Opraveno – Ochrana proti nešetrnému přerušení aktivního BLE přenosu při ručním odeslání

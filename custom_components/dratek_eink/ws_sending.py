@@ -17,12 +17,15 @@ from .display_preview import async_save_display_preview
 from .render import render_text_image
 from .queue import get_transfer_queue
 from .transfer import DratekTransfer
+from .automation import get_entity_auto_update_manager
+from .gateway import async_send_gateway_payload
 from .ws_shared import (
     _clear_entity_automation_if_matches,
     _clear_previous_entity_automation,
     _install_entity_automation,
     _request_entity_automation_refresh,
 )
+
 
 DESIGN_UPLOADS_KEY = "design_uploads"
 DESIGN_UPLOAD_CHUNK_BYTES = 64 * 1024
@@ -72,42 +75,88 @@ async def websocket_send_design(
         )
 
 
+        target_gateway_id = str(msg.get("gateway_id") or "")
+        transport_name = ""
+        manager = get_entity_auto_update_manager(hass)
+        config = manager._configs.get(address.upper()) or {}
+        manual_route = str(config.get("manual_gateway_id") or "")
+        gateway_selection = str(config.get("gateway_selection") or "auto")
+
+        if not target_gateway_id and gateway_selection == "manual" and manual_route:
+            if manual_route != "local":
+                target_gateway_id = manual_route
+        elif not target_gateway_id and gateway_selection != "manual":
+            best = await manager._async_best_gateway_route(address)
+            if best:
+                target_gateway_id = str(best["id"])
+                transport_name = str(best["name"])
+
+        use_gateway = bool(target_gateway_id and target_gateway_id != "local")
+
         async def run_transfer(add_log) -> dict[str, Any]:
             try:
-                add_log(f"Sending editor design {image.width}x{image.height} to SDK type {sdk_type}.")
-                if transform:
-                    add_log(f"Using display transform: {transform}.")
-                transfer = DratekTransfer(log=add_log, hass=hass)
-                await transfer.send_image(
-                    address,
-                    sdk_type,
-                    image,
-                    transform,
-                    orientation,
-                    msg.get("software_version"),
-                )
-                add_log("Design sent.")
-                try:
-                    await async_save_display_preview(
-                        hass, address, image, orientation, list(msg.get("template_ids") or [])
+                if use_gateway:
+                    add_log(
+                        f"Sending editor design {image.width}x{image.height} via gateway {transport_name or target_gateway_id}."
                     )
-                except Exception as exc:
-                    add_log(f"Display updated, but its preview could not be saved: {exc}")
-                await _request_entity_automation_refresh(hass, address, automation)
-                return {"ok": True, "address": address, "log": []}
+                    res = await async_send_gateway_payload(
+                        hass,
+                        target_gateway_id,
+                        address,
+                        sdk_type,
+                        image,
+                        transform,
+                        orientation,
+                        msg.get("software_version"),
+                        log_callback=add_log,
+                    )
+                    if res and res.get("ok") is not False:
+                        try:
+                            await async_save_display_preview(
+                                hass, address, image, orientation, list(msg.get("template_ids") or [])
+                            )
+                        except Exception as exc:
+                            add_log(f"Display updated, but preview could not be saved: {exc}")
+                        await _request_entity_automation_refresh(hass, address, automation)
+                        return res
+                    return res or {"ok": False, "error": "Gateway transfer failed."}
+                else:
+                    add_log(f"Sending editor design {image.width}x{image.height} to SDK type {sdk_type}.")
+                    if transform:
+                        add_log(f"Using display transform: {transform}.")
+                    transfer = DratekTransfer(log=add_log, hass=hass)
+                    await transfer.send_image(
+                        address,
+                        sdk_type,
+                        image,
+                        transform,
+                        orientation,
+                        msg.get("software_version"),
+                    )
+                    add_log("Design sent.")
+                    try:
+                        await async_save_display_preview(
+                            hass, address, image, orientation, list(msg.get("template_ids") or [])
+                        )
+                    except Exception as exc:
+                        add_log(f"Display updated, but its preview could not be saved: {exc}")
+                    await _request_entity_automation_refresh(hass, address, automation)
+                    return {"ok": True, "address": address, "log": []}
             except BaseException:
                 await _clear_entity_automation_if_matches(hass, address, automation)
                 raise
 
         result = await get_transfer_queue(hass).async_submit(
-            resource="local",
-            transport_type="local",
-            transport_name="Home Assistant Bluetooth",
+            resource=f"gateway:{target_gateway_id}" if use_gateway else "local",
+            transport_type="gateway" if use_gateway else "local",
+            transport_name=transport_name or ("DRATEK eInk gateway" if use_gateway else "Home Assistant Bluetooth"),
             address=address,
             operation="design",
             runner=run_transfer,
             wait_for_completion=False,
         )
+
+
     except Exception as exc:  # BLE stack can raise platform-specific exceptions
         log(f"Send failed: {exc}")
         connection.send_result(

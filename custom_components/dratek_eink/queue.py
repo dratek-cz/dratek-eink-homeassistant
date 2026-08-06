@@ -44,7 +44,9 @@ class TransferQueue:
         self._automatic_tasks: dict[str, tuple[str, asyncio.Task[Any]]] = {}
         self._background_tasks: set[asyncio.Task[Any]] = set()
         self._preempted_jobs: set[str] = set()
+        self._last_finish_at: dict[str, float] = {}
         self._load_lock = asyncio.Lock()
+
         self._save_lock = asyncio.Lock()
         self._loaded = False
 
@@ -221,6 +223,16 @@ class TransferQueue:
                     return skipped
                 return await runner(log_line)
 
+        normalized_address = job["address"].upper()
+        last_finish = self._last_finish_at.get(normalized_address)
+        if last_finish is not None:
+            cooldown = 15.0 if int(job.get("sdk_type") or 0) in {75, 264, 267, 270} or int(job.get("payload_size") or 0) >= 20000 else 6.0
+            elapsed = time.monotonic() - last_finish
+            wait_time = cooldown - elapsed
+            if wait_time > 0:
+                add_log(f"Waiting {wait_time:.1f}s for physical e-ink screen refresh to complete...")
+                await asyncio.sleep(wait_time)
+
         try:
             async with asyncio.timeout(TRANSFER_JOB_TIMEOUT_SECONDS):
                 result = await self._run_with_automatic_bluetooth_retry(job, run_attempt, add_log)
@@ -256,6 +268,8 @@ class TransferQueue:
             job["status"] = "failed"
             job["error"] = error
             result = {"ok": False, "address": job["address"], "error": error, "log": list(job["log"])}
+        finally:
+            self._last_finish_at[normalized_address] = time.monotonic()
 
         job["finished_at"] = int(time.time())
         result["queue_job_id"] = job["id"]
@@ -263,6 +277,7 @@ class TransferQueue:
         self._prune()
         await self._save_history()
         return result
+
 
     async def _run_with_automatic_bluetooth_retry(
         self,
