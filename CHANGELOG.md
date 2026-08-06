@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.199] - 2026-08-06
+
+### Opraveno – Odstranění zbytečného okamžitého auto-updatu s prázdnými hodnotami po manuálním odeslání
+- Uložení `base_image` a `svg_template` do konfigurace automatizace při registraci návrhu, aby budoucí aktualizace entit měly kompletní podkladový obrázek.
+- Změna `_request_entity_automation_refresh`: po manuálním odeslání návrhu se nastaví časové razítko `_last_refresh_at`, aniž by se ihned spouštěl druhý nadbytečný přenos z Pythonu, který přemazával právě nahraný displej prázdnými poli.
+
 ## [0.1.198] - 2026-08-06
 
 ### Opraveno – Zvýšení intervalu opakováné komunikace u stejného displeje na 6,0s

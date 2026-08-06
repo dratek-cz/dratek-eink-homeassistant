@@ -34,6 +34,8 @@ async def _install_entity_automation(
     hass: HomeAssistant,
     address: str,
     automation: dict[str, Any] | None,
+    image: Any | None = None,
+    svg_template: str | None = None,
 ) -> dict[str, Any] | None:
     """Activate the HA bindings that belong to a successfully written design if enabled."""
     config = dict(automation) if isinstance(automation, dict) else None
@@ -46,7 +48,12 @@ async def _install_entity_automation(
         # Identifies this exact queued design. If an older transfer fails after a
         # newer one was queued, its rollback must not delete the newer bindings.
         config["installation_id"] = uuid.uuid4().hex
-        await get_entity_auto_update_manager(hass).async_set_config(address, config)
+        manager = get_entity_auto_update_manager(hass)
+        if image is not None:
+            config["base_image"] = manager._encode_base_image(image)
+        if svg_template is not None:
+            config["svg_template"] = str(svg_template)
+        await manager.async_set_config(address, config)
         return config
     await _clear_previous_entity_automation(hass, address)
     return None
@@ -68,9 +75,15 @@ async def _request_entity_automation_refresh(
     address: str,
     automation: dict[str, Any] | None,
 ) -> None:
-    """Check current HA values after a queued design reaches the display if enabled."""
+    """Record that the display was just updated with the fresh design and set safety timestamp."""
     if automation and isinstance(automation, dict) and automation.get("enabled") is True:
-        await get_entity_auto_update_manager(hass).async_request_refresh(address)
+        import time
+
+        manager = get_entity_auto_update_manager(hass)
+        normalized = address.upper()
+        if normalized in manager._configs:
+            manager._last_refresh_at[normalized] = time.monotonic()
+
 
 
 

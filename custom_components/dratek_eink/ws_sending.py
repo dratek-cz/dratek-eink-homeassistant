@@ -67,7 +67,10 @@ async def websocket_send_design(
         image = Image.open(io.BytesIO(raw)).convert("RGB")
         await _clear_previous_entity_automation(hass, address)
         automation = msg.get("automation")
-        automation = await _install_entity_automation(hass, address, automation)
+        automation = await _install_entity_automation(
+            hass, address, automation, image=image, svg_template=msg.get("svg_template")
+        )
+
 
         async def run_transfer(add_log) -> dict[str, Any]:
             try:
@@ -226,10 +229,10 @@ async def websocket_commit_design_upload(
         sdk_type = msg["sdk_type"]
         await _clear_previous_entity_automation(hass, address)
         automation = msg.get("automation")
-        # Start listening while this slow e-ink write is still queued. The
-        # transfer queue defers an entity refresh until the manual job finishes,
-        # so a Home Assistant state change in the meantime is not lost.
-        automation = await _install_entity_automation(hass, address, automation)
+        automation = await _install_entity_automation(
+            hass, address, automation, image=image, svg_template=msg.get("svg_template")
+        )
+
 
         async def run_transfer(add_log) -> dict[str, Any]:
             try:

@@ -211,11 +211,10 @@ async def websocket_send_gateway_design(
             return
         await _clear_previous_entity_automation(hass, msg["address"])
         automation = msg.get("automation")
-        # Register listeners while the manual gateway write is queued. Any HA
-        # value changed meanwhile is retained and refreshed after that write.
         automation = await _install_entity_automation(
-            hass, msg["address"], automation
+            hass, msg["address"], automation, image=image, svg_template=msg.get("svg_template")
         )
+
 
         async def run_transfer(add_log) -> dict[str, Any]:
             try:
