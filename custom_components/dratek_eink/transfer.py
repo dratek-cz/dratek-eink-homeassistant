@@ -34,6 +34,12 @@ UNCONFIRMED_WRITE_DRAIN_TIMEOUT = 10
 MAX_BLOCK_REQUEST_RETRIES = 5
 GATT_OPERATION_TIMEOUT = 8
 STREAM_WRITE_DELAY = 0.04
+MIN_RECONNECT_INTERVAL_SECONDS = 1.5
+
+# Keyed by normalised address, shared across every DratekTransfer instance for
+# the life of the process (a fresh instance is created per call, so per-address
+# reconnect timing has nowhere else to live). See _connected_client.
+_LAST_DISCONNECT_AT: dict[str, float] = {}
 
 
 def _next_block(data: bytes, block_size: int, block_number: int) -> bytes:
@@ -63,7 +69,7 @@ class DratekTransfer:
         self._log(message)
 
     @asynccontextmanager
-    async def _connected_client(self, connection_target: Any) -> AsyncIterator[BleakClient]:
+    async def _connected_client(self, connection_target: Any, address: str) -> AsyncIterator[BleakClient]:
         """Connect and guarantee a disconnect even if this task is cancelled mid-transfer.
 
         A manual upload replaces a running automatic refresh's automation config
@@ -84,7 +90,24 @@ class DratekTransfer:
 
         Shielding the disconnect from the outer cancellation gives it a real
         chance to complete before the CancelledError is allowed through.
+
+        A cheap embedded BLE stack, like this display's, can still be tearing
+        down its previous connection when a new one arrives right on top of it,
+        and answers slowly or not at all - indistinguishable from here from a
+        congested adapter, and exactly the "fine for the first few transfers,
+        then stuck near the safety timeout" pattern a burst of manual sends can
+        trigger. A short forced gap between one session's disconnect and the
+        next connect *to the same address* gives the peripheral time to actually
+        be ready, without slowing anything unrelated down - other addresses and
+        gateway-routed transfers never wait on this.
         """
+        normalized_address = address.upper()
+        last_disconnect = _LAST_DISCONNECT_AT.get(normalized_address)
+        if last_disconnect is not None:
+            loop = asyncio.get_running_loop()
+            wait_seconds = MIN_RECONNECT_INTERVAL_SECONDS - (loop.time() - last_disconnect)
+            if wait_seconds > 0:
+                await asyncio.sleep(wait_seconds)
         client = BleakClient(connection_target, timeout=20.0)
         try:
             await client.connect()
@@ -97,6 +120,7 @@ class DratekTransfer:
                     f"Disconnect cleanup raised {exc}; the Bluetooth slot may take "
                     "longer than usual to free."
                 )
+            _LAST_DISCONNECT_AT[normalized_address] = asyncio.get_running_loop().time()
 
     async def _async_pack(
         self,
@@ -236,7 +260,7 @@ class DratekTransfer:
 
         connection_target = self._connection_target(address)
         self.log(f"Connecting to {address} for RGB LED control...")
-        async with self._connected_client(connection_target) as client:
+        async with self._connected_client(connection_target, address) as client:
             if not client.is_connected:
                 raise RuntimeError("Could not connect to the display.")
             service_uuid, control_char, _write_char = self._find_transfer_chars(client)
@@ -283,7 +307,7 @@ class DratekTransfer:
 
         connection_target = self._connection_target(address)
         self.log(f"Connecting to {address} for find-me flash...")
-        async with self._connected_client(connection_target) as client:
+        async with self._connected_client(connection_target, address) as client:
             if not client.is_connected:
                 raise RuntimeError("Could not connect to the display.")
             service_uuid, control_char, _write_char = self._find_transfer_chars(client)
@@ -366,7 +390,7 @@ class DratekTransfer:
 
         connection_target = self._connection_target(address)
         self.log(f"Connecting to {address}...")
-        async with self._connected_client(connection_target) as client:
+        async with self._connected_client(connection_target, address) as client:
             if not client.is_connected:
                 raise RuntimeError("Could not connect to the display.")
 

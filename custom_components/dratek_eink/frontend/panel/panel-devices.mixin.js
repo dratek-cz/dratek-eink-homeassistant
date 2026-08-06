@@ -2159,8 +2159,13 @@ export const devicesMixin = {
     // future longer value is still clamped instead of overflowing.
     const currentText = String(textNode.textContent || "");
     const svgMaxWidth = Math.max(maxWidth, this._svgTextWidth(currentText, fontSize, bold) + 1);
+    const bindingId = `template-${String(meta.templateId || "slot")}-${meta.key}-${occurrence}`;
+    // Stamped onto the live node so the caller's captured svg_template can be
+    // searched for this exact element later - the backend replaces it by this
+    // id when an automatic refresh substitutes a fresh value.
+    textNode.setAttribute("id", bindingId);
     return {
-      id: `template-${String(meta.templateId || "slot")}-${meta.key}-${occurrence}`,
+      id: bindingId,
       type: "text",
       entity_id: entityId,
       entity_attribute: weatherTemperature ? "temperature" : "",
@@ -2194,7 +2199,7 @@ export const devicesMixin = {
 
   async _preparedTemplateEntityBindings(device, width, height) {
     const request = this._currentDisplayTemplateSvgRequest(device);
-    if (!request?.templates?.length || typeof DOMParser === "undefined") return [];
+    if (!request?.templates?.length || typeof DOMParser === "undefined") return { bindings: [], svgTemplate: "" };
     const currentSvg = await this._buildDisplayTemplateSvg(request.templates, width, height, request.layout);
     const currentDocument = new DOMParser().parseFromString(currentSvg, "image/svg+xml");
     const currentTexts = [...currentDocument.querySelectorAll("text")];
@@ -2236,7 +2241,13 @@ export const devicesMixin = {
         }
       }
     }
-    return bindings;
+    // currentDocument's <text> nodes were tagged with their binding id above, so
+    // this capture of the whole template - background art, icons and all - is
+    // what the backend substitutes fresh values into. That is what makes an
+    // automatic refresh reproduce a manual send exactly instead of guessing at
+    // what should sit behind each value.
+    const svgTemplate = bindings.length ? currentDocument.documentElement.outerHTML : "";
+    return { bindings, svgTemplate };
   },
 
   async _displayTemplateEntityAutomation(image, device, gatewayId = "") {
@@ -2247,7 +2258,8 @@ export const devicesMixin = {
     const px = (value, extent, minimum = 0) => Math.max(minimum, Math.round(Number(value || 0) * extent / 100));
     const bindings = [];
 
-    bindings.push(...await this._preparedTemplateEntityBindings(device, width, height));
+    const prepared = await this._preparedTemplateEntityBindings(device, width, height);
+    bindings.push(...prepared.bindings);
 
     for (const source of this._templateEditorElements || []) {
       const item = this._quarterTurnedUserTemplateElement(source);
@@ -2336,6 +2348,12 @@ export const devicesMixin = {
     return {
       enabled: true,
       base_image: image,
+      // The full template SVG, with every bound value's <text> node tagged by
+      // id. An automatic refresh substitutes fresh values into this document
+      // and rasterises the whole thing, so its background art, icons and
+      // colours always match what a manual send draws - base_image alone
+      // cannot reconstruct that once it is baked to a bitmap.
+      svg_template: prepared.svgTemplate,
       bindings,
       sdk_type: Number(device.sdk_type),
       software_version: Number(device.sw || 0),

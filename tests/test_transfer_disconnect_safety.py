@@ -1,4 +1,5 @@
-"""A cancelled transfer must still disconnect from the display.
+"""A cancelled transfer must still disconnect from the display, and a fresh
+connection to the same display must not crowd the one that just ended.
 
 A manual upload replaces a running automatic refresh's automation config
 (EntityAutoUpdateManager.async_set_config) or preempts it directly
@@ -14,8 +15,14 @@ request, leaving the BLE connection - and the adapter's limited connection slot
 what turns a 5-second transfer into one that needs the 10-minute safety timeout:
 every slot is stuck waiting on a peer that was never told to let go.
 
-These tests pin DratekTransfer._connected_client, which shields the disconnect
-from that outer cancellation.
+Separately, a cheap embedded BLE stack can still be tearing down the previous
+session when the next connection attempt lands right on top of it - a burst of
+manual sends (testing a template, for example) can trigger this even with a
+clean disconnect on our side. A short forced gap between one session's
+disconnect and the next connect to the *same* address gives the peripheral time
+to actually be ready.
+
+These tests pin DratekTransfer._connected_client, which provides both.
 """
 
 from __future__ import annotations
@@ -84,17 +91,26 @@ def _install_fake_client(disconnect_delay: float = 0.0):
 class ConnectedClientTests(unittest.TestCase):
     def setUp(self) -> None:
         self._original_client_cls = transfer.BleakClient
+        # The reconnect cooldown is keyed by address in a module-level dict that
+        # outlives any one test, so tests give it a fresh address each time
+        # rather than relying on cross-test isolation here.
+        self._address_counter = getattr(ConnectedClientTests, "_next_address", 0)
+        ConnectedClientTests._next_address = self._address_counter + 1
 
     def tearDown(self) -> None:
         transfer.BleakClient = self._original_client_cls
+
+    def _fresh_address(self) -> str:
+        return f"AA:BB:CC:DD:EE:{self._address_counter:02X}"
 
     def test_normal_exit_connects_then_disconnects(self) -> None:
         factory, captured = _install_fake_client()
         transfer.BleakClient = factory
         dratek_transfer = transfer.DratekTransfer()
+        address = self._fresh_address()
 
         async def run() -> None:
-            async with dratek_transfer._connected_client("AA:BB:CC:DD:EE:FF"):
+            async with dratek_transfer._connected_client(address, address):
                 pass
 
         asyncio.run(run())
@@ -104,10 +120,11 @@ class ConnectedClientTests(unittest.TestCase):
         factory, captured = _install_fake_client()
         transfer.BleakClient = factory
         dratek_transfer = transfer.DratekTransfer()
+        address = self._fresh_address()
 
         async def run() -> None:
             async def stuck_transfer() -> None:
-                async with dratek_transfer._connected_client("AA:BB:CC:DD:EE:FF"):
+                async with dratek_transfer._connected_client(address, address):
                     # Stands in for an in-flight GATT write awaiting a response
                     # that will never arrive because the peer was preempted.
                     await asyncio.sleep(3600)
@@ -131,10 +148,11 @@ class ConnectedClientTests(unittest.TestCase):
         factory, captured = _install_fake_client(disconnect_delay=0.05)
         transfer.BleakClient = factory
         dratek_transfer = transfer.DratekTransfer()
+        address = self._fresh_address()
 
         async def run() -> None:
             async def stuck_transfer() -> None:
-                async with dratek_transfer._connected_client("AA:BB:CC:DD:EE:FF"):
+                async with dratek_transfer._connected_client(address, address):
                     await asyncio.sleep(3600)
 
             task = asyncio.ensure_future(stuck_transfer())
@@ -148,13 +166,79 @@ class ConnectedClientTests(unittest.TestCase):
         self.assertEqual(captured["client"].events, ["connect", "disconnect"])
 
 
+class ReconnectCooldownTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._original_client_cls = transfer.BleakClient
+        self._original_last_disconnect = dict(transfer._LAST_DISCONNECT_AT)
+        transfer._LAST_DISCONNECT_AT.clear()
+
+    def tearDown(self) -> None:
+        transfer.BleakClient = self._original_client_cls
+        transfer._LAST_DISCONNECT_AT.clear()
+        transfer._LAST_DISCONNECT_AT.update(self._original_last_disconnect)
+
+    def test_reconnecting_the_same_address_waits_out_the_cooldown(self) -> None:
+        factory, _captured = _install_fake_client()
+        transfer.BleakClient = factory
+        dratek_transfer = transfer.DratekTransfer()
+        address = "AA:BB:CC:DD:EE:01"
+
+        async def run() -> float:
+            async with dratek_transfer._connected_client(address, address):
+                pass
+            loop = asyncio.get_running_loop()
+            start = loop.time()
+            async with dratek_transfer._connected_client(address, address):
+                pass
+            return loop.time() - start
+
+        elapsed = asyncio.run(run())
+        self.assertGreaterEqual(elapsed, transfer.MIN_RECONNECT_INTERVAL_SECONDS * 0.9)
+
+    def test_a_different_address_is_never_delayed(self) -> None:
+        factory, _captured = _install_fake_client()
+        transfer.BleakClient = factory
+        dratek_transfer = transfer.DratekTransfer()
+
+        async def run() -> float:
+            async with dratek_transfer._connected_client("AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:01"):
+                pass
+            loop = asyncio.get_running_loop()
+            start = loop.time()
+            async with dratek_transfer._connected_client("AA:BB:CC:DD:EE:02", "AA:BB:CC:DD:EE:02"):
+                pass
+            return loop.time() - start
+
+        elapsed = asyncio.run(run())
+        self.assertLess(elapsed, transfer.MIN_RECONNECT_INTERVAL_SECONDS * 0.5)
+
+    def test_a_second_reconnect_after_the_cooldown_is_not_delayed_again(self) -> None:
+        factory, _captured = _install_fake_client()
+        transfer.BleakClient = factory
+        dratek_transfer = transfer.DratekTransfer()
+        address = "AA:BB:CC:DD:EE:03"
+
+        async def run() -> float:
+            async with dratek_transfer._connected_client(address, address):
+                pass
+            await asyncio.sleep(transfer.MIN_RECONNECT_INTERVAL_SECONDS)
+            loop = asyncio.get_running_loop()
+            start = loop.time()
+            async with dratek_transfer._connected_client(address, address):
+                pass
+            return loop.time() - start
+
+        elapsed = asyncio.run(run())
+        self.assertLess(elapsed, transfer.MIN_RECONNECT_INTERVAL_SECONDS * 0.5)
+
+
 class ConnectionSiteWiringTests(unittest.TestCase):
     def test_every_ble_operation_uses_the_shielded_connection(self) -> None:
         source = (COMPONENT / "transfer.py").read_text(encoding="utf-8")
         # A direct `async with BleakClient(...)` bypasses the shielded disconnect
         # and reintroduces the leaked-connection-slot bug for that operation.
         self.assertEqual(source.count("async with BleakClient("), 0)
-        self.assertEqual(source.count("async with self._connected_client("), 3)
+        self.assertEqual(source.count("self._connected_client(connection_target, address)"), 3)
 
 
 if __name__ == "__main__":

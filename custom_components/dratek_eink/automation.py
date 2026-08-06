@@ -16,12 +16,7 @@ from PIL import Image, ImageChops
 from .const import DOMAIN, LOCAL_ROUTE_ID, PARTIAL_UPDATE_CONFIRMED_SDK_TYPES
 from .gateway import async_gateway_status, async_load_gateways, async_scan_gateway, async_send_gateway_payload
 from .queue import get_transfer_queue
-from .render import (
-    prepare_image_for_display,
-    render_entity_bound_image,
-    render_entity_bound_svg_image,
-)
-from .svg_render import render_available
+from .render import prepare_image_for_display, render_automatic_refresh_image
 from .display_preview import async_save_display_preview
 from .transfer import DratekTransfer
 
@@ -438,18 +433,10 @@ class EntityAutoUpdateManager:
             if isinstance(binding, dict)
         ]
         values = self._current_binding_values(address.upper(), bindings)
-        # When the SVG rasteriser is present and the panel captured slot geometry,
-        # render dynamic text the same way the manual send did (resvg + bundled
-        # Arimo) so the automatic image matches it. Otherwise fall back to the PIL
-        # compositor, which never leaves the panel without an update.
-        renderer = render_entity_bound_image
-        if render_available() and any(
-            isinstance(binding, dict) and binding.get("svg") for binding in bindings
-        ):
-            renderer = render_entity_bound_svg_image
         return await self.hass.async_add_executor_job(
-            renderer,
+            render_automatic_refresh_image,
             str(config.get("base_image") or ""),
+            str(config.get("svg_template") or ""),
             bindings,
             values,
         )

@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.193] - 2026-08-06
+
+### Opraveno – automatická aktualizace skutečně odpovídá ručnímu odeslání
+- Nalezena skutečná příčina, proč se automaticky aktualizovaný obrázek vůbec nepodobal ručně odeslanému: automatika dosud "záplatovala" jen samotný text přes uložený obrázek a hádala barvu pozadí za ním (bílá, nebo barva nejbližšího nalezeného obdélníku). Pokud hodnota seděla na ikoně, přechodu barev nebo obrázku na pozadí, automatika ji přemalovala neprůhledným barevným blokem.
+- Automatická aktualizace nyní znovu použije **celý** SVG obrázek šablony zachycený při posledním ručním odeslání (včetně veškeré grafiky) a dosadí do něj jen aktuální hodnoty. Výsledek je pixelově shodný s ručním odesláním, ne přibližný odhad.
+- Pokud vykreslovací knihovna chybí nebo šablona nemá zachycený podklad (starší konfigurace), automatika bezpečně spadne zpět na předchozí přiblížení, nikdy ne na chybějící hodnotu.
+
+### Vylepšeno – zmírnění zpomalení po několika nahráních za sebou
+- Mezi odpojením od displeje a dalším připojením ke stejnému displeji je nyní vynucená krátká prodleva. Levný displej může být uprostřed vlastního odpojování, když na něj hned dorazí další pokus o připojení – to se dřív mohlo projevit jako postupné zpomalování po několika nahráních rychle za sebou. Jiné displeje a gateway přenosy tato prodleva nijak neovlivňuje.
+
 ## [0.1.192] - 2026-08-06
 
 ### Opraveno – nahrávání do displeje se postupně zpomalovalo

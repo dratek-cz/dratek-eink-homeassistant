@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.193
+
+- opravena skutečná příčina, proč se automaticky aktualizovaný obrázek vůbec nepodobal ručně odeslanému – automatika dosud jen "záplatovala" text přes uložený obrázek a hádala barvu pozadí za ním; pokud hodnota seděla na ikoně, přechodu barev nebo obrázku, přemalovala ji neprůhledným blokem
+- automatická aktualizace nyní znovu použije celý obrázek šablony zachycený při posledním ručním odeslání a dosadí do něj jen aktuální hodnoty – výsledek je pixelově shodný s ručním odesláním
+- vynucená krátká prodleva mezi odpojením a dalším připojením ke stejnému displeji zmírňuje zpomalení po několika nahráních rychle za sebou
+
 ## Novinky ve verzi 0.1.192
 
 - opraveno postupné zpomalování nahrávání do displeje po delším běhu Home Assistantu – ruční odeslání, které přerušilo běžící automatickou aktualizaci, po sobě nechávalo napůl otevřené Bluetooth spojení a postupně zabíralo volné spojovací sloty, až nahrávání trvalo místo pár sekund celých 10 minut

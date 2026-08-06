@@ -50,11 +50,20 @@ class BackendWiringTests(unittest.TestCase):
         # Fallback forces the captured size instead of PIL autoFit.
         self.assertIn('"autoFit": False', render)
 
-    def test_automation_selects_the_svg_renderer_when_available(self) -> None:
+    def test_render_exposes_the_full_template_path(self) -> None:
+        # The primary path: substitute fresh values into the captured whole
+        # template SVG and rasterise it - no covering rect needed, since the
+        # real background (icons, gradients, photos) is simply still there.
+        render = (COMPONENT / "render.py").read_text(encoding="utf-8")
+        self.assertIn("def render_entity_bound_template_image(", render)
+        self.assertIn("def _replace_svg_element_by_id(", render)
+        self.assertIn("def render_automatic_refresh_image(", render)
+        self.assertIn("element_id=element_id,", render)
+
+    def test_automation_delegates_the_render_choice_to_render_py(self) -> None:
         automation = (COMPONENT / "automation.py").read_text(encoding="utf-8")
-        self.assertIn("render_entity_bound_svg_image", automation)
-        self.assertIn("render_available()", automation)
-        self.assertIn('binding.get("svg")', automation)
+        self.assertIn("render_automatic_refresh_image", automation)
+        self.assertIn('config.get("svg_template")', automation)
 
     def test_manifest_requires_the_rasteriser(self) -> None:
         manifest = (COMPONENT / "manifest.json").read_text(encoding="utf-8")

@@ -61,10 +61,8 @@ def _load_automation_module():
         "queue": {"get_transfer_queue": lambda _hass: None},
         "render": {
             "prepare_image_for_display": lambda _sdk, image, *_args: image,
-            "render_entity_bound_image": lambda *_args, **_kwargs: None,
-            "render_entity_bound_svg_image": lambda *_args, **_kwargs: None,
+            "render_automatic_refresh_image": lambda *_args, **_kwargs: None,
         },
-        "svg_render": {"render_available": lambda: False},
         "display_preview": {"async_save_display_preview": lambda *_args, **_kwargs: None},
         "transfer": {"DratekTransfer": object},
     }

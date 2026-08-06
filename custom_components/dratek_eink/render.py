@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -993,6 +994,130 @@ def render_entity_bound_svg_image(
             _composite_binding(image, fixed, _render_bound_text(fixed, value))
 
     return quantize_bwr_preview(image)
+
+
+_SVG_ROOT_SIZE = re.compile(r'<svg\b[^>]*\bwidth="(\d+)"[^>]*\bheight="(\d+)"')
+
+
+def _svg_template_size(svg_template: str) -> tuple[int, int] | None:
+    match = _SVG_ROOT_SIZE.search(svg_template)
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def _replace_svg_element_by_id(document: str, element_id: str, replacement: str) -> str:
+    """Swap one `<text id="...">...</text>` run for a freshly built element.
+
+    A plain string search-and-replace, not an XML parse: the document was
+    serialised by the browser and only ever needs one element located by the id
+    the panel stamped on it when it captured this template, so a regex spares a
+    dependency without giving up correctness.
+    """
+    pattern = re.compile(
+        r"<text\b[^>]*\bid=\"" + re.escape(element_id) + r"\"[^>]*>.*?</text>",
+        re.DOTALL,
+    )
+    return pattern.sub(lambda _match: replacement, document, count=1)
+
+
+def render_entity_bound_template_image(
+    svg_template: str,
+    bindings: list[dict[str, Any]],
+    values: dict[str, str],
+) -> Image.Image | None:
+    """Rebuild the exact template the panel would draw, with live entity values.
+
+    A manual send always redraws the whole template from its designer state, so
+    whatever sits behind a bound value - an icon, a gradient band, a background
+    photo - is simply part of the picture. Patching a coloured rectangle over an
+    isolated text slot (render_entity_bound_svg_image) cannot know what that
+    background really was and has to guess, which is exactly why an automatic
+    refresh could come out looking nothing like the manual send whenever a slot
+    sat on anything but a plain matching rect.
+
+    Here the panel instead hands over the complete SVG it built for the template
+    - the same one behind the manual send - with every bound run tagged by id.
+    Substituting fresh values into that document and rasterising the whole thing
+    reproduces the manual send exactly, backgrounds included. Bindings without an
+    id in the document (charts, gauges, signals - drawn on the canvas overlay,
+    never part of the SVG) are composited on top afterwards exactly as before.
+
+    Returns None - never partially applied - when the rasteriser is unavailable
+    or the template can't be parsed, so the caller falls back to the
+    base_image-compositing path instead of shipping a half-built image.
+    """
+    if not svg_render.render_available():
+        return None
+    size = _svg_template_size(svg_template)
+    if size is None:
+        return None
+    width, height = size
+
+    document = svg_template
+    remaining: list[dict[str, Any]] = []
+    for binding in bindings:
+        element_id = str(binding.get("id") or "")
+        if not (_is_text_binding(binding) and binding.get("svg") and element_id):
+            remaining.append(binding)
+            continue
+        if f'id="{element_id}"' not in document:
+            # The panel could not tag this run when the template was captured
+            # (an id collision, or the value has since gone empty). Composite it
+            # like every other widget instead of leaving the stale text in place.
+            remaining.append(binding)
+            continue
+        value = values.get(element_id, str(binding.get("fallback", "")))
+        svg = binding["svg"]
+        replacement = build_text_element(
+            value,
+            float(svg.get("cx", 0)),
+            float(svg.get("cy", 0)),
+            float(svg.get("size", 12)),
+            bold=bool(svg.get("bold")),
+            anchor=str(svg.get("anchor") or "middle"),
+            color=str(svg.get("color") or "#000000"),
+            max_width=float(svg.get("maxWidth", 0) or 0),
+            element_id=element_id,
+        )
+        document = _replace_svg_element_by_id(document, element_id, replacement)
+
+    image = svg_render.rasterize_svg(document, width, height, background="#ffffff")
+    if image is None:
+        return None
+    image = image.convert("RGBA")
+    for binding in remaining:
+        value = values.get(str(binding.get("id")), str(binding.get("fallback", "")))
+        _composite_binding(image, binding, _render_binding_layer(binding, value))
+    return quantize_bwr_preview(image)
+
+
+def render_automatic_refresh_image(
+    base_image: str,
+    svg_template: str,
+    bindings: list[dict[str, Any]],
+    values: dict[str, str],
+) -> Image.Image:
+    """Pick the closest-to-manual rendering path an automatic refresh can use.
+
+    Preferred: rebuild the captured template SVG with fresh values
+    (render_entity_bound_template_image) - this matches a manual send exactly,
+    backgrounds and all, because it is the same document a manual send would
+    rasterise. Falls back to patching individual text slots over the stored
+    base_image (render_entity_bound_svg_image, correct font/size but blind to
+    whatever the slot's real background was), and finally to plain PIL
+    compositing, so a refresh always produces a complete image rather than
+    erroring out.
+    """
+    if svg_template:
+        image = render_entity_bound_template_image(svg_template, bindings, values)
+        if image is not None:
+            return image
+    if svg_render.render_available() and any(
+        isinstance(binding, dict) and binding.get("svg") for binding in bindings
+    ):
+        return render_entity_bound_svg_image(base_image, bindings, values)
+    return render_entity_bound_image(base_image, bindings, values)
 
 
 def render_text_image(

@@ -124,5 +124,115 @@ class BoundSvgImageTests(unittest.TestCase):
         self.assertGreater(_nonwhite(image), 0)
 
 
+def _template_svg_with_artwork(width: int = 296, height: int = 128) -> str:
+    """A captured template: a diagonal band and a coloured icon behind the slot.
+
+    Neither shape is a plain rect the old panel-side heuristic could match, so
+    they stand in for the icons, gradients and photos a real template's variable
+    slots commonly sit on.
+    """
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}"'
+        f' viewBox="0 0 {width} {height}">'
+        f'<rect width="{width}" height="{height}" fill="#ffffff"/>'
+        '<polygon points="0,0 150,0 100,128 0,128" fill="#111111"/>'
+        '<circle cx="60" cy="64" r="24" fill="#dc140c"/>'
+        '<text id="slot1" x="148" y="64" font-family="Arimo" font-size="26"'
+        ' font-weight="700" fill="#000000" text-anchor="middle"'
+        ' dominant-baseline="central">OLD 99</text>'
+        "</svg>"
+    )
+
+
+class BoundTemplateImageTests(unittest.TestCase):
+    """render_entity_bound_template_image is the primary, 1:1-with-manual path."""
+
+    @unittest.skipUnless(svg_render.render_available(), "SVG rasteriser not installed")
+    def test_background_artwork_survives_a_value_substitution(self) -> None:
+        # This is the bug render_entity_bound_svg_image cannot fix: patching a
+        # rect over the slot cannot know a polygon or a coloured icon was there.
+        # Rebuilding the whole captured template and substituting only the text
+        # leaves everything else - background art included - untouched.
+        image = render.render_entity_bound_template_image(
+            _template_svg_with_artwork(), [_slot()], {"slot1": "NEW 199 Kč"}
+        ).convert("RGB")
+        self.assertEqual(image.getpixel((10, 60)), (0, 0, 0))  # polygon, quantised black
+        self.assertEqual(image.getpixel((60, 64)), (220, 20, 12))  # circle, quantised red
+        self.assertGreater(_nonwhite_region(image, x0=180, y0=44, x1=296, y1=84), 0)
+
+    @unittest.skipUnless(svg_render.render_available(), "SVG rasteriser not installed")
+    def test_empty_value_removes_the_text_without_touching_the_background(self) -> None:
+        image = render.render_entity_bound_template_image(
+            _template_svg_with_artwork(), [_slot()], {"slot1": ""}
+        ).convert("RGB")
+        self.assertEqual(image.getpixel((10, 60)), (0, 0, 0))
+        self.assertEqual(image.getpixel((60, 64)), (220, 20, 12))
+        self.assertEqual(_nonwhite_region(image, x0=200, y0=44, x1=296, y1=84), 0)
+
+    @unittest.skipUnless(svg_render.render_available(), "SVG rasteriser not installed")
+    def test_binding_without_a_matching_id_is_composited_instead_of_dropped(self) -> None:
+        # A mismatch (marker collision, stale id) must not silently lose the
+        # value - it falls back to the same PIL compositing every other widget
+        # type already uses on top of the rasterised template.
+        binding = _slot()
+        binding["id"] = "no-such-slot"
+        image = render.render_entity_bound_template_image(
+            _template_svg_with_artwork(), [binding], {"no-such-slot": "NEW 42"}
+        )
+        self.assertIsNotNone(image)
+        self.assertGreater(_nonwhite(image), 0)
+
+    def test_returns_none_when_the_rasteriser_is_unavailable(self) -> None:
+        original = render.svg_render.render_available
+        render.svg_render.render_available = lambda: False
+        try:
+            result = render.render_entity_bound_template_image(
+                _template_svg_with_artwork(), [_slot()], {"slot1": "NEW 42"}
+            )
+        finally:
+            render.svg_render.render_available = original
+        self.assertIsNone(result)
+
+    def test_returns_none_for_an_unparsable_template(self) -> None:
+        self.assertIsNone(
+            render.render_entity_bound_template_image("<svg></svg>", [_slot()], {"slot1": "x"})
+        )
+
+
+class AutomaticRefreshRendererTests(unittest.TestCase):
+    """render_automatic_refresh_image picks the closest path to a manual send."""
+
+    @unittest.skipUnless(svg_render.render_available(), "SVG rasteriser not installed")
+    def test_prefers_the_full_template_when_available(self) -> None:
+        image = render.render_automatic_refresh_image(
+            _base_with_old_value(), _template_svg_with_artwork(), [_slot()], {"slot1": "NEW 199 Kč"}
+        ).convert("RGB")
+        # Only the full-template path could produce these background pixels;
+        # base_image in this fixture is plain white.
+        self.assertEqual(image.getpixel((10, 60)), (0, 0, 0))
+
+    def test_falls_back_to_the_overlay_path_without_a_template(self) -> None:
+        image = render.render_automatic_refresh_image(
+            _base_with_old_value(), "", [_slot()], {"slot1": "NEW 42"}
+        )
+        self.assertGreater(_nonwhite(image), 0)
+
+    def test_falls_back_to_the_overlay_path_when_template_rendering_fails(self) -> None:
+        original = render.render_entity_bound_template_image
+        render.render_entity_bound_template_image = lambda *args, **kwargs: None
+        try:
+            image = render.render_automatic_refresh_image(
+                _base_with_old_value(), _template_svg_with_artwork(), [_slot()], {"slot1": "NEW 42"}
+            )
+        finally:
+            render.render_entity_bound_template_image = original
+        self.assertGreater(_nonwhite(image), 0)
+
+
+def _nonwhite_region(image: Image.Image, x0: int, y0: int, x1: int, y1: int) -> int:
+    cropped = image.crop((x0, y0, x1, y1))
+    return _nonwhite(cropped)
+
+
 if __name__ == "__main__":
     unittest.main()

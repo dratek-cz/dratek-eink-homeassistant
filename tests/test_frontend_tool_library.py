@@ -980,11 +980,32 @@ class FrontendToolLibraryTests(unittest.TestCase):
     def test_prepared_template_variables_are_sent_as_entity_automation(self):
         self.assertIn("_preparedTemplateEntityBindings", self.source)
         self.assertIn("_templateAutomationBindingOverrides", self.source)
-        self.assertIn("bindings.push(...await this._preparedTemplateEntityBindings", self.source)
+        self.assertIn(
+            "const prepared = await this._preparedTemplateEntityBindings(device, width, height);",
+            self.source,
+        )
+        self.assertIn("bindings.push(...prepared.bindings);", self.source)
         self.assertIn(
             "payload.automation = await this._displayTemplateEntityAutomation",
             self.source,
         )
+
+    def test_automatic_refresh_captures_the_whole_template_svg(self):
+        # An automatic refresh used to patch a coloured rectangle over just the
+        # bound <text> run, guessing at whatever colour sat behind it - correct
+        # only when that background happened to be a plain matching <rect>. Any
+        # icon, gradient or background image behind a value came out as a wrong-
+        # coloured block instead, so the automatic image looked nothing like the
+        # manual send. Capturing the whole template SVG and substituting fresh
+        # values into it reproduces the manual send exactly, backgrounds included.
+        self.assertIn('textNode.setAttribute("id", bindingId);', self.source)
+        self.assertIn("id: bindingId,", self.source)
+        self.assertIn(
+            "const svgTemplate = bindings.length ? currentDocument.documentElement.outerHTML : \"\";",
+            self.source,
+        )
+        self.assertIn("return { bindings, svgTemplate };", self.source)
+        self.assertIn("svg_template: prepared.svgTemplate,", self.source)
 
 
     def test_template_studio_has_contextual_component_editor(self):

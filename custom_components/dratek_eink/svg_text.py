@@ -145,6 +145,7 @@ def svg_text(
     color: str = BLACK,
     max_width: float = 0,
     min_size: float = MIN_READABLE_FONT_SIZE,
+    element_id: str | None = None,
 ) -> str:
     """Serialise one `<text>` element. Port of `_svgText`.
 
@@ -152,13 +153,18 @@ def svg_text(
     dominant-baseline="central", matching the panel exactly. Returns "" for an
     empty string, again matching the JavaScript so the placeholder stays absent
     rather than becoming an empty element.
+
+    `element_id`, when given, adds an `id` attribute. The panel has no matching
+    concept - it is purely so the backend can locate and replace this exact
+    element inside a captured full-template SVG document.
     """
     text = "" if value is None else str(value)
     if not text:
         return ""
     fitted_text, font_size = svg_readable_text(text, size, max_width, bold, min_size)
+    id_attr = f' id="{escape_xml(element_id)}"' if element_id else ""
     return (
-        f'<text x="{x:.2f}" y="{y:.2f}" font-family="{FONT}" font-size="{font_size:.2f}"'
+        f'<text{id_attr} x="{x:.2f}" y="{y:.2f}" font-family="{FONT}" font-size="{font_size:.2f}"'
         f' font-weight="{700 if bold else 400}" fill="{color}" text-anchor="{anchor}"'
         f' dominant-baseline="central" xml:space="preserve">{escape_xml(fitted_text)}</text>'
     )
