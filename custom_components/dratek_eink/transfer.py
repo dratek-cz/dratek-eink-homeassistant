@@ -34,7 +34,8 @@ UNCONFIRMED_WRITE_DRAIN_TIMEOUT = 10
 MAX_BLOCK_REQUEST_RETRIES = 5
 GATT_OPERATION_TIMEOUT = 8
 STREAM_WRITE_DELAY = 0.04
-MIN_RECONNECT_INTERVAL_SECONDS = 3.0
+MIN_RECONNECT_INTERVAL_SECONDS = 6.0
+
 
 # Keyed by normalised address, shared across every DratekTransfer instance for
 # the life of the process (a fresh instance is created per call, so per-address

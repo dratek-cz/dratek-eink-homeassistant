@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.198] - 2026-08-06
+
+### Opraveno – Zvýšení intervalu opakováné komunikace u stejného displeje na 6,0s
+- Zvýšen `MIN_RECONNECT_INTERVAL_SECONDS` z 3,0 s na 6,0 s pro lokální BLE přenosy na stejnou MAC adresu.
+- Důvod: Po dokončení přenosu dat mikrokontrolér displeje provádí fyzickou obnovu e-ink čipu (3–15 sekund) a vypíná BLE rádio k zamezení poklesu napětí. Zvýšení pauzy zamezí situaci, kdy se opakovaný pokus spustil v době fyzického překreslování a zablokoval Bluetooth stack operačního systému.
+
 ## [0.1.197] - 2026-08-06
 
 ### Opraveno – Stabilizace BLE přenosů a chybějících CCCD notifikací dle specifikace v1.0.5
