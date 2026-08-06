@@ -16,7 +16,11 @@ from PIL import Image, ImageChops
 from .const import DOMAIN, LOCAL_ROUTE_ID, PARTIAL_UPDATE_CONFIRMED_SDK_TYPES
 from .gateway import async_gateway_status, async_load_gateways, async_scan_gateway, async_send_gateway_payload
 from .queue import get_transfer_queue
-from .render import prepare_image_for_display, render_automatic_refresh_image
+from .render import (
+    async_render_camera_binding_data_url,
+    prepare_image_for_display,
+    render_automatic_refresh_image,
+)
 from .display_preview import async_save_display_preview
 from .transfer import DratekTransfer
 
@@ -444,6 +448,21 @@ class EntityAutoUpdateManager:
             if isinstance(binding, dict)
         ]
         values = self._current_binding_values(address.upper(), bindings)
+        # A camera snapshot (the Meteoradar map) needs the event loop to fetch,
+        # which the synchronous compositor below does not have - so it is
+        # resolved to a data: URL here, the same way entity state values already
+        # are, before handing everything off to the executor.
+        for binding in bindings:
+            if binding.get("type") != "camera":
+                continue
+            data_url = await async_render_camera_binding_data_url(
+                self.hass,
+                str(binding.get("entity_id") or ""),
+                int(binding.get("width") or 0) or 400,
+                int(binding.get("height") or 0) or 300,
+            )
+            if data_url:
+                values[str(binding.get("id"))] = data_url
         return await self.hass.async_add_executor_job(
             render_automatic_refresh_image,
             str(config.get("base_image") or ""),

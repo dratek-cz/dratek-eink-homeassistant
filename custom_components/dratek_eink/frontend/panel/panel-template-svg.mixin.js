@@ -25,6 +25,13 @@ const FONT = "Arial, Helvetica, sans-serif";
 // font look acceptable on a monitor even though it becomes only a few broken
 // dots after the physical panel's three-colour quantisation.
 const MIN_READABLE_FONT_SIZE = 10;
+// The backend refetches RainViewer at most every ten minutes (that is the real
+// data's own refresh cadence - see meteoradar.py), so re-fetching a rendered
+// PNG through the websocket more often than this just spends round trips on the
+// same frame. Two minutes is a compromise: interactive editing (resizing the
+// slot, switching templates) still sees a fresh-ish image without hammering the
+// connection on every re-render tick.
+const METEORADAR_CACHE_MS = 2 * 60 * 1000;
 
 // Advance width of one glyph as a fraction of the font size, per character class,
 // measured off the Arial/Helvetica stack above.
@@ -163,6 +170,56 @@ export const templateSvgMixin = {
     await Promise.all(this._templateIconNames(rows).map((name) => this._mdiIconPath(name)));
   },
 
+  _templateNeedsRadarImage(rows) {
+    return (rows || []).some((row) => row?.radarMap);
+  },
+
+  // Fetches (or reuses a cached) rendered radar map at roughly the template's
+  // own resolution. The image is embedded with preserveAspectRatio, so it does
+  // not need to match the radarMap row's exact sub-box - only be large enough
+  // that scaling it down stays sharp.
+  async _ensureTemplateRadarImage(width, height) {
+    const key = `${Math.round(width)}x${Math.round(height)}`;
+    const cached = this._meteoradarImageCache;
+    if (cached && cached.key === key && Date.now() - cached.fetchedAt < METEORADAR_CACHE_MS) return false;
+    if (!this._hass?.callWS) return false;
+    try {
+      const result = await this._hass.callWS({
+        type: "dratek_eink/render_meteoradar",
+        width: Math.round(width),
+        height: Math.round(height),
+      });
+      if (!result?.ok || !result?.image) return false;
+      this._meteoradarImageCache = { key, dataUrl: result.image, fetchedAt: Date.now() };
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  },
+
+  // The blocking counterpart used by the export path: a manual send must never
+  // go out with a stale or missing map, so it waits for the fetch instead of
+  // drawing the placeholder used during interactive editing.
+  async _preloadTemplateRadarImage(rows, width, height) {
+    if (!this._templateNeedsRadarImage(rows)) return;
+    await this._ensureTemplateRadarImage(width, height);
+  },
+
+  // Non-blocking counterpart for the live on-screen preview, matching how
+  // _requestTemplateIcons keeps icon loading off the render path.
+  _requestTemplateRadarImage(rows, width, height) {
+    if (!this._templateNeedsRadarImage(rows) || this._radarImageRequestPending) return;
+    this._radarImageRequestPending = true;
+    this._ensureTemplateRadarImage(width, height)
+      .then((changed) => {
+        this._radarImageRequestPending = false;
+        if (changed) this._scheduleTemplateIconRepaint();
+      })
+      .catch(() => {
+        this._radarImageRequestPending = false;
+      });
+  },
+
   // Kick off whatever this template still needs, without blocking the render.
   // A single "preload in progress" flag used to guard this, and because the
   // preview slots render one after another the second slot skipped its own
@@ -276,6 +333,7 @@ export const templateSvgMixin = {
     const baseTemplate = this._templateBaseDefinition(template);
     const rows = this._templateSvgRows(baseTemplate);
     this._requestTemplateIcons(rows);
+    this._requestTemplateRadarImage(rows, width, height);
     this._warmTemplateIcons();
     return this._applyTemplateAdjustmentsToSvgMarkup(this._layoutTemplateSvg(rows, width, height), template);
   },
@@ -517,6 +575,7 @@ export const templateSvgMixin = {
     if (row.datebox) return this._blockDatebox(row, box);
     if (row.board) return this._blockBoard(row, box);
     if (row.qr) return this._blockQr(row, box);
+    if (row.radarMap) return this._blockRadarMap(row, box);
     if (row.pricetag) return this._blockPriceTag(row, box);
     if (row.text != null) return this._blockText(row, box);
     return "";
@@ -1000,6 +1059,28 @@ export const templateSvgMixin = {
       + `<path d="${path}" fill="${BLACK}" shape-rendering="crispEdges"></path>`;
   },
 
+  // The only raster content in an otherwise all-vector renderer: a live snapshot
+  // of camera.meteoradar (camera.py), already rendered server-side as a black
+  // country outline with red/white precipitation and quantised to the panel's
+  // three colours (ws_meteoradar.py). Embedding it as <image> rather than
+  // redrawing a map here keeps the projection and border-drawing code in one
+  // place instead of duplicated between Python and this file.
+  //
+  // The fetch is asynchronous and this method is not, so it can only ever draw
+  // whatever _ensureTemplateRadarImage last cached - never block layout waiting
+  // on a network round trip. The very first render of a fresh session draws the
+  // placeholder box below and repaints once the fetch resolves.
+  _blockRadarMap(row, box) {
+    const cached = this._meteoradarImageCache;
+    if (!cached?.dataUrl) {
+      return `<rect x="${box.x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${box.w.toFixed(2)}" height="${box.h.toFixed(2)}"`
+        + ` fill="#ffffff" stroke="${BLACK}" stroke-width="1"></rect>`
+        + this._svgText("Načítám radarovou mapu…", box.x + box.w / 2, box.y + box.h / 2, Math.max(10, box.h * 0.11), { maxWidth: box.w * 0.9 });
+    }
+    return `<image x="${box.x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${box.w.toFixed(2)}" height="${box.h.toFixed(2)}"`
+      + ` preserveAspectRatio="xMidYMid meet" href="${cached.dataUrl}"></image>`;
+  },
+
   // A departure board: the line number lives in a filled badge, so it is found by
   // shape before anything is read.
   _blockBoard(row, box) {
@@ -1179,14 +1260,14 @@ export const templateSvgMixin = {
         { footer: [{ label: "SVÁTEK MÁ", value: v(2, "Jana") }], h: 0.14 },
       ],
       radar: () => [
-        { band: { label: "METEORADAR (MET.NO)", value: v(0, "Česká republika"), color: "black" }, bleed: true, h: 0.16 },
-        { text: "📡  [ Celoplošná srážková mapa Met.no / RainViewer ]  📡", h: 0.54, size: 0.042, bold: true },
+        { band: { label: "METEORADAR", value: v(0, "Česká republika"), color: "black" }, bleed: true, h: 0.16 },
+        { radarMap: true, h: 0.54 },
         { strip: [
           { label: "MET.NO STAV", value: v(1, "21,5 °C • Déšť"), color: "red" },
-          { label: "LEGENDA", value: "■ Slabé  ■ Silné" },
+          { label: "ZDROJ", value: "RainViewer" },
         ], bleed: true, h: 0.17 },
         { flex: true },
-        { footer: [{ label: "ZDROJ: MET.NO / CHMI", value: v(2, "12:40") }], h: 0.13 },
+        { footer: [{ label: "AKTUALIZOVÁNO", value: v(2, "12:40") }], h: 0.13 },
       ],
 
 
@@ -1386,6 +1467,7 @@ export const templateSvgMixin = {
       const template = list[index] || list[0];
       const rows = this._templateSvgRows(template);
       await this._preloadTemplateIcons(rows);
+      await this._preloadTemplateRadarImage(rows, slot.w, slot.h);
       const markup = this._applyTemplateAdjustmentsToSvgMarkup(this._layoutTemplateSvg(rows, slot.w, slot.h), template, index ? "secondary" : "primary");
       bodies.push(`<g transform="translate(${slot.x.toFixed(2)},${slot.y.toFixed(2)})">`
         + `<rect x="0" y="0" width="${slot.w.toFixed(2)}" height="${slot.h.toFixed(2)}" fill="#ffffff"></rect>`

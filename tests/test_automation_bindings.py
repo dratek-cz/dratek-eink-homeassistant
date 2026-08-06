@@ -21,6 +21,10 @@ COMPONENT = ROOT / "custom_components" / "dratek_eink"
 PACKAGE = "dratek_automation_test"
 
 
+async def _async_none(*_args, **_kwargs):
+    return None
+
+
 def _load_automation_module():
     package = types.ModuleType(PACKAGE)
     package.__path__ = [str(COMPONENT)]
@@ -62,6 +66,7 @@ def _load_automation_module():
         "render": {
             "prepare_image_for_display": lambda _sdk, image, *_args: image,
             "render_automatic_refresh_image": lambda *_args, **_kwargs: None,
+            "async_render_camera_binding_data_url": _async_none,
         },
         "display_preview": {"async_save_display_preview": lambda *_args, **_kwargs: None},
         "transfer": {"DratekTransfer": object},

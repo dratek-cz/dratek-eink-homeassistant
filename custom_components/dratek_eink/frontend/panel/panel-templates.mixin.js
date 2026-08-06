@@ -588,9 +588,9 @@ export const templatesMixin = {
         <div class="symbol-search"><input type="search" id="symbolSearch" value="${this._escape(this._symbolSearch)}" placeholder="Hledat symbol, například Wi-Fi, teplota, světlo..."><span class="pill muted">${symbols.length} symbolů</span></div>
         <div class="category-row">${this._symbolCategories().map(([id, label]) => `<button class="secondary ${this._symbolCategory === id ? "active" : ""}" data-symbol-category="${this._escape(id)}">${this._escape(label)}</button>`).join("")}</div>
         <div class="symbol-grid">${symbols.map((item) => {
-          const label = this._translateSymbolLabel(item.label);
-          return `<button class="symbol-tile" data-symbol="${this._escape(item.symbol)}" title="${this._escape(label)}"><strong>${this._escape(item.symbol)}</strong><span>${this._escape(label)}</span></button>`;
-        }).join("")}</div>
+      const label = this._translateSymbolLabel(item.label);
+      return `<button class="symbol-tile" data-symbol="${this._escape(item.symbol)}" title="${this._escape(label)}"><strong>${this._escape(item.symbol)}</strong><span>${this._escape(label)}</span></button>`;
+    }).join("")}</div>
       </div>
     </div>`;
   },

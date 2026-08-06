@@ -1,0 +1,202 @@
+"""The Meteoradar camera draws the country shape and clips precipitation to it.
+
+meteoradar.py splits into a pure half (Mercator projection, tile-bounds math,
+compositing) and a network half (fetching RainViewer's frame index and tiles).
+These tests exercise only the pure half, with synthetic tiles standing in for
+real downloads, so they run without a network connection or Home Assistant
+installed - the module only imports `homeassistant.helpers.aiohttp_client`
+lazily, inside the functions that actually need it.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import math
+from pathlib import Path
+import sys
+import types
+import unittest
+
+from PIL import Image
+
+
+ROOT = Path(__file__).resolve().parents[1]
+COMPONENT = ROOT / "custom_components" / "dratek_eink"
+PACKAGE = "dratek_meteoradar_test"
+
+
+def _load(name: str):
+    if PACKAGE not in sys.modules:
+        package = types.ModuleType(PACKAGE)
+        package.__path__ = [str(COMPONENT)]
+        sys.modules[PACKAGE] = package
+    spec = importlib.util.spec_from_file_location(f"{PACKAGE}.{name}", COMPONENT / f"{name}.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+meteoradar = _load("meteoradar")
+
+
+class MercatorProjectionTests(unittest.TestCase):
+    def test_the_equator_and_prime_meridian_land_at_the_worlds_centre(self) -> None:
+        x, y = meteoradar.mercator_pixel(0.0, 0.0, zoom=0, tile_size=256)
+        self.assertAlmostEqual(x, 128.0)
+        self.assertAlmostEqual(y, 128.0)
+
+    def test_pixels_move_right_and_up_with_longitude_and_latitude(self) -> None:
+        origin_x, origin_y = meteoradar.mercator_pixel(49.0, 15.0, zoom=6, tile_size=512)
+        east_x, east_y = meteoradar.mercator_pixel(49.0, 16.0, zoom=6, tile_size=512)
+        north_x, north_y = meteoradar.mercator_pixel(50.0, 15.0, zoom=6, tile_size=512)
+        self.assertGreater(east_x, origin_x)
+        self.assertAlmostEqual(east_y, origin_y)
+        self.assertLess(north_y, origin_y)  # Mercator y grows southward
+        self.assertAlmostEqual(north_x, origin_x)
+
+    def test_extreme_latitude_is_clamped_instead_of_raising(self) -> None:
+        # math.tan/log would blow up past the Mercator limit without the clamp.
+        x, y = meteoradar.mercator_pixel(89.9, 0.0, zoom=4, tile_size=256)
+        self.assertTrue(math.isfinite(x))
+        self.assertTrue(math.isfinite(y))
+
+
+class TileBoundsTests(unittest.TestCase):
+    def test_covers_a_small_square_border_with_one_or_a_few_tiles(self) -> None:
+        # A tiny bounding box near the equator at a coarse zoom must fit in a
+        # single tile.
+        square = ((10.0, 49.0), (10.1, 49.0), (10.1, 49.1), (10.0, 49.1), (10.0, 49.0))
+        x_min, y_min, x_max, y_max = meteoradar.tile_bounds(square, zoom=2, tile_size=256)
+        self.assertEqual((x_min, y_min), (x_max, y_max))
+
+    def test_known_czech_republic_bounds_at_zoom_6(self) -> None:
+        # Pinned against a live-verified reference: this exact (34, 21, 35, 22)
+        # range was confirmed against real RainViewer tiles during development.
+        self.assertEqual(
+            meteoradar.tile_bounds(meteoradar.CZECH_BORDER, zoom=6, tile_size=512),
+            (34, 21, 35, 22),
+        )
+
+
+def _uniform_tile(size: int, rgba: tuple[int, int, int, int]) -> Image.Image:
+    return Image.new("RGBA", (size, size), rgba)
+
+
+class ComposeCountryRadarImageTests(unittest.TestCase):
+    """A small synthetic border and grid, independent of the real Czech outline."""
+
+    # A diamond "country": its bounding-box corners fall outside the shape, so
+    # clipping can be told apart from a plain bbox crop. Near the equator, a
+    # *square* in lon/lat is almost a perfect rectangle after Mercator
+    # projection, which is too forgiving a shape for this test.
+    DIAMOND_BORDER = ((0.0, -10.0), (10.0, 0.0), (0.0, 10.0), (-10.0, 0.0), (0.0, -10.0))
+    ZOOM = 3
+    TILE_SIZE = 200
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        # Real code always derives the tile grid from tile_bounds() rather than
+        # guessing coordinates, so these tests do the same instead of risking a
+        # grid that does not actually contain the projected polygon.
+        cls.x_min, cls.y_min, cls.x_max, cls.y_max = meteoradar.tile_bounds(
+            cls.DIAMOND_BORDER, zoom=cls.ZOOM, tile_size=cls.TILE_SIZE
+        )
+
+    def _grid(self, rgba: tuple[int, int, int, int]) -> dict[tuple[int, int], Image.Image]:
+        return {
+            (x, y): _uniform_tile(self.TILE_SIZE, rgba)
+            for x in range(self.x_min, self.x_max + 1)
+            for y in range(self.y_min, self.y_max + 1)
+        }
+
+    def _compose(self, rgba: tuple[int, int, int, int], **kwargs) -> Image.Image:
+        return meteoradar.compose_country_radar_image(
+            self._grid(rgba),
+            zoom=self.ZOOM, tile_size=self.TILE_SIZE,
+            x_min=self.x_min, y_min=self.y_min, x_max=self.x_max, y_max=self.y_max,
+            border=self.DIAMOND_BORDER, margin=0,
+            **kwargs,
+        )
+
+    def test_precipitation_is_clipped_to_the_country_shape(self) -> None:
+        # An opaque grid everywhere: without clipping, red would fill the frame.
+        image = self._compose((0, 100, 200, 255))
+        corners = [
+            image.getpixel((0, 0)),
+            image.getpixel((image.width - 1, 0)),
+            image.getpixel((0, image.height - 1)),
+            image.getpixel((image.width - 1, image.height - 1)),
+        ]
+        # The crop is tight to the polygon's bbox, so every corner sits outside
+        # the diamond and must stay white, not red.
+        self.assertTrue(all(corner == (255, 255, 255) for corner in corners), corners)
+        self.assertEqual(image.getpixel((image.width // 2, image.height // 2)), meteoradar.PRECIPITATION_COLOR)
+
+    def test_low_alpha_trace_echo_does_not_count_as_precipitation(self) -> None:
+        image = self._compose((0, 100, 200, 40))  # below the default threshold
+        self.assertNotIn(meteoradar.PRECIPITATION_COLOR, list(image.getdata()))
+
+    def test_high_alpha_precipitation_is_drawn_in_the_display_red(self) -> None:
+        image = self._compose((0, 100, 200, 255))
+        self.assertIn(meteoradar.PRECIPITATION_COLOR, list(image.getdata()))
+
+    def test_a_missing_tile_is_treated_as_transparent_not_an_error(self) -> None:
+        grid = self._grid((0, 100, 200, 255))
+        grid.pop(next(iter(grid)))  # a partial fetch must still produce an image
+        image = meteoradar.compose_country_radar_image(
+            grid, zoom=self.ZOOM, tile_size=self.TILE_SIZE,
+            x_min=self.x_min, y_min=self.y_min, x_max=self.x_max, y_max=self.y_max,
+            border=self.DIAMOND_BORDER, margin=0,
+        )
+        self.assertGreater(image.width, 0)
+        self.assertGreater(image.height, 0)
+
+    def test_the_country_outline_is_drawn_in_black(self) -> None:
+        image = self._compose((0, 0, 0, 0), border_width=4)  # no precipitation at all
+        self.assertIn(meteoradar.BORDER_COLOR, list(image.getdata()))
+
+    def test_output_is_a_flat_rgb_image_safe_for_the_eink_palette(self) -> None:
+        image = self._compose((0, 100, 200, 255))
+        self.assertEqual(image.mode, "RGB")
+        colors = set(list(image.getdata()))
+        self.assertTrue(colors <= {(255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.BORDER_COLOR})
+
+
+class FitToSizeTests(unittest.TestCase):
+    def test_output_is_exactly_the_requested_size(self) -> None:
+        source = Image.new("RGB", (300, 100), meteoradar.PRECIPITATION_COLOR)
+        fitted = meteoradar.fit_to_size(source, 120, 120)
+        self.assertEqual(fitted.size, (120, 120))
+
+    def test_aspect_ratio_is_preserved_with_white_padding(self) -> None:
+        source = Image.new("RGB", (400, 100), meteoradar.PRECIPITATION_COLOR)
+        fitted = meteoradar.fit_to_size(source, 100, 100)
+        # A 4:1 source fit into a square must leave white bars top and bottom.
+        self.assertEqual(fitted.getpixel((50, 0)), (255, 255, 255))
+        self.assertEqual(fitted.getpixel((50, 99)), (255, 255, 255))
+
+
+class CameraPlatformWiringTests(unittest.TestCase):
+    """HA camera entities can't run without Home Assistant installed, so this
+    pins the source wiring instead - a genuine behavioural test would need a
+    live HA core to instantiate config entries and the entity platform.
+    """
+
+    def test_camera_platform_is_forwarded_from_setup_entry(self) -> None:
+        init_source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn("PLATFORMS: list[Platform] = [Platform.CAMERA]", init_source)
+        self.assertIn("await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)", init_source)
+        self.assertIn("await hass.config_entries.async_unload_platforms(entry, PLATFORMS)", init_source)
+
+    def test_camera_entity_renders_through_meteoradar(self) -> None:
+        camera_source = (COMPONENT / "camera.py").read_text(encoding="utf-8")
+        self.assertIn("class DratekMeteoradarCamera(Camera):", camera_source)
+        self.assertIn("from .meteoradar import async_render_meteoradar", camera_source)
+        self.assertIn("async def async_camera_image(", camera_source)
+        self.assertIn("image = await async_render_meteoradar(self.hass)", camera_source)
+
+
+if __name__ == "__main__":
+    unittest.main()

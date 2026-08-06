@@ -600,15 +600,14 @@ export const devicesMixin = {
         ],
       },
       radar: {
-        summary: "Celoplošná živá srážková mapa přes celý displej propojená s integrací Met.no (Meteorologisk institutt).",
+        summary: "Živá srážková mapa České republiky – černý obrys státu, uvnitř červeně vyznačené srážky. Mapu integrace stahuje a vykresluje sama, žádná kamera se nastavovat nemusí.",
         integrations: [
-          { name: "Met.no (Meteorologisk institutt)", domain: "weather", core: true, why: "Dodá entitu weather.home s informacemi o teplote a srážkách (předinstalovaná v HA)." },
-          { name: "RainViewer / OpenStreetMap", domain: "camera", core: true, why: "Poskytuje celoplošnou srážkovou mapu pro ČR, SR, Německo, Rakousko, Polsko atd." },
+          { name: "Met.no (Meteorologisk institutt)", domain: "weather", core: true, why: "Volitelné: dodá entitu weather.home s aktuální teplotou a stavem počasí do popisku pod mapou." },
         ],
         steps: [
-          "Přetáhněte šablonu Meteoradar (Met.no) na displej – mapa se roztáhne přes 100 % celého displeje.",
-          "V poli Stát vyberte svůj stát (Česká republika, Slovensko, Německo, Rakousko, Polsko...).",
-          "V Nastavit propojte položku Met.no s entitou weather.home.",
+          "Přetáhněte šablonu Meteoradar na displej – mapa se roztáhne přes 100 % šířky.",
+          "Radarová data (RainViewer) se aktualizují nejvýše jednou za 10 minut, stejně často jako je skutečně měří.",
+          "Volitelně: v Nastavit propojte popisek s entitou weather.home, ať se pod mapou zobrazí i aktuální teplota.",
         ],
       },
 
@@ -2259,11 +2258,27 @@ export const devicesMixin = {
         }
       }
     }
-    // currentDocument's <text> nodes were tagged with their binding id above, so
-    // this capture of the whole template - background art, icons and all - is
-    // what the backend substitutes fresh values into. That is what makes an
-    // automatic refresh reproduce a manual send exactly instead of guessing at
-    // what should sit behind each value.
+    // The Meteoradar row (and anything else built from _blockRadarMap) embeds a
+    // live camera snapshot as a plain <image>, not a bound HA entity value, so it
+    // is tagged and captured the same way but carries its own binding type: an
+    // automatic refresh re-fetches the camera rather than reading entity state.
+    const radarImage = currentDocument.querySelector("image");
+    if (radarImage) {
+      const radarId = "template-radar-map";
+      radarImage.setAttribute("id", radarId);
+      bindings.push({
+        id: radarId,
+        type: "camera",
+        entity_id: "camera.meteoradar",
+        width: Math.round(Number(radarImage.getAttribute("width")) || width),
+        height: Math.round(Number(radarImage.getAttribute("height")) || height),
+      });
+    }
+    // currentDocument's tagged nodes are what the backend substitutes fresh
+    // values into - text runs and the radar image alike - so this capture of the
+    // whole template (background art, icons and all) is what makes an automatic
+    // refresh reproduce a manual send exactly instead of guessing at what should
+    // sit behind each value.
     const svgTemplate = bindings.length ? currentDocument.documentElement.outerHTML : "";
     return { bindings, svgTemplate };
   },

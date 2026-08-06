@@ -23,6 +23,7 @@ from .ws_devices import (
     websocket_set_device_name,
     websocket_set_rgb_led,
 )
+from .ws_meteoradar import websocket_render_meteoradar
 from .ws_gateways import (
     websocket_add_gateway,
     websocket_delete_gateway,
@@ -111,6 +112,7 @@ COMMANDS = (
     websocket_gateway_ota_job,
     websocket_transfer_queue,
     websocket_clear_queue,
+    websocket_render_meteoradar,
 )
 
 

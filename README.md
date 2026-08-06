@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.206
+
+- šablona Meteoradar konečně vykresluje skutečnou mapu – integrace má vlastní kamerovou entitu `camera.meteoradar`, která sama stahuje živá srážková data z RainViewer a skládá je do obrázku: černý obrys České republiky, uvnitř červeně vyznačené srážky, bíle tam, kde neprší
+- žádné ruční nastavování kamery ani URL adres – funguje ihned po instalaci
+- mapa se vykresluje na backendu, takže je pixelově shodná v náhledu, po ručním odeslání i po automatické aktualizaci displeje; data se obnovují nejvýše jednou za 10 minut (rychleji stejně RainViewer nová data nemá)
+
 ## Novinky ve verzi 0.1.193
 
 - opravena skutečná příčina, proč se automaticky aktualizovaný obrázek vůbec nepodobal ručně odeslanému – automatika dosud jen "záplatovala" text přes uložený obrázek a hádala barvu pozadí za ním; pokud hodnota seděla na ikoně, přechodu barev nebo obrázku, přemalovala ji neprůhledným blokem

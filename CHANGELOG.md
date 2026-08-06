@@ -2,6 +2,15 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.206] - 2026-08-06
+
+### Opraveno – Meteoradar konečně vykresluje skutečnou mapu se srážkami
+- Šablona **Meteoradar** dosud jen slibovala "celoplošnou mapu", ale reálně vykreslovala pouze textový placeholder – žádná mapa se nikdy nestáhla ani nezobrazila.
+- Integrace nyní obsahuje vlastní kamerovou entitu `camera.meteoradar`, která si sama stahuje aktuální srážková data z RainViewer a skládá je do obrázku: **černý obrys celé České republiky, uvnitř červeně vyznačené srážky** (bílá tam, kde neprší). Žádné nastavování kamery ani URL adres – funguje ihned po instalaci.
+- Mapa se vykresluje na backendu (server-side), takže je pixelově shodná mezi náhledem, ručním odesláním i automatickou aktualizací displeje.
+- RainViewer poskytuje nová data nejvýše jednou za 10 minut, takže se mapa (a automatická aktualizace displeje) přiměřeně aktualizuje ve stejném rytmu – rychlejší dotazování by beztak vracelo stejná data.
+- Odstraněn zastaralý pokyn "nastavte si kameru RainViewer/OpenStreetMap sami" ze setup průvodce – tento krok už není potřeba.
+
 ## [0.1.205] - 2026-08-06
 
 ### Přidáno – Celoplošný Meteoradar přes celý displej propojený s Met.no

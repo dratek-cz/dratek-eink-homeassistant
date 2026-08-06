@@ -11,6 +11,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageMath
 
 from . import svg_render
 from .const import DEVICE_SIZES
+from .meteoradar import fit_to_size
 from .svg_text import svg_text as build_text_element
 
 # The single black/white/red rule, shared verbatim with the panel's
@@ -1021,6 +1022,57 @@ def _replace_svg_element_by_id(document: str, element_id: str, replacement: str)
     return pattern.sub(lambda _match: replacement, document, count=1)
 
 
+def _replace_svg_image_href_by_id(document: str, element_id: str, data_url: str) -> str:
+    """Swap the `href` of one `<image id="...">` element for a fresh data: URL.
+
+    Only the attribute changes - the element's position and size, set when the
+    panel captured the template, stay exactly as designed.
+    """
+    pattern = re.compile(
+        r'(<image\b[^>]*\bid="' + re.escape(element_id) + r'"[^>]*\bhref=")[^"]*(")'
+    )
+    return pattern.sub(lambda match: match.group(1) + data_url + match.group(2), document, count=1)
+
+
+async def async_render_camera_binding_data_url(
+    hass: Any, entity_id: str, width: int, height: int
+) -> str | None:
+    """Fetch a camera entity's current snapshot, fit and quantise it for the panel.
+
+    Shared by the Meteoradar preview command (ws_meteoradar.py) and automatic
+    refreshes (automation.py): both need the exact same "current camera frame,
+    ready for the three-colour panel" image, and camera.async_get_image needs
+    the event loop a synchronous compositor does not have, so this step has to
+    run before any executor dispatch.
+
+    Returns None on any fetch or decode failure so callers can fall back to
+    whatever was last successfully rendered, rather than raising into the
+    refresh loop over what is often a transient network hiccup.
+    """
+    from homeassistant.components.camera import async_get_image
+
+    try:
+        camera_image = await async_get_image(hass, entity_id)
+    except Exception:
+        return None
+
+    def _prepare() -> bytes | None:
+        try:
+            source = Image.open(io.BytesIO(camera_image.content)).convert("RGB")
+        except Exception:
+            return None
+        fitted = fit_to_size(source, width, height)
+        quantized = quantize_bwr_preview(fitted)
+        buffer = io.BytesIO()
+        quantized.save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    png_bytes = await hass.async_add_executor_job(_prepare)
+    if png_bytes is None:
+        return None
+    return "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
+
+
 def render_entity_bound_template_image(
     svg_template: str,
     bindings: list[dict[str, Any]],
@@ -1058,6 +1110,17 @@ def render_entity_bound_template_image(
     remaining: list[dict[str, Any]] = []
     for binding in bindings:
         element_id = str(binding.get("id") or "")
+        if binding.get("type") == "camera" and element_id:
+            # The fresh snapshot (a data: URL) was already fetched and quantised
+            # asynchronously by the caller - camera.async_get_image needs the
+            # event loop, which this synchronous compositor does not have.
+            data_url = values.get(element_id)
+            if data_url and f'id="{element_id}"' in document:
+                document = _replace_svg_image_href_by_id(document, element_id, str(data_url))
+            # No fresh snapshot: leave the <image> exactly as captured rather
+            # than dropping it, so a transient fetch failure still ships the
+            # last-known map instead of a blank slot.
+            continue
         if not (_is_text_binding(binding) and binding.get("svg") and element_id):
             remaining.append(binding)
             continue

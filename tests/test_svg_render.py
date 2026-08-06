@@ -234,5 +234,108 @@ def _nonwhite_region(image: Image.Image, x0: int, y0: int, x1: int, y1: int) -> 
     return _nonwhite(cropped)
 
 
+def _solid_png_data_url(size: tuple[int, int], color: tuple[int, int, int]) -> str:
+    buffer = io.BytesIO()
+    Image.new("RGB", size, color).save(buffer, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+class SvgImageHrefSubstitutionTests(unittest.TestCase):
+    def test_replaces_only_the_matching_images_href(self) -> None:
+        document = (
+            '<svg><image id="other" href="data:old-other"/>'
+            '<image id="cam1" x="1" y="2" href="data:old-cam1"/></svg>'
+        )
+        result = render._replace_svg_image_href_by_id(document, "cam1", "data:new-cam1")
+        self.assertIn('id="cam1" x="1" y="2" href="data:new-cam1"', result)
+        self.assertIn('id="other" href="data:old-other"', result)
+
+    def test_a_missing_id_leaves_the_document_untouched(self) -> None:
+        document = '<image id="cam1" href="data:old"/>'
+        result = render._replace_svg_image_href_by_id(document, "no-such-id", "data:new")
+        self.assertEqual(result, document)
+
+
+class CameraBindingTemplateRenderTests(unittest.TestCase):
+    """render_entity_bound_template_image's handling of type: camera bindings."""
+
+    def _document(self, href: str) -> str:
+        return (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100">'
+            '<rect width="200" height="100" fill="#ffffff"/>'
+            f'<image id="cam1" x="0" y="0" width="200" height="100" href="{href}"/>'
+            "</svg>"
+        )
+
+    @unittest.skipUnless(svg_render.render_available(), "SVG rasteriser not installed")
+    def test_a_fresh_value_replaces_the_captured_snapshot(self) -> None:
+        old = _solid_png_data_url((10, 10), (255, 255, 255))  # indistinguishable from background
+        new = _solid_png_data_url((10, 10), render.BWR_RED)
+        binding = {"id": "cam1", "type": "camera", "entity_id": "camera.meteoradar"}
+        image = render.render_entity_bound_template_image(
+            self._document(old), [binding], {"cam1": new}
+        )
+        self.assertGreater(_nonwhite(image), 0)
+
+    @unittest.skipUnless(svg_render.render_available(), "SVG rasteriser not installed")
+    def test_no_fresh_value_keeps_the_captured_snapshot(self) -> None:
+        # A transient fetch failure (values has no entry for this id) must not
+        # blank the map - the last-known frame stays on the panel.
+        old = _solid_png_data_url((10, 10), render.BWR_RED)
+        binding = {"id": "cam1", "type": "camera", "entity_id": "camera.meteoradar"}
+        image = render.render_entity_bound_template_image(self._document(old), [binding], {})
+        self.assertGreater(_nonwhite(image), 0)
+
+
+class AsyncCameraBindingFetchTests(unittest.TestCase):
+    """async_render_camera_binding_data_url: the shared fetch-fit-quantise step."""
+
+    def setUp(self) -> None:
+        import asyncio
+
+        self.asyncio = asyncio
+        self._camera_module = types.ModuleType("homeassistant.components.camera")
+        sys.modules.setdefault("homeassistant", types.ModuleType("homeassistant"))
+        sys.modules.setdefault("homeassistant.components", types.ModuleType("homeassistant.components"))
+        sys.modules["homeassistant.components.camera"] = self._camera_module
+
+    def tearDown(self) -> None:
+        sys.modules.pop("homeassistant.components.camera", None)
+
+    class _FakeHass:
+        async def async_add_executor_job(self, func, *args):
+            return func(*args)
+
+    class _FakeCameraImage:
+        def __init__(self, content: bytes) -> None:
+            self.content = content
+
+    def test_returns_a_quantised_data_url_on_success(self) -> None:
+        raw = io.BytesIO()
+        Image.new("RGB", (40, 20), (0, 100, 220)).save(raw, format="PNG")
+
+        async def fake_async_get_image(_hass, _entity_id, timeout=10):
+            return self._FakeCameraImage(raw.getvalue())
+
+        self._camera_module.async_get_image = fake_async_get_image
+        result = self.asyncio.run(
+            render.async_render_camera_binding_data_url(self._FakeHass(), "camera.meteoradar", 20, 10)
+        )
+        self.assertIsNotNone(result)
+        self.assertTrue(result.startswith("data:image/png;base64,"))
+        decoded = Image.open(io.BytesIO(base64.b64decode(result.split(",", 1)[1])))
+        self.assertEqual(decoded.size, (20, 10))
+
+    def test_returns_none_when_the_camera_entity_is_unavailable(self) -> None:
+        async def fake_async_get_image(_hass, _entity_id, timeout=10):
+            raise RuntimeError("no such entity")
+
+        self._camera_module.async_get_image = fake_async_get_image
+        result = self.asyncio.run(
+            render.async_render_camera_binding_data_url(self._FakeHass(), "camera.meteoradar", 20, 10)
+        )
+        self.assertIsNone(result)
+
+
 if __name__ == "__main__":
     unittest.main()

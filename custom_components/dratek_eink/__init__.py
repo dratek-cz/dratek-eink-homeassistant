@@ -7,6 +7,7 @@ import voluptuous as vol
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 
@@ -16,6 +17,12 @@ from .queue import get_transfer_queue
 from .transfer import DratekTransfer
 
 _LOGGER = logging.getLogger(__name__)
+# The Meteoradar template needs a live, always-current radar snapshot. A plain
+# fetch buried in the render path would be invisible to the rest of Home
+# Assistant, so it is a real camera entity instead - inspectable in Developer
+# Tools like any other camera, and read through the same camera.async_get_image
+# API a user's own camera entities already go through.
+PLATFORMS: list[Platform] = [Platform.CAMERA]
 PANEL_URL_PATH = "dratek-eink"
 # The version belongs in the path, not in a ?v= query on the entry file alone.
 # dratek-eink-panel.js imports its mixins with plain relative specifiers, and those
@@ -85,12 +92,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN].setdefault("entries", {})
     hass.data[DOMAIN]["entries"][entry.entry_id] = entry.data
     await _async_register_panel(hass)
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    hass.data.get(DOMAIN, {}).get("entries", {}).pop(entry.entry_id, None)
-    return True
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        hass.data.get(DOMAIN, {}).get("entries", {}).pop(entry.entry_id, None)
+    return unloaded
 
 
 async def _async_register_panel(hass: HomeAssistant) -> None:
