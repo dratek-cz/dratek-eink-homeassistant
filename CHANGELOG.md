@@ -2,7 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.201] - 2026-08-06
+
+### Opraveno – Ochrana proti nešetrnému přerušení aktivního BLE přenosu při ručním odeslání
+- Změna v `_preempt_automatic_update`: Pokud již probíhá fyzický zápis dat na displej/gateway (`status == "writing"`), úloha se nezruší natvrdo uprostřed přenosu.
+- Důvod: Natvrdo zrušený přenos nechal řadič displeje v zamrzlém stavu očekávajícím další bloky. Nově se rozběhnutý přenos nechá v klidu dokončit/uvolnit BLE rozhraní a manuální požadavky počkají na uvolnění zámku zařízení, čímž se zamezí 15minutovým vytuhnutím.
+
 ## [0.1.199] - 2026-08-06
+
 
 ### Opraveno – Odstranění zbytečného okamžitého auto-updatu s prázdnými hodnotami po manuálním odeslání
 - Uložení `base_image` a `svg_template` do konfigurace automatizace při registraci návrhu, aby budoucí aktualizace entit měly kompletní podkladový obrázek.

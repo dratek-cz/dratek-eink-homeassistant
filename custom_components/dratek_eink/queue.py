@@ -177,7 +177,16 @@ class TransferQueue:
         if task.done():
             return
         self._preempted_jobs.add(job_id)
+        job = next((j for j in self._jobs if j.get("id") == job_id), None)
+        if job and job.get("status") == "writing":
+            # An active physical BLE/gateway transfer is mid-flight.
+            # Abrupt task cancellation cuts the connection mid-block, leaving
+            # the e-ink display controller frozen in RECEIVE state.
+            # Mark it so no new retry attempt starts, but let the active attempt
+            # finish cleanly so the BLE slot is freed.
+            return
         task.cancel()
+
 
     async def _run(self, job: dict[str, Any], runner: TransferRunner) -> dict[str, Any]:
         device_lock = self._device_locks.setdefault(job["address"], asyncio.Lock())
