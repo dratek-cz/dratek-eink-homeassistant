@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.205] - 2026-08-06
+
+### Přidáno – Celoplošný Meteoradar přes celý displej propojený s Met.no
+- Aktualizována šablona **Meteoradar (Met.no)** na **100% celoplošné zobrazení mapa přes celý displej**.
+- Šablona je nativně propojena s integrací **Met.no (Meteorologisk institutt)** pro předpověď/teplotu a živou celoplošnou srážkovou mapu.
+
 ## [0.1.204] - 2026-08-06
 
 ### Opraveno – Registrace Meteoradar šablony v katalogu předpřipravených šablon UI

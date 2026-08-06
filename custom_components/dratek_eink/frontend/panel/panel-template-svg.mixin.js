@@ -1179,17 +1179,16 @@ export const templateSvgMixin = {
         { footer: [{ label: "SVÁTEK MÁ", value: v(2, "Jana") }], h: 0.14 },
       ],
       radar: () => [
-        { text: v(0, "Česká republika"), caption: "Meteoradar", h: 0.16, bold: true, color: "red" },
-        { rule: true, h: 0.02 },
-        { text: "📡  [ Živá srážková mapa ]  📡", h: 0.48, size: 0.045, bold: true },
-        { rule: true, h: 0.02 },
+        { band: { label: "METEORADAR (MET.NO)", value: v(0, "Česká republika"), color: "black" }, bleed: true, h: 0.16 },
+        { text: "📡  [ Celoplošná srážková mapa Met.no / RainViewer ]  📡", h: 0.54, size: 0.042, bold: true },
         { strip: [
-          { label: "SLABÉ SRÁŽKY", value: "■", color: "black" },
-          { label: "SILNÉ SRÁŽKY", value: "■", color: "red" },
-        ], h: 0.16 },
+          { label: "MET.NO STAV", value: v(1, "21,5 °C • Déšť"), color: "red" },
+          { label: "LEGENDA", value: "■ Slabé  ■ Silné" },
+        ], bleed: true, h: 0.17 },
         { flex: true },
-        { footer: [{ label: "POSLEDNÍ AKTUALIZACE", value: v(1, "11:55") }], h: 0.13 },
+        { footer: [{ label: "ZDROJ: MET.NO / CHMI", value: v(2, "12:40") }], h: 0.13 },
       ],
+
 
       security: () => [
         { icon: "shield-home", h: 0.15 },

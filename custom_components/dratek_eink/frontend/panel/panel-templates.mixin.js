@@ -186,24 +186,19 @@ export const templatesMixin = {
         ]
       },
       {
-        id: "radar", title: "Meteoradar", icon: "mdi:radar", objects: [
-          this._tt(15, 12, 30, 26, "📡", "red", true),
-          this._tt(50, 14, 110, 18, "Meteoradar", "black", true),
-          this._tt(52, 34, 130, 12, "Česká republika", "red", true, "radar_stat"),
-          this._ln(15, 52, 235, 52),
-          this._rr(15, 58, 220, 155, "none", "black", 1),
-          this._tt(60, 115, 130, 30, " srážková mapa ", "black", true, "radar_mapa"),
-          this._ln(15, 218, 235, 218),
-          this._rr(15, 224, 220, 48, "none", "black", 1),
-          this._tt(22, 230, 60, 11, "Srážky:"),
-          this._rr(88, 230, 12, 12, "black", "black"),
-          this._tt(104, 230, 38, 11, "Slabé"),
-          this._rr(148, 230, 12, 12, "red", "red"),
-          this._tt(164, 230, 42, 11, "Silné", "red", true),
-          this._tt(22, 250, 120, 12, "Aktualizace:"),
-          this._tt(165, 248, 65, 14, "11:55", "black", true, "radar_cas"),
+        id: "radar", title: "Meteoradar (Met.no)", icon: "mdi:radar", objects: [
+          this._img(0, 0, 250, 128, "https://www.rainviewer.com/api/v2/radar/nowcast/512/0/0/1_0.png", "radar_mapa"),
+          this._rr(0, 0, 250, 24, "red", "none"),
+          this._tt(8, 3, 20, 18, "📡", "white", true),
+          this._tt(30, 4, 110, 16, "Meteoradar", "white", true),
+          this._tt(145, 4, 100, 16, "Česká republika", "white", true, "radar_stat", "right"),
+          this._rr(0, 100, 250, 28, "white", "black", 1),
+          this._tt(6, 104, 110, 14, "Met.no: 21.5°C • Déšť", "black", true, "radar_metno", "left"),
+          this._tt(120, 106, 60, 11, "■ Slabé ■ Silné", "red"),
+          this._tt(185, 104, 60, 14, "12:40", "black", true, "radar_cas", "right"),
         ]
       },
+
     ];
   },
 

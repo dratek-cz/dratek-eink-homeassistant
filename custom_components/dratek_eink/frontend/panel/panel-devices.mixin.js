@@ -600,16 +600,18 @@ export const devicesMixin = {
         ],
       },
       radar: {
-        summary: "Zobrazení meteoradaru a srážkové mapy pro vybraný stát (Česko, Slovensko, Německo, Rakousko, Polsko atd.).",
+        summary: "Celoplošná živá srážková mapa přes celý displej propojená s integrací Met.no (Meteorologisk institutt).",
         integrations: [
-          { name: "RainViewer / ČHMÚ", domain: "camera", core: true, why: "Dodá entitu kamery nebo statický/živý snímek srážkového radaru." },
+          { name: "Met.no (Meteorologisk institutt)", domain: "weather", core: true, why: "Dodá entitu weather.home s informacemi o teplote a srážkách (předinstalovaná v HA)." },
+          { name: "RainViewer / OpenStreetMap", domain: "camera", core: true, why: "Poskytuje celoplošnou srážkovou mapu pro ČR, SR, Německo, Rakousko, Polsko atd." },
         ],
         steps: [
-          "Vložte šablonu Meteoradar na displej.",
-          "Kliknutím na textový slot Stát vyberte požadovaný stát (Česko, Slovensko, Německo, Rakousko, Polsko atd.).",
-          "V Nastavit vyhodnoťte kamerovou entitu (např. camera.meteoradar) nebo ponechte výchozí generovanou srážkovou mapu.",
+          "Přetáhněte šablonu Meteoradar (Met.no) na displej – mapa se roztáhne přes 100 % celého displeje.",
+          "V poli Stát vyberte svůj stát (Česká republika, Slovensko, Německo, Rakousko, Polsko...).",
+          "V Nastavit propojte položku Met.no s entitou weather.home.",
         ],
       },
+
 
       energy: {
         summary: "Aktuální cena elektřiny a průběh ceny během dne.",
@@ -997,7 +999,8 @@ export const devicesMixin = {
       { id: "blank", number: "00", category: "custom", title: "Prázdná šablona", variables: [] },
       ...userTemplates,
       { id: "weather", number: "01", category: "nature", title: "Počasí", variables: [["thermometer", "Teplota"], ["weather-partly-cloudy", "Stav počasí"], ["clock-outline", "Čas"], ["calendar-outline", "Datum"], ["weather-rainy", "Předpověď"]] },
-      { id: "radar", number: "23", category: "nature", title: "Meteoradar", variables: [["map-marker", "Stát / Oblast"], ["radar", "Srážkový radar"], ["clock-outline", "Aktualizace"]] },
+      { id: "radar", number: "23", category: "nature", title: "Meteoradar (Met.no)", variables: [["map-marker", "Stát / Oblast"], ["weather-partly-cloudy", "Met.no Počasí"], ["clock-outline", "Aktualizace"]] },
+
 
       { id: "energy", number: "02", category: "energy", title: "Cena elektřiny", variables: [["currency-usd", "Aktuální cena"], ["clock-outline", "Cenový interval"], ["chart-line", "Denní průběh"], ["tag-outline", "Minimum dne"]] },
       { id: "cz_spot_prices", number: "22", category: "energy", title: "České spotové ceny", variables: [["currency-usd", "Aktuální cena"], ["chart-line", "Cenový průběh dnes"], ["tray-arrow-down", "Minimum dnes"], ["arrow-up-down", "Maximum dnes"], ["weather-sunny", "Minimum zítra"], ["counter", "Aktuální pořadí"]] },
