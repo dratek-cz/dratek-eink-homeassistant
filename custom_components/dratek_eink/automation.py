@@ -30,7 +30,8 @@ MAX_REFRESH_INTERVAL_SECONDS = 86400
 BATTERY_SAVER_THRESHOLD_PERCENT = 15
 BATTERY_SAVER_MIN_INTERVAL_SECONDS = 3600
 GATEWAY_ROUTE_SCAN_SECONDS = 3
-GATEWAY_ROUTE_CACHE_SECONDS = 30
+GATEWAY_ROUTE_CACHE_SECONDS = 120
+
 
 
 def _binding_sources(binding: dict[str, Any]) -> set[tuple[str, str]]:
@@ -181,6 +182,13 @@ class EntityAutoUpdateManager:
         self._configs.pop(normalized, None)
         self._last_refresh_at.pop(normalized, None)
         self._pending_refreshes.discard(normalized)
+        # Prune cached chart series for this address to avoid memory leaks
+        chart_series = getattr(self, "_chart_series", None)
+        if isinstance(chart_series, dict):
+            for key in list(chart_series):
+                if key.startswith(f"{normalized}:"):
+                    chart_series.pop(key, None)
+
         cancel_timer = self._timers.pop(normalized, None)
         if cancel_timer:
             cancel_timer()
@@ -336,12 +344,14 @@ class EntityAutoUpdateManager:
 
     @staticmethod
     def _state_value(state: Any, binding: dict[str, Any]) -> str:
+        fallback = str(binding.get("fallback", ""))
         if state is None:
-            return str(binding.get("fallback", ""))
+            return fallback
         attribute = str(binding.get("entity_attribute") or "")
         value = state.attributes.get(attribute) if attribute else state.state
-        if value is None:
-            return str(binding.get("fallback", ""))
+        if value is None or str(value).strip().lower() in {"unavailable", "unknown"}:
+            return fallback
+
         rules = binding.get("condition_rules")
         if isinstance(rules, list) and rules:
             for rule in rules:

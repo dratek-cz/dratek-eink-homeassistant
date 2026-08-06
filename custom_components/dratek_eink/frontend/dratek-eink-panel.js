@@ -181,6 +181,11 @@ class DratekEinkPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
+    if (this._onWindowResize) {
+      window.removeEventListener("resize", this._onWindowResize);
+      this._onWindowResize = null;
+      this._stickyOffsetBound = false;
+    }
     if (this._designerGlobalKeyHandler) {
       window.removeEventListener("keydown", this._designerGlobalKeyHandler, true);
       this._designerGlobalKeyHandler = null;
@@ -199,6 +204,7 @@ class DratekEinkPanel extends HTMLElement {
       this._saveCurrentDeviceDraft();
     }
   }
+
 
   set hass(hass) {
     const templateLiveDataChanged = this._templateLiveDataChanged?.(this._hass, hass) || false;

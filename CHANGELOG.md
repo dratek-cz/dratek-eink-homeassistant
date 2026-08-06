@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.196] - 2026-08-06
+
+### Opraveno – Optimalizace automatického nahrávání, paměti a frontend posluchačů
+- Ruční nahrání z editoru/studia již nezakládá nechtěné automatické aktualizace na pozadí a nepřenáší chybové texty `unavailable`.
+- Skenování tras ESP32 Gatewayí prodlouženo z 30 s na 120 s pro zklidnění provozu a ochranu BLE komunikace.
+- Přidáno automatické promazávání neaktuálních historických dat grafů z paměti RAM v `automation.py`.
+- Ošetřeno uvolňování posluchačů událostí okna v `disconnectedCallback` na frontendu.
+
 ## [0.1.195] - 2026-08-06
 
 ### Opraveno – aktualizace integrace již nevyžaduje restart celého hostitele Home Assistant

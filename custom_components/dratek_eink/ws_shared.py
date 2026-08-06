@@ -35,10 +35,14 @@ async def _install_entity_automation(
     address: str,
     automation: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
-    """Activate the HA bindings that belong to a successfully written design."""
+    """Activate the HA bindings that belong to a successfully written design if enabled."""
     config = dict(automation) if isinstance(automation, dict) else None
-    if config and isinstance(config.get("bindings"), list) and config["bindings"]:
-        config["enabled"] = True
+    if (
+        config
+        and config.get("enabled") is True
+        and isinstance(config.get("bindings"), list)
+        and config["bindings"]
+    ):
         # Identifies this exact queued design. If an older transfer fails after a
         # newer one was queued, its rollback must not delete the newer bindings.
         config["installation_id"] = uuid.uuid4().hex
@@ -64,9 +68,10 @@ async def _request_entity_automation_refresh(
     address: str,
     automation: dict[str, Any] | None,
 ) -> None:
-    """Check current HA values after a queued design reaches the display."""
-    if automation:
+    """Check current HA values after a queued design reaches the display if enabled."""
+    if automation and isinstance(automation, dict) and automation.get("enabled") is True:
         await get_entity_auto_update_manager(hass).async_request_refresh(address)
+
 
 
 def _battery_payload(device: Any) -> dict[str, Any]:
