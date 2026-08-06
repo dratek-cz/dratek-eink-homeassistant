@@ -124,7 +124,28 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
             hass.data[DOMAIN]["brand_static_path_registered"] = True
         hass.data[DOMAIN]["static_paths_registered"] = True
 
+    # Remove any stale extra_js_url entries from previous versions or reloads so
+    # the frontend never attempts to fetch an old versioned path that returns 404
+    # and breaks Home Assistant until a host reboot.
+    for key in ("frontend_extra_module_url", "frontend_extra_js_url"):
+        extra_urls = hass.data.get(key)
+        if isinstance(extra_urls, (set, list)):
+            stale = [
+                item for item in list(extra_urls)
+                if "dratek-eink-overview-card.js" in str(getattr(item, "url", item))
+                or f"{DOMAIN}_panel" in str(getattr(item, "url", item))
+            ]
+            for old_item in stale:
+                if isinstance(extra_urls, set):
+                    extra_urls.discard(old_item)
+                elif isinstance(extra_urls, list):
+                    try:
+                        extra_urls.remove(old_item)
+                    except ValueError:
+                        pass
+
     frontend.add_extra_js_url(hass, OVERVIEW_CARD_MODULE_URL)
+
 
     registered_version = hass.data[DOMAIN].get("panel_registered_version")
     panel_exists = PANEL_URL_PATH in hass.data.get("frontend_panels", {})

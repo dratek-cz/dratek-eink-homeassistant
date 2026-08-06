@@ -1,4 +1,4 @@
-const DRATEK_EINK_OVERVIEW_VERSION = "0.1.194";
+const DRATEK_EINK_OVERVIEW_VERSION = "0.1.195";
 const DRATEK_EINK_PANEL_PATH = "/dratek-eink";
 const overviewStore = {
   devices: [],

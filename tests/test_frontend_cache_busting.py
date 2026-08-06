@@ -92,6 +92,13 @@ class FrontendCacheBustingTests(unittest.TestCase):
                     )
         self.assertGreater(checked, 10, "the import scan stopped finding imports")
 
+    def test_stale_extra_js_urls_are_purged_on_reload(self) -> None:
+        self.assertIn("frontend_extra_module_url", INIT_SOURCE)
+        self.assertIn("frontend_extra_js_url", INIT_SOURCE)
+        self.assertIn("dratek-eink-overview-card.js", INIT_SOURCE)
+
+
 
 if __name__ == "__main__":
     unittest.main()
+

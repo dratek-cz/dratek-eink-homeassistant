@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.195] - 2026-08-06
+
+### Opraveno – aktualizace integrace již nevyžaduje restart celého hostitele Home Assistant
+- Nalezena a opravena přesná příčina, proč bylo po každém stáhnutí aktualizace v HACS nutné provést plný restart hostitele (`ha host restart`): volání `frontend.add_extra_js_url` v Home Assistantu vrství skripty starých i nových verzí v `frontend_extra_module_url`. Při dalším načtení UI se tak prohlížeč dotazoval na staré verze cesta `/dratek_eink_panel/0.1.193/...`, které po přepsání souborů vracely HTTP 404 a zamrzly načítání Lovelace.
+- `_async_register_panel` nyní před přidáním nového skriptu automaticky promaže všechny neaktuální URL z `frontend_extra_module_url` / `frontend_extra_js_url`. Po aktualizaci v HACS a restartu Home Assistant Core (nebo znovunačtení integrace) se frontend načte okamžitě bez nutnosti restartovat celý počítač / hostitel.
+
 ## [0.1.194] - 2026-08-06
 
 ### Opraveno – uvíznutí Bluetooth notifikací a zaciklení nahrávání do displejů
