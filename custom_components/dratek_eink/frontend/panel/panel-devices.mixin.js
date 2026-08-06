@@ -599,6 +599,18 @@ export const devicesMixin = {
           "Předpověď se načítá službou weather.get_forecasts – integrace ji musí podporovat, jinak zůstanou ukázkové dny.",
         ],
       },
+      radar: {
+        summary: "Zobrazení meteoradaru a srážkové mapy pro vybraný stát (Česko, Slovensko, Německo, Rakousko, Polsko atd.).",
+        integrations: [
+          { name: "RainViewer / ČHMÚ", domain: "camera", core: true, why: "Dodá entitu kamery nebo statický/živý snímek srážkového radaru." },
+        ],
+        steps: [
+          "Vložte šablonu Meteoradar na displej.",
+          "Kliknutím na textový slot Stát vyberte požadovaný stát (Česko, Slovensko, Německo, Rakousko, Polsko atd.).",
+          "V Nastavit vyhodnoťte kamerovou entitu (např. camera.meteoradar) nebo ponechte výchozí generovanou srážkovou mapu.",
+        ],
+      },
+
       energy: {
         summary: "Aktuální cena elektřiny a průběh ceny během dne.",
         integrations: [
@@ -3847,6 +3859,9 @@ export const devicesMixin = {
     const targets = {
       forecast: { domains: ["weather"] },
       weather: { domains: ["weather"] },
+      radar: { domains: ["camera", "sensor"] },
+      camera: { domains: ["camera", "sensor"] },
+
       calendar: { domains: ["calendar"] },
       person: { domains: ["person", "device_tracker"] },
       temperature: { domains: ["sensor", "climate"], classes: ["temperature"] },

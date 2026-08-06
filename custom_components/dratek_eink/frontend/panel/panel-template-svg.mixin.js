@@ -1178,6 +1178,19 @@ export const templateSvgMixin = {
         { flex: true },
         { footer: [{ label: "SVÁTEK MÁ", value: v(2, "Jana") }], h: 0.14 },
       ],
+      radar: () => [
+        { text: v(0, "Česká republika"), caption: "Meteoradar", h: 0.16, bold: true, color: "red" },
+        { rule: true, h: 0.02 },
+        { text: "📡  [ Živá srážková mapa ]  📡", h: 0.48, size: 0.045, bold: true },
+        { rule: true, h: 0.02 },
+        { strip: [
+          { label: "SLABÉ SRÁŽKY", value: "■", color: "black" },
+          { label: "SILNÉ SRÁŽKY", value: "■", color: "red" },
+        ], h: 0.16 },
+        { flex: true },
+        { footer: [{ label: "POSLEDNÍ AKTUALIZACE", value: v(1, "11:55") }], h: 0.13 },
+      ],
+
       security: () => [
         { icon: "shield-home", h: 0.15 },
         { band: { label: "ALARM", value: v(0, "ZAPNUTO"), color: "black" }, bleed: true, h: 0.2 },

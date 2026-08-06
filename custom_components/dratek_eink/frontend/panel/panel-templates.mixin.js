@@ -185,8 +185,46 @@ export const templatesMixin = {
           this._tt(78, 271, 70, 18, "Jana", "white", true, "svatek"),
         ]
       },
+      {
+        id: "radar", title: "Meteoradar", icon: "mdi:radar", objects: [
+          this._tt(15, 12, 30, 26, "📡", "red", true),
+          this._tt(50, 14, 110, 18, "Meteoradar", "black", true),
+          this._tt(52, 34, 130, 12, "Česká republika", "red", true, "radar_stat"),
+          this._ln(15, 52, 235, 52),
+          this._rr(15, 58, 220, 155, "none", "black", 1),
+          this._tt(60, 115, 130, 30, " srážková mapa ", "black", true, "radar_mapa"),
+          this._ln(15, 218, 235, 218),
+          this._rr(15, 224, 220, 48, "none", "black", 1),
+          this._tt(22, 230, 60, 11, "Srážky:"),
+          this._rr(88, 230, 12, 12, "black", "black"),
+          this._tt(104, 230, 38, 11, "Slabé"),
+          this._rr(148, 230, 12, 12, "red", "red"),
+          this._tt(164, 230, 42, 11, "Silné", "red", true),
+          this._tt(22, 250, 120, 12, "Aktualizace:"),
+          this._tt(165, 248, 65, 14, "11:55", "black", true, "radar_cas"),
+        ]
+      },
     ];
   },
+
+  _img(x, y, w, h, image, variableName = "") {
+    return {
+      type: "image",
+      x,
+      y,
+      w,
+      h,
+      rotation: 0,
+      flipH: false,
+      image,
+      tint: "original",
+      keepRatio: true,
+      variable: !!variableName,
+      variableName,
+      entityId: "camera.meteoradar",
+    };
+  },
+
 
   _tt(x, y, w, h, text, color = "black", bold = false, variableName = "", align = "center") {
     const minFontSize = h >= 28 ? 18 : h >= 18 ? 13 : 11;

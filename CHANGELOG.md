@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.203] - 2026-08-06
+
+### Přidáno – Nová vestavěná šablona Meteoradar s volbou státu
+- Přidána nová oficiální šablona **Meteoradar** v editoru DRATEK eInk.
+- Šablona podporuje výběr státu (Česko, Slovensko, Německo, Rakousko, Polsko...) a propojení se srážkovou kamerovou entitou (např. `camera.meteoradar`).
+
 ## [0.1.202] - 2026-08-06
 
 ### Opraveno – Dynamická detekce/respektování zvolené gateway a zavedení prodlevy překreslení velkých displejů (400x300)
