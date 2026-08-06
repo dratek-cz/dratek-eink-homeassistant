@@ -8,7 +8,9 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageMath
 
+from . import svg_render
 from .const import DEVICE_SIZES
+from .svg_text import svg_text as build_text_element
 
 # The single black/white/red rule, shared verbatim with the panel's
 # _quantizeEinkPixel in panel-template-svg.mixin.js. Preview and payload have to
@@ -870,6 +872,31 @@ def _render_bound_weather(binding: dict[str, Any], value: str) -> Image.Image:
     return output
 
 
+def _is_text_binding(binding: dict[str, Any]) -> bool:
+    """A binding drawn as a single run of text (the default when no type is set)."""
+    return binding.get("type") in (None, "", "text")
+
+
+def _render_binding_layer(binding: dict[str, Any], value: str) -> Image.Image:
+    """Rasterise one binding to its own RGBA layer."""
+    if binding.get("type") == "chart":
+        return _render_bound_chart(binding, value)
+    if binding.get("type") == "layered":
+        return _render_bound_layer(binding, value)
+    if binding.get("type") == "weather":
+        return _render_bound_weather(binding, value)
+    return _render_bound_text(binding, value)
+
+
+def _composite_binding(image: Image.Image, binding: dict[str, Any], layer: Image.Image) -> None:
+    """Alpha-composite a rendered layer, keeping it centred on the binding box."""
+    x = round(float(binding.get("x", 0)))
+    y = round(float(binding.get("y", 0)))
+    x -= (layer.width - max(1, round(float(binding.get("w", 1))))) // 2
+    y -= (layer.height - max(1, round(float(binding.get("h", 1))))) // 2
+    image.alpha_composite(layer, (x, y))
+
+
 def render_entity_bound_image(
     base_image: str,
     bindings: list[dict[str, Any]],
@@ -879,19 +906,92 @@ def render_entity_bound_image(
     image = _decode_data_image(base_image).convert("RGBA")
     for binding in bindings:
         value = values.get(str(binding.get("id")), str(binding.get("fallback", "")))
-        if binding.get("type") == "chart":
-            layer = _render_bound_chart(binding, value)
-        elif binding.get("type") == "layered":
-            layer = _render_bound_layer(binding, value)
-        elif binding.get("type") == "weather":
-            layer = _render_bound_weather(binding, value)
-        else:
-            layer = _render_bound_text(binding, value)
-        x = round(float(binding.get("x", 0)))
-        y = round(float(binding.get("y", 0)))
-        x -= (layer.width - max(1, round(float(binding.get("w", 1))))) // 2
-        y -= (layer.height - max(1, round(float(binding.get("h", 1))))) // 2
-        image.alpha_composite(layer, (x, y))
+        _composite_binding(image, binding, _render_binding_layer(binding, value))
+    return quantize_bwr_preview(image)
+
+
+def _svg_text_slot(binding: dict[str, Any], value: str) -> str:
+    """Rebuild one dynamic text slot as an SVG rect + <text>, matching the panel.
+
+    The panel captured the slot geometry as hex colours and an anchor point in
+    svg.* (panel-devices.mixin.js). The rect repaints the background so the stale
+    value baked into the base image is covered - the same job _render_bound_text's
+    background fill does in the PIL path.
+    """
+    svg = binding.get("svg") or {}
+    parts: list[str] = []
+    background = str(svg.get("bg") or "none")
+    if background and background != "none":
+        parts.append(
+            f'<rect x="{float(svg.get("x", 0)):.2f}" y="{float(svg.get("y", 0)):.2f}"'
+            f' width="{float(svg.get("w", 1)):.2f}" height="{float(svg.get("h", 1)):.2f}"'
+            f' fill="{background}"/>'
+        )
+    parts.append(
+        build_text_element(
+            value,
+            float(svg.get("cx", 0)),
+            float(svg.get("cy", 0)),
+            float(svg.get("size", 12)),
+            bold=bool(svg.get("bold")),
+            anchor=str(svg.get("anchor") or "middle"),
+            color=str(svg.get("color") or "#000000"),
+            max_width=float(svg.get("maxWidth", 0) or 0),
+        )
+    )
+    return "".join(parts)
+
+
+def render_entity_bound_svg_image(
+    base_image: str,
+    bindings: list[dict[str, Any]],
+    values: dict[str, str],
+) -> Image.Image:
+    """Like render_entity_bound_image, but dynamic text is rasterised through resvg.
+
+    Text slots that carry svg geometry are drawn by an SVG engine with the bundled
+    Arimo - the same font and layout the panel used for the manual send - so an
+    automatic refresh matches it. Charts and gauges keep the PIL path. If the SVG
+    rasteriser is unavailable or fails, every text slot falls back to PIL, so the
+    image is always complete.
+    """
+    image = _decode_data_image(base_image).convert("RGBA")
+    svg_text_bindings: list[dict[str, Any]] = []
+    for binding in bindings:
+        value = values.get(str(binding.get("id")), str(binding.get("fallback", "")))
+        if _is_text_binding(binding) and binding.get("svg"):
+            svg_text_bindings.append(binding)
+            continue
+        _composite_binding(image, binding, _render_binding_layer(binding, value))
+
+    layer = None
+    if svg_text_bindings:
+        slots = "".join(
+            _svg_text_slot(
+                binding,
+                values.get(str(binding.get("id")), str(binding.get("fallback", ""))),
+            )
+            for binding in svg_text_bindings
+        )
+        width, height = image.size
+        document = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}"'
+            f' viewBox="0 0 {width} {height}">{slots}</svg>'
+        )
+        layer = svg_render.rasterize_svg(document, width, height)
+
+    if layer is not None:
+        image.alpha_composite(layer)
+    else:
+        # No rasteriser (or it failed): draw the very same slots through PIL so the
+        # refresh is never left with missing values. Force the captured font size
+        # instead of PIL's autoFit, which would grow the text to fill the box and
+        # produce the oversized, off-size look this whole path exists to avoid.
+        for binding in svg_text_bindings:
+            value = values.get(str(binding.get("id")), str(binding.get("fallback", "")))
+            fixed = {**binding, "autoFit": False}
+            _composite_binding(image, fixed, _render_bound_text(fixed, value))
+
     return quantize_bwr_preview(image)
 
 

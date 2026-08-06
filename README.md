@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.191
+
+- automatická aktualizace textu v šablonách vypadá stejně jako ruční odeslání – stejná velikost, tučnost i poloha písma; zmizelo nafouknuté a posunuté písmo z dřívějšího přerenderování na pozadí
+- pozadí každého slotu se při automatické aktualizaci překreslí, takže předchozí hodnota je vždy překryta
+- opraveno vynechávání hodnot – sloty šablony, které přeformátovaly interní značku (čísla, prázdné hodnoty, zkrácení textu), se nyní na automatickou aktualizaci napojí spolehlivě
+- kde vykreslovací knihovna není dostupná (např. 32bitové ARM), aktualizace bezpečně spadne zpět na původní vykreslení – instalace se nikdy nezablokuje
+
 ## Novinky ve verzi 0.1.190
 
 - automatický zápis přeskočený nebo sloučený během aktivního uploadu už sám sebe znovu nezařazuje a nevytváří nekonečnou smyčku ve frontě

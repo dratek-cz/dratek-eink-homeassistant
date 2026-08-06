@@ -2121,8 +2121,17 @@ export const devicesMixin = {
       anchor === "middle" ? centerX - boxWidth / 2 : anchor === "end" ? centerX - boxWidth : centerX));
     const y = Math.max(0, Math.min(height - boxHeight, centerY - boxHeight / 2));
     const color = this._templateAutomationPalette(textNode.getAttribute("fill"), "black");
+    // The exact hex the panel drew this run through, kept verbatim so the backend
+    // SVG rasteriser reproduces the manual send pixel for pixel rather than
+    // re-deriving it from a colour name.
+    const colorHex = String(textNode.getAttribute("fill") || "#000000");
 
     let backgroundColor = "white";
+    // The base image the backend composites over still carries the previous
+    // value's pixels, so each slot has to repaint its own background exactly the
+    // way _render_bound_text does. Default to white, then adopt the covering
+    // rect's real fill when the slot sits on a coloured band.
+    let backgroundHex = "#ffffff";
     const allNodes = [...documentNode.querySelectorAll("rect, text")];
     const textIndex = allNodes.indexOf(textNode);
     for (let index = textIndex - 1; index >= 0; index -= 1) {
@@ -2135,6 +2144,7 @@ export const devicesMixin = {
       const rh = Number(rect.getAttribute("height") || 0);
       if (centerX >= rx && centerX <= rx + rw && centerY >= ry && centerY <= ry + rh) {
         backgroundColor = this._templateAutomationPalette(rect.getAttribute("fill"), "white");
+        backgroundHex = String(rect.getAttribute("fill") || "#ffffff");
         break;
       }
     }
@@ -2142,23 +2152,43 @@ export const devicesMixin = {
     const state = this._hass?.states?.[entityId];
     const kind = this._templateSlotKind(meta.label, meta.icon);
     const weatherTemperature = String(entityId).startsWith("weather.") && kind === "temperature";
+    const bold = Number(textNode.getAttribute("font-weight") || 400) >= 600;
+    // A max width that never shrinks the value the panel just showed: the box
+    // bound, but at least this run's own text width, so re-rendering the current
+    // value through svg_text.py is a no-op fit and stays byte-identical, while a
+    // future longer value is still clamped instead of overflowing.
+    const currentText = String(textNode.textContent || "");
+    const svgMaxWidth = Math.max(maxWidth, this._svgTextWidth(currentText, fontSize, bold) + 1);
     return {
       id: `template-${String(meta.templateId || "slot")}-${meta.key}-${occurrence}`,
       type: "text",
       entity_id: entityId,
       entity_attribute: weatherTemperature ? "temperature" : "",
       x: Math.round(x), y: Math.round(y), w: Math.round(boxWidth), h: Math.round(boxHeight),
-      fallback: String(textNode.textContent || ""),
+      fallback: currentText,
       include_unit: !weatherTemperature,
       value_suffix: weatherTemperature ? ` ${state?.attributes?.temperature_unit || "°C"}` : "",
       backgroundColor,
       color,
       fontSize: Math.round(fontSize),
       minFontSize: 6,
-      bold: Number(textNode.getAttribute("font-weight") || 400) >= 600,
+      bold,
       autoFit: true,
       textAlign: anchor === "end" ? "right" : anchor === "start" ? "left" : "center",
       verticalAlign: "middle",
+      // Everything the backend needs to rebuild this exact <text> (and cover the
+      // stale pixels underneath it) when the SVG rasteriser is available. Falls
+      // back to the box fields above when it is not.
+      svg: {
+        cx: centerX, cy: centerY,
+        size: fontSize,
+        maxWidth: svgMaxWidth,
+        anchor,
+        bold,
+        color: colorHex,
+        bg: backgroundHex,
+        x: Math.round(x), y: Math.round(y), w: Math.round(boxWidth), h: Math.round(boxHeight),
+      },
     };
   },
 
@@ -2189,8 +2219,16 @@ export const devicesMixin = {
         const markedTexts = [...markedDocument.querySelectorAll("text")];
         let occurrence = 0;
         for (let textIndex = 0; textIndex < markedTexts.length; textIndex += 1) {
-          if (!String(markedTexts[textIndex]?.textContent || "").includes(marker)) continue;
+          const markedText = String(markedTexts[textIndex]?.textContent || "");
           const currentText = currentTexts[textIndex];
+          // A slot belongs to this variable when injecting the marker changed the
+          // rendered text - whether the marker survived verbatim or the block
+          // reformatted it (a number slot, an ellipsis clip, an empty value). The
+          // old test only matched a verbatim marker, so those reformatting slots
+          // produced no binding and silently never auto-updated.
+          const drivenByVariable =
+            markedText.includes(marker) || markedText !== String(currentText?.textContent || "");
+          if (!drivenByVariable) continue;
           if (!currentText) continue;
           bindings.push(this._templateAutomationTextBinding(
             currentDocument, currentText, entityId, meta, occurrence++, width, height

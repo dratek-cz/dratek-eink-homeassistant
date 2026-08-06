@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.191] - 2026-08-06
+
+### Opraveno – automatická aktualizace šablon 1:1 s ručním odesláním
+- Automatická aktualizace textu v šablonách nyní vykresluje stejné SVG jako ruční odeslání a rasterizuje ho na pozadí (resvg) přibaleným fontem Arimo. Text má stejnou velikost, tučnost i polohu jako při ručním odeslání – zmizelo nafouknuté a posunuté písmo z dřívějšího přerenderování přes PIL.
+- Každý slot si při automatické aktualizaci překreslí vlastní pozadí, takže předchozí hodnota zapečená do obrázku je vždy překryta.
+- Kde rasterizér není k dispozici (např. 32bitové ARM), spadne vykreslení automaticky zpět na PIL bez nafukování textu – instalace se nikdy nezablokuje.
+- Opraveno vynechávání hodnot: sloty šablony, které přeformátovaly interní značku (čísla, prázdné hodnoty, zkrácení), se dříve vůbec nenapojily na automatickou aktualizaci. Nově se slot pozná podle změny obsahu, takže žádná hodnota nevypadne.
+
 ## [0.1.190] - 2026-08-05
 
 ### Opraveno – smyčka automatických zápisů
