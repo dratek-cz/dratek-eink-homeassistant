@@ -33,6 +33,7 @@ OPTIONAL_COMPLETION_TIMEOUT = 2
 UNCONFIRMED_WRITE_DRAIN_TIMEOUT = 10
 MAX_BLOCK_REQUEST_RETRIES = 5
 GATT_OPERATION_TIMEOUT = 8
+TEARDOWN_OPERATION_TIMEOUT = 5
 STREAM_WRITE_DELAY = 0.04
 MIN_RECONNECT_INTERVAL_SECONDS = 6.0
 
@@ -92,6 +93,18 @@ class DratekTransfer:
         Shielding the disconnect from the outer cancellation gives it a real
         chance to complete before the CancelledError is allowed through.
 
+        That shield alone isn't enough, though: write_gatt_char already has a
+        bounded timeout (GATT_OPERATION_TIMEOUT), but disconnect() and the
+        start_notify/stop_notify calls around it did not. On this same flaky
+        stack, one of those can simply hang instead of erroring, and since
+        every BLE op for one display is serialised behind TransferQueue's
+        per-address lock, a hung teardown after transfer N blocks transfer
+        N+1 for as long as it hangs - the "gets slower every few uploads"
+        pattern, capped only by the 10-minute job safety net. Bounding every
+        teardown call at TEARDOWN_OPERATION_TIMEOUT keeps that worst case a
+        few seconds instead of minutes, so upload N+10 connects exactly like
+        upload 1 regardless of how the previous session's teardown went.
+
         A cheap embedded BLE stack, like this display's, can still be tearing
         down its previous connection when a new one arrives right on top of it,
         and answers slowly or not at all - indistinguishable from here from a
@@ -115,7 +128,8 @@ class DratekTransfer:
             yield client
         finally:
             try:
-                await asyncio.shield(client.disconnect())
+                async with asyncio.timeout(TEARDOWN_OPERATION_TIMEOUT):
+                    await asyncio.shield(client.disconnect())
             except Exception as exc:
                 self.log(
                     f"Disconnect cleanup raised {exc}; the Bluetooth slot may take "
@@ -268,7 +282,7 @@ class DratekTransfer:
             if not control_char:
                 raise RuntimeError("DRATEK eInk control characteristic was not found.")
             self.log(f"Using service {service_uuid}")
-            await client.start_notify(control_char, notify_handler)
+            await self._start_notify(client, control_char, notify_handler)
             try:
                 await asyncio.sleep(0.25)
                 await self._write_char(client, control_char, packet, "RGB LED")
@@ -280,10 +294,7 @@ class DratekTransfer:
                     timeout=5,
                 )
             finally:
-                try:
-                    await client.stop_notify(control_char)
-                except Exception:
-                    pass
+                await self._stop_notify(client, control_char)
 
     async def flash_identify(self, address: str) -> None:
         """Blink the display's indicator once so it can be located ("find me")."""
@@ -320,7 +331,7 @@ class DratekTransfer:
             if not control_char:
                 raise RuntimeError("DRATEK eInk control characteristic was not found.")
             self.log(f"Using service {service_uuid}")
-            await client.start_notify(control_char, notify_handler)
+            await self._start_notify(client, control_char, notify_handler)
             try:
                 await asyncio.sleep(0.25)
                 await self._write_char(client, control_char, packet, "find me")
@@ -332,10 +343,7 @@ class DratekTransfer:
                     timeout=5,
                 )
             finally:
-                try:
-                    await client.stop_notify(control_char)
-                except Exception:
-                    pass
+                await self._stop_notify(client, control_char)
 
 
     async def _send_with_retries(
@@ -412,11 +420,11 @@ class DratekTransfer:
 
             self.log(f"Using service {service_uuid}")
             await self._negotiate_mtu(client)
-            await client.start_notify(control_char, notify_handler)
+            await self._start_notify(client, control_char, notify_handler)
             write_notify_enabled = False
             if "notify" in write_char.properties or "indicate" in write_char.properties:
                 try:
-                    await client.start_notify(write_char, notify_handler)
+                    await self._start_notify(client, write_char, notify_handler)
                     write_notify_enabled = True
                 except Exception as exc:
                     self.log(f"Optional write characteristic notification setup skipped: {exc}")
@@ -612,14 +620,8 @@ class DratekTransfer:
                 )
             finally:
                 if write_notify_enabled:
-                    try:
-                        await client.stop_notify(write_char)
-                    except Exception:
-                        pass
-                try:
-                    await client.stop_notify(control_char)
-                except Exception:
-                    pass
+                    await self._stop_notify(client, write_char)
+                await self._stop_notify(client, control_char)
 
 
     def _resolve_software_version(
@@ -728,6 +730,29 @@ class DratekTransfer:
 
         mtu_size = int(getattr(client, "mtu_size", 0) or 0)
         self.log(f"Negotiated ATT MTU: {mtu_size or 'unknown'} bytes.")
+
+    async def _start_notify(
+        self,
+        client,
+        char,
+        handler: Callable[[Any, Any], None],
+        operation_timeout: float = GATT_OPERATION_TIMEOUT,
+    ) -> None:
+        async with asyncio.timeout(operation_timeout):
+            await client.start_notify(char, handler)
+
+    async def _stop_notify(
+        self,
+        client,
+        char,
+        operation_timeout: float = TEARDOWN_OPERATION_TIMEOUT,
+    ) -> None:
+        """Best-effort unsubscribe; a hang here must not outlast disconnect() itself."""
+        try:
+            async with asyncio.timeout(operation_timeout):
+                await client.stop_notify(char)
+        except Exception as exc:
+            self.log(f"Notification cleanup for {char} raised {exc}; continuing.")
 
     async def _write_char(
         self,

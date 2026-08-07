@@ -79,6 +79,51 @@ class TileBoundsTests(unittest.TestCase):
             (34, 21, 35, 22),
         )
 
+    def test_neighboring_country_bounds_at_zoom_6(self) -> None:
+        # Pinned the same way as the Czech border above, computed from the
+        # geoBoundaries-sourced polygons: a regression here means a border was
+        # accidentally corrupted or mis-simplified, not a RainViewer change.
+        self.assertEqual(
+            meteoradar.tile_bounds(meteoradar.SLOVAKIA_BORDER, zoom=6, tile_size=512),
+            (34, 21, 36, 22),
+        )
+        self.assertEqual(
+            meteoradar.tile_bounds(meteoradar.GERMANY_BORDER, zoom=6, tile_size=512),
+            (33, 20, 34, 22),
+        )
+        self.assertEqual(
+            meteoradar.tile_bounds(meteoradar.AUSTRIA_BORDER, zoom=6, tile_size=512),
+            (33, 21, 35, 22),
+        )
+        self.assertEqual(
+            meteoradar.tile_bounds(meteoradar.POLAND_BORDER, zoom=6, tile_size=512),
+            (34, 20, 36, 21),
+        )
+
+    def test_europe_overview_bounds_cover_every_member_country(self) -> None:
+        all_points = [
+            point for _name, border in meteoradar.EUROPE_OVERVIEW_BORDERS for point in border
+        ]
+        self.assertEqual(
+            meteoradar.tile_bounds(all_points, zoom=6, tile_size=512),
+            (33, 20, 36, 22),
+        )
+
+
+class CountryBorderDataTests(unittest.TestCase):
+    def test_every_border_is_a_closed_ring_with_real_shape(self) -> None:
+        for name, border in meteoradar.COUNTRY_BORDERS.items():
+            with self.subTest(country=name):
+                self.assertEqual(border[0], border[-1])
+                self.assertGreater(len(border), 20)
+
+    def test_europe_overview_lists_every_country_border_once(self) -> None:
+        names = [name for name, _border in meteoradar.EUROPE_OVERVIEW_BORDERS]
+        self.assertEqual(sorted(names), sorted(meteoradar.COUNTRY_BORDERS.keys()))
+        for name, border in meteoradar.EUROPE_OVERVIEW_BORDERS:
+            with self.subTest(country=name):
+                self.assertIs(border, meteoradar.COUNTRY_BORDERS[name])
+
 
 def _uniform_tile(size: int, rgba: tuple[int, int, int, int]) -> Image.Image:
     return Image.new("RGBA", (size, size), rgba)
@@ -155,6 +200,63 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
 
     def test_the_country_outline_is_drawn_in_black(self) -> None:
         image = self._compose((0, 0, 0, 0), border_width=4)  # no precipitation at all
+        self.assertIn(meteoradar.BORDER_COLOR, list(image.getdata()))
+
+    def test_output_is_a_flat_rgb_image_safe_for_the_eink_palette(self) -> None:
+        image = self._compose((0, 100, 200, 255))
+        self.assertEqual(image.mode, "RGB")
+        colors = set(list(image.getdata()))
+        self.assertTrue(colors <= {(255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.BORDER_COLOR})
+
+
+class ComposeMultiCountryRadarImageTests(unittest.TestCase):
+    """Two well-separated synthetic "countries" stand in for the Europe overview."""
+
+    COUNTRY_A = ("a", ((-5.0, -5.0), (0.0, -5.0), (0.0, 5.0), (-5.0, 5.0), (-5.0, -5.0)))
+    COUNTRY_B = ("b", ((15.0, -5.0), (20.0, -5.0), (20.0, 5.0), (15.0, 5.0), (15.0, -5.0)))
+    BORDERS = (COUNTRY_A, COUNTRY_B)
+    ZOOM = 3
+    TILE_SIZE = 200
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        all_points = [point for _name, border in cls.BORDERS for point in border]
+        cls.x_min, cls.y_min, cls.x_max, cls.y_max = meteoradar.tile_bounds(
+            all_points, zoom=cls.ZOOM, tile_size=cls.TILE_SIZE
+        )
+
+    def _grid(self, rgba: tuple[int, int, int, int]) -> dict[tuple[int, int], Image.Image]:
+        return {
+            (x, y): _uniform_tile(self.TILE_SIZE, rgba)
+            for x in range(self.x_min, self.x_max + 1)
+            for y in range(self.y_min, self.y_max + 1)
+        }
+
+    def _compose(self, rgba: tuple[int, int, int, int], **kwargs) -> Image.Image:
+        return meteoradar.compose_multi_country_radar_image(
+            self._grid(rgba),
+            zoom=self.ZOOM, tile_size=self.TILE_SIZE,
+            x_min=self.x_min, y_min=self.y_min, x_max=self.x_max, y_max=self.y_max,
+            borders=self.BORDERS, margin=0,
+            **kwargs,
+        )
+
+    def test_precipitation_is_clipped_to_the_union_of_both_countries(self) -> None:
+        # An opaque grid everywhere: without per-country clipping, red would
+        # fill the whole crop, including the gap between the two rectangles.
+        image = self._compose((0, 100, 200, 255))
+        width, height = image.size
+        mid_y = height // 2
+        left_country_x = width // 8
+        gap_x = width // 2
+        right_country_x = width - width // 8
+
+        self.assertEqual(image.getpixel((left_country_x, mid_y)), meteoradar.PRECIPITATION_COLOR)
+        self.assertEqual(image.getpixel((right_country_x, mid_y)), meteoradar.PRECIPITATION_COLOR)
+        self.assertEqual(image.getpixel((gap_x, mid_y)), (255, 255, 255))
+
+    def test_each_country_outline_is_drawn(self) -> None:
+        image = self._compose((0, 0, 0, 0), border_width=3)  # no precipitation at all
         self.assertIn(meteoradar.BORDER_COLOR, list(image.getdata()))
 
     def test_output_is_a_flat_rgb_image_safe_for_the_eink_palette(self) -> None:

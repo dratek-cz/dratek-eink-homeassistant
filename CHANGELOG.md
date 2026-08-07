@@ -2,6 +2,28 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.218] - 2026-08-07
+
+### Opraveno – Odesílání se po několika nahráních za sebou postupně zpomalovalo
+- `transfer.py`: Zápis bloků obrázku (`write_gatt_char`) měl už dřív ohraničený timeout (`GATT_OPERATION_TIMEOUT`), ale `disconnect()` a `start_notify`/`stop_notify` kolem něj ne. Na tomto levném BLE stacku displeje umí některé z nich místo chyby prostě zaseknout - a protože je každý BLE přenos na jednu adresu serializovaný přes zámek `TransferQueue`, zaseklý úklid po přenosu N zablokoval přenos N+1 na dobu, po kterou visel, ohraničenou jen 10minutovým bezpečnostním timeoutem celé fronty. Přesně tenhle vzorec ("čím víc nahrání za sebou, tím pomalejší") byl vidět ve frontě - jeden zápis trval 432s místo obvyklých pár sekund.
+- `transfer.py`: Nové metody `_start_notify`/`_stop_notify` a ohraničení `disconnect()` konstantou `TEARDOWN_OPERATION_TIMEOUT` (5s) zajišťují, že se zaseklý úklid spojení maximálně po pár sekundách vzdá a uvolní zámek pro další nahrání - desáté nahrátí za sebou by tak mělo připojovat stejně rychle jako první, bez ohledu na to, jak dopadl úklid po tom předchozím.
+
+## [0.1.217] - 2026-08-07
+
+### Opraveno – Hranice sousedních států dotaženy na stejnou kvalitu jako ČR
+- `meteoradar.py`: Slovensko, Německo, Rakousko a Polsko dříve zjednodušeny na sdílený rozpočet ~150-220 bodů, což u složitějších tvarů (německé pobřeží Baltu/Severního moře) ořízlo víc reálného detailu než u ČR. Nově zjednodušeny algoritmem Douglas-Peucker se stejnou tolerancí (epsilon 0.02°) jako ČR, takže výsledná věrnost je skutečně 1:1 - Německo tak dostalo 603 bodů místo dřívějších ~200, protože jeho pobřeží si to při stejné toleranci žádá.
+- `meteoradar.py`: Zdroj hranic Polska nahrazen - geoBoundaries mělo pro Polsko jen hrubý ~1200bodový obrys (Wiki Commons), zatímco ostatní země těžily z desítek tisíc bodů OpenStreetMap. Polská hranice nyní stažena přímo z OpenStreetMap (Overpass API, relace 49715) a poskládána z member ways do jednoho ~67 000bodového obrysu před zjednodušením.
+- `panel-devices.mixin.js`: Interaktivní mapa výběru státu (nastavení šablony i lokální náhled) přegenerována z aktualizovaných dat.
+
+## [0.1.216] - 2026-08-07
+
+### Přidáno – Dokončení šablony Meteoradar: přesné hranice, přehled Evropy, automatická obnova
+- `meteoradar.py`: Hranice Slovenska, Německa, Rakouska a Polska nahrazeny přesnou geometrií z geoBoundaries (zjednodušenou algoritmem Douglas-Peucker), stejně jako u ČR.
+- `meteoradar.py`: Přidána funkce `compose_multi_country_radar_image` a volba státu `eu` nyní vykresluje skutečný přehled celé střední Evropy (hranice všech pěti zemí najednou) místo prázdného obdélníku.
+- `panel-devices.mixin.js` & `automation.py`: Vybraný stát srážkové mapy se nyní správně přenáší i do automatických obnov (dříve automatika vždy vykreslila ČR bez ohledu na výběr).
+- `automation.py`: Přidána periodická obnova (`_handle_camera_tick`, každých 10 minut) pro šablony s kamerovou vazbou (Meteoradar) – entita `camera.meteoradar` nemění svůj stav, takže se dosud nikdy automaticky neobnovovala; nyní se pravidelně znovu vykreslí a odešle frontou na displej, kde je šablona nastavena.
+- `panel-devices.mixin.js` & `panel-render-ui.mixin.js`: Interaktivní mapa výběru státu v nastavení šablony (a tedy i v lokálním náhledu `preview.html`, který stejnou komponentu sdílí) nahrazena přesnými obrysy hranic (stejná data jako na displeji) místo ručně kreslených přibližných tvarů; ke každému státu přidána výrazná vlajka nad zkratkou kódu.
+
 ## [0.1.215] - 2026-08-07
 
 ### Opraveno – Oprava chyby voluptuous schématu ve websocket_api

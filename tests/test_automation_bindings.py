@@ -37,6 +37,7 @@ def _load_automation_module():
     event = types.ModuleType("homeassistant.helpers.event")
     event.async_call_later = lambda *_args, **_kwargs: None
     event.async_track_state_change_event = lambda *_args, **_kwargs: None
+    event.async_track_time_interval = lambda *_args, **_kwargs: None
     storage = types.ModuleType("homeassistant.helpers.storage")
     storage.Store = object
     helpers = types.ModuleType("homeassistant.helpers")
@@ -358,6 +359,30 @@ class AutomationBindingTests(unittest.TestCase):
 
         self.assertEqual(["FF:FF:92:81:46:32"], scheduled)
 
+    def test_camera_binding_ticks_are_scheduled_regardless_of_entity_state(self):
+        # camera.meteoradar's state never meaningfully changes between RainViewer
+        # frames, so a camera-bound display must refresh from the periodic tick
+        # (_handle_camera_tick), not from _handle_state_change.
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager._configs = {
+            "FF:FF:92:81:46:32": {
+                "bindings": [
+                    {"id": "radar", "type": "camera", "entity_id": "camera.meteoradar"},
+                ]
+            },
+            "AA:AA:11:22:33:44": {
+                "bindings": [{"id": "temp", "type": "text", "entity_id": "sensor.temperature"}]
+            },
+        }
+        scheduled = []
+        manager._schedule_refresh = scheduled.append
+
+        manager._handle_camera_tick(None)
+
+        self.assertEqual(["FF:FF:92:81:46:32"], scheduled)
+
     def test_custom_element_edit_does_not_schedule_display_in_manual_mode(self):
         manager = automation.EntityAutoUpdateManager.__new__(
             automation.EntityAutoUpdateManager
@@ -453,6 +478,56 @@ class AutomationBindingTests(unittest.TestCase):
         self.assertEqual("[18.0,19.0,21.5]", values["temperature"])
         self.assertIn('"__selection__":"on"', values["socket"])
         self.assertIn('"sensor.power":{"state":"48"', values["socket"])
+
+    def test_camera_binding_passes_its_selected_country_to_the_renderer(self):
+        # A camera binding without this would always render "cz" during an
+        # automatic refresh no matter which country the user picked in the
+        # template, since async_render_camera_binding_data_url defaults to it.
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+
+        async def executor(function, *args):
+            return function(*args)
+
+        manager.hass = types.SimpleNamespace(
+            states=_States({}), async_add_executor_job=executor
+        )
+        manager._chart_series = {}
+        captured = {}
+
+        async def fake_camera_render(_hass, entity_id, width, height, country="cz"):
+            captured["entity_id"] = entity_id
+            captured["country"] = country
+            return "data:image/png;base64,AA=="
+
+        original = automation.async_render_camera_binding_data_url
+        automation.async_render_camera_binding_data_url = fake_camera_render
+        try:
+            asyncio.run(
+                manager.async_render_preview(
+                    "FF:FF:92:81:46:32",
+                    {
+                        "base_image": "",
+                        "svg_template": "",
+                        "bindings": [
+                            {
+                                "id": "radar",
+                                "type": "camera",
+                                "entity_id": "camera.meteoradar",
+                                "width": 400,
+                                "height": 300,
+                                "country": "pl",
+                            }
+                        ],
+                    },
+                )
+            )
+        finally:
+            automation.async_render_camera_binding_data_url = original
+
+        self.assertEqual("camera.meteoradar", captured["entity_id"])
+        self.assertEqual("pl", captured["country"])
 
 
 class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):

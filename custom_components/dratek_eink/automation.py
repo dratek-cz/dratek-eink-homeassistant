@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from datetime import timedelta
 import io
 import json
 import re
@@ -9,7 +10,11 @@ import time
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.event import async_call_later, async_track_state_change_event
+from homeassistant.helpers.event import (
+    async_call_later,
+    async_track_state_change_event,
+    async_track_time_interval,
+)
 from homeassistant.helpers.storage import Store
 from PIL import Image, ImageChops
 
@@ -35,6 +40,13 @@ BATTERY_SAVER_THRESHOLD_PERCENT = 15
 BATTERY_SAVER_MIN_INTERVAL_SECONDS = 3600
 GATEWAY_ROUTE_SCAN_SECONDS = 3
 GATEWAY_ROUTE_CACHE_SECONDS = 5
+# A camera binding (the Meteoradar map) has no HA entity whose *state* changes
+# when a new frame appears - camera.meteoradar's state stays "idle" - so
+# _handle_state_change below never fires for it and it would otherwise never
+# auto-refresh. RainViewer's own data only moves on every ten minutes anyway
+# (see meteoradar.py), so a periodic tick at that same cadence is enough to
+# keep any display showing a camera-bound template current.
+CAMERA_BINDING_REFRESH_INTERVAL_SECONDS = 600
 
 
 
@@ -159,6 +171,7 @@ class EntityAutoUpdateManager:
         self._gateway_route_cache_at = 0.0
         self._gateway_route_lock = asyncio.Lock()
         self._initialized = False
+        self._camera_tick_unsubscribe = None
 
     async def async_initialize(self) -> None:
         if self._initialized:
@@ -172,6 +185,28 @@ class EntityAutoUpdateManager:
         }
         self._initialized = True
         self._refresh_listener()
+        if self._camera_tick_unsubscribe is None:
+            self._camera_tick_unsubscribe = async_track_time_interval(
+                self.hass,
+                self._handle_camera_tick,
+                timedelta(seconds=CAMERA_BINDING_REFRESH_INTERVAL_SECONDS),
+            )
+
+    def _camera_bound_addresses(self) -> list[str]:
+        """Addresses whose active design includes a camera binding (the Meteoradar map)."""
+        return [
+            address
+            for address, config in self._configs.items()
+            if any(
+                isinstance(binding, dict) and binding.get("type") == "camera"
+                for binding in config.get("bindings", [])
+            )
+        ]
+
+    @callback
+    def _handle_camera_tick(self, _now: Any) -> None:
+        for address in self._camera_bound_addresses():
+            self._schedule_refresh(address)
 
     @staticmethod
     def _refresh_interval(config: dict[str, Any]) -> int:
@@ -460,6 +495,7 @@ class EntityAutoUpdateManager:
                 str(binding.get("entity_id") or ""),
                 int(binding.get("width") or 0) or 400,
                 int(binding.get("height") or 0) or 300,
+                country=str(binding.get("country") or "cz"),
             )
             if data_url:
                 values[str(binding.get("id"))] = data_url
