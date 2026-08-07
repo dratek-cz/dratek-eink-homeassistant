@@ -1864,43 +1864,61 @@ export const devicesMixin = {
         : this._hasEntityDomain(item.domain);
       const documentationUrl = item.url || (item.core && !item.helper ? `https://www.home-assistant.io/integrations/${item.domain}/` : "");
       const link = documentationUrl
-        ? `<a href="${this._escape(documentationUrl)}" target="_blank" rel="noopener noreferrer">${this._escape(item.linkLabel || "Dokumentace")}</a>`
+        ? `<a href="${this._escape(documentationUrl)}" target="_blank" rel="noopener noreferrer" class="template-setup-doc-link"><ha-icon icon="mdi:open-in-new"></ha-icon>${this._escape(item.linkLabel || "Dokumentace")}</a>`
         : "";
       return `<li class="template-setup-integration ${found ? "is-found" : "is-missing"}">
-        <span class="template-setup-status"><ha-icon icon="mdi:${found ? "check-circle" : "alert-circle-outline"}"></ha-icon></span>
-        <div><strong>${this._escape(item.name)}</strong><small>${this._escape(item.why)}</small>
-          <span class="template-setup-meta">${found ? `Nalezeno v Home Assistantu (${this._escape(item.domain)}.*)` : `Zatím nenalezeno – chybí entity ${this._escape(item.domain)}.*`} ${link}</span>
+        <div class="template-setup-integration-head">
+          <span class="template-setup-status-badge ${found ? "is-found" : "is-missing"}">
+            <ha-icon icon="mdi:${found ? "check-circle" : "alert-circle-outline"}"></ha-icon>
+            ${found ? "Nalezeno" : "Chybí"}
+          </span>
+          <strong>${this._escape(item.name)}</strong>
+        </div>
+        <p class="template-setup-integration-why">${this._escape(item.why)}</p>
+        <div class="template-setup-meta">
+          <span>${found ? `Připraveno (${this._escape(item.domain)}.*)` : `Doporučeno (${this._escape(item.domain)}.*)`}</span>
+          ${link}
         </div>
       </li>`;
     }).join("");
-    return `<p class="template-setup-summary">${this._escape(recipe.summary)}</p>
-      ${integrations ? `<h3><ha-icon icon="mdi:puzzle-outline"></ha-icon>Co je potřeba v Home Assistantu</h3>
-      <ul class="template-setup-integrations">${integrations}</ul>` : ""}
-      <h3><ha-icon icon="mdi:format-list-numbered"></ha-icon>Postup</h3>
-      <ol class="template-setup-steps">${(recipe.steps || []).map((step) => `<li>${this._escape(step)}</li>`).join("")}</ol>
-      ${recipe.note ? `<p class="template-setup-note"><ha-icon icon="mdi:information-outline"></ha-icon>${this._escape(recipe.note)}</p>` : ""}`;
+
+    const steps = (recipe.steps || []).map((step, index) => `<li class="template-setup-step-tile"><span class="template-step-num">${index + 1}</span><span>${this._escape(step)}</span></li>`).join("");
+
+    return `<div class="template-guide-summary-card">
+        <ha-icon icon="mdi:lightbulb-outline"></ha-icon>
+        <p>${this._escape(recipe.summary)}</p>
+      </div>
+      ${integrations ? `<div class="template-guide-section">
+        <h4><ha-icon icon="mdi:puzzle-outline"></ha-icon> Co je potřeba v Home Assistantu</h4>
+        <ul class="template-setup-integrations">${integrations}</ul>
+      </div>` : ""}
+      <div class="template-guide-section">
+        <h4><ha-icon icon="mdi:format-list-numbered"></ha-icon> Postup zprovoznění</h4>
+        <ol class="template-setup-steps">${steps}</ol>
+      </div>
+      ${recipe.note ? `<div class="template-setup-note-card">
+        <ha-icon icon="mdi:information-outline"></ha-icon>
+        <span>${this._escape(recipe.note)}</span>
+      </div>` : ""}`;
   },
 
   _renderTemplateSettingsDialog(activeTemplate, selectedSize, largeDisplay) {
     if (!this._templateSettingsDialogOpen) return "";
-    const variablesOnly = this._templateSettingsDialogMode === "variables";
     const crop = this._templateVariableCropContext(activeTemplate);
-    const variableList = `<p class="template-settings-intro">Všechny zdroje dat použité v této šabloně. U každého můžete změnit napojenou entitu; systémové hodnoty doplňuje Home Assistant automaticky.</p><div class="template-variable-settings">${activeTemplate.variables.map((variable, index) => this._renderTemplateVariableSetting(activeTemplate, variable, index, crop)).join("")}</div>`;
-    return `<div class="template-settings-backdrop" data-template-settings-close><section class="card template-settings-dialog ${variablesOnly ? "is-guide-layout" : ""}" role="dialog" aria-modal="true" aria-label="${variablesOnly ? "Nastavení šablony" : "Nastavení šablony"}" data-template-settings-dialog>
-      <header><span><small>${variablesOnly ? "Jak zprovoznit a nastavit" : "Nastavení celé šablony"}</small><strong>${this._escape(activeTemplate.title)}</strong></span><button type="button" data-template-settings-close title="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button></header>
-      <div class="template-settings-dialog-content ${variablesOnly ? "template-settings-two-col" : ""}">
-        ${variablesOnly ? `<aside class="template-settings-guide">${this._renderTemplateSetupGuide(activeTemplate)}</aside><div class="template-settings-variables">${variableList}</div>` : `
-        <div class="template-layout-options template-size-options" style="display:none">
-          <button type="button" class="${selectedSize === "large" ? "is-active" : ""}" data-template-size="large" ${largeDisplay ? "" : "disabled"}><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon>Velká</button>
-          <button type="button" class="${selectedSize === "small" ? "is-active" : ""}" data-template-size="small" ${largeDisplay ? "" : "disabled"}><ha-icon icon="mdi:arrow-collapse-all"></ha-icon>Malá</button>
-        </div>
-        ${this._renderTemplatePartControls(activeTemplate)}
-        <button type="button" class="secondary template-setup-open" data-display-template-setup="${this._escape(activeTemplate.id)}"><ha-icon icon="mdi:help-circle-outline"></ha-icon>Jak zprovoznit tuto šablonu</button>
-        ${this._renderTemplateOptionSettings(activeTemplate)}
-        ${variableList}`}
+    const variableList = `<div class="template-variables-header">
+      <h4><ha-icon icon="mdi:tune-vertical"></ha-icon> Napojení proměnných</h4>
+      <p class="template-settings-intro">U každé položky vyberte entitu v Home Assistantu. Systémové údaje (čas, datum) se doplňují automaticky.</p>
+    </div>
+    <div class="template-variable-settings">${activeTemplate.variables.map((variable, index) => this._renderTemplateVariableSetting(activeTemplate, variable, index, crop)).join("")}</div>`;
+    return `<div class="template-settings-backdrop" data-template-settings-close><section class="card template-settings-dialog is-guide-layout" role="dialog" aria-modal="true" aria-label="Nastavení šablony" data-template-settings-dialog>
+      <header><span><small>Jak zprovoznit a nastavit šablonu</small><strong>${this._escape(activeTemplate.title)}</strong></span><button type="button" data-template-settings-close title="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button></header>
+      <div class="template-settings-dialog-content template-settings-two-col">
+        <aside class="template-settings-guide">${this._renderTemplateSetupGuide(activeTemplate)}</aside>
+        <div class="template-settings-variables">${variableList}</div>
       </div>
     </section></div>`;
   },
+
 
   _renderStudioActions() {
     return `<div class="studio-pro-detached-actions" aria-label="Akce návrhu">

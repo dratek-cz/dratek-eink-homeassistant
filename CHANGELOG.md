@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.211] - 2026-08-07
+
+### Předesignováno – Dvousloupcové grafické menu nastavení šablony
+- `panel-devices.mixin.js`: Sjednocení dialogu nastavení šablony a návodu k zprovoznění do přehledného 2-sloupcového grafického rozvržení.
+- Vlevo: Grafický návod krok za krokem s indikátory nalezených/chybějících integrací a odkazů na dokumentaci.
+- Vpravo: Přehledné napojení proměnných na entity Home Assistantu.
+- `panel-render-ui.mixin.js`: Přidán moderní CSS design s glassmorphism pozadím, novými kartami integrací a stavovými odznaky.
+
 ## [0.1.210] - 2026-08-07
 
 ### Opraveno – Bluetooth konektivita po opakovaných zápisech a automatické retry

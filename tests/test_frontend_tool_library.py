@@ -450,9 +450,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('selectedItem.classList.remove("is-selected")', self.source)
         self.assertIn("--template-item-x", self.source)
         self.assertNotIn('data-template-layout="side-by-side"', self.source)
-        self.assertNotIn('data-template-layout="stacked"', self.source)
-        self.assertIn('data-template-size="large"', self.source)
-        self.assertIn('data-template-size="small"', self.source)
+        self.assertIn('class="template-responsive-preview"', self.source)
+
         self.assertIn('data-template-placement="${value}"', self.source)
         self.assertIn('["full", "Přes celý displej"', self.source)
         self.assertIn('["left", "Vlevo"', self.source)
@@ -1137,10 +1136,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('class="template-variable-preview ${meta.automatic ? "is-automatic" : ""}"', self.source)
         self.assertIn('const sample = this._templateSampleValue(meta.label);', self.source)
         self.assertIn('this._templateSettingsDialogTemplateId = templateId;', self.source)
-        self.assertIn('this._displaySettingsView = "templates";', self.source)
-        self.assertIn('settingsTemplate && this._templateSettingsDialogMode === "variables"', self.source)
-        self.assertIn('const variablesOnly = this._templateSettingsDialogMode === "variables";', self.source)
-        self.assertIn('aria-label="${variablesOnly ?', self.source)
+        self.assertIn('class="template-settings-dialog-content template-settings-two-col"', self.source)
+        self.assertIn('class="template-settings-guide"', self.source)
+        self.assertIn('class="template-settings-variables"', self.source)
+
         self.assertIn('@media(max-width:800px){.studio-pro-top-row{position:relative;top:auto', self.source)
 
     def test_template_image_import_uses_the_original_colour_classifier(self):
