@@ -1902,8 +1902,29 @@ export const devicesMixin = {
       </div>` : ""}`;
   },
 
+  _toggleModalScrollLock(active) {
+    try {
+      const lock = !!active;
+      if (typeof document !== "undefined" && document.body) {
+        document.body.classList.toggle("has-dratek-modal-open", lock);
+        if (lock) {
+          document.body.style.overflow = "hidden";
+        } else {
+          document.body.style.overflow = "";
+        }
+      }
+      if (this && this.classList) {
+        this.classList.toggle("has-dratek-modal-open", lock);
+      }
+    } catch (_err) {}
+  },
+
   _renderTemplateSettingsDialog(activeTemplate, selectedSize, largeDisplay) {
-    if (!this._templateSettingsDialogOpen) return "";
+    if (!this._templateSettingsDialogOpen) {
+      this._toggleModalScrollLock(false);
+      return "";
+    }
+    this._toggleModalScrollLock(true);
     const crop = this._templateVariableCropContext(activeTemplate);
     const variableList = `<div class="template-variables-header">
       <h4><ha-icon icon="mdi:tune-vertical"></ha-icon> Napojení proměnných</h4>

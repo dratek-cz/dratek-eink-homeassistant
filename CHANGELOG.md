@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.213] - 2026-08-07
+
+### Přidáno – Zamknutí scrollování na pozadí při otevřeném dialogu nastavení
+- `panel-devices.mixin.js`: Přidána metoda `_toggleModalScrollLock(active)`, která při otevření nastavení zamkne scrollování na `document.body` a na panelových kontejnerech a po zavření nastavení scrollování pozadí automaticky odemkne.
+- `panel-render-ui.mixin.js`: Přidáno pravidlo `overscroll-behavior: contain` na backdrop dialogu, aby se scrollování uvnitř dialogu nepřenášelo na hlavní stránku šablon.
+
 ## [0.1.212] - 2026-08-07
 
 ### Opraveno – Přetékání a překrývání karet integrací v návodu k zprovoznění
