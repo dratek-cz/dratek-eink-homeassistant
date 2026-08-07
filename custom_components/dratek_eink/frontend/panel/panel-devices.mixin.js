@@ -1866,23 +1866,23 @@ export const devicesMixin = {
       const link = documentationUrl
         ? `<a href="${this._escape(documentationUrl)}" target="_blank" rel="noopener noreferrer" class="template-setup-doc-link"><ha-icon icon="mdi:open-in-new"></ha-icon>${this._escape(item.linkLabel || "Dokumentace")}</a>`
         : "";
-      return `<li class="template-setup-integration ${found ? "is-found" : "is-missing"}">
-        <div class="template-setup-integration-head">
+      return `<li class="template-guide-integration-card ${found ? "is-found" : "is-missing"}">
+        <div class="template-guide-integration-top">
+          <strong>${this._escape(item.name)}</strong>
           <span class="template-setup-status-badge ${found ? "is-found" : "is-missing"}">
             <ha-icon icon="mdi:${found ? "check-circle" : "alert-circle-outline"}"></ha-icon>
             ${found ? "Nalezeno" : "Chybí"}
           </span>
-          <strong>${this._escape(item.name)}</strong>
         </div>
-        <p class="template-setup-integration-why">${this._escape(item.why)}</p>
-        <div class="template-setup-meta">
+        <p class="template-guide-integration-why">${this._escape(item.why)}</p>
+        <div class="template-guide-integration-footer">
           <span>${found ? `Připraveno (${this._escape(item.domain)}.*)` : `Doporučeno (${this._escape(item.domain)}.*)`}</span>
           ${link}
         </div>
       </li>`;
     }).join("");
 
-    const steps = (recipe.steps || []).map((step, index) => `<li class="template-setup-step-tile"><span class="template-step-num">${index + 1}</span><span>${this._escape(step)}</span></li>`).join("");
+    const steps = (recipe.steps || []).map((step, index) => `<li class="template-guide-step-card"><span class="template-step-num">${index + 1}</span><span class="template-step-text">${this._escape(step)}</span></li>`).join("");
 
     return `<div class="template-guide-summary-card">
         <ha-icon icon="mdi:lightbulb-outline"></ha-icon>
@@ -1890,11 +1890,11 @@ export const devicesMixin = {
       </div>
       ${integrations ? `<div class="template-guide-section">
         <h4><ha-icon icon="mdi:puzzle-outline"></ha-icon> Co je potřeba v Home Assistantu</h4>
-        <ul class="template-setup-integrations">${integrations}</ul>
+        <ul class="template-guide-integrations-list">${integrations}</ul>
       </div>` : ""}
       <div class="template-guide-section">
         <h4><ha-icon icon="mdi:format-list-numbered"></ha-icon> Postup zprovoznění</h4>
-        <ol class="template-setup-steps">${steps}</ol>
+        <ul class="template-guide-steps-list">${steps}</ul>
       </div>
       ${recipe.note ? `<div class="template-setup-note-card">
         <ha-icon icon="mdi:information-outline"></ha-icon>

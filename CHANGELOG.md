@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.212] - 2026-08-07
+
+### Opraveno – Přetékání a překrývání karet integrací v návodu k zprovoznění
+- `panel-devices.mixin.js`: Nahrazeny kolidující CSS třídy v návodu novými izolovanými třídami (`template-guide-integration-card`, `template-guide-integration-top`, `template-guide-steps-list`, `template-guide-step-card`).
+- `panel-render-ui.mixin.js`: Přidán čistý flexbox layout pro karty integrací a kroků, čímž se eliminovalo překrývání odznaků a textů v levém panelu.
+
 ## [0.1.211] - 2026-08-07
 
 ### Předesignováno – Dvousloupcové grafické menu nastavení šablony
