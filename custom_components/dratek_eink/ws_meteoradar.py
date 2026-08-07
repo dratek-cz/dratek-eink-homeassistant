@@ -15,6 +15,8 @@ from typing import Any
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
 
+import voluptuous as vol
+
 from .render import async_render_camera_binding_data_url
 
 # Matches DratekMeteoradarCamera's suggested object id (camera.py): the panel
@@ -28,7 +30,7 @@ METEORADAR_CAMERA_ENTITY_ID = "camera.meteoradar"
         "type": "dratek_eink/render_meteoradar",
         "width": int,
         "height": int,
-        websocket_api.Optional("country"): str,
+        vol.Optional("country"): str,
     }
 )
 @websocket_api.async_response

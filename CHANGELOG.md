@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.215] - 2026-08-07
+
+### Opraveno – Oprava chyby voluptuous schématu ve websocket_api
+- `ws_meteoradar.py`: Opraven import `voluptuous as vol` a nahrazen neexistující atribut `websocket_api.Optional` za správný `vol.Optional("country")`, čímž se zamezilo chybě `AttributeError` při spuštění integrace v Home Assistantu.
+
 ## [0.1.214] - 2026-08-07
 
 ### Přidáno – Výběr státu meteoradaru s přesnými geografickými hranicemi & Odznaky stavu šablon
