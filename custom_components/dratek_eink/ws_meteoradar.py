@@ -28,6 +28,7 @@ METEORADAR_CAMERA_ENTITY_ID = "camera.meteoradar"
         "type": "dratek_eink/render_meteoradar",
         "width": int,
         "height": int,
+        websocket_api.Optional("country"): str,
     }
 )
 @websocket_api.async_response
@@ -36,9 +37,10 @@ async def websocket_render_meteoradar(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Return the current Czech Republic precipitation map, fit to the requested size."""
+    """Return the current precipitation map for the requested country, fit to size."""
+    country = str(msg.get("country") or "cz").lower()
     data_url = await async_render_camera_binding_data_url(
-        hass, METEORADAR_CAMERA_ENTITY_ID, msg["width"], msg["height"]
+        hass, METEORADAR_CAMERA_ENTITY_ID, msg["width"], msg["height"], country=country
     )
     if data_url is None:
         connection.send_error(msg["id"], "meteoradar_unavailable", "Radarová mapa není momentálně dostupná.")

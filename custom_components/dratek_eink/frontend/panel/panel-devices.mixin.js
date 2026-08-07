@@ -427,6 +427,9 @@ export const devicesMixin = {
       const assignedTemplates = this._assignedDisplayTemplates(device);
       const cardPreview = this._renderDevicePreview(device, mode === "list" ? "mini" : mode);
 
+      const deviceDraft = this._deviceDrafts?.[String(device.address || "").toUpperCase()] || {};
+      const deviceInterval = Number(deviceDraft.refresh_interval_seconds || 60);
+
       return `<article class="display-tile ${temporarilyUnseen ? "is-stale" : ""} ${writingJob ? "is-writing" : ""} ${recentlySucceededJob ? "is-uploaded" : ""}" data-device-card-settings="${this._escape(device.address)}" role="button" tabindex="0" aria-label="Upravit displej ${this._escape(this._deviceTitle(device))}">
         <header class="display-tile-header">
           <span class="display-online-dot ${temporarilyUnseen ? "stale" : ""}" title="${temporarilyUnseen ? "Displej nebyl zachycen v posledním krátkém skenu" : "Displej je dostupný"}"></span>
@@ -444,6 +447,9 @@ export const devicesMixin = {
         <div class="display-health">
           <div class="display-health-item display-battery-item" title="Baterie${Number.isFinite(battery.percent) ? ` ${battery.percent} %` : ""}${Number.isFinite(battery.voltage) ? ` · ${this._formatBatteryVoltage(battery.voltage)}` : ""}">${this._renderBatterySegments(battery.percent)}<strong class="health-value battery-value level-${this._batteryLevel(battery.percent)}">${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></div>
           <div class="display-health-item display-signal-item" title="Síla signálu${Number.isFinite(rssi) ? ` ${rssi} dBm` : ""}">${this._renderSignalBars(rssi)}<strong class="health-value signal-value level-${this._signalLevel(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>
+          <div class="display-health-item display-interval-item" title="Interval automatické obnovy obsahu na displeji">
+            ${this._renderRefreshIntervalSelect(device.address, deviceInterval, "in-tile")}
+          </div>
           <div class="display-health-item display-health-route ${temporarilyUnseen ? "stale" : ""}">
             <span class="health-route-icons"><ha-icon class="health-icon" icon="${temporarilyUnseen ? "mdi:bluetooth-off" : preferredPath?.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon>${!temporarilyUnseen && preferredPath?.type !== "local" ? `<ha-icon class="health-icon health-icon-sub" icon="mdi:bluetooth" title="Displej je za gatewayí připojen přes BLE"></ha-icon>` : ""}</span>
             <span class="health-route-text"><small>Připojeno</small><strong>${temporarilyUnseen ? "Čekám na signál" : this._escape(preferredPath?.name || "Nedostupné")}</strong></span>
@@ -1298,6 +1304,7 @@ export const devicesMixin = {
               <span class="display-health-item display-signal-item" title="Síla signálu${Number.isFinite(rssi) ? ` ${rssi} dBm` : ""}">${this._renderSignalBars(rssi)}<strong class="health-value signal-value level-${this._signalLevel(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></span>
             </div>
 
+            ${this._renderRefreshIntervalSelect(device.address, this._refreshIntervalSeconds, "in-header")}
             <span class="pill muted display-template-device-info-resolution">${size.width} × ${size.height} px</span>
           </div>
           <div class="display-template-dropzone ${assignedTemplates.length ? "has-template" : ""}" data-display-template-dropzone tabindex="0" aria-label="Přetáhněte sem šablonu">
@@ -1373,7 +1380,7 @@ export const devicesMixin = {
               </div>
               <div class="display-template-tile-meta">
                 ${userCreated ? `<span class="user-template-created-note"><ha-icon icon="mdi:palette-outline"></ha-icon>Vytvořeno v eInk Studiu</span>` : `<div class="display-template-meta-row">
-                  ${configStatus.total > 0 ? `<button type="button" class="display-template-config-status is-${configStatus.state}" data-display-template-configure="${this._escape(template.id)}" title="${configStatus.state === "complete" ? "Všechny zdroje dat jsou napojené na entity Home Assistantu. Kliknutím upravíte." : configStatus.state === "partial" ? `Napojeno ${configStatus.done} z ${configStatus.total} zdrojů dat. Kliknutím dokončíte.` : "Zdroje dat ještě nejsou napojené. Kliknutím je nastavíte."}"><ha-icon icon="mdi:${configStatus.state === "complete" ? "check-circle" : configStatus.state === "partial" ? "alert-circle" : "circle-off-outline"}"></ha-icon>${configStatus.state === "complete" ? "Nastaveno" : configStatus.state === "partial" ? `${configStatus.done}/${configStatus.total}` : "Nenastaveno"}</button>` : ""}
+                  <button type="button" class="display-template-config-status is-${configStatus.state}" data-display-template-configure="${this._escape(template.id)}" title="${configStatus.state === "complete" ? "Všechny zdroje dat jsou napojené na entity Home Assistantu. Kliknutím upravíte." : configStatus.state === "partial" ? `Napojeno ${configStatus.done} z ${configStatus.total} zdrojů dat. Kliknutím dokončíte.` : "Zdroje dat ještě nejsou napojené. Kliknutím je nastavíte."}"><ha-icon icon="mdi:${configStatus.state === "complete" ? "check-circle" : configStatus.state === "partial" ? "alert-circle" : "circle-off-outline"}"></ha-icon>${configStatus.state === "complete" ? "Nastaveno" : configStatus.state === "partial" ? `${configStatus.done}/${configStatus.total}` : "Nenastaveno"}</button>
                   <span class="display-template-variables-row" aria-label="Použité údaje">${(template.variables.length > 5 ? template.variables.slice(0, 4) : template.variables).map(([iconName, label]) => `<span class="display-template-variable-icon" title="${this._escape(label)}"><ha-icon icon="mdi:${iconName}"></ha-icon></span>`).join("")}${template.variables.length > 5 ? `<span class="display-template-variable-overflow" tabindex="0" aria-label="Další údaje: ${this._escape(template.variables.map(([, label]) => label).join(", "))}">
                     <span class="display-template-variable-overflow-badge">+${template.variables.length}</span>
                     <span class="display-template-variable-overflow-menu" role="tooltip">
@@ -1535,6 +1542,7 @@ export const devicesMixin = {
       placements: structuredClone(this._templateCanvasPlacements || {}),
       image_library: structuredClone(this._templateImageLibrary || []),
       designer_viewport: this._templateDesignerViewport || "wide",
+      meteoradar_country: this._meteoradarCountry || "cz",
     };
   },
 
@@ -1542,6 +1550,7 @@ export const devicesMixin = {
     this._templateUndoStack = [];
     this._templateRedoStack = [];
     this._templatePropertyHistoryKey = "";
+    this._meteoradarCountry = config?.meteoradar_country || "cz";
     const address = String(this._selectedDeviceAddress || "").toUpperCase();
     if (!config || typeof config !== "object") {
       if (address) {
@@ -1850,8 +1859,77 @@ export const devicesMixin = {
 
   // The setup guide's own content, reused both inside the merged dialog and
   // (unchanged) nowhere else now that the two dialogs are one.
+  _renderInteractiveCountryMap(selectedCountry = "cz", address = "") {
+    const active = String(selectedCountry || "cz").toLowerCase();
+    const countries = [
+      { id: "cz", name: "Česká republika", flag: "🇨🇿" },
+      { id: "sk", name: "Slovensko", flag: "🇸🇰" },
+      { id: "de", name: "Německo", flag: "🇩🇪" },
+      { id: "at", name: "Rakousko", flag: "🇦🇹" },
+      { id: "pl", name: "Polsko", flag: "🇵🇱" },
+      { id: "eu", name: "Střední Evropa", flag: "🇪🇺" },
+    ];
+    const activeCountryObj = countries.find((c) => c.id === active) || countries[0];
+
+    return `<div class="interactive-country-map-widget">
+      <div class="country-map-header">
+        <ha-icon icon="mdi:map-legend"></ha-icon>
+        <strong>Výběr státu srážkové radarové mapy</strong>
+        <span class="active-country-pill">${activeCountryObj.flag} ${this._escape(activeCountryObj.name)}</span>
+      </div>
+      <div class="country-map-svg-wrap">
+        <svg class="country-map-svg" viewBox="0 0 600 450" preserveAspectRatio="xMidYMid meet" aria-label="Interaktivní mapa Střední Evropy pro výběr státu">
+          <defs>
+            <filter id="mapGlow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+          </defs>
+
+          <!-- NĚMECKO (DE) -->
+          <g class="map-country-group ${active === "de" ? "is-active" : ""}" data-meteoradar-country="de" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Německo">
+            <path d="M 294.6 206.4 L 289.0 203.4 L 284.5 197.8 L 277.1 198.0 L 270.9 209.4 L 254.3 214.3 L 237.8 224.5 L 231.1 227.0 L 221.4 230.1 L 216.6 237.9 L 211.6 236.4 L 208.6 233.9 L 211.6 244.5 L 220.0 250.4 L 223.8 273.1 L 230.1 282.7 L 242.2 291.3 L 250.3 301.4 L 262.5 311.3 L 262.1 320.0 L 252.6 325.0 L 236.8 340.0 L 230.5 355.0 L 236.8 375.0 L 221.1 375.0 L 189.5 375.0 L 157.9 375.0 L 129.5 375.0 L 66.3 375.0 L 72.6 320.0 L 78.9 275.0 L 18.9 215.0 L 15.8 160.0 L 50.5 85.0 L 78.9 60.0 L 97.9 5.0 L 138.9 10.0 L 173.7 25.0 L 236.8 25.0 L 274.7 55.0 L 281.1 85.0 L 287.4 125.0 L 290.5 160.0 L 300.0 192.5 L 294.6 206.4 Z" class="map-country-shape" />
+            <text x="145" y="195" class="map-country-label">DE 🇩🇪</text>
+          </g>
+
+          <!-- POLSKO (PL) -->
+          <g class="map-country-group ${active === "pl" ? "is-active" : ""}" data-meteoradar-country="pl" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Polsko">
+            <path d="M 294.6 206.4 L 301.9 198.9 L 313.9 209.5 L 325.8 212.2 L 339.0 216.4 L 345.6 221.0 L 358.8 240.1 L 369.6 230.7 L 387.1 239.7 L 392.2 251.1 L 401.3 250.1 L 412.8 253.9 L 421.6 274.1 L 426.3 272.5 L 438.9 271.0 L 451.6 287.5 L 464.2 279.0 L 480.0 280.0 L 502.1 279.0 L 517.9 277.5 L 538.7 296.0 L 543.2 265.0 L 571.6 175.0 L 577.9 115.0 L 568.4 50.0 L 546.3 35.0 L 445.3 30.0 L 426.3 30.0 L 410.5 15.0 L 378.9 10.0 L 331.6 25.0 L 287.4 50.0 L 274.7 55.0 L 281.1 85.0 L 287.4 125.0 L 290.5 160.0 L 300.0 192.5 L 294.6 206.4 Z" class="map-country-shape" />
+            <text x="420" y="160" class="map-country-label">PL 🇵🇱</text>
+          </g>
+
+          <!-- ČESKÁ REPUBLIKA (CZ) -->
+          <g class="map-country-group ${active === "cz" ? "is-active" : ""}" data-meteoradar-country="cz" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Českou republiku">
+            <path d="M 358.8 240.1 L 357.2 240.4 L 353.9 245.2 L 351.6 244.4 L 349.3 241.8 L 348.9 238.5 L 345.2 233.8 L 343.7 233.6 L 343.0 231.0 L 340.4 231.6 L 338.2 229.4 L 338.1 227.6 L 341.4 224.7 L 343.0 224.9 L 345.6 221.0 L 342.4 216.9 L 339.0 216.4 L 337.4 218.6 L 334.9 216.8 L 332.4 220.1 L 331.1 219.3 L 332.3 218.5 L 331.3 215.8 L 327.2 216.3 L 325.8 212.2 L 322.3 213.1 L 313.9 209.5 L 311.8 211.1 L 311.6 208.1 L 308.8 205.5 L 308.7 201.0 L 305.7 200.9 L 305.4 199.0 L 304.1 200.5 L 301.9 198.9 L 299.5 199.5 L 299.0 200.5 L 300.7 201.6 L 299.7 203.9 L 300.1 206.6 L 294.6 206.4 L 293.6 209.0 L 291.2 208.9 L 288.0 207.1 L 289.0 203.4 L 286.2 204.1 L 287.3 200.6 L 284.2 198.9 L 284.5 197.8 L 281.3 199.1 L 278.4 197.2 L 277.1 198.0 L 276.6 200.6 L 278.6 200.7 L 278.3 202.3 L 281.0 203.2 L 280.7 205.0 L 276.9 205.2 L 270.9 209.4 L 265.3 210.3 L 265.2 212.7 L 263.8 213.7 L 254.3 214.3 L 253.4 214.8 L 253.4 218.0 L 251.5 219.9 L 248.6 217.5 L 247.0 220.9 L 244.7 220.4 L 243.0 224.8 L 237.8 224.5 L 237.5 227.7 L 235.2 229.8 L 231.1 227.0 L 230.9 228.5 L 228.5 228.4 L 227.6 230.1 L 221.4 230.1 L 220.7 232.5 L 217.8 233.9 L 216.6 237.9 L 215.7 237.9 L 215.8 241.4 L 214.4 241.2 L 214.5 239.0 L 212.8 237.7 L 213.7 237.5 L 213.3 236.4 L 211.6 236.4 L 211.1 233.9 L 208.6 233.9 L 209.7 236.1 L 208.1 237.4 L 211.5 240.1 L 211.6 244.5 L 214.0 246.2 L 213.5 247.1 L 220.0 250.4 L 221.0 251.4 L 220.3 253.1 L 222.6 254.0 L 220.2 258.3 L 220.2 260.7 L 217.9 262.3 L 219.2 264.8 L 221.7 265.7 L 221.9 269.1 L 223.0 269.0 L 223.8 273.1 L 225.6 273.8 L 226.0 278.3 L 229.2 280.3 L 230.1 282.7 L 235.1 282.8 L 237.8 284.8 L 237.9 286.8 L 242.2 291.3 L 242.6 293.3 L 246.0 294.1 L 249.4 297.5 L 250.3 301.4 L 252.6 302.9 L 252.9 301.5 L 255.2 301.5 L 258.0 306.0 L 260.1 305.7 L 262.5 311.3 L 270.3 316.3 L 268.8 318.0 L 270.5 320.3 L 278.9 322.4 L 282.0 320.5 L 283.3 317.6 L 284.3 319.1 L 287.7 318.6 L 289.4 320.9 L 290.7 320.7 L 291.4 315.6 L 293.9 313.3 L 294.0 311.1 L 299.4 311.4 L 298.5 310.5 L 299.8 304.8 L 299.2 301.5 L 300.6 299.0 L 304.9 300.3 L 305.1 302.9 L 308.3 302.3 L 308.8 300.3 L 314.8 302.4 L 321.8 307.2 L 326.6 306.1 L 334.8 312.7 L 343.5 313.6 L 346.1 309.6 L 348.7 309.3 L 352.5 311.0 L 353.1 313.6 L 360.1 314.1 L 361.3 319.2 L 364.5 311.8 L 369.5 306.1 L 374.6 309.3 L 377.5 307.7 L 379.8 309.4 L 385.4 307.0 L 387.8 303.7 L 391.1 303.6 L 392.3 299.0 L 396.5 298.6 L 397.8 297.0 L 399.4 287.6 L 400.5 285.7 L 406.7 283.5 L 407.9 281.6 L 407.5 280.2 L 409.8 279.6 L 412.2 274.8 L 418.6 275.6 L 421.6 274.1 L 420.2 266.2 L 414.5 263.9 L 412.7 258.5 L 413.9 256.9 L 412.7 256.3 L 412.8 253.9 L 411.3 255.0 L 405.3 252.5 L 405.8 253.5 L 404.8 254.2 L 401.3 250.1 L 398.4 250.3 L 395.8 246.7 L 394.9 248.0 L 396.1 248.2 L 396.2 249.7 L 394.9 249.1 L 392.2 251.1 L 387.7 249.0 L 386.2 245.1 L 383.7 244.5 L 381.9 242.0 L 387.1 239.7 L 387.3 238.2 L 386.1 237.2 L 386.9 235.0 L 385.7 233.9 L 382.5 236.7 L 374.2 236.8 L 374.2 233.6 L 372.1 234.0 L 369.6 230.7 L 360.2 227.5 L 358.7 229.6 L 360.3 230.5 L 361.5 324.2 L 363.2 234.9 L 364.1 238.5 L 363.1 239.2 L 362.4 237.8 L 358.8 240.1 Z" class="map-country-shape" />
+            <text x="315" y="260" class="map-country-label">CZ 🇨🇿</text>
+          </g>
+
+          <!-- SLOVENSKO (SK) -->
+          <g class="map-country-group ${active === "sk" ? "is-active" : ""}" data-meteoradar-country="sk" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Slovensko">
+            <path d="M 421.6 274.1 L 426.3 272.5 L 438.9 271.0 L 451.6 287.5 L 464.2 279.0 L 480.0 280.0 L 502.1 279.0 L 517.9 277.5 L 538.7 296.0 L 525.5 328.0 L 510.0 331.0 L 478.4 324.0 L 470.5 326.0 L 451.6 342.0 L 426.3 347.0 L 416.8 361.0 L 399.5 362.5 L 378.9 356.0 L 368.2 349.0 L 363.2 342.5 L 361.3 319.2 L 364.5 311.8 L 369.5 306.1 L 377.5 307.7 L 387.8 303.7 L 396.5 298.6 L 399.4 287.6 L 407.9 281.6 L 412.2 274.8 L 418.6 275.6 L 421.6 274.1 Z" class="map-country-shape" />
+            <text x="445" y="315" class="map-country-label">SK 🇸🇰</text>
+          </g>
+
+          <!-- RAKOUSKO (AT) -->
+          <g class="map-country-group ${active === "at" ? "is-active" : ""}" data-meteoradar-country="at" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Rakousko">
+            <path d="M 262.5 311.3 L 270.3 316.3 L 278.9 322.4 L 287.7 318.6 L 293.9 313.3 L 299.8 304.8 L 304.9 300.3 L 314.8 302.4 L 326.6 306.1 L 343.5 313.6 L 352.5 311.0 L 361.3 319.2 L 363.2 342.5 L 366.3 355.0 L 353.7 365.0 L 347.4 380.0 L 344.2 405.0 L 334.7 407.5 L 300.0 420.0 L 274.7 425.0 L 258.9 425.0 L 221.1 415.0 L 205.3 400.0 L 189.5 400.0 L 157.9 405.0 L 126.3 395.0 L 129.5 375.0 L 157.9 375.0 L 189.5 375.0 L 221.1 375.0 L 236.8 375.0 L 230.5 355.0 L 236.8 340.0 L 252.6 325.0 L 262.5 311.3 Z" class="map-country-shape" />
+            <text x="240" y="375" class="map-country-label">AT 🇦🇹</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="country-buttons-row">
+        ${countries.map((c) => `<button type="button" class="country-pick-btn ${active === c.id ? "is-active" : ""}" data-meteoradar-country="${c.id}" data-device-address="${this._escape(address)}">
+          <span class="country-flag">${c.flag}</span>
+          <span class="country-name">${this._escape(c.name)}</span>
+        </button>`).join("")}
+      </div>
+    </div>`;
+  },
+
   _renderTemplateSetupGuide(template) {
     const recipe = this._templateSetupRecipe(template);
+
     const integrations = (recipe.integrations || []).map((item) => {
       const states = this._hass?.states || {};
       const normalize = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -1902,6 +1980,29 @@ export const devicesMixin = {
       </div>` : ""}`;
   },
 
+  _renderRefreshIntervalSelect(address, currentSeconds, extraClass = "") {
+    const seconds = Math.max(30, Math.min(86400, Number(currentSeconds) || 60));
+    const presets = [
+      { value: 30, label: "30 s" },
+      { value: 60, label: "1 min" },
+      { value: 300, label: "5 min" },
+      { value: 600, label: "10 min" },
+      { value: 900, label: "15 min" },
+      { value: 1800, label: "30 min" },
+      { value: 3600, label: "1 hod" },
+      { value: 7200, label: "2 hod" },
+      { value: 21600, label: "6 hod" },
+      { value: 43200, label: "12 hod" },
+      { value: 86400, label: "24 hod" },
+    ];
+    return `<div class="display-interval-control ${extraClass}" title="Interval automatického nahrávání a obnovy displeje">
+      <ha-icon icon="mdi:timer-refresh-outline"></ha-icon>
+      <select class="display-refresh-interval-select" data-device-refresh-interval="${this._escape(address || '')}" aria-label="Interval automatické obnovy">
+        ${presets.map((p) => `<option value="${p.value}" ${seconds === p.value ? "selected" : ""}>${p.label}</option>`).join("")}
+      </select>
+    </div>`;
+  },
+
   _toggleModalScrollLock(active) {
     try {
       const lock = !!active;
@@ -1925,11 +2026,23 @@ export const devicesMixin = {
       return "";
     }
     this._toggleModalScrollLock(true);
+    const isRadarTemplate = activeTemplate?.id === "radar" || activeTemplate?.category === "radar" || String(activeTemplate?.id || "").includes("radar");
+    const selectedCountry = this._meteoradarCountry || this._displayTemplateConfig?.meteoradar_country || "cz";
+    const mapWidget = isRadarTemplate ? this._renderInteractiveCountryMap(selectedCountry, this._selectedDeviceAddress) : "";
+
     const crop = this._templateVariableCropContext(activeTemplate);
     const variableList = `<div class="template-variables-header">
+      <div class="template-guide-interval-box">
+        <div class="template-guide-interval-title">
+          <ha-icon icon="mdi:timer-refresh-outline"></ha-icon>
+          <span>Interval automatické obnovy displeje:</span>
+        </div>
+        ${this._renderRefreshIntervalSelect(this._selectedDeviceAddress, this._refreshIntervalSeconds, "in-dialog")}
+      </div>
       <h4><ha-icon icon="mdi:tune-vertical"></ha-icon> Napojení proměnných</h4>
       <p class="template-settings-intro">U každé položky vyberte entitu v Home Assistantu. Systémové údaje (čas, datum) se doplňují automaticky.</p>
     </div>
+    ${mapWidget}
     <div class="template-variable-settings">${activeTemplate.variables.map((variable, index) => this._renderTemplateVariableSetting(activeTemplate, variable, index, crop)).join("")}</div>`;
     return `<div class="template-settings-backdrop" data-template-settings-close><section class="card template-settings-dialog is-guide-layout" role="dialog" aria-modal="true" aria-label="Nastavení šablony" data-template-settings-dialog>
       <header><span><small>Jak zprovoznit a nastavit šablonu</small><strong>${this._escape(activeTemplate.title)}</strong></span><button type="button" data-template-settings-close title="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button></header>

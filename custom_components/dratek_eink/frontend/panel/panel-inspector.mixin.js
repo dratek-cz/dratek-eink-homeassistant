@@ -1351,9 +1351,44 @@ export const inspectorMixin = {
     this.shadowRoot.querySelector("#sendDesign")?.addEventListener("click", () => this._sendDesign());
     this.shadowRoot.querySelector("#sendPartialDesign")?.addEventListener("click", () => this._sendPartialDesign());
     this.shadowRoot.querySelector("#sendGatewayDesign")?.addEventListener("click", () => this._sendDesignViaGateway());
-    this.shadowRoot.querySelector("#refreshInterval")?.addEventListener("change", (event) => {
-      this._refreshIntervalSeconds = Math.max(30, Math.min(86400, Number(event.target.value) || 60));
-      this._scheduleDraftSave();
+    this.shadowRoot.querySelectorAll("[data-device-refresh-interval], #refreshInterval").forEach((select) => {
+      select.addEventListener("change", (event) => {
+        event.stopPropagation();
+        const address = select.dataset.deviceRefreshInterval || this._selectedDeviceAddress;
+        const seconds = Math.max(30, Math.min(86400, Number(event.target.value) || 60));
+        this._refreshIntervalSeconds = seconds;
+        const upperAddr = String(address || "").toUpperCase();
+        if (upperAddr) {
+          if (!this._deviceDrafts) this._deviceDrafts = {};
+          const draft = this._deviceDrafts[upperAddr] || {};
+          draft.refresh_interval_seconds = seconds;
+          this._deviceDrafts[upperAddr] = draft;
+        }
+        this._scheduleDraftSave();
+        this._render();
+        this._paint();
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-meteoradar-country]").forEach((element) => {
+      element.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const country = element.dataset.meteoradarCountry || "cz";
+        this._meteoradarCountry = country;
+        if (!this._displayTemplateConfig) this._displayTemplateConfig = {};
+        this._displayTemplateConfig.meteoradar_country = country;
+        const address = element.dataset.deviceAddress || this._selectedDeviceAddress;
+        const upperAddr = String(address || "").toUpperCase();
+        if (upperAddr) {
+          if (!this._deviceDrafts) this._deviceDrafts = {};
+          const draft = this._deviceDrafts[upperAddr] || {};
+          if (!draft.template_config) draft.template_config = {};
+          draft.template_config.meteoradar_country = country;
+          this._deviceDrafts[upperAddr] = draft;
+        }
+        this._scheduleDraftSave();
+        this._render();
+        this._paint();
+      });
     });
     this.shadowRoot.querySelectorAll("#applyRgbLed").forEach((button) => button.addEventListener("click", () => this._applyRgbLed()));
     this.shadowRoot.querySelectorAll("[data-led-mode]").forEach((button) => button.addEventListener("click", () => {

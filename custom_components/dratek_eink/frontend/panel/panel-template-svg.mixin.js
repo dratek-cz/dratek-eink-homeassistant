@@ -191,7 +191,8 @@ export const templateSvgMixin = {
   // successful fetch's own cache lifetime, so the map appears on its own shortly
   // after the underlying cause (usually that restart) is resolved.
   async _ensureTemplateRadarImage(width, height) {
-    const key = `${Math.round(width)}x${Math.round(height)}`;
+    const country = this._meteoradarCountry || this._displayTemplateConfig?.meteoradar_country || "cz";
+    const key = `${Math.round(width)}x${Math.round(height)}_${country}`;
     const cached = this._meteoradarImageCache;
     const age = cached ? Date.now() - cached.fetchedAt : Infinity;
     const ttl = cached?.dataUrl ? METEORADAR_CACHE_MS : METEORADAR_RETRY_MS;
@@ -202,6 +203,7 @@ export const templateSvgMixin = {
         type: "dratek_eink/render_meteoradar",
         width: Math.round(width),
         height: Math.round(height),
+        country: country,
       });
       if (!result?.ok || !result?.image) {
         this._meteoradarImageCache = { key, dataUrl: "", fetchedAt: Date.now(), error: "Server nevrátil obrázek." };

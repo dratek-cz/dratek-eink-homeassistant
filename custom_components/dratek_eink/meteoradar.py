@@ -117,6 +117,76 @@ CZECH_BORDER: tuple[tuple[float, float], ...] = (
 )
 
 
+# Simplified border polygons for Czech Republic and neighboring countries
+SLOVAKIA_BORDER: tuple[tuple[float, float], ...] = (
+    (18.8509, 49.5171), (19.0, 49.55), (19.4, 49.58), (19.8, 49.25), (20.2, 49.42),
+    (20.7, 49.4), (21.4, 49.42), (21.9, 49.45), (22.56, 49.08), (22.14, 48.44),
+    (21.65, 48.38), (20.65, 48.52), (20.4, 48.48), (19.8, 48.16), (19.0, 48.06),
+    (18.7, 47.78), (18.15, 47.75), (17.5, 47.88), (17.16, 48.02), (17.0, 48.15),
+    (16.9402, 48.6165), (17.0433, 48.7643), (17.2002, 48.8776), (17.4532, 48.8467),
+    (17.7813, 48.9253), (18.0571, 49.0285), (18.147, 49.2479), (18.4156, 49.3675),
+    (18.5529, 49.5031), (18.7545, 49.4884), (18.8509, 49.5171),
+)
+
+GERMANY_BORDER: tuple[tuple[float, float], ...] = (
+    (14.8296, 50.8728), (14.6502, 50.9315), (14.5084, 51.0433), (14.2739, 51.0398),
+    (14.0785, 50.8125), (13.5519, 50.7137), (13.0317, 50.5098), (12.819, 50.4603),
+    (12.512, 50.3973), (12.3592, 50.2421), (12.2013, 50.2728), (12.1047, 50.3217),
+    (12.1996, 50.1108), (12.4672, 49.9928), (12.5885, 49.5385), (12.7858, 49.3455),
+    (13.1709, 49.1736), (13.4262, 48.9725), (13.8132, 48.774), (13.8, 48.6),
+    (13.5, 48.5), (13.0, 48.2), (12.8, 47.9), (13.0, 47.5), (12.5, 47.5),
+    (11.5, 47.5), (10.5, 47.5), (9.6, 47.5), (7.6, 47.5), (7.8, 48.6),
+    (8.0, 49.5), (6.1, 50.7), (6.0, 51.8), (7.1, 53.3), (8.0, 53.8),
+    (8.6, 54.9), (9.9, 54.8), (11.0, 54.5), (13.0, 54.5), (14.2, 53.9),
+    (14.4, 53.3), (14.6, 52.5), (14.7, 51.8), (15.0, 51.15), (14.8296, 50.8728),
+)
+
+AUSTRIA_BORDER: tuple[tuple[float, float], ...] = (
+    (13.8132, 48.774), (14.0601, 48.6733), (14.3332, 48.5518), (14.6105, 48.6281),
+    (14.8081, 48.7339), (14.9929, 48.9037), (15.1563, 48.9933), (15.4685, 48.9518),
+    (15.8415, 48.8771), (16.378, 48.7285), (16.6637, 48.781), (16.9402, 48.6165),
+    (17.0, 48.15), (17.1, 47.9), (16.7, 47.7), (16.5, 47.4), (16.4, 46.9),
+    (16.1, 46.85), (15.0, 46.6), (14.2, 46.5), (13.7, 46.5), (12.5, 46.7),
+    (12.0, 47.0), (11.5, 47.0), (10.5, 46.9), (9.5, 47.1), (9.6, 47.5),
+    (10.5, 47.5), (11.5, 47.5), (12.5, 47.5), (13.0, 47.5), (12.8, 47.9),
+    (13.0, 48.2), (13.5, 48.5), (13.8132, 48.774),
+)
+
+POLAND_BORDER: tuple[tuple[float, float], ...] = (
+    (14.8296, 50.8728), (15.061, 51.0229), (15.4395, 50.8091), (15.8162, 50.7553),
+    (16.2348, 50.6716), (16.4449, 50.5796), (16.8628, 50.1982), (17.2033, 50.3864),
+    (17.7585, 50.2066), (17.9186, 49.978), (18.2066, 49.9979), (18.5729, 49.9216),
+    (18.8509, 49.5171), (19.0, 49.55), (19.4, 49.58), (19.8, 49.25), (20.2, 49.42),
+    (20.7, 49.4), (21.4, 49.42), (21.9, 49.45), (22.56, 49.08), (22.7, 49.7),
+    (23.6, 51.5), (23.8, 52.7), (23.5, 54.0), (22.8, 54.3), (19.6, 54.4),
+    (19.0, 54.4), (18.5, 54.7), (17.5, 54.8), (16.0, 54.5), (14.6, 54.0),
+    (14.2, 53.9), (14.4, 53.3), (14.6, 52.5), (14.7, 51.8), (15.0, 51.15),
+    (14.8296, 50.8728),
+)
+
+CENTRAL_EUROPE_BORDER: tuple[tuple[float, float], ...] = (
+    (6.0, 54.9), (23.5, 54.9), (23.5, 46.5), (6.0, 46.5), (6.0, 54.9),
+)
+
+COUNTRY_BORDERS: dict[str, tuple[tuple[float, float], ...]] = {
+    "cz": CZECH_BORDER,
+    "sk": SLOVAKIA_BORDER,
+    "de": GERMANY_BORDER,
+    "at": AUSTRIA_BORDER,
+    "pl": POLAND_BORDER,
+    "eu": CENTRAL_EUROPE_BORDER,
+}
+
+COUNTRY_NAMES: dict[str, str] = {
+    "cz": "Česká republika 🇨🇿",
+    "sk": "Slovensko 🇸🇰",
+    "de": "Německo 🇩🇪",
+    "at": "Rakousko 🇦🇹",
+    "pl": "Polsko 🇵🇱",
+    "eu": "Střední Evropa 🇪🇺",
+}
+
+
 def mercator_pixel(lat: float, lon: float, zoom: int, tile_size: int) -> tuple[float, float]:
     """Project (lat, lon) to a pixel in the world-wide Web Mercator raster at `zoom`.
 
@@ -220,7 +290,7 @@ def fit_to_size(image: Image.Image, width: int, height: int) -> Image.Image:
     return canvas
 
 
-_cache: dict[str, object] = {"frame_key": None, "composed": None, "checked_at": 0.0}
+_cache: dict[str, dict[str, object]] = {}
 
 
 async def _async_fetch_json(hass: "HomeAssistant", url: str) -> dict:
@@ -248,32 +318,39 @@ async def _async_fetch_tile(hass: "HomeAssistant", url: str) -> Image.Image | No
         return None
 
 
-async def _async_composed_base_image(hass: "HomeAssistant") -> Image.Image | None:
+async def _async_composed_base_image(
+    hass: "HomeAssistant",
+    border: tuple[tuple[float, float], ...] | None = None,
+    country: str = "cz",
+) -> Image.Image | None:
     """Return the current country map at native resolution, refetching only when
     RainViewer's own frame timestamp has actually moved on.
     """
+    key = str(country or "cz").lower()
+    if border is None:
+        border = COUNTRY_BORDERS.get(key, CZECH_BORDER)
     now = time.monotonic()
-    if _cache["composed"] is not None and now - float(_cache["checked_at"]) < INDEX_RECHECK_INTERVAL_SECONDS:
-        return _cache["composed"]  # type: ignore[return-value]
+    cached = _cache.get(key)
+    if cached and cached.get("composed") is not None and now - float(cached.get("checked_at", 0)) < INDEX_RECHECK_INTERVAL_SECONDS:
+        return cached["composed"]  # type: ignore[return-value]
 
     try:
         index = await _async_fetch_json(hass, RAINVIEWER_INDEX_URL)
         frames = (index.get("radar") or {}).get("past") or []
         if not frames:
-            return _cache["composed"]  # type: ignore[return-value]
+            return cached.get("composed") if cached else None  # type: ignore[return-value]
         host = str(index.get("host") or "")
         path = str(frames[-1].get("path") or "")
     except Exception:
-        return _cache["composed"]  # type: ignore[return-value]
+        return cached.get("composed") if cached else None  # type: ignore[return-value]
 
-    _cache["checked_at"] = now
     frame_key = f"{host}{path}"
     if not host or not path:
-        return _cache["composed"]  # type: ignore[return-value]
-    if frame_key == _cache["frame_key"] and _cache["composed"] is not None:
-        return _cache["composed"]  # type: ignore[return-value]
+        return cached.get("composed") if cached else None  # type: ignore[return-value]
+    if cached and cached.get("frame_key") == frame_key and cached.get("composed") is not None:
+        return cached["composed"]  # type: ignore[return-value]
 
-    x_min, y_min, x_max, y_max = tile_bounds(CZECH_BORDER, ZOOM, TILE_SIZE)
+    x_min, y_min, x_max, y_max = tile_bounds(border, ZOOM, TILE_SIZE)
     tile_urls = {
         (tile_x, tile_y): (
             f"{host}{path}/{TILE_SIZE}/{ZOOM}/{tile_x}/{tile_y}/{COLOR_SCHEME}/{SMOOTH}_{SNOW}.png"
@@ -284,9 +361,9 @@ async def _async_composed_base_image(hass: "HomeAssistant") -> Image.Image | Non
     fetched = await asyncio.gather(
         *(_async_fetch_tile(hass, url) for url in tile_urls.values())
     )
-    tiles = {key: image for key, image in zip(tile_urls.keys(), fetched) if image is not None}
+    tiles = {k: image for k, image in zip(tile_urls.keys(), fetched) if image is not None}
     if not tiles:
-        return _cache["composed"]  # type: ignore[return-value]
+        return cached.get("composed") if cached else None  # type: ignore[return-value]
 
     composed = await hass.async_add_executor_job(
         functools.partial(
@@ -298,30 +375,24 @@ async def _async_composed_base_image(hass: "HomeAssistant") -> Image.Image | Non
             y_min=y_min,
             x_max=x_max,
             y_max=y_max,
+            border=border,
         )
     )
-    _cache["composed"] = composed
-    _cache["frame_key"] = frame_key
+    _cache[key] = {
+        "composed": composed,
+        "frame_key": frame_key,
+        "checked_at": now,
+    }
     return composed
 
 
 MAX_NATIVE_DIMENSION = 800
 
 
-async def async_render_meteoradar(hass: "HomeAssistant") -> Image.Image | None:
-    """Return the live Czech Republic precipitation map at its own cropped aspect.
-
-    This is what DratekMeteoradarCamera (camera.py) hands back as its snapshot, the
-    same way any other camera entity returns whatever it has - undistorted, without
-    forcing it into a caller's box. Whoever composites it into a template slot fits
-    it there the same way any other image binding already does (fit_to_size, or an
-    equivalent keep-aspect resize).
-
-    Returns None only when RainViewer could not be reached at all and no previous
-    render is cached yet - callers should show a placeholder in that case, not fail
-    outright, since the next attempt (or the cached frame) will usually work.
-    """
-    base = await _async_composed_base_image(hass)
+async def async_render_meteoradar(hass: "HomeAssistant", country: str = "cz") -> Image.Image | None:
+    """Return the live precipitation map for the requested country at its own cropped aspect."""
+    border = COUNTRY_BORDERS.get(country.lower(), CZECH_BORDER)
+    base = await _async_composed_base_image(hass, border=border, country=country)
     if base is None:
         return None
     if base.width <= MAX_NATIVE_DIMENSION and base.height <= MAX_NATIVE_DIMENSION:
@@ -329,3 +400,4 @@ async def async_render_meteoradar(hass: "HomeAssistant") -> Image.Image | None:
     scale = MAX_NATIVE_DIMENSION / max(base.width, base.height)
     size = (max(1, round(base.width * scale)), max(1, round(base.height * scale)))
     return await hass.async_add_executor_job(base.resize, size, Image.Resampling.LANCZOS)
+

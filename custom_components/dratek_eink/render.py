@@ -1035,7 +1035,7 @@ def _replace_svg_image_href_by_id(document: str, element_id: str, data_url: str)
 
 
 async def async_render_camera_binding_data_url(
-    hass: Any, entity_id: str, width: int, height: int
+    hass: Any, entity_id: str, width: int, height: int, country: str = "cz"
 ) -> str | None:
     """Fetch a camera entity's current snapshot, fit and quantise it for the panel.
 
@@ -1073,7 +1073,7 @@ async def async_render_camera_binding_data_url(
 
     # Fallback: render directly via RainViewer for camera.meteoradar or missing camera entity
     try:
-        radar_img = await async_render_meteoradar(hass)
+        radar_img = await async_render_meteoradar(hass, country=country)
         if radar_img is not None:
             def _prepare_radar() -> bytes:
                 fitted = fit_to_size(radar_img, width, height)

@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.214] - 2026-08-07
+
+### Přidáno – Výběr státu meteoradaru s přesnými geografickými hranicemi & Odznaky stavu šablon
+- `meteoradar.py` & `panel-devices.mixin.js`: Přidány reálné geografické hranice ČR, Slovenska, Německa, Rakouska a Polska v plném geografickém detailu.
+- `panel-devices.mixin.js`: Přesunuta interaktivní mapa států do pravého panelu nastavení šablony přímo k nastavení entit.
+- `panel-devices.mixin.js` & `panel-render-ui.mixin.js`: Přidány jasné indikátory stavu nastavení (`Nastaveno` / `Nenastaveno` / `Částečně`) na všechny karty šablon v katalogu i přehledu.
+- `panel-devices.mixin.js`: Přidán volitelný interval automatické obnovy displeje u každého zařízení.
+
 ## [0.1.213] - 2026-08-07
 
 ### Přidáno – Zamknutí scrollování na pozadí při otevřeném dialogu nastavení
