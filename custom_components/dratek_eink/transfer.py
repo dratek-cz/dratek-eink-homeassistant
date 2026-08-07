@@ -657,6 +657,7 @@ class DratekTransfer:
 
         from homeassistant.components import bluetooth
 
+        # 1. Try connectable=True first (preferred fast route)
         ble_device = bluetooth.async_ble_device_from_address(
             self._hass,
             address,
@@ -665,22 +666,18 @@ class DratekTransfer:
         if ble_device is not None:
             return ble_device
 
-        diagnostics = ""
-        try:
-            from homeassistant.components.bluetooth import BluetoothReachabilityIntent
-
-            diagnostics = bluetooth.async_address_reachability_diagnostics(
-                self._hass,
-                address,
-                BluetoothReachabilityIntent.CONNECTION,
-            )
-        except (AttributeError, ImportError):
-            pass
-        detail = f" {diagnostics}" if diagnostics else ""
-        raise RuntimeError(
-            "Bluetooth connection is temporarily unavailable; no connectable adapter "
-            f"currently has a free slot for {address}.{detail}"
+        # 2. Try connectable=False if connectable flag hasn't been refreshed yet by HA scanner
+        ble_device = bluetooth.async_ble_device_from_address(
+            self._hass,
+            address,
+            connectable=False,
         )
+        if ble_device is not None:
+            return ble_device
+
+        # 3. Fall back to returning raw address string so Bleak can attempt direct connection
+        return address
+
 
     @staticmethod
     def _is_transient_connection_error(exc: Exception) -> bool:

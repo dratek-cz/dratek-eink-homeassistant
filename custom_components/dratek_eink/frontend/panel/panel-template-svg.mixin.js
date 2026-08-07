@@ -445,19 +445,26 @@ export const templateSvgMixin = {
   // floor, icons the size of the text, and two thirds of the width left empty.
   // Anything clearly wider than tall is therefore laid out in two columns
   // instead, which is a rearrangement of the same rows, not a different design.
-  _layoutTemplateSvg(rows, width, height) {
+  // `collector`, when given, receives one { rowIndex, box } entry per row this
+  // pass lays out - box geometry only, nothing about what the row draws. The
+  // variable-preview crop in the template settings dialog is the only
+  // consumer: it needs to know exactly which rectangle of the finished SVG a
+  // given variable landed in, and that rectangle is a side effect of this
+  // same layout math, not something worth recomputing separately (and risking
+  // it drifting from what actually gets drawn).
+  _layoutTemplateSvg(rows, width, height, collector) {
     return width / height >= LANDSCAPE_ASPECT
-      ? this._layoutTemplateSvgColumns(rows, width, height)
-      : this._layoutTemplateSvgStacked(rows, width, height);
+      ? this._layoutTemplateSvgColumns(rows, width, height, collector)
+      : this._layoutTemplateSvgStacked(rows, width, height, collector);
   },
 
-  _layoutTemplateSvgStacked(rows, width, height) {
+  _layoutTemplateSvgStacked(rows, width, height, collector) {
     const pad = Math.max(3, Math.round(Math.min(width, height) * 0.035));
     const footerRow = rows.find((row) => row.footer);
     const footerHeight = footerRow ? Math.max(18, Math.round(height * (footerRow.h || 0.16))) : 0;
     const box = { x: pad, y: pad, w: width - pad * 2, h: height - footerHeight - pad, fullX: 0, fullW: width };
-    const parts = this._stackTemplateBlocks(rows.filter((row) => !row.footer), box, height);
-    parts.push(...this._layoutTemplateFooter(footerRow, width, height, footerHeight));
+    const parts = this._stackTemplateBlocks(rows.filter((row) => !row.footer), box, height, collector);
+    parts.push(...this._layoutTemplateFooter(footerRow, width, height, footerHeight, collector));
     return parts.join("");
   },
 
@@ -466,7 +473,7 @@ export const templateSvgMixin = {
   // a second one, and the footer keeps the full-width band it has when stacked.
   // Rows are re-grouped rather than re-authored, so a template says the same thing
   // on a 296x128 tag as it does on a 240x416 one.
-  _layoutTemplateSvgColumns(rows, width, height) {
+  _layoutTemplateSvgColumns(rows, width, height, collector) {
     const pad = Math.max(3, Math.round(Math.min(width, height) * 0.045));
     const footerRow = rows.find((row) => row.footer);
     // Horizontal rules separate stacked rows; side by side there is nothing left
@@ -496,19 +503,19 @@ export const templateSvgMixin = {
     const parts = [];
     if (!lead.length || !detail.length) {
       const box = { x: pad, y: pad, w: width - pad * 2, h: columnHeight, fullX: pad, fullW: width - pad * 2 };
-      parts.push(...this._stackTemplateBlocks(lead.length ? lead : flowRows, box, 0));
-      if (lead.length && detail.length) parts.push(...this._stackTemplateBlocks(detail, box, 0));
+      parts.push(...this._stackTemplateBlocks(lead.length ? lead : flowRows, box, 0, collector));
+      if (lead.length && detail.length) parts.push(...this._stackTemplateBlocks(detail, box, 0, collector));
     } else {
       const gap = pad;
       const leadWidth = Math.max(1, Math.round((width - pad * 2 - gap) * 0.42));
       const detailX = pad + leadWidth + gap;
       const detailWidth = Math.max(1, width - pad - detailX);
-      parts.push(...this._stackTemplateBlocks(lead, { x: pad, y: pad, w: leadWidth, h: columnHeight, fullX: pad, fullW: leadWidth }, 0));
+      parts.push(...this._stackTemplateBlocks(lead, { x: pad, y: pad, w: leadWidth, h: columnHeight, fullX: pad, fullW: leadWidth }, 0, collector));
       parts.push(`<rect x="${(detailX - gap / 2).toFixed(2)}" y="${pad.toFixed(2)}" width="1" height="${columnHeight.toFixed(2)}" fill="${BLACK}"></rect>`);
-      parts.push(...this._stackTemplateBlocks(detail, { x: detailX, y: pad, w: detailWidth, h: columnHeight, fullX: detailX, fullW: detailWidth }, 0));
+      parts.push(...this._stackTemplateBlocks(detail, { x: detailX, y: pad, w: detailWidth, h: columnHeight, fullX: detailX, fullW: detailWidth }, 0, collector));
     }
 
-    parts.push(...this._layoutTemplateFooter(footerRow, width, height, footerHeight));
+    parts.push(...this._layoutTemplateFooter(footerRow, width, height, footerHeight, collector));
     return parts.join("");
   },
 
@@ -518,7 +525,7 @@ export const templateSvgMixin = {
   // the stacked layout, which keeps its proportions exactly as authored, or 0 in
   // the column layout, where a subset of the rows has to fill a column of its own
   // and the fractions are normalised against each other instead.
-  _stackTemplateBlocks(rows, box, base) {
+  _stackTemplateBlocks(rows, box, base, collector) {
     const total = rows.reduce((sum, row) => sum + (row.flex ? 0 : (row.h || 0.08)), 0) || 1;
     const unit = base || box.h / total;
     const fixed = rows.map((row) => (row.flex ? 0 : Math.max(1, unit * (row.h || 0.08))));
@@ -531,15 +538,20 @@ export const templateSvgMixin = {
     const parts = [];
     rows.forEach((row, index) => {
       const rowHeight = row.flex ? flexShare : fixed[index] * scale;
-      const markup = this._renderTemplateBlock(row, { x: box.x, y, w: box.w, h: rowHeight, fullX: box.fullX, fullW: box.fullW });
+      const rowBox = { x: box.x, y, w: box.w, h: rowHeight, fullX: box.fullX, fullW: box.fullW };
+      if (collector && row.__rowIndex !== undefined) collector.push({ rowIndex: row.__rowIndex, box: rowBox });
+      const markup = this._renderTemplateBlock(row, rowBox);
       parts.push(row.group && markup ? `<g data-template-block="${this._escape(row.group)}">${markup}</g>` : markup);
       y += rowHeight;
     });
     return parts;
   },
 
-  _layoutTemplateFooter(footerRow, width, height, footerHeight) {
+  _layoutTemplateFooter(footerRow, width, height, footerHeight, collector) {
     if (!footerRow || footerHeight <= 0) return [];
+    if (collector && footerRow.__rowIndex !== undefined) {
+      collector.push({ rowIndex: footerRow.__rowIndex, box: { x: 0, y: height - footerHeight, w: width, h: footerHeight } });
+    }
     const parts = [];
     const top = height - footerHeight;
     const footerColor = footerRow.color === "black" ? BLACK : RED;
@@ -1141,8 +1153,12 @@ export const templateSvgMixin = {
   // Home Assistant binding for that variable slot, falling back to sample data.
   // Kept separate from _templateSvgRows so the icon warm-up can enumerate the
   // ids without a second copy of the list drifting out of step with this one.
-  _templateSvgSpecs(template) {
-    const v = (index, fallback) => this._templateDisplayValue(template, index, fallback);
+  // `resolveValue`, when given, replaces the normal v(index, fallback) lookup.
+  // The only caller that does this is _templateVariableCropBoxes, which needs
+  // to know which row a variable index ends up in without caring what value
+  // it actually holds.
+  _templateSvgSpecs(template, resolveValue) {
+    const v = resolveValue || ((index, fallback) => this._templateDisplayValue(template, index, fallback));
     // Charts, meters and dials need numbers rather than formatted strings, and the
     // weather and calendar rows need data that arrives from a service call. All of
     // them fall back to the sample so a template still reads as itself before any
@@ -1465,6 +1481,60 @@ export const templateSvgMixin = {
       { text: baseTemplate?.title || "Šablona", h: 0.1, size: 0.07, bold: true },
       { flex: true },
     ];
+  },
+
+  // Where each variable's value actually lands in the rendered template, as a
+  // box in the same coordinate space the SVG is drawn in - so the settings
+  // dialog can crop straight into the real markup instead of drawing its own
+  // stand-in preview that could silently drift out of sync with it.
+  //
+  // Found by asking the row builder for v(index) a second time with every
+  // call replaced by a unique marker string, then scanning the resulting rows
+  // for which one absorbed which marker. Box geometry never depends on what
+  // v() returns (row heights are fixed fractions, not measured from text), so
+  // the swapped-out rows lay out identically to the real ones and the row
+  // that got the marker is exactly the row the real value would have landed
+  // in. series()/ratio()/day()/event()/option() - chart data, forecasts,
+  // calendar entries, the price-tag sale switch - are left resolving for
+  // real, since a marker string in a number-typed slot would break the chart
+  // math; those variables simply come back without a box, and the caller
+  // falls back to the old icon-only preview for just those few.
+  _templateVariableCropBoxes(template, width, height) {
+    const baseTemplate = this._templateBaseDefinition(template);
+    const build = this._templateSvgSpecs(baseTemplate, (index) => `VAR${index}`)[baseTemplate?.id];
+    const rows = build ? build() : [];
+    if (!rows.length) return {};
+    rows.forEach((row, index) => { row.__rowIndex = index; });
+    const collector = [];
+    this._layoutTemplateSvg(rows, width, height, collector);
+    const rowBoxes = {};
+    collector.forEach(({ rowIndex, box }) => { if (!(rowIndex in rowBoxes)) rowBoxes[rowIndex] = box; });
+    const scan = (value) => {
+      if (typeof value === "string") return [...value.matchAll(/VAR(\d+)/g)].map((match) => Number(match[1]));
+      if (Array.isArray(value)) return value.flatMap(scan);
+      if (value && typeof value === "object") return Object.values(value).flatMap(scan);
+      return [];
+    };
+    const boxes = {};
+    rows.forEach((row) => {
+      const box = rowBoxes[row.__rowIndex];
+      if (!box) return;
+      scan(row).forEach((variableIndex) => { boxes[variableIndex] ??= box; });
+    });
+    return boxes;
+  },
+
+  // The crop itself: the same full-template markup real bindings would
+  // produce, windowed to just one variable's box via viewBox instead of a
+  // redrawn miniature - so it is the actual template at 1:1, not a rendition
+  // of it that could disagree on a font size or a color.
+  _templateVariableCropSvg(template, box, width, height, fullMarkup) {
+    if (!box) return "";
+    const x = box.x.toFixed(2), y = box.y.toFixed(2), w = Math.max(1, box.w).toFixed(2), h = Math.max(1, box.h).toFixed(2);
+    return `<svg class="template-variable-crop-svg" viewBox="${x} ${y} ${w} ${h}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">`
+      + `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#ffffff"></rect>`
+      + fullMarkup
+      + `</svg>`;
   },
 
   // ---------------------------------------------------------------- export ---

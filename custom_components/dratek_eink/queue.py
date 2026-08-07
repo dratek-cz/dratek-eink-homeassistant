@@ -306,10 +306,9 @@ class TransferQueue:
 
     @staticmethod
     def _is_retryable_automatic_bluetooth_error(job: dict[str, Any], exc: Exception) -> bool:
-        if job.get("operation") != "entity_update":
-            return False
         error = str(exc).lower()
         return any(marker in error for marker in RETRYABLE_BLUETOOTH_ERROR_MARKERS)
+
 
     def _should_skip_automatic_update(self, job: dict[str, Any]) -> bool:
         return job.get("operation") == "entity_update" and bool(

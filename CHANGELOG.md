@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.210] - 2026-08-07
+
+### Opraveno – Bluetooth konektivita po opakovaných zápisech a automatické retry
+- `transfer.py`: Přidáno záložní vyhledání BLE zařízeni s `connectable=False` a záloha na přímou MAC adresu v `_connection_target`, pokud skener HA ještě nestihl aktualizovat stav po odpojení.
+- `queue.py`: Rozšířen automatický Bluetooth retry i na manuální zápisy z editoru (`editor_design`), čímž se eliminuje selhání zápisu při dočasně obsazeném Bluetooth adaptéru.
+
 ## [0.1.209] - 2026-08-06
 
 ### Opraveno – Celoplošné nativní vykreslování srážkového radaru a viditelnost aktualizace v HACS

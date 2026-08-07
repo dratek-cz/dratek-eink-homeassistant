@@ -157,7 +157,7 @@ class TransferQueueRetryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(job["status"], "writing")
         self.assertTrue(any("temporarily unavailable" in line for line in log))
 
-    async def test_manual_update_does_not_receive_automatic_retry(self):
+    async def test_manual_update_receives_automatic_retry(self):
         queue = queue_module.TransferQueue(object())
         job = {"operation": "design", "status": "writing"}
         attempts = 0
@@ -165,12 +165,14 @@ class TransferQueueRetryTests(unittest.IsolatedAsyncioTestCase):
         async def runner(_add_log):
             nonlocal attempts
             attempts += 1
-            raise RuntimeError("No backend with an available connection slot was found")
+            if attempts == 1:
+                raise RuntimeError("No backend with an available connection slot was found")
+            return {"ok": True}
 
-        with self.assertRaises(RuntimeError):
-            await queue._run_with_automatic_bluetooth_retry(job, runner, lambda _line: None)
+        result = await queue._run_with_automatic_bluetooth_retry(job, runner, lambda _line: None)
+        self.assertTrue(result["ok"])
+        self.assertEqual(attempts, 2)
 
-        self.assertEqual(attempts, 1)
 
     async def test_editor_transfers_can_be_queued_while_another_is_writing(self):
         hass = FakeHass()

@@ -563,8 +563,7 @@ export const devicesMixin = {
     return `<section class="display-settings-page">
       ${this._displaySettingsView === "templates" ? this._renderDisplayTemplatesSection(device) : ""}
       ${this._displaySettingsView === "designer" ? this._renderDisplayTemplateEditor(device) : ""}
-      ${this._renderDisplayTemplateConflictDialog(device)}
-      ${this._renderDisplayTemplateSetupDialog()}
+      ${this._renderTemplatePlacementDialog(device)}
       ${this._renderPriceSaleDialog()}
     </section>`;
   },
@@ -944,25 +943,92 @@ export const devicesMixin = {
     </div>`;
   },
 
-  _renderDisplayTemplateConflictDialog(device) {
+  // A miniature of the actual split: both templates rendered through the same
+  // catalog-thumbnail renderer used everywhere else, just sized to the half
+  // (or whole) they would occupy. This is what makes the choice legible - a
+  // label like "Nahoře" does not say whether the weather template's footer
+  // survives being squeezed into a quarter of the display, but the thumbnail
+  // does.
+  _renderTemplatePlacementPreview(value, currentTemplate, nextTemplate, width, height) {
+    const preview = (template, slotWidth, slotHeight) => this._renderDisplayTemplateCatalogPreview(
+      template, slotWidth >= slotHeight ? "landscape" : "portrait", { width: slotWidth, height: slotHeight },
+    );
+    if (value === "full") {
+      return `<span class="template-placement-preview layout-full" style="aspect-ratio:${width}/${height}">`
+        + `<span class="template-placement-slot is-incoming">${preview(nextTemplate, width, height)}</span></span>`;
+    }
+    const stacked = value === "top" || value === "bottom";
+    const slotWidth = stacked ? width : width / 2;
+    const slotHeight = stacked ? height / 2 : height;
+    const incoming = `<span class="template-placement-slot is-incoming">${preview(nextTemplate, slotWidth, slotHeight)}</span>`;
+    const existing = `<span class="template-placement-slot is-existing">${preview(currentTemplate || nextTemplate, slotWidth, slotHeight)}</span>`;
+    const first = value === "left" || value === "top";
+    return `<span class="template-placement-preview layout-${value}" style="aspect-ratio:${width}/${height}">${first ? incoming + existing : existing + incoming}</span>`;
+  },
+
+  // Where a second (or third, replacing one of two) template goes when the
+  // display already carries at least one full-size one. Dragging straight
+  // onto an edge of the preview picks this in one gesture already (see the
+  // drop-zone cross in the dropzone markup below); this dialog is the same
+  // five choices for anyone who clicked the template tile instead of
+  // dragging it.
+  _renderTemplatePlacementDialog(device) {
     const pending = this._pendingDisplayTemplateConflict;
     if (!pending?.templateId) return "";
     const templates = this._displayTemplateCards();
     const nextTemplate = templates.find((item) => item.id === pending.templateId);
-    const currentTemplate = templates.find((item) => item.id === this._assignedDisplayTemplates(device)[0]);
     if (!nextTemplate) return "";
+    const assigned = this._assignedDisplayTemplates(device);
+    const primaryTemplate = templates.find((item) => item.id === assigned[0]);
+    const secondaryTemplate = templates.find((item) => item.id === assigned[1]);
+    const bothSlotsFull = assigned.length > 1;
+    const size = this._devicePreviewSize(device);
+    const orientation = this._displayTemplateOrientation === "landscape" ? "landscape" : "portrait";
+    const long = Math.max(size.width, size.height);
+    const short = Math.min(size.width, size.height);
+    const previewWidth = orientation === "landscape" ? long : short;
+    const previewHeight = orientation === "landscape" ? short : long;
+    // Left/top always mean "index 0", right/bottom always mean "index 1" -
+    // that is what the new template takes. Whichever template currently sits
+    // there is displaced by it; the other slot's template (if any) is left
+    // untouched and is what the preview's other half shows.
+    const displacedFor = (value) => (value === "left" || value === "top") ? primaryTemplate : secondaryTemplate;
+    const remainingFor = (value) => (value === "left" || value === "top")
+      ? (secondaryTemplate || primaryTemplate)
+      : (primaryTemplate || secondaryTemplate);
+    const hintFor = (value, moveVerb) => {
+      const displaced = displacedFor(value);
+      if (!displaced) return "Šablona bude přidána do prázdné poloviny.";
+      return bothSlotsFull
+        ? `Nahradí šablonu „${this._escape(displaced.title)}“.`
+        : `Šablona „${this._escape(displaced.title)}“ se přesune ${moveVerb}.`;
+    };
+    const options = [
+      ["full", "Přes celý displej", bothSlotsFull ? "Nahradí obě šablony." : "Nahradí stávající šablonu."],
+      ["left", "Vlevo", hintFor("left", "doprava")],
+      ["right", "Vpravo", hintFor("right", "doleva")],
+      ["top", "Nahoře", hintFor("top", "dolů")],
+      ["bottom", "Dole", hintFor("bottom", "nahoru")],
+    ];
+    const description = bothSlotsFull
+      ? `Displej už zobrazuje šablony <strong>${this._escape(primaryTemplate?.title || "?")}</strong> a <strong>${this._escape(secondaryTemplate?.title || "?")}</strong>. Vyberte, kterou nahradit, nebo šablonu roztáhněte přes celý displej.`
+      : `Šablona <strong>${this._escape(primaryTemplate?.title || "První šablona")}</strong> zabírá celý displej. Vyberte, jak si obě šablony mají displej rozdělit.`;
     return `<div class="modal-backdrop template-space-dialog-backdrop">
       <section class="template-space-dialog" role="dialog" aria-modal="true" aria-labelledby="templateSpaceDialogTitle">
         <span class="template-space-dialog-icon"><ha-icon icon="mdi:view-dashboard-edit-outline"></ha-icon></span>
         <div>
-          <small>Nedostatek místa na displeji</small>
-          <h2 id="templateSpaceDialogTitle">První šablona je nastavená jako velká</h2>
-          <p>Šablona <strong>${this._escape(currentTemplate?.title || "První šablona")}</strong> zabírá celý displej. Chcete ji zmenšit a přidat <strong>${this._escape(nextTemplate.title)}</strong>, nebo ji novou šablonou nahradit?</p>
+          <small>Displej je již obsazený</small>
+          <h2 id="templateSpaceDialogTitle">Kam umístit šablonu „${this._escape(nextTemplate.title)}“?</h2>
+          <p>${description}</p>
+        </div>
+        <div class="template-placement-options">
+          ${options.map(([value, label, hint]) => `<button type="button" class="template-placement-option is-${value}" data-template-placement="${value}">
+            ${this._renderTemplatePlacementPreview(value, remainingFor(value), nextTemplate, previewWidth, previewHeight)}
+            <span class="template-placement-option-text"><strong>${label}</strong><small>${hint}</small></span>
+          </button>`).join("")}
         </div>
         <div class="template-space-dialog-actions">
-          <button type="button" class="template-space-shrink" data-template-conflict-action="shrink"><ha-icon icon="mdi:arrow-collapse-all"></ha-icon>Zmenšit a přidat</button>
-          <button type="button" class="secondary" data-template-conflict-action="replace"><ha-icon icon="mdi:swap-horizontal"></ha-icon>Nahradit velkou šablonu</button>
-          <button type="button" class="ghost" data-template-conflict-action="cancel">Zrušit</button>
+          <button type="button" class="ghost" data-template-placement="cancel">Zrušit</button>
         </div>
       </section>
     </div>`;
@@ -1046,6 +1112,30 @@ export const devicesMixin = {
       const suggested = weatherEntity || czSpotBindings[index] || (template.id === "cz_spot_prices" ? "" : this._suggestTemplateEntity(meta));
       if (suggested) this._displayTemplateBindings[key] = suggested;
     });
+  },
+
+  // Whether a template's data slots actually point at real entities yet, as
+  // opposed to still showing sample data. Automatic slots (time, date, …) do
+  // not count - they never need a user choice. A template with no non-automatic
+  // slots at all (blank, a user-drawn template, the radar map) has nothing to
+  // configure, so it is reported as "complete" rather than "empty": there is no
+  // unset state for a card that never asks for one.
+  _templateBindingStatus(template) {
+    const variables = Array.isArray(template?.variables) ? template.variables : [];
+    const bindings = this._displayTemplateBindings || {};
+    let total = 0;
+    let done = 0;
+    variables.forEach((variable, index) => {
+      const meta = this._templateVariableMeta(variable, index);
+      if (meta.automatic) return;
+      total += 1;
+      const value = bindings[`${template.id}:${meta.key}`];
+      if (typeof value === "string" && value.trim()) done += 1;
+    });
+    if (!total) return { total: 0, done: 0, state: "complete" };
+    if (done >= total) return { total, done, state: "complete" };
+    if (done > 0) return { total, done, state: "partial" };
+    return { total, done, state: "empty" };
   },
 
   _czSpotTemplateBindings() {
@@ -1194,7 +1284,7 @@ export const devicesMixin = {
     return `<section class="display-templates-inline">
       <div class="display-template-workspace">
         <aside class="card display-template-drop-panel">
-          <div class="display-template-device-info">
+          <div class="display-template-device-info ${primaryTemplate ? "is-configurable" : ""}" ${primaryTemplate ? `data-display-template-configure="${this._escape(primaryTemplate.id)}" role="button" tabindex="0" title="Nastavit zdroje dat šablony ${this._escape(primaryTemplate.title)}"` : ""}>
             <span class="display-template-device-info-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></span>
             <div class="display-template-device-info-identity">
               <div class="display-template-device-info-name-row">
@@ -1214,9 +1304,12 @@ export const devicesMixin = {
             ${primaryTemplate
               ? this._renderTemplatePhysicalDevicePreview(device, primaryTemplate, secondaryTemplate, orientation, layout, true)
               : this._renderDevicePreview(device, "template")}
-            ${largeDisplay ? `<div class="display-template-drop-halves" data-display-template-drop-halves="${["side-by-side", "stacked"].includes(this._displayTemplateLargeLayout) ? this._displayTemplateLargeLayout : "side-by-side"}">
-              <span class="display-template-drop-half" data-display-template-drop-half="0"></span>
-              <span class="display-template-drop-half" data-display-template-drop-half="1"></span>
+            ${largeDisplay && assignedTemplates.length ? `<div class="display-template-drop-zones" data-display-template-drop-zones aria-hidden="true">
+              <span class="display-template-drop-zone is-top" data-display-template-drop-zone="top" title="Umístit nahoru"><ha-icon icon="mdi:arrow-collapse-up"></ha-icon></span>
+              <span class="display-template-drop-zone is-left" data-display-template-drop-zone="left" title="Umístit vlevo"><ha-icon icon="mdi:arrow-collapse-left"></ha-icon></span>
+              <span class="display-template-drop-zone is-full" data-display-template-drop-zone="full" title="Přes celý displej"><ha-icon icon="mdi:arrow-expand-all"></ha-icon></span>
+              <span class="display-template-drop-zone is-right" data-display-template-drop-zone="right" title="Umístit vpravo"><ha-icon icon="mdi:arrow-collapse-right"></ha-icon></span>
+              <span class="display-template-drop-zone is-bottom" data-display-template-drop-zone="bottom" title="Umístit dolů"><ha-icon icon="mdi:arrow-collapse-down"></ha-icon></span>
             </div>` : ""}
           </div>
           <div class="display-template-drop-controls">
@@ -1253,6 +1346,7 @@ export const devicesMixin = {
             const used = assignedTemplates.includes(template.id);
             const onDisplay = sentTemplates.includes(template.id);
             const userCreated = !!template.user_created;
+            const configStatus = this._templateBindingStatus(template);
             if (template.id === "blank") {
               return `<article class="display-template-card display-template-drag-card display-template-blank-card ${onDisplay ? "is-on-display" : ""}" data-display-template-open="blank" aria-label="Vytvořit vlastní šablonu od nuly. Kliknutím otevřete designer.">
                 <header class="display-template-tile-header">
@@ -1268,19 +1362,26 @@ export const devicesMixin = {
                 </div>
               </article>`;
             }
-            return `<article class="display-template-card display-template-drag-card ${userCreated ? "is-user-created" : ""} ${used ? "is-used" : ""} ${onDisplay ? "is-on-display" : ""}" draggable="true" data-display-template-drag="${template.id}" aria-label="${this._escape(template.title)}. Přetáhněte na displej.">
+            return `<article class="display-template-card display-template-drag-card is-config-${configStatus.state} ${userCreated ? "is-user-created" : ""} ${used ? "is-used" : ""} ${onDisplay ? "is-on-display" : ""}" draggable="true" data-display-template-drag="${template.id}" aria-label="${this._escape(template.title)}. Přetáhněte na displej.">
               <header class="display-template-tile-header">
                 <span class="display-template-kind-icon"><ha-icon icon="mdi:${userCreated ? "palette-outline" : template.kind === "prepared" ? "auto-fix" : "tune-variant"}"></ha-icon></span>
                 <span class="display-template-tile-identity"><strong>${this._escape(template.title)}</strong><small>${userCreated ? "Vytvořeno uživatelem" : template.kind === "prepared" ? "Automatické nastavení" : "Vlastní zdroje dat"}</small></span>
-                ${userCreated ? `<span class="display-template-variable-count is-user-template-badge">Moje</span>` : `<span class="display-template-variable-count">${template.variables.length} údajů</span>`}
                 ${userCreated ? `<span class="user-template-owner-mark" title="Uživatelská šablona"><ha-icon icon="mdi:check-circle"></ha-icon></span>` : `<button type="button" class="display-template-help" data-display-template-setup="${this._escape(template.id)}" title="Jak zprovoznit šablonu ${this._escape(template.title)}" aria-label="Jak zprovoznit šablonu ${this._escape(template.title)}"><ha-icon icon="mdi:help-circle-outline"></ha-icon></button>`}
               </header>
               <div class="display-template-tile-preview is-${orientation}" data-display-template-select="${template.id}" role="button" tabindex="0" aria-label="Vybrat šablonu ${this._escape(template.title)} pro displej">
-                <span class="display-template-drag-handle"><ha-icon icon="mdi:drag"></ha-icon>Přetáhnout na displej</span>
                 <span class="display-template-preview ${userCreated ? "has-user-template" : ""}" style="aspect-ratio:${previewAspect};min-height:0">${this._renderDisplayTemplateCatalogPreview(template, orientation, size)}</span>
               </div>
               <div class="display-template-tile-meta">
-                ${userCreated ? `<span class="user-template-created-note"><ha-icon icon="mdi:palette-outline"></ha-icon>Vytvořeno v eInk Studiu</span>` : `<span class="display-template-variables" aria-label="Použité údaje">${template.variables.map(([iconName, label]) => `<span><ha-icon icon="mdi:${iconName}"></ha-icon>${this._escape(label)}</span>`).join("")}</span>`}
+                ${userCreated ? `<span class="user-template-created-note"><ha-icon icon="mdi:palette-outline"></ha-icon>Vytvořeno v eInk Studiu</span>` : `<div class="display-template-meta-row">
+                  ${configStatus.total > 0 ? `<button type="button" class="display-template-config-status is-${configStatus.state}" data-display-template-configure="${this._escape(template.id)}" title="${configStatus.state === "complete" ? "Všechny zdroje dat jsou napojené na entity Home Assistantu. Kliknutím upravíte." : configStatus.state === "partial" ? `Napojeno ${configStatus.done} z ${configStatus.total} zdrojů dat. Kliknutím dokončíte.` : "Zdroje dat ještě nejsou napojené. Kliknutím je nastavíte."}"><ha-icon icon="mdi:${configStatus.state === "complete" ? "check-circle" : configStatus.state === "partial" ? "alert-circle" : "circle-off-outline"}"></ha-icon>${configStatus.state === "complete" ? "Nastaveno" : configStatus.state === "partial" ? `${configStatus.done}/${configStatus.total}` : "Nenastaveno"}</button>` : ""}
+                  <span class="display-template-variables-row" aria-label="Použité údaje">${(template.variables.length > 5 ? template.variables.slice(0, 4) : template.variables).map(([iconName, label]) => `<span class="display-template-variable-icon" title="${this._escape(label)}"><ha-icon icon="mdi:${iconName}"></ha-icon></span>`).join("")}${template.variables.length > 5 ? `<span class="display-template-variable-overflow" tabindex="0" aria-label="Další údaje: ${this._escape(template.variables.map(([, label]) => label).join(", "))}">
+                    <span class="display-template-variable-overflow-badge">+${template.variables.length}</span>
+                    <span class="display-template-variable-overflow-menu" role="tooltip">
+                      <strong>Použité údaje</strong>
+                      <ul>${template.variables.map(([iconName, label]) => `<li><ha-icon icon="mdi:${iconName}"></ha-icon>${this._escape(label)}</li>`).join("")}</ul>
+                    </span>
+                  </span>` : ""}</span>
+                </div>`}
               </div>
               <div class="display-template-tile-actions">
                 <button type="button" class="display-template-card-action" data-display-template-edit-menu="${template.id}" aria-expanded="${this._templateEditMenuId === template.id}"><ha-icon icon="mdi:${onDisplay ? "check-circle" : "tune-variant"}"></ha-icon>Upravit šablonu<ha-icon icon="mdi:chevron-down"></ha-icon></button>
@@ -1333,6 +1434,47 @@ export const devicesMixin = {
     this._displayTemplateAssignments ||= {};
     this._displayTemplateAssignments[address] = next;
     return next;
+  },
+
+  // Puts exactly one template on the display, discarding whatever else was
+  // there. This is the "whole screen" placement choice - the other four
+  // (left/right/top/bottom) keep the display's other slot intact instead.
+  _assignDisplayTemplateFull(device, templateId) {
+    const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
+    if (!address || !templateId) return [];
+    this._displayTemplateAssignments ||= {};
+    this._displayTemplateAssignments[address] = [templateId];
+    return [templateId];
+  },
+
+  // Puts a template into a specific half (index 0 = left/top, index 1 =
+  // right/bottom) while keeping whatever already occupies the other half.
+  // _assignDisplayTemplate cannot do this: its replaceIndex only overwrites a
+  // slot that already exists in the current array, so handing it index 0 while
+  // only one template is assigned collapses the array back to length 1 and
+  // silently drops that other template instead of shifting it aside.
+  _placeDisplayTemplateInSlot(device, templateId, index) {
+    const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
+    if (!address || !templateId) return [];
+    const current = this._assignedDisplayTemplates(device);
+    let next;
+    if (current.length >= 2) {
+      // Both slots already have a fixed position; only the requested one changes.
+      next = [current[0], current[1]];
+      next[index] = templateId;
+    } else {
+      // Fewer than two slots exist yet, so the sole occupant (if any) is not
+      // reliably at the position it conceptually belongs to - a single template
+      // always sits at array index 0 regardless of which half it visually
+      // occupies. Find it by identity instead of by index, so it lands in
+      // whichever slot this placement did not ask for.
+      const other = current.find((id) => id !== templateId) || null;
+      next = index === 0 ? [templateId, other] : [other, templateId];
+    }
+    const deduped = next.filter((id, position) => id && next.indexOf(id) === position).slice(0, 2);
+    this._displayTemplateAssignments ||= {};
+    this._displayTemplateAssignments[address] = deduped;
+    return deduped;
   },
 
   _activeTemplateEditorStateId() {
@@ -1690,14 +1832,64 @@ export const devicesMixin = {
     </section>`;
   },
 
+  // Geometry and markup shared by every variable's crop in one dialog, built
+  // once instead of once per variable: the SVG layout pass and icon warm-up
+  // are the same regardless of which variable is asking.
+  _templateVariableCropContext(template) {
+    const size = this._devicePreviewSize(this._device()) || { width: 296, height: 128 };
+    const orientation = this._displayTemplateOrientation === "landscape" ? "landscape" : "portrait";
+    const long = Math.max(size.width, size.height);
+    const short = Math.min(size.width, size.height);
+    const width = orientation === "landscape" ? long : short;
+    const height = orientation === "landscape" ? short : long;
+    const rows = this._templateSvgRows(template);
+    this._requestTemplateIcons(rows);
+    this._requestTemplateRadarImage(rows, width, height);
+    return { width, height, markup: this._layoutTemplateSvg(rows, width, height), boxes: this._templateVariableCropBoxes(template, width, height) };
+  },
+
+  // The setup guide's own content, reused both inside the merged dialog and
+  // (unchanged) nowhere else now that the two dialogs are one.
+  _renderTemplateSetupGuide(template) {
+    const recipe = this._templateSetupRecipe(template);
+    const integrations = (recipe.integrations || []).map((item) => {
+      const states = this._hass?.states || {};
+      const normalize = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const friendlyNames = new Set((item.entityFriendlyNames || []).map(normalize));
+      const foundByPrefix = Array.isArray(item.entityPrefixes) && item.entityPrefixes.length
+        && Object.keys(states).some((entityId) => item.entityPrefixes.some((prefix) => entityId.startsWith(prefix)));
+      const foundByName = friendlyNames.size > 0 && Object.values(states).some((state) => friendlyNames.has(normalize(state?.attributes?.friendly_name)));
+      const found = (item.entityPrefixes || []).length || friendlyNames.size
+        ? foundByPrefix || foundByName
+        : this._hasEntityDomain(item.domain);
+      const documentationUrl = item.url || (item.core && !item.helper ? `https://www.home-assistant.io/integrations/${item.domain}/` : "");
+      const link = documentationUrl
+        ? `<a href="${this._escape(documentationUrl)}" target="_blank" rel="noopener noreferrer">${this._escape(item.linkLabel || "Dokumentace")}</a>`
+        : "";
+      return `<li class="template-setup-integration ${found ? "is-found" : "is-missing"}">
+        <span class="template-setup-status"><ha-icon icon="mdi:${found ? "check-circle" : "alert-circle-outline"}"></ha-icon></span>
+        <div><strong>${this._escape(item.name)}</strong><small>${this._escape(item.why)}</small>
+          <span class="template-setup-meta">${found ? `Nalezeno v Home Assistantu (${this._escape(item.domain)}.*)` : `Zatím nenalezeno – chybí entity ${this._escape(item.domain)}.*`} ${link}</span>
+        </div>
+      </li>`;
+    }).join("");
+    return `<p class="template-setup-summary">${this._escape(recipe.summary)}</p>
+      ${integrations ? `<h3><ha-icon icon="mdi:puzzle-outline"></ha-icon>Co je potřeba v Home Assistantu</h3>
+      <ul class="template-setup-integrations">${integrations}</ul>` : ""}
+      <h3><ha-icon icon="mdi:format-list-numbered"></ha-icon>Postup</h3>
+      <ol class="template-setup-steps">${(recipe.steps || []).map((step) => `<li>${this._escape(step)}</li>`).join("")}</ol>
+      ${recipe.note ? `<p class="template-setup-note"><ha-icon icon="mdi:information-outline"></ha-icon>${this._escape(recipe.note)}</p>` : ""}`;
+  },
+
   _renderTemplateSettingsDialog(activeTemplate, selectedSize, largeDisplay) {
     if (!this._templateSettingsDialogOpen) return "";
     const variablesOnly = this._templateSettingsDialogMode === "variables";
-    const variableList = `<p class="template-settings-intro">Všechny zdroje dat použité v této šabloně. U každého můžete změnit napojenou entitu; systémové hodnoty doplňuje Home Assistant automaticky.</p><div class="template-variable-settings">${activeTemplate.variables.map((variable, index) => this._renderTemplateVariableSetting(activeTemplate, variable, index)).join("")}</div>`;
-    return `<div class="template-settings-backdrop" data-template-settings-close><section class="card template-settings-dialog" role="dialog" aria-modal="true" aria-label="${variablesOnly ? "Upravit zdroje dat" : "Nastavení šablony"}" data-template-settings-dialog>
-      <header><span><small>${variablesOnly ? "Zdroje dat šablony" : "Nastavení celé šablony"}</small><strong>${this._escape(activeTemplate.title)}</strong></span><button type="button" data-template-settings-close title="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button></header>
-      <div class="template-settings-dialog-content">
-        ${variablesOnly ? variableList : `
+    const crop = this._templateVariableCropContext(activeTemplate);
+    const variableList = `<p class="template-settings-intro">Všechny zdroje dat použité v této šabloně. U každého můžete změnit napojenou entitu; systémové hodnoty doplňuje Home Assistant automaticky.</p><div class="template-variable-settings">${activeTemplate.variables.map((variable, index) => this._renderTemplateVariableSetting(activeTemplate, variable, index, crop)).join("")}</div>`;
+    return `<div class="template-settings-backdrop" data-template-settings-close><section class="card template-settings-dialog ${variablesOnly ? "is-guide-layout" : ""}" role="dialog" aria-modal="true" aria-label="${variablesOnly ? "Nastavení šablony" : "Nastavení šablony"}" data-template-settings-dialog>
+      <header><span><small>${variablesOnly ? "Jak zprovoznit a nastavit" : "Nastavení celé šablony"}</small><strong>${this._escape(activeTemplate.title)}</strong></span><button type="button" data-template-settings-close title="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button></header>
+      <div class="template-settings-dialog-content ${variablesOnly ? "template-settings-two-col" : ""}">
+        ${variablesOnly ? `<aside class="template-settings-guide">${this._renderTemplateSetupGuide(activeTemplate)}</aside><div class="template-settings-variables">${variableList}</div>` : `
         <div class="template-layout-options template-size-options" style="display:none">
           <button type="button" class="${selectedSize === "large" ? "is-active" : ""}" data-template-size="large" ${largeDisplay ? "" : "disabled"}><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon>Velká</button>
           <button type="button" class="${selectedSize === "small" ? "is-active" : ""}" data-template-size="small" ${largeDisplay ? "" : "disabled"}><ha-icon icon="mdi:arrow-collapse-all"></ha-icon>Malá</button>

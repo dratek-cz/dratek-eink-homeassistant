@@ -253,6 +253,34 @@ export const inspectorMixin = {
       const input = this.shadowRoot.querySelector(`[data-device-name-input="${address}"]`);
       this._saveDeviceName(address, input?.value ?? this._deviceNameDraft);
     }));
+    // Anything carrying this attribute opens that template's data sources -
+    // the device-info bar above the preview (a plain container, so a click on
+    // its nested rename button must not also trigger this) and each card's
+    // "Nastaveno"/"Nenastaveno" status pill (itself the button, so the guard
+    // below must not reject a click landing on the trigger element itself).
+    this.shadowRoot.querySelectorAll("[data-display-template-configure]").forEach((bar) => {
+      const openTemplateSettings = () => {
+        const templateId = bar.dataset.displayTemplateConfigure || "";
+        if (!templateId) return;
+        this._templateEditMenuId = "";
+        this._templateSettingsDialogOpen = true;
+        this._templateSettingsDialogMode = "variables";
+        this._templateSettingsDialogTemplateId = templateId;
+        this._render();
+        this._paint();
+      };
+      bar.addEventListener("click", (event) => {
+        const blocker = event.target.closest("button,input,select,textarea,a,details,summary");
+        if (blocker && blocker !== bar) return;
+        event.stopPropagation();
+        openTemplateSettings();
+      });
+      bar.addEventListener("keydown", (event) => {
+        if (event.target !== bar || !["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        openTemplateSettings();
+      });
+    });
     const openDisplaySettings = (address) => {
       this._selectedDeviceAddress = address;
       this._displaySettingsView = "templates";
@@ -291,38 +319,57 @@ export const inspectorMixin = {
       this._render();
       this._paint();
     }));
-    const openDisplayTemplate = (templateId, replaceIndex = null, stayInCatalog = false) => {
+    // `placement` is the explicit choice from either the drop-zone cross or the
+    // placement dialog: "full" replaces everything with just this template;
+    // "left"/"right"/"top"/"bottom" put it in one half and keep whatever
+    // already occupies the other one. Left unset, the call falls back to the
+    // older replaceIndex-based behaviour used by the plain template swap
+    // control.
+    const openDisplayTemplate = (templateId, replaceIndex = null, stayInCatalog = false, placement = null) => {
       const device = this._device();
       const template = this._displayTemplateCards().find((item) => item.id === templateId);
       const previousAssigned = this._assignedDisplayTemplates(device);
+      const isPlacementMove = ["left", "right", "top", "bottom", "full"].includes(placement);
       // A template can be assigned to a display only once. Re-dropping the
       // same card used to run the complete apply flow again even though the
       // assignment itself stayed unchanged. That reset the active template
       // state and could leave the physical preview empty. Treat a duplicate
-      // drop/click as a genuine no-op and keep the existing preview intact.
-      if (previousAssigned.includes(templateId)) {
+      // drop/click as a genuine no-op and keep the existing preview intact -
+      // unless it is an explicit placement move, which repositions it on
+      // purpose (e.g. dragging the already-assigned template to "full").
+      if (previousAssigned.includes(templateId) && !isPlacementMove) {
         this._pendingDisplayTemplateConflict = null;
         return;
       }
       this._rememberActiveTemplateEditorState?.();
       this._prepareDisplayTemplateBindings(template);
-      const assigned = this._assignDisplayTemplate(device, templateId, replaceIndex);
       const size = this._devicePreviewSize(device);
       const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
+      let assigned;
+      let forcedLayout = null;
+      if (placement === "full") {
+        assigned = this._assignDisplayTemplateFull(device, templateId);
+        forcedLayout = "single";
+      } else if (placement === "left" || placement === "top") {
+        assigned = this._placeDisplayTemplateInSlot(device, templateId, 0);
+        forcedLayout = placement === "left" ? "side-by-side" : "stacked";
+      } else if (placement === "right" || placement === "bottom") {
+        assigned = this._placeDisplayTemplateInSlot(device, templateId, 1);
+        forcedLayout = placement === "right" ? "side-by-side" : "stacked";
+      } else {
+        assigned = this._assignDisplayTemplate(device, templateId, replaceIndex);
+      }
       this._displayTemplateSizes ||= { primary: "large", secondary: "small" };
-      if (!largeDisplay) {
+      if (!largeDisplay || assigned.length < 2) {
         this._displayTemplateSizes.primary = "large";
         this._displayTemplateSizes.secondary = "small";
-      } else if (assigned.length > 1) {
+      } else {
         this._displayTemplateSizes.primary = "small";
-        this._displayTemplateSizes.secondary = "small";
-      } else if (!previousAssigned.length || Number.isInteger(replaceIndex)) {
-        this._displayTemplateSizes.primary = "large";
         this._displayTemplateSizes.secondary = "small";
       }
       this._selectedDisplayTemplateId = assigned[0] || templateId;
       this._selectedDisplayTemplateSecondaryId = assigned[1] || "";
-      this._displayTemplateLargeLayout = largeDisplay && assigned.length > 1 ? "side-by-side" : "single";
+      this._displayTemplateLargeLayout = forcedLayout || (largeDisplay && assigned.length > 1 ? "side-by-side" : "single");
       this._templateOrientationMenuOpen = false;
       this._selectedTemplateCanvasSlot = assigned.indexOf(templateId) === 1 ? "secondary" : "primary";
       if (!largeDisplay) {
@@ -334,12 +381,27 @@ export const inspectorMixin = {
       this._displayDesignerReturnView = "templates";
       this._displaySettingsView = stayInCatalog ? "templates" : "designer";
 
-      // Load template objects into canvas state
-      if (template?.user_created) this._applyUserDisplayTemplate(template);
-      else this._applyTemplate(templateId, true);
-
-      this._render();
-      this._paint();
+      // Load template objects into canvas state. _applyTemplate ends with its
+      // own render+paint; _applyUserDisplayTemplate does not, so only that
+      // branch needs one here. Calling render+paint a second time regardless
+      // of branch used to re-run _render() right after _applyTemplate's own,
+      // replacing the canvas it had just painted with a fresh, blank one - the
+      // _paint() that would have repainted it is a silent no-op, guarded
+      // against running twice in the same tick. The dithered preview canvas
+      // then never gets another chance to be drawn into, because nothing else
+      // is pending to trigger a repaint: the first assignment of any template
+      // still works, since its render arrives later through an async image
+      // load that lands after the guard resets, but assigning the same
+      // template again - a warm cache, no async round trip - painted the
+      // canvas _render() was about to throw away and nothing else, so the
+      // display outright disappeared.
+      if (template?.user_created) {
+        this._applyUserDisplayTemplate(template);
+        this._render();
+        this._paint();
+      } else {
+        this._applyTemplate(templateId, true);
+      }
       // Assigning a template while staying in the catalog - by clicking its
       // preview, or by dragging it onto the device preview - keeps the
       // user on the same page, so their scroll position must not move. Only
@@ -362,23 +424,33 @@ export const inspectorMixin = {
       this._pendingDisplayTemplateConflict = null;
       this._displayDesignerReturnView = "templates";
       this._displaySettingsView = "designer";
-      if (template.user_created) this._applyUserDisplayTemplate(template);
-      else this._applyTemplate(templateId, true);
-      this._render();
-      this._paint();
+      // See the matching branch in openDisplayTemplate above for why this
+      // must not render+paint a second time after _applyTemplate already did.
+      if (template.user_created) {
+        this._applyUserDisplayTemplate(template);
+        this._render();
+        this._paint();
+      } else {
+        this._applyTemplate(templateId, true);
+      }
       this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
     };
-    // A large display already carrying one full-size template has no room for a
-    // second without the user choosing to shrink it or replace it outright, so
-    // both the "configure" button and the selectable preview have to detect
-    // that and defer to the conflict dialog instead of silently overwriting.
+    // A large display with no free slot has no room for another template
+    // without the user choosing where it goes, so both the "configure" button
+    // and the selectable preview have to detect that and defer to the
+    // placement dialog instead of silently doing nothing. That is true both
+    // with one full-size template already there (no split exists yet to drop
+    // the new one into) and with both halves of an existing split already
+    // taken (a third template has nowhere free to land).
     const hasTemplateSlotConflict = (templateId) => {
       const device = this._device();
       const size = this._devicePreviewSize(device);
       const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
       const assigned = this._assignedDisplayTemplates(device);
+      if (!largeDisplay || assigned.includes(templateId)) return false;
+      if (assigned.length >= 2) return true;
       const primaryIsLarge = this._displayTemplateSizes?.primary !== "small";
-      return largeDisplay && assigned.length === 1 && primaryIsLarge && !assigned.includes(templateId);
+      return assigned.length === 1 && primaryIsLarge;
     };
     this.shadowRoot.querySelectorAll("[data-display-template-edit-menu]").forEach((button) => {
       button.addEventListener("click", (event) => {
@@ -458,41 +530,43 @@ export const inspectorMixin = {
         card.classList.remove("is-dragging");
         const dropzone = this.shadowRoot.querySelector("[data-display-template-dropzone]");
         dropzone?.classList.remove("is-drag-over");
-        dropzone?.querySelectorAll("[data-display-template-drop-half]").forEach((half) => half.classList.remove("is-target"));
-        this._pendingLargeDropHalfIndex = null;
+        dropzone?.querySelectorAll("[data-display-template-drop-zone]").forEach((zone) => zone.classList.remove("is-target"));
+        this._pendingTemplateDropZone = null;
       });
     });
     const templateDropzone = this.shadowRoot.querySelector("[data-display-template-dropzone]");
-    const dropHalves = templateDropzone?.querySelector("[data-display-template-drop-halves]");
-    const dropHalfElements = dropHalves ? Array.from(dropHalves.querySelectorAll("[data-display-template-drop-half]")) : [];
+    const dropZonesEl = templateDropzone?.querySelector("[data-display-template-drop-zones]");
+    const dropZoneElements = dropZonesEl ? Array.from(dropZonesEl.querySelectorAll("[data-display-template-drop-zone]")) : [];
     const dropScreenEl = templateDropzone?.querySelector(".designer-device-screen");
-    const clearDropHalfHighlight = () => {
-      dropHalfElements.forEach((half) => half.classList.remove("is-target"));
-      this._pendingLargeDropHalfIndex = null;
+    const clearDropZoneHighlight = () => {
+      dropZoneElements.forEach((zone) => zone.classList.remove("is-target"));
+      this._pendingTemplateDropZone = null;
     };
+    // Five zones over the physical preview: the outer 30% strip on each edge
+    // targets that half, the middle targets the whole display. This mirrors
+    // the placement dialog's five choices as a single drag gesture instead of
+    // a confirmation step.
     templateDropzone?.addEventListener("dragover", (event) => {
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
       templateDropzone.classList.add("is-drag-over");
-      if (!dropHalves || !dropScreenEl) return;
+      if (!dropZonesEl || !dropScreenEl) return;
       const dzRect = templateDropzone.getBoundingClientRect();
       const screenRect = dropScreenEl.getBoundingClientRect();
-      dropHalves.style.left = `${screenRect.left - dzRect.left}px`;
-      dropHalves.style.top = `${screenRect.top - dzRect.top}px`;
-      dropHalves.style.width = `${screenRect.width}px`;
-      dropHalves.style.height = `${screenRect.height}px`;
-      const axis = dropHalves.dataset.displayTemplateDropHalves === "stacked" ? "y" : "x";
-      const fraction = axis === "y"
-        ? (event.clientY - screenRect.top) / (screenRect.height || 1)
-        : (event.clientX - screenRect.left) / (screenRect.width || 1);
-      const index = fraction < 0.5 ? 0 : 1;
-      this._pendingLargeDropHalfIndex = index;
-      dropHalfElements.forEach((half) => half.classList.toggle("is-target", Number(half.dataset.displayTemplateDropHalf) === index));
+      dropZonesEl.style.left = `${screenRect.left - dzRect.left}px`;
+      dropZonesEl.style.top = `${screenRect.top - dzRect.top}px`;
+      dropZonesEl.style.width = `${screenRect.width}px`;
+      dropZonesEl.style.height = `${screenRect.height}px`;
+      const fx = (event.clientX - screenRect.left) / (screenRect.width || 1);
+      const fy = (event.clientY - screenRect.top) / (screenRect.height || 1);
+      const zone = fx < 0.3 ? "left" : fx > 0.7 ? "right" : fy < 0.3 ? "top" : fy > 0.7 ? "bottom" : "full";
+      this._pendingTemplateDropZone = zone;
+      dropZoneElements.forEach((element) => element.classList.toggle("is-target", element.dataset.displayTemplateDropZone === zone));
     });
     templateDropzone?.addEventListener("dragleave", (event) => {
       if (!templateDropzone.contains(event.relatedTarget)) {
         templateDropzone.classList.remove("is-drag-over");
-        clearDropHalfHighlight();
+        clearDropZoneHighlight();
       }
     });
     templateDropzone?.addEventListener("drop", (event) => {
@@ -500,47 +574,36 @@ export const inspectorMixin = {
       templateDropzone.classList.remove("is-drag-over");
       const templateId = event.dataTransfer.getData("application/x-dratek-display-template")
         || event.dataTransfer.getData("text/plain");
-      const pendingHalfIndex = this._pendingLargeDropHalfIndex;
-      clearDropHalfHighlight();
+      const pendingZone = this._pendingTemplateDropZone;
+      clearDropZoneHighlight();
       if (!this._displayTemplateCards().some((item) => item.id === templateId)) return;
       const device = this._device();
       const size = this._devicePreviewSize(device);
       const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
       const assigned = this._assignedDisplayTemplates(device);
-      const replaceIndex = largeDisplay
-        ? (Number.isInteger(pendingHalfIndex) ? pendingHalfIndex : (assigned.length < 2 ? assigned.length : 0))
-        : null;
-      openDisplayTemplate(templateId, replaceIndex, true);
+      // No existing template to split against yet, or the display is too
+      // small for a split at all: the drop always means "the whole screen".
+      const placement = largeDisplay && assigned.length ? (pendingZone || "full") : "full";
+      openDisplayTemplate(templateId, null, true, placement);
     });
     this.shadowRoot.querySelectorAll("[data-display-template-replace]").forEach((button) => button.addEventListener("click", () => {
       const card = button.closest(".display-template-card-replace");
       const target = Number(card?.querySelector("[data-template-replace-target]")?.value);
       openDisplayTemplate(button.dataset.displayTemplateReplace || "", Number.isInteger(target) ? target : 0);
     }));
-    this.shadowRoot.querySelectorAll("[data-template-conflict-action]").forEach((button) => button.addEventListener("click", async () => {
+    this.shadowRoot.querySelectorAll("[data-template-placement]").forEach((button) => button.addEventListener("click", async () => {
       const pendingTemplateId = this._pendingDisplayTemplateConflict?.templateId || "";
-      const action = button.dataset.templateConflictAction;
-      if (!pendingTemplateId || action === "cancel") {
+      const placement = button.dataset.templatePlacement;
+      if (!pendingTemplateId || placement === "cancel") {
         this._pendingDisplayTemplateConflict = null;
         this._render();
         this._paint();
         return;
       }
-      // Resolving the conflict only changes the editor draft. The user still
+      // Resolving the placement only changes the editor draft. The user still
       // confirms the physical transfer separately with the Send button.
       const stayInCatalog = this._pendingDisplayTemplateConflict?.stayInCatalog === true;
-      this._displayTemplateSizes ||= { primary: "large", secondary: "small" };
-      if (action === "shrink") {
-        this._displayTemplateSizes.primary = "small";
-        this._displayTemplateSizes.secondary = "small";
-        openDisplayTemplate(pendingTemplateId, null, stayInCatalog);
-        return;
-      }
-      if (action === "replace") {
-        this._displayTemplateSizes.primary = "large";
-        this._displayTemplateSizes.secondary = "small";
-        openDisplayTemplate(pendingTemplateId, 0, stayInCatalog);
-      }
+      openDisplayTemplate(pendingTemplateId, null, stayInCatalog, placement);
     }));
     this.shadowRoot.querySelectorAll("[data-template-orientation]").forEach((button) => button.addEventListener("click", () => {
       this._displayTemplateOrientation = button.dataset.templateOrientation === "landscape" ? "landscape" : "portrait";
