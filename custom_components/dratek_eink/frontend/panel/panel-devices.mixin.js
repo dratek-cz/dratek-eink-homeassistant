@@ -1708,6 +1708,31 @@ export const devicesMixin = {
     </div>`;
   },
 
+  // What actually has to happen before a display redraws: only a real change
+  // to a napojená entita, only the interval ticking over, or either - kept
+  // separate from the interval itself, because "how often" and "on what"
+  // are two different questions (a display with nothing that needs periodic
+  // insurance, e.g. no camera binding, may want to never redraw between real
+  // changes; a fast-changing entity may want throttling to a fixed cadence
+  // instead of redrawing on every update).
+  _renderRefreshTriggerModeSelect(address, currentMode, extraClass = "") {
+    const mode = ["both", "change_only", "interval_only"].includes(currentMode) ? currentMode : "both";
+    const options = [
+      { value: "both", label: "Při změně i pravidelně" },
+      { value: "change_only", label: "Jen při změně entity" },
+      { value: "interval_only", label: "Jen pravidelně (podle intervalu)" },
+    ];
+    // Reuses display-interval-control/display-refresh-interval-select's styling
+    // (icon + borderless select in a pill) rather than defining a parallel set
+    // of rules for what is visually the same kind of control.
+    return `<div class="display-interval-control display-trigger-mode-control ${extraClass}" title="Co spouští automatickou obnovu displeje">
+      <ha-icon icon="mdi:swap-horizontal"></ha-icon>
+      <select class="display-refresh-interval-select display-refresh-trigger-mode-select" data-device-refresh-trigger-mode="${this._escape(address || '')}" aria-label="Co spouští automatickou obnovu">
+        ${options.map((o) => `<option value="${o.value}" ${mode === o.value ? "selected" : ""}>${o.label}</option>`).join("")}
+      </select>
+    </div>`;
+  },
+
   _toggleModalScrollLock(active) {
     try {
       const lock = !!active;
@@ -1743,6 +1768,7 @@ export const devicesMixin = {
           <span>Interval automatické obnovy displeje:</span>
         </div>
         ${this._renderRefreshIntervalSelect(this._selectedDeviceAddress, this._refreshIntervalSeconds, "in-dialog")}
+        ${this._renderRefreshTriggerModeSelect(this._selectedDeviceAddress, this._refreshTriggerMode, "in-dialog")}
       </div>
       <h4><ha-icon icon="mdi:tune-vertical"></ha-icon> Napojení proměnných</h4>
       <p class="template-settings-intro">U každé položky vyberte entitu v Home Assistantu. Systémové údaje (čas, datum) se doplňují automaticky.</p>
@@ -2312,12 +2338,22 @@ export const devicesMixin = {
     if (radarImage) {
       const radarId = "template-radar-map";
       radarImage.setAttribute("id", radarId);
+      const radarWidth = Math.round(Number(radarImage.getAttribute("width")) || width);
+      const radarHeight = Math.round(Number(radarImage.getAttribute("height")) || height);
       bindings.push({
         id: radarId,
         type: "camera",
         entity_id: "camera.meteoradar",
-        width: Math.round(Number(radarImage.getAttribute("width")) || width),
-        height: Math.round(Number(radarImage.getAttribute("height")) || height),
+        width: radarWidth,
+        height: radarHeight,
+        // x/y/w/h let the backend's clean_background tier paste the fresh
+        // camera frame at the exact spot the <image> occupied - the other
+        // (SVG-substitution) tier does not need these, it just swaps the
+        // href of the very same element and keeps its original geometry.
+        x: Math.round(Number(radarImage.getAttribute("x")) || 0),
+        y: Math.round(Number(radarImage.getAttribute("y")) || 0),
+        w: radarWidth,
+        h: radarHeight,
         country: this._meteoradarCountry || this._displayTemplateConfig?.meteoradar_country || "cz",
       });
     }
@@ -2327,7 +2363,44 @@ export const devicesMixin = {
     // refresh reproduce a manual send exactly instead of guessing at what should
     // sit behind each value.
     const svgTemplate = bindings.length ? currentDocument.documentElement.outerHTML : "";
-    return { bindings, svgTemplate };
+    const cleanBackground = await this._blankedDisplayTemplateBackground(currentDocument, bindings, width, height);
+    return { bindings, svgTemplate, cleanBackground };
+  },
+
+  // Builds the true, value-free background an automatic refresh composites
+  // fresh values onto (automation.py's clean_background tier): a clone of the
+  // exact document captured above with every dynamic binding's footprint
+  // removed - tagged <text> runs and the radar <image> href - then rasterised
+  // WITHOUT paintOverlay, so free-form chart/gauge/signal/slider widgets (which
+  // only ever reach the canvas through that callback, see
+  // _rasterizeDisplayTemplateSvg) are absent too. Nothing here is guessed: this
+  // is the same real background a manual send draws behind every value, so an
+  // automatic refresh can match it exactly on any platform, with no dependency
+  // on the backend's optional SVG rasteriser.
+  //
+  // Not gated on text/camera bindings existing (unlike svgTemplate above) - a
+  // chart/gauge-only design still benefits from a real clean background, since
+  // paintOverlay is what would have baked their stale values in otherwise.
+  async _blankedDisplayTemplateBackground(currentDocument, bindings, width, height) {
+    const clone = currentDocument.cloneNode(true);
+    for (const binding of bindings) {
+      const elementId = String(binding.id || "");
+      if (!elementId) continue;
+      const node = clone.getElementById(elementId);
+      if (!node) continue; // best-effort, mirrors the backend's own id-collision tolerance
+      if (binding.type === "camera") {
+        node.removeAttribute("href");
+        continue;
+      }
+      if (binding.type === "text") {
+        node.remove();
+      }
+    }
+    try {
+      return await this._rasterizeSvgStringToPng(clone.documentElement.outerHTML, width, height);
+    } catch {
+      return ""; // falls back to the older tiers on the backend, same as a missing svg_template
+    }
   },
 
   async _displayTemplateEntityAutomation(image, device, gatewayId = "") {
@@ -2434,12 +2507,23 @@ export const devicesMixin = {
       // colours always match what a manual send draws - base_image alone
       // cannot reconstruct that once it is baked to a bitmap.
       svg_template: prepared.svgTemplate,
+      // A real, value-free render of this exact template (icons/gradients/photos
+      // included, chart/gauge/signal/slider widgets excluded since they never
+      // reach this document) captured by the panel itself. An automatic refresh
+      // composites fresh values on top of this instead of guessing a flat
+      // rectangle for whatever the value's box actually sits on - unlike
+      // svg_template, this needs no backend SVG rasteriser, so it works the
+      // same on every Home Assistant platform.
+      clean_background: prepared.cleanBackground || "",
       bindings,
       sdk_type: Number(device.sdk_type),
       software_version: Number(device.sw || 0),
       orientation: landscape ? "landscape" : "portrait",
       transform: this._displayTransform || "rotate_cw",
       refresh_interval_seconds: Math.max(30, Math.min(86400, Number(this._refreshIntervalSeconds) || 60)),
+      refresh_trigger_mode: ["both", "change_only", "interval_only"].includes(this._refreshTriggerMode)
+        ? this._refreshTriggerMode
+        : "both",
       gateway_selection: "manual",
       manual_gateway_id: gatewayId || "local",
       route_type: gatewayId ? "gateway" : "local",

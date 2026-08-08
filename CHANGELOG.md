@@ -2,6 +2,21 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.227] - 2026-08-08
+
+### Opraveno – Automatická obnova displeje po šablonách nevykreslovala správně texty ani data
+- `render.py`, `automation.py`: Automatická obnova (na časovač i na změnu entity) dosud vykreslovala každou hodnotu (text, graf, měřidlo, počasí) bez skutečné znalosti toho, co je za ní na pozadí - buď potřebovala nativní SVG rasterizér `resvg_py`, který se na některých instalacích Home Assistanta (ARM, HAOS na muslu) vůbec nenačte, nebo (bez něj) prostě přelepila celé místo plnou bílou/černou/červenou obdélníkovou "hádankou" a teprve na ni napsala novou hodnotu. Kdekoliv pod hodnotou ve skutečnosti byla ikona, barevný přechod nebo fotka - typicky u šablon jako Počasí - vypadal výsledek zjevně rozbitě a neodpovídal ručnímu odeslání.
+- Panel teď při ručním odeslání zachytí navíc i `clean_background`: skutečné vykreslení šablony s úplně vyprázdněnými dynamickými hodnotami (bez textu, bez kamerového snímku, bez grafů/měřidel) - stejným prohlížečovým vykreslovačem jako ruční odeslání, takže tu nikdy nic nehádá. Automatická obnova pak na tento opravdový podklad skládá čerstvé hodnoty (`render_entity_bound_clean_background_image`), a to pro každý typ prvku, na jakékoliv platformě, bez závislosti na `resvg_py`.
+- `panel-devices.mixin.js`, `panel-template-svg.mixin.js`: Nová metoda `_blankedDisplayTemplateBackground` klonuje zachycený dokument šablony, odstraní zaznačené textové uzly a href kamerového snímku a vynechá vykreslení volných widgetů (graf/měřidlo/signál/posuvník), protože ty se do plátna dostávají jen přes `paintOverlay`, který se pro tento průchod vůbec nevolá.
+- Starší již uložené automatizace (bez `clean_background`) fungují beze změny přes původní řetězec náhradních cest - jde čistě o přidání, žádná migrace není potřeba.
+
+### Přidáno – Volba, co spouští automatickou obnovu displeje
+- `automation.py`: Nové nastavení `refresh_trigger_mode` (výchozí `both`, jako dosud) rozhoduje, co u daného displeje smí spustit obnovu - **při změně i pravidelně** (dosavadní chování), **jen při změně entity** (`change_only` - periodický časovač tento displej úplně přeskočí, užitečné pro displeje bez potřeby pravidelné pojistky, např. bez kamerové vazby), nebo **jen pravidelně podle intervalu** (`interval_only` - změny navázané entity se ignorují, užitečné pro entitu měnící se moc často, kterou chce uživatel spíš omezit na pevný interval).
+- `_handle_refresh_tick` přeskakuje displeje v režimu `change_only`, `_handle_state_change` přeskakuje displeje v režimu `interval_only` a `_refresh_listener` navíc vůbec nepřihlašuje k odběru entity, které žádný displej v režimu `both`/`change_only` nepotřebuje - `interval_only` displej tak nikdy nezareaguje na cizí sdílenou entitu jiného displeje.
+- `ws_projects.py`: Uložení konceptu displeje (`dratek_eink/device_drafts/save`) teď kromě intervalu prosadí i změnu tohoto režimu okamžitě do běžící automatizace (`async_set_refresh_trigger_mode`), bez nutnosti displej znovu odeslat.
+- V nastavení šablony/designeru displeje (`panel-devices.mixin.js`) přibyl výběr vedle intervalu obnovy s těmito třemi možnostmi.
+- Starší uložené automatizace (bez `refresh_trigger_mode`) fungují beze změny - výchozí `both` odpovídá přesně dosavadnímu chování.
+
 ## [0.1.225] - 2026-08-07
 
 ### Opraveno – Interval automatické obnovy displeje konečně skutečně odesílá nový náhled

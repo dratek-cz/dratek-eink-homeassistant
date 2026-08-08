@@ -224,5 +224,9 @@ async def websocket_save_device_draft(
         await get_entity_auto_update_manager(hass).async_set_refresh_interval(
             address, draft["refresh_interval_seconds"]
         )
+    if "refresh_trigger_mode" in draft:
+        await get_entity_auto_update_manager(hass).async_set_refresh_trigger_mode(
+            address, draft["refresh_trigger_mode"]
+        )
     preview = await async_display_preview(hass, address)
     connection.send_result(msg["id"], {"draft": {**draft, **(preview or {})}})

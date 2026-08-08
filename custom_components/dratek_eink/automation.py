@@ -45,6 +45,18 @@ GATEWAY_ROUTE_CACHE_SECONDS = 5
 # (MIN_REFRESH_INTERVAL_SECONDS) sets the floor, since checking any less often
 # than that would make picking a short interval pointless.
 REFRESH_TICK_SECONDS = MIN_REFRESH_INTERVAL_SECONDS
+# What actually triggers a refresh for a given display:
+# - "both" (default): a bound entity changing state AND the periodic tick,
+#   same as before this setting existed.
+# - "change_only": only a bound entity changing state - the periodic tick
+#   skips this display entirely. For displays with nothing that benefits from
+#   periodic insurance (e.g. no camera binding) and where the user would
+#   rather it never redraw between real changes.
+# - "interval_only": only the periodic tick - entity state changes are
+#   ignored. For a fast-changing entity the user wants throttled to a fixed
+#   cadence instead of redrawing on every update.
+VALID_REFRESH_TRIGGER_MODES = {"both", "change_only", "interval_only"}
+DEFAULT_REFRESH_TRIGGER_MODE = "both"
 
 
 
@@ -207,6 +219,8 @@ class EntityAutoUpdateManager:
     def _handle_refresh_tick(self, _now: Any) -> None:
         now = time.monotonic()
         for address, config in self._configs.items():
+            if self._refresh_trigger_mode(config) == "change_only":
+                continue
             interval = self._refresh_interval(config)
             if now - self._last_refresh_at.get(address, 0.0) >= interval:
                 self._schedule_refresh(address)
@@ -218,6 +232,11 @@ class EntityAutoUpdateManager:
         except (TypeError, ValueError):
             interval = DEFAULT_REFRESH_INTERVAL_SECONDS
         return max(MIN_REFRESH_INTERVAL_SECONDS, min(MAX_REFRESH_INTERVAL_SECONDS, interval))
+
+    @staticmethod
+    def _refresh_trigger_mode(config: dict[str, Any]) -> str:
+        mode = str(config.get("refresh_trigger_mode") or DEFAULT_REFRESH_TRIGGER_MODE)
+        return mode if mode in VALID_REFRESH_TRIGGER_MODES else DEFAULT_REFRESH_TRIGGER_MODE
 
     async def async_set_config(self, address: str, config: dict[str, Any] | None) -> None:
         await self.async_initialize()
@@ -242,6 +261,7 @@ class EntityAutoUpdateManager:
             updated = dict(config)
             updated["enabled"] = True
             updated["refresh_interval_seconds"] = self._refresh_interval(updated)
+            updated["refresh_trigger_mode"] = self._refresh_trigger_mode(updated)
             self._configs[normalized] = updated
         await self._store.async_save({"configs": self._configs})
         self._refresh_listener()
@@ -259,6 +279,7 @@ class EntityAutoUpdateManager:
         expected = dict(config)
         expected["enabled"] = True
         expected["refresh_interval_seconds"] = self._refresh_interval(expected)
+        expected["refresh_trigger_mode"] = self._refresh_trigger_mode(expected)
         if self._configs.get(normalized) == expected:
             await self.async_set_config(normalized, None)
 
@@ -283,6 +304,26 @@ class EntityAutoUpdateManager:
         updated["refresh_interval_seconds"] = interval
         self._configs[normalized] = updated
         await self._store.async_save({"configs": self._configs})
+
+    async def async_set_refresh_trigger_mode(self, address: str, mode: Any) -> None:
+        """Update what triggers a refresh (change, interval, or both) in place."""
+        await self.async_initialize()
+        normalized = address.upper()
+        config = self._configs.get(normalized)
+        if not config:
+            return
+        resolved = self._refresh_trigger_mode({"refresh_trigger_mode": mode})
+        if self._refresh_trigger_mode(config) == resolved:
+            return
+        updated = dict(config)
+        updated["refresh_trigger_mode"] = resolved
+        self._configs[normalized] = updated
+        await self._store.async_save({"configs": self._configs})
+        # The periodic tick re-checks each config's mode on every tick, so
+        # nothing extra is needed for "change_only". Switching into or out of
+        # "interval_only" does need this: it changes which entities this
+        # display's bindings should ever be able to trigger a refresh through.
+        self._refresh_listener()
 
     async def async_set_gateway_preference(
         self,
@@ -333,6 +374,7 @@ class EntityAutoUpdateManager:
         entity_ids = sorted({
             entity_id
             for config in self._configs.values()
+            if self._refresh_trigger_mode(config) != "interval_only"
             for binding in config.get("bindings", [])
             if isinstance(binding, dict)
             for entity_id, _attribute in _binding_sources(binding)
@@ -506,6 +548,7 @@ class EntityAutoUpdateManager:
             render_automatic_refresh_image,
             str(config.get("base_image") or ""),
             str(config.get("svg_template") or ""),
+            str(config.get("clean_background") or ""),
             bindings,
             values,
         )
@@ -516,6 +559,8 @@ class EntityAutoUpdateManager:
         old_state = event.data.get("old_state")
         new_state = event.data.get("new_state")
         for address, config in self._configs.items():
+            if self._refresh_trigger_mode(config) == "interval_only":
+                continue
             sources = {
                 (source_entity_id, attribute)
                 for binding in config.get("bindings", [])

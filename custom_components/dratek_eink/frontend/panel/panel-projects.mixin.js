@@ -80,6 +80,9 @@ export const projectsMixin = {
     this._orientation = source.orientation === "portrait" ? "portrait" : "landscape";
     this._displayTransform = source.display_transform || "rotate_cw";
     this._refreshIntervalSeconds = Math.max(30, Math.min(86400, Number(source.refresh_interval_seconds) || 60));
+    this._refreshTriggerMode = ["both", "change_only", "interval_only"].includes(source.refresh_trigger_mode)
+      ? source.refresh_trigger_mode
+      : "both";
     this._invertColors = false;
     this._backgroundColor = ["white", "black", "red"].includes(source.background_color) ? source.background_color : "white";
     const size = this._displaySize(device);
@@ -289,6 +292,7 @@ export const projectsMixin = {
       orientation: this._orientation,
       display_transform: this._displayTransform,
       refresh_interval_seconds: this._refreshIntervalSeconds,
+      refresh_trigger_mode: this._refreshTriggerMode,
       invert_colors: this._invertColors,
       background_color: this._backgroundColor,
       width: size.width,

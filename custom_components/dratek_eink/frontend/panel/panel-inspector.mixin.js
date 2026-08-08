@@ -1363,6 +1363,24 @@ export const inspectorMixin = {
         this._paint();
       });
     });
+    this.shadowRoot.querySelectorAll("[data-device-refresh-trigger-mode]").forEach((select) => {
+      select.addEventListener("change", (event) => {
+        event.stopPropagation();
+        const address = select.dataset.deviceRefreshTriggerMode || this._selectedDeviceAddress;
+        const mode = ["both", "change_only", "interval_only"].includes(event.target.value) ? event.target.value : "both";
+        this._refreshTriggerMode = mode;
+        const upperAddr = String(address || "").toUpperCase();
+        if (upperAddr) {
+          if (!this._deviceDrafts) this._deviceDrafts = {};
+          const draft = this._deviceDrafts[upperAddr] || {};
+          draft.refresh_trigger_mode = mode;
+          this._deviceDrafts[upperAddr] = draft;
+        }
+        this._scheduleDraftSave();
+        this._render();
+        this._paint();
+      });
+    });
     this.shadowRoot.querySelectorAll("[data-meteoradar-country]").forEach((element) => {
       element.addEventListener("click", (event) => {
         event.stopPropagation();

@@ -1311,6 +1311,15 @@ export const templateSvgMixin = {
   // palette the panel can actually show.
   async _rasterizeDisplayTemplateSvg(templates, width, height, layout = "single", paintOverlay = null) {
     const svg = await this._buildDisplayTemplateSvg(templates, width, height, layout);
+    return this._rasterizeSvgStringToPng(svg, width, height, paintOverlay);
+  },
+
+  // The rasterise/quantise tail of _rasterizeDisplayTemplateSvg, split out so a
+  // caller that already has a ready SVG string - e.g. a clone of the captured
+  // template with its dynamic values blanked out, for automation.py's
+  // clean_background tier - can reuse it without re-running _buildDisplayTemplateSvg
+  // (which would re-fetch the radar camera frame and other live data unnecessarily).
+  async _rasterizeSvgStringToPng(svg, width, height, paintOverlay = null) {
     const bitmap = new Image();
     await new Promise((resolve, reject) => {
       bitmap.onload = resolve;

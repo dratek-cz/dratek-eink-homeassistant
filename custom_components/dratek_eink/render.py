@@ -236,7 +236,7 @@ def _draw_centered_text(
     return font_size
 
 
-def _render_bound_text(binding: dict[str, Any], value: str) -> Image.Image:
+def _render_bound_text(binding: dict[str, Any], value: str, force_transparent: bool = False) -> Image.Image:
     width = max(1, round(float(binding.get("w", 1))))
     height = max(1, round(float(binding.get("h", 1))))
     backgrounds = {
@@ -245,9 +245,13 @@ def _render_bound_text(binding: dict[str, Any], value: str) -> Image.Image:
         "white": (255, 255, 255, 255),
         "transparent": (0, 0, 0, 0),
     }
-    background = backgrounds.get(
-        str(binding.get("backgroundColor") or "transparent"),
-        backgrounds["transparent"],
+    background = (
+        backgrounds["transparent"]
+        if force_transparent
+        else backgrounds.get(
+            str(binding.get("backgroundColor") or "transparent"),
+            backgrounds["transparent"],
+        )
     )
     layer = Image.new("RGBA", (width, height), background)
     draw = ImageDraw.Draw(layer)
@@ -311,7 +315,7 @@ def _chart_values(value: str, maximum: int = 48) -> list[float]:
     return values[-max(2, min(96, maximum)) :]
 
 
-def _render_bound_chart(binding: dict[str, Any], value: str) -> Image.Image:
+def _render_bound_chart(binding: dict[str, Any], value: str, force_transparent: bool = False) -> Image.Image:
     width = max(24, round(float(binding.get("w", 24))))
     height = max(24, round(float(binding.get("h", 24))))
     palette = {
@@ -319,7 +323,11 @@ def _render_bound_chart(binding: dict[str, Any], value: str) -> Image.Image:
         "red": (220, 20, 12, 255),
         "white": (255, 255, 255, 255),
     }
-    background = palette.get(str(binding.get("backgroundColor") or "white"), palette["white"])
+    background = (
+        (0, 0, 0, 0)
+        if force_transparent
+        else palette.get(str(binding.get("backgroundColor") or "white"), palette["white"])
+    )
     layer = Image.new("RGBA", (width, height), background)
     draw = ImageDraw.Draw(layer)
     values = _chart_values(value, int(binding.get("maxPoints", 48)))
@@ -539,7 +547,7 @@ def _render_bound_chart(binding: dict[str, Any], value: str) -> Image.Image:
     return layer
 
 
-def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
+def _render_bound_layer(binding: dict[str, Any], value: str, force_transparent: bool = False) -> Image.Image:
     """Render the graphical layer selected by a Home Assistant condition."""
     width = max(1, round(float(binding.get("w", 1))))
     height = max(1, round(float(binding.get("h", 1))))
@@ -547,7 +555,13 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
     source_height = max(1, int(binding.get("canvas_height", 128)))
     scale_x = width / source_width
     scale_y = height / source_height
-    output = Image.new("RGBA", (width, height), (255, 255, 255, 255))
+    # The outer canvas guesses white when composited over an unknown backdrop
+    # (base_image/flat-color tiers); over a real clean_background capture there
+    # is no need to guess, so it stays transparent and the real art shows
+    # through everywhere except the widget's own drawn shapes (track, needle,
+    # slice...) below. Those inner shapes keep their own opaque "plate" fills
+    # (bar_gauge, pie) - that's deliberate legibility, not a background guess.
+    output = Image.new("RGBA", (width, height), (0, 0, 0, 0) if force_transparent else (255, 255, 255, 255))
     layers = binding.get("layers") if isinstance(binding.get("layers"), list) else []
     render_value: Any = value
     if isinstance(value, str) and value.lstrip().startswith("{"):
@@ -854,13 +868,14 @@ def _render_bound_layer(binding: dict[str, Any], value: str) -> Image.Image:
     return output
 
 
-def _render_bound_weather(binding: dict[str, Any], value: str) -> Image.Image:
+def _render_bound_weather(binding: dict[str, Any], value: str, force_transparent: bool = False) -> Image.Image:
     w = max(1, round(float(binding.get("w", 100))))
     h = max(1, round(float(binding.get("h", 60))))
     output = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(output)
     colors = {"black": (0, 0, 0, 255), "red": (220, 20, 12, 255), "white": (255, 255, 255, 255)}
-    draw.rectangle((0, 0, w - 1, h - 1), fill=colors["white"], outline=colors["black"])
+    if not force_transparent:
+        draw.rectangle((0, 0, w - 1, h - 1), fill=colors["white"], outline=colors["black"])
     condition = str(value or binding.get("sample_value") or "sunny").lower()
     icon_symbol = "SUN"
     if "rain" in condition: icon_symbol = "RAIN"
@@ -879,15 +894,15 @@ def _is_text_binding(binding: dict[str, Any]) -> bool:
     return binding.get("type") in (None, "", "text")
 
 
-def _render_binding_layer(binding: dict[str, Any], value: str) -> Image.Image:
+def _render_binding_layer(binding: dict[str, Any], value: str, force_transparent: bool = False) -> Image.Image:
     """Rasterise one binding to its own RGBA layer."""
     if binding.get("type") == "chart":
-        return _render_bound_chart(binding, value)
+        return _render_bound_chart(binding, value, force_transparent)
     if binding.get("type") == "layered":
-        return _render_bound_layer(binding, value)
+        return _render_bound_layer(binding, value, force_transparent)
     if binding.get("type") == "weather":
-        return _render_bound_weather(binding, value)
-    return _render_bound_text(binding, value)
+        return _render_bound_weather(binding, value, force_transparent)
+    return _render_bound_text(binding, value, force_transparent)
 
 
 def _composite_binding(image: Image.Image, binding: dict[str, Any], layer: Image.Image) -> None:
@@ -1173,23 +1188,79 @@ def render_entity_bound_template_image(
     return quantize_bwr_preview(image)
 
 
+def render_entity_bound_clean_background_image(
+    clean_background: str,
+    bindings: list[dict[str, Any]],
+    values: dict[str, str],
+) -> Image.Image | None:
+    """Composite fresh values over a true, value-free background capture.
+
+    clean_background is rendered by the panel itself - a real browser SVG/canvas,
+    the same one a manual send uses, with every dynamic binding blanked out
+    (text removed, camera image hidden, chart/gauge/signal/slider overlay
+    widgets never drawn). No guessed flat rectangle ever has to stand in for
+    art the backend cannot see, so this tier matches a manual send for every
+    binding type - not just text - and needs no SVG rasteriser (resvg_py),
+    so it works the same on every Home Assistant platform.
+
+    Returns None - never partially applied - when clean_background cannot be
+    decoded, so the caller falls back to the older, resvg-dependent tiers.
+    """
+    try:
+        image = _decode_data_image(clean_background).convert("RGBA")
+    except Exception:
+        return None
+    for binding in bindings:
+        if not isinstance(binding, dict):
+            continue
+        element_id = str(binding.get("id") or "")
+        value = values.get(element_id, str(binding.get("fallback", "")))
+        if binding.get("type") == "camera":
+            # A fresh snapshot was already fetched and quantised asynchronously
+            # by the caller (async_render_camera_binding_data_url needs the
+            # event loop, which this synchronous compositor does not have) -
+            # composited directly rather than through _render_binding_layer,
+            # which has no camera case (that dispatch only ever serves the
+            # SVG-substitution tier, where a camera value swaps an <image>
+            # href instead of being pasted as its own layer).
+            if not value:
+                continue
+            try:
+                camera_layer = _decode_data_image(value).convert("RGBA")
+            except Exception:
+                continue
+            _composite_binding(image, binding, camera_layer)
+            continue
+        _composite_binding(
+            image, binding, _render_binding_layer(binding, value, force_transparent=True)
+        )
+    return quantize_bwr_preview(image)
+
+
 def render_automatic_refresh_image(
     base_image: str,
     svg_template: str,
+    clean_background: str,
     bindings: list[dict[str, Any]],
     values: dict[str, str],
 ) -> Image.Image:
     """Pick the closest-to-manual rendering path an automatic refresh can use.
 
-    Preferred: rebuild the captured template SVG with fresh values
-    (render_entity_bound_template_image) - this matches a manual send exactly,
-    backgrounds and all, because it is the same document a manual send would
-    rasterise. Falls back to patching individual text slots over the stored
-    base_image (render_entity_bound_svg_image, correct font/size but blind to
-    whatever the slot's real background was), and finally to plain PIL
-    compositing, so a refresh always produces a complete image rather than
-    erroring out.
+    Preferred: composite fresh values over a real, value-free background the
+    panel captured at manual-send time (render_entity_bound_clean_background_image)
+    - this matches a manual send exactly, for every binding type, on any
+    platform, because nothing about it is guessed. Falls back - for designs
+    saved before this existed - to rebuilding the captured template SVG with
+    fresh values (render_entity_bound_template_image), then to patching
+    individual text slots over the stored base_image (render_entity_bound_svg_image,
+    correct font/size but blind to whatever the slot's real background was),
+    and finally to plain PIL compositing, so a refresh always produces a
+    complete image rather than erroring out.
     """
+    if clean_background:
+        image = render_entity_bound_clean_background_image(clean_background, bindings, values)
+        if image is not None:
+            return image
     if svg_template:
         image = render_entity_bound_template_image(svg_template, bindings, values)
         if image is not None:
