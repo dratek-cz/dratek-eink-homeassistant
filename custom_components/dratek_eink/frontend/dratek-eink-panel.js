@@ -1,7 +1,7 @@
 import { storageMixin } from "./panel/panel-storage.mixin.js";
 import { queueMixin } from "./panel/panel-queue.mixin.js";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js";
-import { devicesMixin } from "./panel/panel-devices.mixin.js?v=automation-loop-4";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=template-files-1";
 import { projectsMixin } from "./panel/panel-projects.mixin.js?v=template-save-queue-1";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
 import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-3";
@@ -13,7 +13,7 @@ import { i18nMixin } from "./panel/panel-i18n.mixin.js";
 import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=readable-chart-type-2";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
-import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=readable-template-type-3";
+import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=template-files-1";
 
 import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js";
 
@@ -36,7 +36,6 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedDeviceAddress = "";
     this._displaySettingsView = "templates";
     this._displayTemplateSearchQuery = "";
-    this._displayTemplateCategory = "prepared";
     this._selectedDisplayTemplateId = "";
     this._selectedDisplayTemplateSecondaryId = "";
     this._displayTemplateOrientation = "portrait";

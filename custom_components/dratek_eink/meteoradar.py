@@ -31,9 +31,10 @@ import functools
 import io
 import math
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -54,6 +55,21 @@ PRECIPITATION_COLOR = (220, 20, 12)
 BORDER_COLOR = (0, 0, 0)
 INDEX_RECHECK_INTERVAL_SECONDS = 60
 HTTP_TIMEOUT_SECONDS = 15
+# The final image is downscaled at least twice after compositing - once here
+# (any composed crop wider/taller than this gets shrunk before caching) and
+# again in render.py's fit_to_size() to whatever the display slot needs. Border
+# widths are chosen relative to this cap (see _scaled_border_width) so a line
+# that reads fine at native zoom-6 resolution doesn't disappear into a single
+# antialiased, sub-pixel streak once both downscales and BWR quantization have
+# had a turn at it.
+MAX_NATIVE_DIMENSION = 800
+# A small black-on-white label baked into the composed image's corner, sized
+# relative to the image so it scales sensibly whether it is a tight Czech crop
+# or the much larger Europe overview.
+CORNER_BADGE_MARGIN = 6
+CORNER_BADGE_PADDING = 6
+CORNER_BADGE_FONT_SIZE_RATIO = 0.045
+CORNER_BADGE_MIN_FONT_SIZE = 12
 
 # Czech Republic border as (lon, lat) pairs, closed (first point repeats last).
 # Sourced from the Czech Office for Surveying, Mapping and Cadastre (ČÚZK) via
@@ -489,6 +505,18 @@ COUNTRY_NAMES: dict[str, str] = {
     "eu": "Střední Evropa 🇪🇺",
 }
 
+# Short, emoji-free labels for the corner badge - the bundled Arimo font has no
+# colour-emoji glyphs, so reusing COUNTRY_NAMES verbatim would draw a tofu box
+# where the flag should be.
+COUNTRY_SHORT_LABELS: dict[str, str] = {
+    "cz": "Česko",
+    "sk": "Slovensko",
+    "de": "Německo",
+    "at": "Rakousko",
+    "pl": "Polsko",
+    "eu": "Evropa",
+}
+
 
 def mercator_pixel(lat: float, lon: float, zoom: int, tile_size: int) -> tuple[float, float]:
     """Project (lat, lon) to a pixel in the world-wide Web Mercator raster at `zoom`.
@@ -521,6 +549,58 @@ def tile_bounds(
         int(math.floor(max(xs))),
         int(math.floor(max(ys))),
     )
+
+
+def _scaled_border_width(extent_px: float, base_width: int) -> int:
+    """Thicken a border stroke when its own extent is well past MAX_NATIVE_DIMENSION.
+
+    The Europe overview's five-country bounding box is several times wider, at
+    the same zoom level, than a single country's crop - so the same nominal
+    stroke width that reads cleanly for one country is already most of the way
+    to invisible once this composed image is downscaled to the native cap and
+    then again to the display slot. Scaling the stroke by how far `extent_px`
+    exceeds the cap keeps the *post-downscale* line roughly `base_width` pixels
+    wide regardless of how much real-world area the crop covers.
+    """
+    ratio = extent_px / MAX_NATIVE_DIMENSION
+    return base_width if ratio <= 1 else max(base_width, round(base_width * ratio))
+
+
+def _load_badge_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    bundled_font = Path(__file__).parent / "frontend" / "fonts" / "Arimo-wght.ttf"
+    try:
+        font = ImageFont.truetype(str(bundled_font), int(size))
+        if hasattr(font, "set_variation_by_axes"):
+            font.set_variation_by_axes([700])
+        return font
+    except (OSError, TypeError, ValueError):
+        return ImageFont.load_default()
+
+
+def draw_corner_badge(image: Image.Image, text: str) -> Image.Image:
+    """Stamp a small black-on-white label into the image's bottom-right corner.
+
+    Pure and side-effect-free like the compose_* functions above: takes a
+    finished composite and returns it with the badge drawn in place, so the
+    same call works whether the caller wants a country name, an update time,
+    or both - `_async_composed_base_image` is the only caller today, combining
+    both into one string.
+    """
+    if not text:
+        return image
+    font_size = max(CORNER_BADGE_MIN_FONT_SIZE, round(min(image.width, image.height) * CORNER_BADGE_FONT_SIZE_RATIO))
+    font = _load_badge_font(font_size)
+    draw = ImageDraw.Draw(image)
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    box_right = image.width - CORNER_BADGE_MARGIN
+    box_bottom = image.height - CORNER_BADGE_MARGIN
+    box_left = box_right - (text_width + CORNER_BADGE_PADDING * 2)
+    box_top = box_bottom - (text_height + CORNER_BADGE_PADDING * 2)
+    draw.rectangle((box_left, box_top, box_right, box_bottom), fill=(255, 255, 255), outline=BORDER_COLOR, width=1)
+    draw.text((box_left + CORNER_BADGE_PADDING - bbox[0], box_top + CORNER_BADGE_PADDING - bbox[1]), text, font=font, fill=BORDER_COLOR)
+    return image
 
 
 def compose_country_radar_image(
@@ -563,15 +643,17 @@ def compose_country_radar_image(
     ImageDraw.Draw(country_mask).polygon(polygon, fill=255)
     country_mask = country_mask.convert("1")
 
+    xs = [point[0] for point in polygon]
+    ys = [point[1] for point in polygon]
+    extent = max(max(xs) - min(xs), max(ys) - min(ys))
+
     output = Image.new("RGB", composite.size, "white")
     output.paste(
         Image.new("RGB", composite.size, PRECIPITATION_COLOR),
         mask=ImageChops.logical_and(country_mask, precipitation_mask),
     )
-    ImageDraw.Draw(output).polygon(polygon, outline=BORDER_COLOR, width=border_width)
+    ImageDraw.Draw(output).polygon(polygon, outline=BORDER_COLOR, width=_scaled_border_width(extent, border_width))
 
-    xs = [point[0] for point in polygon]
-    ys = [point[1] for point in polygon]
     crop_box = (
         max(0, int(min(xs)) - margin),
         max(0, int(min(ys)) - margin),
@@ -592,7 +674,7 @@ def compose_multi_country_radar_image(
     y_max: int,
     borders: tuple[tuple[str, tuple[tuple[float, float], ...]], ...] = EUROPE_OVERVIEW_BORDERS,
     alpha_threshold: int = PRECIPITATION_ALPHA_THRESHOLD,
-    border_width: int = 2,
+    border_width: int = 3,
     margin: int = 12,
 ) -> Image.Image:
     """The Europe-overview counterpart to `compose_country_radar_image`.
@@ -628,6 +710,14 @@ def compose_multi_country_radar_image(
         mask_draw.polygon(polygon, fill=255)
     countries_mask = countries_mask.convert("1")
 
+    xs = [x for polygon in polygons for x, _y in polygon]
+    ys = [y for polygon in polygons for _x, y in polygon]
+    # The overview's combined extent is what actually gets downscaled, not any
+    # single country's - a thin line here is the exact "borders too thin once
+    # it's shrunk" complaint the extent-based scaling exists to fix.
+    extent = max(max(xs) - min(xs), max(ys) - min(ys))
+    scaled_width = _scaled_border_width(extent, border_width)
+
     output = Image.new("RGB", composite.size, "white")
     output.paste(
         Image.new("RGB", composite.size, PRECIPITATION_COLOR),
@@ -635,10 +725,8 @@ def compose_multi_country_radar_image(
     )
     output_draw = ImageDraw.Draw(output)
     for polygon in polygons:
-        output_draw.polygon(polygon, outline=BORDER_COLOR, width=border_width)
+        output_draw.polygon(polygon, outline=BORDER_COLOR, width=scaled_width)
 
-    xs = [x for polygon in polygons for x, _y in polygon]
-    ys = [y for polygon in polygons for _x, y in polygon]
     crop_box = (
         max(0, int(min(xs)) - margin),
         max(0, int(min(ys)) - margin),
@@ -646,6 +734,14 @@ def compose_multi_country_radar_image(
         min(output.height, int(max(ys)) + margin),
     )
     return output.crop(crop_box)
+
+
+def _compose_and_badge(compose_fn, tiles, badge_text: str, **kwargs) -> Image.Image:
+    """Run `compose_fn` (either compose function above) and stamp the corner
+    badge on its result in the same executor job, so the badge never shows up
+    as a separate flicker once the composed image is cached and reused.
+    """
+    return draw_corner_badge(compose_fn(tiles, **kwargs), badge_text)
 
 
 def fit_to_size(image: Image.Image, width: int, height: int) -> Image.Image:
@@ -714,6 +810,7 @@ async def _async_composed_base_image(
             return cached.get("composed") if cached else None  # type: ignore[return-value]
         host = str(index.get("host") or "")
         path = str(frames[-1].get("path") or "")
+        frame_epoch = frames[-1].get("time")
     except Exception:
         return cached.get("composed") if cached else None  # type: ignore[return-value]
 
@@ -738,11 +835,24 @@ async def _async_composed_base_image(
     if not tiles:
         return cached.get("composed") if cached else None  # type: ignore[return-value]
 
+    # The badge shows when RainViewer's own frame is *from*, not when this
+    # render happened - the two can differ by up to INDEX_RECHECK_INTERVAL_SECONDS
+    # thanks to the cache above, and the data's own age is the more useful fact.
+    time_label = ""
+    if isinstance(frame_epoch, (int, float)):
+        from homeassistant.util import dt as dt_util
+
+        time_label = dt_util.as_local(dt_util.utc_from_timestamp(frame_epoch)).strftime("%H:%M")
+    country_label = COUNTRY_SHORT_LABELS.get(key, key.upper())
+    badge_text = f"{country_label} · {time_label}" if time_label else country_label
+
     if is_europe:
         composed = await hass.async_add_executor_job(
             functools.partial(
+                _compose_and_badge,
                 compose_multi_country_radar_image,
                 tiles,
+                badge_text,
                 zoom=ZOOM,
                 tile_size=TILE_SIZE,
                 x_min=x_min,
@@ -755,8 +865,10 @@ async def _async_composed_base_image(
     else:
         composed = await hass.async_add_executor_job(
             functools.partial(
+                _compose_and_badge,
                 compose_country_radar_image,
                 tiles,
+                badge_text,
                 zoom=ZOOM,
                 tile_size=TILE_SIZE,
                 x_min=x_min,
@@ -772,9 +884,6 @@ async def _async_composed_base_image(
         "checked_at": now,
     }
     return composed
-
-
-MAX_NATIVE_DIMENSION = 800
 
 
 async def async_render_meteoradar(hass: "HomeAssistant", country: str = "cz") -> Image.Image | None:

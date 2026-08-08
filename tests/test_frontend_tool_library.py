@@ -21,7 +21,7 @@ def _panel_source() -> str:
     parts = [PANEL.read_text(encoding="utf-8")]
     parts.extend(
         path.read_text(encoding="utf-8")
-        for path in sorted(PANEL_MODULES.glob("*.js"))
+        for path in sorted(PANEL_MODULES.rglob("*.js"))
     )
     return "\n".join(parts)
 
@@ -216,16 +216,17 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('class="display-template-device-info ${primaryTemplate ? "is-configurable" : ""}"', self.source)
         self.assertIn('data-display-template-configure="${this._escape(primaryTemplate.id)}"', self.source)
         self.assertIn('class="display-template-device-info-identity"', self.source)
-        self.assertIn('class="display-template-device-info-health"', self.source)
-        # display-template-device-info-workspace span was removed at user request
-        self.assertIn('class="pill muted display-template-device-info-resolution"', self.source)
+        self.assertIn('class="display-template-device-info-stats"', self.source)
+        # The refresh-interval select was removed from this panel at user
+        # request, for consistency with the main devices page cards.
+        self.assertNotIn('this._renderRefreshIntervalSelect(device.address, this._refreshIntervalSeconds, "in-header")', self.source)
+        self.assertIn('class="display-template-device-info-stat-copy"><small>Rozlišení</small>', self.source)
         self.assertIn('icon="mdi:tablet-dashboard"', self.source)
-        self.assertIn('class="display-health-item display-battery-item"', self.source)
-        self.assertIn('class="display-health-item display-signal-item"', self.source)
-        self.assertIn(".display-template-device-info{display:flex", self.source)
-        self.assertIn(".display-template-device-info-health{display:flex", self.source)
-        self.assertIn(".display-template-device-info .display-battery-item .battery-segments{width:clamp(24px,9cqw,34px)", self.source)
-        self.assertIn(".display-template-device-info .display-signal-item .signal-bars{width:clamp(18px,7cqw,26px)", self.source)
+        self.assertIn('class="display-template-device-info-stat"', self.source)
+        self.assertIn(".display-template-device-info{display:flex;flex-direction:column", self.source)
+        self.assertIn(".display-template-device-info-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))", self.source)
+        self.assertIn(".display-template-device-info-stat .battery-segments{width:clamp(24px,9cqw,34px)", self.source)
+        self.assertIn(".display-template-device-info-stat .signal-bars{width:clamp(18px,7cqw,26px)", self.source)
         self.assertIn("container-type:inline-size", self.source)
         self.assertNotIn("<header>\n            <span><small>Váš displej</small>", self.source)
         self.assertNotIn('class="display-settings-actions"', self.source)
@@ -311,9 +312,14 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('data-template-library-remove="${this._escape(asset.id)}"', self.source)
         self.assertIn('.template-library-image-remove{position:absolute;', self.source)
 
-    def test_settings_status_cluster_is_pulled_toward_device_name(self):
-        self.assertIn('.display-template-device-info{gap:6px!important;padding-left:0!important}', self.source)
-        self.assertIn('.display-template-device-info-health{gap:5px!important}', self.source)
+    def test_settings_device_info_panel_is_a_sectioned_card(self):
+        # Redesigned as a proper card: identity row on top, a distinct status
+        # row below - no more single scrolling row held together with
+        # !important overrides.
+        self.assertIn('class="display-template-device-info-top"', self.source)
+        self.assertIn('.display-template-device-info-top{display:flex', self.source)
+        self.assertNotIn('overflow-x:auto!important', self.source)
+        self.assertNotIn('.display-template-device-info>*{flex:0 0 auto!important', self.source)
 
     def test_templates_button_opens_outline_and_filled_icon_gallery(self):
         self.assertIn('this._displaySettingsView = "templates";', self.source)
@@ -321,7 +327,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('${this._displaySettingsView === "templates" ? this._renderDisplayTemplatesSection(device) : ""}', self.source)
         self.assertNotIn('return this._renderDisplayTemplatesPage(device)', self.source)
         self.assertIn('class="display-template-grid"', self.source)
-        self.assertEqual(self.source.count('number: "'), 24)
+        # 25, not 24: "priceshelf" already had a full design and setup guide
+        # but no catalog entry, so it was unreachable from the UI - adding one
+        # here is what actually makes it a selectable 25th template.
+        self.assertEqual(self.source.count('number: "'), 25)
 
         self.assertIn("variables: [", self.source)
         # A promotion is a decision rather than a reading, so a price tag carries a
@@ -339,16 +348,17 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('class="display-template-config-status is-${configStatus.state}"', self.source)
         self.assertIn('data-display-template-configure="${this._escape(template.id)}"', self.source)
         self.assertIn('data-display-template-search', self.source)
-        self.assertIn('data-display-template-category="${category.id}"', self.source)
         self.assertIn('class="card devices-toolbar-card display-template-toolbar"', self.source)
         self.assertIn('class="devices-toolbar"', self.source)
         self.assertIn('class="device-search"', self.source)
         self.assertIn('class="pill muted display-template-result-count"', self.source)
         self.assertIn(".display-template-toolbar>.devices-toolbar{flex-wrap:nowrap}", self.source)
-        self.assertIn(".display-template-toolbar .device-search{flex:0 0 360px", self.source)
-        self.assertIn(".display-template-categories{display:flex;align-items:center", self.source)
-        self.assertIn('{ id: "prepared", icon: "auto-fix", title: "Předpřipravené" }', self.source)
-        self.assertIn('{ id: "custom", icon: "tune-variant", title: "Vlastní nastavení" }', self.source)
+        # The "Předpřipravené" / "Vlastní nastavení" tabs used to hide half the
+        # catalog behind a click; every template now shows up together and
+        # search is the only filter left.
+        self.assertNotIn('data-display-template-category', self.source)
+        self.assertNotIn('.display-template-categories{', self.source)
+        self.assertNotIn('title: "Předpřipravené"', self.source)
         self.assertIn('class="display-template-workspace"', self.source)
         self.assertIn('data-display-template-dropzone', self.source)
         self.assertIn('draggable="true" data-display-template-drag="${template.id}"', self.source)
@@ -380,7 +390,6 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("_prepareDisplayTemplateBindings(template)", self.source)
         self.assertIn('entityId.startsWith("weather.")', self.source)
         self.assertIn(".display-template-workspace{display:grid;grid-template-columns:minmax(280px,1fr) minmax(0,2fr)", self.source)
-        self.assertIn('this._displayTemplateCategory = button.dataset.displayTemplateCategory || "prepared";', self.source)
         self.assertIn('this._displayTemplateSearchQuery = event.target.value;', self.source)
         # The Wi-Fi code is built by the SVG renderer, so it reaches the panel. It
         # used to exist only in the catalog thumbnail's HTML, which was never sent
@@ -1083,7 +1092,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
     def test_czech_spot_price_template_autobinds_and_has_setup_guide(self):
         self.assertIn('id: "cz_spot_prices"', self.source)
         self.assertIn('title: "České spotové ceny"', self.source)
-        self.assertIn('cz_spot_prices: () => {', self.source)
+        self.assertIn('design: ({ v, series }) => {', self.source)
         self.assertIn('https://github.com/rnovacek/homeassistant_cz_energy_spot_prices', self.source)
         self.assertIn('"sensor.aktualni_spotova_cena_elektriny"', self.source)
         self.assertIn('"Aktuální spotová cena elektřiny"', self.source)

@@ -1,4 +1,5 @@
 import { DRATEK_EINK_VERSION } from "./panel-constants.js";
+import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js";
 
 export const devicesMixin = {
 
@@ -427,9 +428,6 @@ export const devicesMixin = {
       const assignedTemplates = this._assignedDisplayTemplates(device);
       const cardPreview = this._renderDevicePreview(device, mode === "list" ? "mini" : mode);
 
-      const deviceDraft = this._deviceDrafts?.[String(device.address || "").toUpperCase()] || {};
-      const deviceInterval = Number(deviceDraft.refresh_interval_seconds || 60);
-
       return `<article class="display-tile ${temporarilyUnseen ? "is-stale" : ""} ${writingJob ? "is-writing" : ""} ${recentlySucceededJob ? "is-uploaded" : ""}" data-device-card-settings="${this._escape(device.address)}" role="button" tabindex="0" aria-label="Upravit displej ${this._escape(this._deviceTitle(device))}">
         <header class="display-tile-header">
           <span class="display-online-dot ${temporarilyUnseen ? "stale" : ""}" title="${temporarilyUnseen ? "Displej nebyl zachycen v posledním krátkém skenu" : "Displej je dostupný"}"></span>
@@ -447,9 +445,6 @@ export const devicesMixin = {
         <div class="display-health">
           <div class="display-health-item display-battery-item" title="Baterie${Number.isFinite(battery.percent) ? ` ${battery.percent} %` : ""}${Number.isFinite(battery.voltage) ? ` · ${this._formatBatteryVoltage(battery.voltage)}` : ""}">${this._renderBatterySegments(battery.percent)}<strong class="health-value battery-value level-${this._batteryLevel(battery.percent)}">${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></div>
           <div class="display-health-item display-signal-item" title="Síla signálu${Number.isFinite(rssi) ? ` ${rssi} dBm` : ""}">${this._renderSignalBars(rssi)}<strong class="health-value signal-value level-${this._signalLevel(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>
-          <div class="display-health-item display-interval-item" title="Interval automatické obnovy obsahu na displeji">
-            ${this._renderRefreshIntervalSelect(device.address, deviceInterval, "in-tile")}
-          </div>
           <div class="display-health-item display-health-route ${temporarilyUnseen ? "stale" : ""}">
             <span class="health-route-icons"><ha-icon class="health-icon" icon="${temporarilyUnseen ? "mdi:bluetooth-off" : preferredPath?.type === "local" ? "mdi:bluetooth-connect" : "mdi:router-wireless"}"></ha-icon>${!temporarilyUnseen && preferredPath?.type !== "local" ? `<ha-icon class="health-icon health-icon-sub" icon="mdi:bluetooth" title="Displej je za gatewayí připojen přes BLE"></ha-icon>` : ""}</span>
             <span class="health-route-text"><small>Připojeno</small><strong>${temporarilyUnseen ? "Čekám na signál" : this._escape(preferredPath?.name || "Nedostupné")}</strong></span>
@@ -590,286 +585,7 @@ export const devicesMixin = {
   // without a link, because promising a URL for a community integration that may have
   // moved is worse than not linking at all.
   _templateSetupRecipes() {
-    const helper = (kind, why) => ({ name: `Pomocník typu ${kind}`, domain: kind === "text" ? "input_text" : kind === "číslo" ? "input_number" : kind === "spínač" ? "input_boolean" : "input_datetime", why, core: true, helper: true });
-    return {
-      weather: {
-        summary: "Aktuální teplota, stav počasí a čtyřdenní předpověď.",
-        integrations: [
-          { name: "Met.no", domain: "weather", core: true, why: "Dodá entitu weather.* s předpovědí. V Home Assistantu bývá už po instalaci." },
-          { name: "OpenWeatherMap", domain: "weather", core: true, why: "Alternativa, pokud chcete jiný zdroj předpovědi." },
-        ],
-        steps: [
-          "Zkontrolujte, že v Nastavení → Zařízení a služby máte integraci počasí.",
-          "Přetáhněte šablonu na náhled displeje; entita weather.* se najde sama.",
-          "Předpověď se načítá službou weather.get_forecasts – integrace ji musí podporovat, jinak zůstanou ukázkové dny.",
-        ],
-      },
-      radar: {
-        summary: "Živá srážková mapa České republiky přes celý displej – černý obrys státu, uvnitř červeně vyznačené srážky. Mapu integrace stahuje a vykresluje sama, nic se nemusí nastavovat.",
-        integrations: [],
-        steps: [
-          "Přetáhněte šablonu Meteoradar na displej – mapa vyplní celou plochu.",
-          "Radarová data (RainViewer) se aktualizují nejvýše jednou za 10 minut, stejně často jako je skutečně měří.",
-        ],
-      },
-
-
-      energy: {
-        summary: "Aktuální cena elektřiny a průběh ceny během dne.",
-        integrations: [
-          { name: "Integrace spotových cen elektřiny", domain: "sensor", why: "Dodá senzor s aktuální cenou. Většina těchto integrací se instaluje přes HACS." },
-        ],
-        steps: [
-          "Nainstalujte integraci, která poskytuje senzor s cenou elektřiny.",
-          "V Nastavit vyberte u údaje Aktuální cena tento senzor.",
-          "Sloupcový graf se vykreslí, pokud má senzor atribut s polem cen na celý den; jinak zůstane ukázkový průběh.",
-        ],
-      },
-      cz_spot_prices: {
-        summary: "České spotové ceny elektřiny z integrace Czech Energy Spot Prices podle dat OTE. Šablona automaticky načte aktuální cenu, celý denní průběh, minimum, maximum, cenu na zítřek a pořadí aktuálního intervalu.",
-        integrations: [
-          {
-            name: "Czech Energy Spot Prices",
-            domain: "sensor",
-            entityPrefixes: ["sensor.current_buy_electricity_price", "sensor.current_spot_electricity_price", "sensor.aktualni_spotova_cena_elektriny"],
-            entityFriendlyNames: [
-              "Aktuální spotová cena elektřiny",
-              "Dnešní nejdražší spotová cena elektřiny",
-              "Dnešní nejlevnější spotová cena elektřiny",
-              "Dnešní pořadí hodin spotových cen elektřiny",
-              "K dispozici zítřejší spotové ceny elektřiny",
-              "Zítřejší nejdražší spotová cena elektřiny",
-              "Zítřejší nejlevnější spotová cena elektřiny",
-              "Zítřejší pořadí hodin spotových cen elektřiny",
-            ],
-            url: "https://github.com/rnovacek/homeassistant_cz_energy_spot_prices",
-            linkLabel: "GitHub a instalace",
-            why: "Komunitní integrace pro ceny elektřiny z OTE. Podporuje hodinové i 15minutové ceny a volitelnou skutečnou nákupní cenu včetně poplatků a DPH.",
-          },
-        ],
-        steps: [
-          "V HACS otevřete Integrace, vyhledejte Czech Energy Spot Prices a integraci nainstalujte. Potom restartujte Home Assistant.",
-          "V Nastavení → Zařízení a služby → Přidat integraci vyberte Czech Energy Spot Prices.",
-          "Zvolte elektřinu, měnu CZK, jednotku kWh a hodinový nebo 15minutový interval.",
-          "Chcete-li zobrazovat skutečnou nákupní cenu, otevřete u integrace Konfigurovat a vyplňte šablonu nákupní ceny včetně distribuce, poplatků a DPH.",
-          "Otevřete tuto šablonu znovu. Senzory se přiřadí automaticky; pokud máte více instancí integrace, můžete zdroje ručně změnit v Upravit data.",
-        ],
-        note: "Šablona preferuje nákupní cenu, pokud je v integraci nakonfigurovaná. Jinak použije základní spotovou cenu. Při současné hodinové a 15minutové instanci preferuje podrobnější 15minutová data.",
-      },
-      home: {
-        summary: "Teplota, vlhkost, světla a zámky v jedné dlaždicové přehledce.",
-        integrations: [
-          { name: "Senzory teploty a vlhkosti", domain: "sensor", why: "Cokoli s device_class temperature a humidity – Zigbee, ESPHome, Bluetooth." },
-          { name: "Světla a zámky", domain: "light", why: "Entity light.* a lock.*, které chcete na štítku sledovat." },
-        ],
-        steps: [
-          "Přetáhněte šablonu na displej; senzory se přiřadí podle svého device_class.",
-          "V Nastavit zkontrolujte, že u každé dlaždice sedí správná místnost.",
-        ],
-      },
-      waste: {
-        summary: "Nejbližší dva svozy odpadu a jejich druh.",
-        integrations: [
-          { name: "Integrace svozu odpadu", domain: "sensor", why: "Obvykle z HACS podle obce. Dodá senzor s datem nejbližšího svozu." },
-          helper("datum", "Pokud integrace pro vaši obec neexistuje, zadejte termíny ručně."),
-        ],
-        steps: [
-          "Nainstalujte integraci svozu pro svou obec, nebo si vytvořte pomocníky typu datum.",
-          "V Nastavit přiřaďte první a druhý svoz.",
-        ],
-      },
-      solar: {
-        summary: "Okamžitý výkon fotovoltaiky a výroba za den, měsíc a celkem.",
-        integrations: [
-          { name: "Integrace vašeho střídače", domain: "sensor", core: true, why: "Fronius, GoodWe, SolarEdge, SolaX a další jsou součástí Home Assistantu." },
-        ],
-        steps: [
-          "Přidejte integraci střídače v Nastavení → Zařízení a služby.",
-          "Šablona si vezme senzory s device_class power a energy.",
-          "Mezikruží se plní podle procentní hodnoty; pokud senzor procenta nemá, zobrazí ukázkovou výplň.",
-        ],
-      },
-      washer: {
-        summary: "Program pračky, zbývající čas a čas dokončení.",
-        integrations: [
-          { name: "Home Connect", domain: "sensor", core: true, why: "Pro pračky Bosch a Siemens. Dodá program i zbývající čas." },
-          { name: "Senzor spotřeby + šablona", domain: "sensor", why: "U pračky bez chytrého připojení se stav odvodí od příkonu chytré zásuvky." },
-        ],
-        steps: [
-          "Připojte pračku podporovanou integrací, nebo si stav odvoďte ze zásuvky.",
-          "V Nastavit přiřaďte program a zbývající čas.",
-        ],
-      },
-      living: {
-        summary: "Teplota v místnosti s ukazateli vlhkosti a CO₂.",
-        integrations: [
-          { name: "Senzor teploty a vlhkosti", domain: "sensor", why: "Jakýkoli senzor s device_class temperature a humidity." },
-          { name: "Senzor CO₂", domain: "sensor", why: "Například přes ESPHome nebo Netatmo; device_class carbon_dioxide." },
-        ],
-        steps: ["Přetáhněte šablonu na displej a v Nastavit zkontrolujte místnost u každého senzoru."],
-      },
-      presence: {
-        summary: "Kdo z domácnosti je doma a kdo ne.",
-        integrations: [
-          { name: "Osoby", domain: "person", core: true, why: "Nastavení → Lidé. Každý člen domácnosti je entita person.*." },
-          { name: "Home Assistant Companion", domain: "device_tracker", core: true, why: "Mobilní aplikace hlásí polohu, ze které se přítomnost odvodí." },
-        ],
-        steps: [
-          "V Nastavení → Lidé založte členy domácnosti.",
-          "Propojte je se sledovacím zařízením z mobilní aplikace.",
-          "Stavy se na štítku zobrazí česky jako Doma a Pryč.",
-        ],
-      },
-      wifi: {
-        summary: "QR kód pro připojení k Wi-Fi, název sítě a heslo.",
-        integrations: [
-          helper("text", "Jeden pomocník na název sítě a druhý na heslo."),
-        ],
-        steps: [
-          "V Nastavení → Zařízení a služby → Pomocníci vytvořte dva pomocníky typu text.",
-          "Vyplňte název sítě a heslo a v Nastavit je u šablony vyberte.",
-          "QR kód se vygeneruje sám z obou hodnot.",
-        ],
-        note: "Na malých štítcích na šířku (296 × 128) vyjde kód asi 8 mm a je na hraně čitelnosti. Použijte raději štítek na výšku nebo větší.",
-      },
-      calendar: {
-        summary: "Dvě nejbližší události z kalendáře a svátek.",
-        integrations: [
-          { name: "Místní kalendář", domain: "calendar", core: true, why: "Kalendář přímo v Home Assistantu, bez cloudu. Nejrychlejší způsob, jak šablonu vyzkoušet." },
-          { name: "Google Calendar", domain: "calendar", core: true, why: "Napojení na Google účet; události se načtou automaticky." },
-          { name: "CalDAV", domain: "calendar", core: true, why: "Pro Nextcloud, iCloud a další servery podporující CalDAV." },
-        ],
-        steps: [
-          "Přidejte některou kalendářovou integraci v Nastavení → Zařízení a služby.",
-          "Přetáhněte šablonu na displej; entita calendar.* se najde sama.",
-          "Události se čtou službou calendar.get_events na 21 dní dopředu.",
-        ],
-      },
-      security: {
-        summary: "Režim alarmu a stav dveří, oken a pohybu.",
-        integrations: [
-          { name: "Manual alarm", domain: "alarm_control_panel", core: true, why: "Alarm přímo v Home Assistantu, konfiguruje se v configuration.yaml. Vhodné pro vyzkoušení." },
-          { name: "Integrace vaší ústředny", domain: "alarm_control_panel", why: "Jablotron, Alarmo a další; každá dodá entitu alarm_control_panel.*." },
-          { name: "Kontakty dveří a oken", domain: "binary_sensor", why: "Binární senzory s device_class door, window a motion." },
-        ],
-        steps: [
-          "Zprovozněte ústřednu alarmu, nebo použijte Manual alarm pro začátek.",
-          "Přidejte kontakty dveří, oken a detektor pohybu.",
-          "V Nastavit zkontrolujte přiřazení; stavy se zobrazí česky.",
-        ],
-      },
-      transport: {
-        summary: "Nejbližší odjezdy ze zastávky s čísly linek.",
-        integrations: [
-          { name: "Integrace vašeho dopravce", domain: "sensor", why: "Obvykle z HACS podle města, nebo vlastní REST senzor nad otevřeným API dopravce." },
-        ],
-        steps: [
-          "Zprovozněte senzor, který vrací nejbližší odjezdy.",
-          "V Nastavit přiřaďte zastávku a časy odjezdů.",
-        ],
-      },
-      shopping: {
-        summary: "Nákupní seznam se zaškrtnutými položkami.",
-        integrations: [
-          { name: "Místní úkolovník", domain: "todo", core: true, why: "Seznamy úkolů přímo v Home Assistantu." },
-          { name: "Nákupní seznam", domain: "todo", core: true, why: "Klasický nákupní seznam Home Assistantu." },
-        ],
-        steps: [
-          "Přidejte integraci seznamu v Nastavení → Zařízení a služby.",
-          "V Nastavit přiřaďte seznam k údaji Položky.",
-        ],
-      },
-      air: {
-        summary: "Index kvality vzduchu na budíku s hodnotami CO₂, PM2.5 a vlhkosti.",
-        integrations: [
-          { name: "Airly", domain: "sensor", core: true, why: "Venkovní kvalita ovzduší podle nejbližší stanice." },
-          { name: "Netatmo", domain: "sensor", core: true, why: "Vnitřní senzor CO₂ a kvality vzduchu." },
-          { name: "ESPHome", domain: "sensor", core: true, why: "Vlastní senzor CO₂ nebo prachu postavený na ESP." },
-        ],
-        steps: ["Zprovozněte zdroj dat o vzduchu a v Nastavit přiřaďte AQI, CO₂ a PM2.5."],
-      },
-      thermostat: {
-        summary: "Aktuální a cílová teplota s výkonem topení.",
-        integrations: [
-          { name: "Integrace vašeho termostatu", domain: "climate", core: true, why: "Tado, Netatmo, Zigbee hlavice a další dodají entitu climate.*." },
-          { name: "Generic thermostat", domain: "climate", core: true, why: "Termostat složený z teploměru a spínače přímo v Home Assistantu." },
-        ],
-        steps: ["Přidejte termostat a v Nastavit přiřaďte aktuální i cílovou teplotu."],
-      },
-      water: {
-        summary: "Spotřeba vody dnes s trendem za týden.",
-        integrations: [
-          { name: "Vodoměr", domain: "sensor", why: "Impulzní vstup, Zigbee vodoměr nebo senzor přes ESPHome; device_class water." },
-          { name: "Utility Meter", domain: "sensor", core: true, why: "Z průběžného odečtu udělá denní, týdenní a měsíční spotřebu." },
-        ],
-        steps: [
-          "Zprovozněte měření spotřeby vody.",
-          "Přidejte Utility Meter pro denní, týdenní a měsíční hodnotu.",
-          "V Nastavit přiřaďte jednotlivá období.",
-        ],
-      },
-      parcel: {
-        summary: "Stav zásilky a průběh dopravy.",
-        integrations: [
-          { name: "17TRACK", domain: "sensor", core: true, why: "Sleduje zásilky napříč dopravci; dodá senzor se stavem." },
-        ],
-        steps: ["Přidejte integraci sledování zásilek a v Nastavit přiřaďte stav zásilky."],
-      },
-      birthdays: {
-        summary: "Kdo dnes slaví a kdo je na řadě příště.",
-        integrations: [
-          { name: "Místní kalendář", domain: "calendar", core: true, why: "Založte kalendář Narozeniny s celodenními opakovanými událostmi." },
-        ],
-        steps: [
-          "Vytvořte kalendář s narozeninami jako opakované celodenní události.",
-          "V Nastavit jej přiřaďte k údaji Jméno.",
-        ],
-      },
-      server: {
-        summary: "Dostupnost serveru s ukazateli CPU, RAM, disku a teploty.",
-        integrations: [
-          { name: "System Monitor", domain: "sensor", core: true, why: "Zátěž procesoru, paměti a disku stroje, na kterém běží Home Assistant." },
-        ],
-        steps: [
-          "Přidejte integraci System Monitor a vyberte, které hodnoty sledovat.",
-          "V Nastavit přiřaďte CPU, RAM a disk; ukazatele se plní podle procent.",
-        ],
-      },
-      garden: {
-        summary: "Vlhkost půdy se sedmidenním trendem a další zálivka.",
-        integrations: [
-          { name: "Xiaomi BLE", domain: "sensor", core: true, why: "Čidla Mi Flora měří vlhkost půdy přes Bluetooth." },
-          { name: "ESPHome", domain: "sensor", core: true, why: "Vlastní čidlo vlhkosti půdy postavené na ESP." },
-        ],
-        steps: ["Zprovozněte čidlo vlhkosti půdy a v Nastavit jej přiřaďte."],
-      },
-      price: {
-        summary: "Cenovka se jménem zboží, cenou a QR kódem.",
-        integrations: [
-          helper("text", "Název zboží a kód zboží pro QR kód."),
-          helper("číslo", "Cena, původní cena a jednotková cena."),
-          helper("spínač", "Nepovinné: zapíná akci automatizací nebo z pokladního systému."),
-        ],
-        steps: [
-          "V Nastavení → Zařízení a služby → Pomocníci vytvořte pomocníky pro název a cenu.",
-          "V Nastavit je přiřaďte k jednotlivým údajům.",
-          "Akci zapnete přepínačem v Nastavit, nebo pomocníkem typu spínač u údaje Akce.",
-        ],
-      },
-      priceshelf: {
-        summary: "Regálová cenovka s pruhem, cenou a skladovou zásobou.",
-        integrations: [
-          helper("text", "Název zboží a kód zboží."),
-          helper("číslo", "Cena, původní cena a počet kusů skladem."),
-          helper("spínač", "Nepovinné: zapíná akci automatizací nebo z pokladního systému."),
-        ],
-        steps: [
-          "Vytvořte pomocníky pro název, cenu a zásobu.",
-          "V Nastavit je přiřaďte k údajům šablony.",
-          "Přepínačem Akce zvýrazníte slevu.",
-        ],
-      },
-    };
+    return Object.fromEntries(DISPLAY_TEMPLATES.map((entry) => [entry.catalog.id, entry.setup]));
   },
 
   _hasEntityDomain(domain) {
@@ -1066,33 +782,9 @@ export const devicesMixin = {
     const templates = [
       { id: "blank", number: "00", category: "custom", title: "Prázdná šablona", variables: [] },
       ...userTemplates,
-      { id: "weather", number: "01", category: "nature", title: "Počasí", variables: [["thermometer", "Teplota"], ["weather-partly-cloudy", "Stav počasí"], ["clock-outline", "Čas"], ["calendar-outline", "Datum"], ["weather-rainy", "Předpověď"]] },
-      { id: "radar", number: "23", category: "nature", title: "Meteoradar", variables: [] },
-
-
-      { id: "energy", number: "02", category: "energy", title: "Cena elektřiny", variables: [["currency-usd", "Aktuální cena"], ["clock-outline", "Cenový interval"], ["chart-line", "Denní průběh"], ["tag-outline", "Minimum dne"]] },
-      { id: "cz_spot_prices", number: "22", category: "energy", title: "České spotové ceny", variables: [["currency-usd", "Aktuální cena"], ["chart-line", "Cenový průběh dnes"], ["tray-arrow-down", "Minimum dnes"], ["arrow-up-down", "Maximum dnes"], ["weather-sunny", "Minimum zítra"], ["counter", "Aktuální pořadí"]] },
-      { id: "home", number: "03", category: "home", title: "Dům", variables: [["thermometer", "Teplota"], ["water-percent", "Vlhkost"], ["lightbulb-on-outline", "Světla"], ["lock-outline", "Zámky"]] },
-      { id: "waste", number: "04", category: "home", title: "Odpady", variables: [["trash-can-outline", "První svoz"], ["recycle", "Druhý svoz"], ["calendar-clock", "Termíny svozu"]] },
-      { id: "solar", number: "05", category: "energy", title: "Fotovoltaika", variables: [["solar-power", "Aktuální výkon"], ["weather-sunny", "Výroba dnes"], ["calendar-month", "Výroba měsíc"], ["counter", "Výroba celkem"], ["leaf", "Úspora CO₂"]] },
-      { id: "washer", number: "06", category: "home", title: "Pračka", variables: [["washing-machine", "Program"], ["timer-outline", "Zbývající čas"], ["clock-check-outline", "Čas dokončení"]] },
-      { id: "living", number: "07", category: "home", title: "Obývák", variables: [["thermometer", "Teplota"], ["water-percent", "Vlhkost"], ["molecule-co2", "CO₂"]] },
-      { id: "presence", number: "08", category: "home", title: "Kdo je doma", variables: [["account-group-outline", "Osoby"], ["home-account", "Přítomnost"], ["school-outline", "Stav osoby"], ["clock-outline", "Aktualizace"]] },
-      { id: "wifi", number: "09", category: "information", title: "Wi-Fi", variables: [["wifi", "Název sítě"], ["key-outline", "Heslo"]] },
-      { id: "calendar", number: "10", category: "information", title: "Kalendář", variables: [["calendar", "První událost"], ["calendar-multiple", "Druhá událost"], ["cake-variant-outline", "Svátek"]] },
-      { id: "security", number: "11", category: "technology", title: "Zabezpečení", variables: [["shield-lock-outline", "Režim alarmu"], ["door-closed-lock", "Dveře"], ["window-closed", "Okna"], ["motion-sensor", "Pohyb"]] },
-      { id: "transport", number: "12", category: "information", title: "Odjezdy", variables: [["map-marker-outline", "Zastávka"], ["tram", "Linky"], ["clock-fast", "Časy odjezdů"], ["walk", "Vzdálenost"]] },
-      { id: "shopping", number: "13", category: "home", title: "Nákupní seznam", variables: [["format-list-checks", "Položky"], ["checkbox-marked-outline", "Splněné"], ["cart-outline", "Počet zbývajících"]] },
-      { id: "air", number: "14", category: "nature", title: "Kvalita vzduchu", variables: [["air-filter", "AQI"], ["molecule-co2", "CO₂"], ["blur", "PM2.5"], ["water-percent", "Vlhkost"]] },
-      { id: "thermostat", number: "15", category: "home", title: "Topení", variables: [["thermometer", "Teplota"], ["thermostat", "Cílová teplota"], ["fire", "Výkon topení"], ["clock-outline", "Další změna"]] },
-      { id: "water", number: "16", category: "energy", title: "Spotřeba vody", variables: [["water", "Spotřeba dnes"], ["calendar-week", "Spotřeba týden"], ["calendar-month", "Spotřeba měsíc"], ["compare", "Porovnání"]] },
-      { id: "parcel", number: "17", category: "information", title: "Zásilka", variables: [["package-variant", "Stav zásilky"], ["barcode", "Sledovací číslo"], ["map-marker-path", "Průběh dopravy"], ["clock-outline", "Čas doručení"]] },
-      { id: "birthdays", number: "18", category: "information", title: "Narozeniny", variables: [["account", "Jméno"], ["numeric", "Věk"], ["calendar-star", "Další narozeniny"], ["gift-outline", "Připomínka"]] },
-      { id: "server", number: "19", category: "technology", title: "Stav serveru", variables: [["server-network", "Dostupnost"], ["chip", "CPU"], ["memory", "RAM"], ["harddisk", "Disk"], ["thermometer", "Teplota"], ["clock-outline", "Doba provozu"]] },
-      { id: "garden", number: "20", category: "nature", title: "Zahrada", variables: [["sprout-outline", "Záhon"], ["water-percent", "Vlhkost půdy"], ["thermometer", "Teplota"], ["weather-windy", "Vítr"], ["sprinkler-variant", "Další zálivka"]] },
-      { id: "price", number: "21", category: "shop", title: "Cenovka", options: [["sale", "Akce", "Zobrazí štítek AKCE, původní cenu přeškrtne a novou zvýrazní."]], variables: [["tag-outline", "Název zboží"], ["currency-usd", "Cena"], ["cash-multiple", "Původní cena"], ["barcode", "Kód zboží"]] },
+      ...DISPLAY_TEMPLATE_CATALOG,
     ];
-    const prepared = new Set(["blank", "weather", "radar", "home", "solar", "living", "calendar", "security", "air", "thermostat", "server", "garden", "price", "cz_spot_prices"]);
+    const prepared = new Set(["blank", ...DISPLAY_TEMPLATES.filter((entry) => entry.prepared).map((entry) => entry.catalog.id)]);
 
     return templates.map((template) => ({
       ...template,
@@ -1263,20 +955,16 @@ export const devicesMixin = {
     const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
     const assignedTemplates = this._assignedDisplayTemplates(device);
     const sentTemplates = this._sentDisplayTemplates(device);
-    const categories = [
-      { id: "prepared", icon: "auto-fix", title: "Předpřipravené" },
-      { id: "custom", icon: "tune-variant", title: "Vlastní nastavení" },
-    ];
     const cards = this._displayTemplateCards();
     const settingsTemplate = cards.find((item) => item.id === this._templateSettingsDialogTemplateId);
     const query = String(this._displayTemplateSearchQuery || "").trim().toLocaleLowerCase("cs");
-    const activeCategory = categories.some((category) => category.id === this._displayTemplateCategory)
-      ? this._displayTemplateCategory
-      : "prepared";
+    // Every template shows up together - the old "Předpřipravené" / "Vlastní
+    // nastavení" tabs hid half the catalog behind a click nobody knew to make.
+    // The per-card badge (see below) still tells you whether a template's data
+    // sources fill in on their own or need picking by hand; search is the only
+    // filter left.
     const visibleCards = cards.filter((template) => {
-      if (template.id === "blank" || template.user_created) return true;
-      if (template.kind !== activeCategory) return false;
-      if (!query) return true;
+      if (template.id === "blank" || !query) return true;
       const searchable = [template.title, ...template.variables.map(([, label]) => label)].join(" ").toLocaleLowerCase("cs");
       return searchable.includes(query);
     });
@@ -1291,21 +979,31 @@ export const devicesMixin = {
       <div class="display-template-workspace">
         <aside class="card display-template-drop-panel">
           <div class="display-template-device-info ${primaryTemplate ? "is-configurable" : ""}" ${primaryTemplate ? `data-display-template-configure="${this._escape(primaryTemplate.id)}" role="button" tabindex="0" title="Nastavit zdroje dat šablony ${this._escape(primaryTemplate.title)}"` : ""}>
-            <span class="display-template-device-info-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></span>
-            <div class="display-template-device-info-identity">
-              <div class="display-template-device-info-name-row">
-                ${editing
-                  ? `<input class="display-settings-name-input" data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Název displeje" aria-label="Název displeje"><button class="display-settings-name-button is-save" data-device-name-save="${this._escape(device.address)}" title="Uložit název" aria-label="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button>`
-                  : `<strong class="display-template-device-info-name">${this._escape(this._deviceTitle(device))}</strong><button class="display-settings-name-button" data-device-rename="${this._escape(device.address)}" title="Přejmenovat displej" aria-label="Přejmenovat displej"><ha-icon icon="mdi:pencil-outline"></ha-icon></button><span class="display-template-device-info-address display-template-device-info-address--block">${this._escape(device.address)}</span>`}
+            <div class="display-template-device-info-top">
+              <span class="display-template-device-info-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></span>
+              <div class="display-template-device-info-identity">
+                <div class="display-template-device-info-name-row">
+                  ${editing
+                    ? `<input class="display-settings-name-input" data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Název displeje" aria-label="Název displeje"><button class="display-settings-name-button is-save" data-device-name-save="${this._escape(device.address)}" title="Uložit název" aria-label="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button>`
+                    : `<strong class="display-template-device-info-name">${this._escape(this._deviceTitle(device))}</strong><button class="display-settings-name-button" data-device-rename="${this._escape(device.address)}" title="Přejmenovat displej" aria-label="Přejmenovat displej"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>`}
+                </div>
+                <span class="display-template-device-info-address">${this._escape(device.address)}</span>
               </div>
             </div>
-            <div class="display-template-device-info-health">
-              <span class="display-health-item display-battery-item" title="Baterie${Number.isFinite(battery.percent) ? ` ${battery.percent} %` : ""}">${this._renderBatterySegments(battery.percent)}<strong class="health-value battery-value level-${this._batteryLevel(battery.percent)}">${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></span>
-              <span class="display-health-item display-signal-item" title="Síla signálu${Number.isFinite(rssi) ? ` ${rssi} dBm` : ""}">${this._renderSignalBars(rssi)}<strong class="health-value signal-value level-${this._signalLevel(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></span>
+            <div class="display-template-device-info-stats">
+              <div class="display-template-device-info-stat" title="Baterie${Number.isFinite(battery.percent) ? ` ${battery.percent} %` : ""}${Number.isFinite(battery.voltage) ? ` · ${this._formatBatteryVoltage(battery.voltage)}` : ""}">
+                ${this._renderBatterySegments(battery.percent)}
+                <div class="display-template-device-info-stat-copy"><small>Baterie</small><strong class="health-value battery-value level-${this._batteryLevel(battery.percent)}">${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></div>
+              </div>
+              <div class="display-template-device-info-stat" title="Síla signálu${Number.isFinite(rssi) ? ` ${rssi} dBm` : ""}">
+                ${this._renderSignalBars(rssi)}
+                <div class="display-template-device-info-stat-copy"><small>Signál</small><strong class="health-value signal-value level-${this._signalLevel(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>
+              </div>
+              <div class="display-template-device-info-stat" title="Rozlišení displeje">
+                <ha-icon icon="mdi:aspect-ratio"></ha-icon>
+                <div class="display-template-device-info-stat-copy"><small>Rozlišení</small><strong>${size.width} × ${size.height}</strong></div>
+              </div>
             </div>
-
-            ${this._renderRefreshIntervalSelect(device.address, this._refreshIntervalSeconds, "in-header")}
-            <span class="pill muted display-template-device-info-resolution">${size.width} × ${size.height} px</span>
           </div>
           <div class="display-template-dropzone ${assignedTemplates.length ? "has-template" : ""}" data-display-template-dropzone tabindex="0" aria-label="Přetáhněte sem šablonu">
             ${primaryTemplate
@@ -1342,9 +1040,6 @@ export const devicesMixin = {
               <div class="device-search">
                 <ha-icon icon="mdi:magnify"></ha-icon>
                 <input type="search" id="displayTemplateSearch" data-display-template-search value="${this._escape(this._displayTemplateSearchQuery || "")}" placeholder="Hledat šablonu nebo údaj…" aria-label="Hledat šablony">
-              </div>
-              <div class="display-template-categories" aria-label="Kategorie šablon">
-                ${categories.map((category) => `<button type="button" class="${activeCategory === category.id ? "is-active" : ""}" data-display-template-category="${category.id}" aria-pressed="${activeCategory === category.id}"><ha-icon icon="mdi:${category.icon}"></ha-icon>${category.title}</button>`).join("")}
               </div>
               <span class="pill muted display-template-result-count">${visibleCards.length} šablon</span>
             </div>
@@ -1861,6 +1556,11 @@ export const devicesMixin = {
   // (unchanged) nowhere else now that the two dialogs are one.
   _renderInteractiveCountryMap(selectedCountry = "cz", address = "") {
     const active = String(selectedCountry || "cz").toLowerCase();
+    // The "eu" overview draws all five countries' borders at once (see
+    // compose_multi_country_radar_image in meteoradar.py), so picking it here
+    // should light up all five shapes too - leaving the map dark for that
+    // choice looked like the picker had forgotten about it entirely.
+    const isCountryActive = (id) => active === id || active === "eu";
     const countries = [
       { id: "cz", name: "Česká republika", flag: "🇨🇿" },
       { id: "sk", name: "Slovensko", flag: "🇸🇰" },
@@ -1887,35 +1587,35 @@ export const devicesMixin = {
           </defs>
 
           <!-- NĚMECKO (DE) - reálná hranice (geoBoundaries, zjednodušeno Douglas-Peucker) -->
-          <g class="map-country-group ${active === "de" ? "is-active" : ""}" data-meteoradar-country="de" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Německo">
+          <g class="map-country-group ${isCountryActive("de") ? "is-active" : ""}" data-meteoradar-country="de" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Německo">
             <path d="M 160.5 382.9 L 185.6 390.0 L 215.7 374.3 L 240.0 385.8 L 231.1 356.8 L 264.2 327.0 L 228.0 296.0 L 211.0 253.9 L 218.1 261.0 L 281.0 225.9 L 278.4 218.3 L 293.5 229.7 L 301.1 207.6 L 287.2 180.6 L 288.7 143.0 L 272.9 129.6 L 283.0 108.0 L 277.9 81.7 L 242.9 56.6 L 260.7 55.6 L 258.8 39.6 L 246.2 35.1 L 255.6 46.9 L 242.9 41.2 L 242.5 53.1 L 221.0 54.5 L 236.3 47.4 L 223.6 44.5 L 191.1 75.3 L 169.7 68.3 L 180.9 49.2 L 151.9 51.8 L 142.1 45.9 L 143.8 27.8 L 98.3 23.6 L 97.8 14.0 L 93.8 30.3 L 104.0 23.4 L 116.5 45.0 L 103.7 53.4 L 124.4 77.3 L 104.1 76.0 L 92.9 101.0 L 85.5 84.8 L 55.7 93.4 L 61.3 121.0 L 44.8 144.0 L 56.6 159.7 L 46.4 176.8 L 22.3 180.5 L 30.9 203.4 L 19.9 218.7 L 36.5 253.1 L 27.4 266.3 L 46.6 308.7 L 92.4 317.9 L 72.3 357.1 L 75.1 383.8 L 103.1 381.0 L 102.7 371.4 L 122.6 377.9 L 117.1 371.0 L 153.7 395.8 L 160.5 382.9 Z" class="map-country-shape" />
             <text x="162" y="164" class="map-country-flag">🇩🇪</text>
             <text x="162" y="190" class="map-country-label">DE</text>
           </g>
 
           <!-- POLSKO (PL) - reálná hranice (geoBoundaries, zjednodušeno Douglas-Peucker) -->
-          <g class="map-country-group ${active === "pl" ? "is-active" : ""}" data-meteoradar-country="pl" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Polsko">
+          <g class="map-country-group ${isCountryActive("pl") ? "is-active" : ""}" data-meteoradar-country="pl" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Polsko">
             <path d="M 414.5 284.5 L 409.3 272.9 L 401.5 273.2 L 392.8 266.0 L 384.9 268.2 L 379.3 261.5 L 384.3 259.3 L 383.0 253.7 L 371.9 256.6 L 358.0 247.7 L 362.0 258.2 L 351.6 264.5 L 336.5 248.5 L 344.1 241.4 L 341.0 237.4 L 331.2 240.4 L 324.8 232.9 L 311.3 231.8 L 305.1 220.0 L 299.4 220.4 L 299.9 227.4 L 294.3 227.2 L 301.1 207.6 L 287.3 180.7 L 292.4 168.5 L 285.5 152.0 L 288.7 143.0 L 272.9 129.7 L 283.0 108.0 L 271.6 46.7 L 277.7 63.3 L 328.7 46.1 L 340.6 32.7 L 364.9 21.4 L 401.5 15.2 L 420.6 25.6 L 442.2 46.1 L 497.4 53.2 L 541.4 48.4 L 559.9 61.9 L 573.1 113.4 L 573.8 136.0 L 559.3 144.2 L 550.5 157.6 L 565.0 168.1 L 561.1 185.2 L 564.8 206.7 L 580.1 227.5 L 574.3 231.0 L 578.6 238.6 L 575.6 249.4 L 567.3 250.6 L 553.6 264.4 L 534.0 291.5 L 541.7 316.0 L 521.3 309.2 L 503.0 295.4 L 487.5 295.9 L 481.4 302.5 L 475.7 296.8 L 466.3 296.7 L 457.5 301.4 L 455.7 307.9 L 446.4 307.0 L 446.6 297.1 L 441.8 297.2 L 436.7 287.5 L 421.8 297.8 L 414.5 284.5 Z" class="map-country-shape" />
             <text x="423" y="198" class="map-country-flag">🇵🇱</text>
             <text x="423" y="224" class="map-country-label">PL</text>
           </g>
 
           <!-- ČESKÁ REPUBLIKA (CZ) - reálná hranice (ČÚZK via geoBoundaries, zjednodušeno Douglas-Peucker) -->
-          <g class="map-country-group ${active === "cz" ? "is-active" : ""}" data-meteoradar-country="cz" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Českou republiku">
+          <g class="map-country-group ${isCountryActive("cz") ? "is-active" : ""}" data-meteoradar-country="cz" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Českou republiku">
             <path d="M 356.9 259.7 L 349.9 263.8 L 336.9 249.5 L 344.1 241.4 L 341.0 237.4 L 331.2 240.4 L 324.8 232.9 L 311.3 231.8 L 305.1 220.0 L 299.4 220.4 L 299.9 227.4 L 291.3 229.6 L 284.7 218.9 L 278.8 218.3 L 277.1 221.6 L 281.1 225.9 L 264.7 234.2 L 255.4 234.9 L 252.8 240.3 L 249.9 237.9 L 236.9 249.8 L 233.0 247.1 L 223.6 250.1 L 218.1 261.0 L 213.5 253.7 L 210.6 257.1 L 224.6 272.9 L 220.1 280.9 L 228.0 296.0 L 239.4 302.1 L 251.6 317.6 L 261.1 321.7 L 271.2 335.2 L 279.4 337.2 L 283.6 332.7 L 290.8 335.7 L 293.9 326.7 L 299.2 327.0 L 300.4 315.4 L 304.7 319.1 L 308.4 316.6 L 325.6 322.1 L 333.6 328.2 L 342.0 329.0 L 347.0 325.0 L 358.1 329.5 L 359.3 334.2 L 367.2 322.1 L 377.3 325.1 L 388.2 319.7 L 394.7 313.6 L 397.4 302.9 L 403.4 300.9 L 408.7 292.7 L 417.8 292.1 L 409.3 272.9 L 401.5 273.2 L 392.8 266.0 L 389.3 270.2 L 384.9 268.2 L 379.3 261.5 L 384.3 259.3 L 383.0 253.7 L 371.8 256.5 L 371.8 253.4 L 358.3 247.6 L 362.0 258.2 L 356.9 259.7 Z" class="map-country-shape" />
             <text x="317" y="260" class="map-country-flag">🇨🇿</text>
             <text x="317" y="286" class="map-country-label">CZ</text>
           </g>
 
           <!-- SLOVENSKO (SK) - reálná hranice (geoBoundaries, zjednodušeno Douglas-Peucker) -->
-          <g class="map-country-group ${active === "sk" ? "is-active" : ""}" data-meteoradar-country="sk" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Slovensko">
+          <g class="map-country-group ${isCountryActive("sk") ? "is-active" : ""}" data-meteoradar-country="sk" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Slovensko">
             <path d="M 514.4 345.1 L 519.1 344.3 L 519.6 335.5 L 524.7 331.1 L 526.1 322.7 L 531.7 312.2 L 516.2 306.4 L 513.2 300.0 L 509.4 298.0 L 507.5 299.7 L 503.0 295.4 L 497.0 297.0 L 492.2 294.7 L 489.6 297.5 L 487.5 295.9 L 485.1 296.7 L 486.6 299.2 L 481.4 302.5 L 475.7 296.8 L 470.7 298.7 L 466.3 296.7 L 457.5 301.4 L 455.7 308.0 L 451.0 305.3 L 446.4 307.0 L 446.6 297.1 L 441.8 297.2 L 436.1 287.5 L 433.5 291.2 L 430.4 291.4 L 427.1 297.4 L 421.8 297.8 L 420.6 292.0 L 408.7 292.7 L 403.4 300.9 L 397.4 302.9 L 393.5 315.0 L 389.4 315.4 L 388.2 319.7 L 385.0 319.8 L 382.7 322.9 L 372.2 325.1 L 367.0 322.2 L 360.1 331.8 L 356.0 345.1 L 363.9 358.0 L 363.9 361.7 L 371.4 362.9 L 382.9 373.8 L 400.7 374.9 L 417.8 371.0 L 414.9 367.3 L 417.0 360.6 L 436.7 358.8 L 438.5 353.3 L 441.7 351.1 L 446.9 353.7 L 446.8 355.6 L 449.9 355.0 L 450.0 356.9 L 454.6 354.9 L 457.1 350.9 L 463.0 350.1 L 469.8 337.5 L 479.1 335.8 L 487.3 340.0 L 497.2 335.7 L 502.5 339.2 L 505.9 346.5 L 514.4 345.1 Z" class="map-country-shape" />
             <text x="448" y="308" class="map-country-flag">🇸🇰</text>
             <text x="448" y="334" class="map-country-label">SK</text>
           </g>
 
           <!-- RAKOUSKO (AT) - reálná hranice (geoBoundaries, zjednodušeno Douglas-Peucker) -->
-          <g class="map-country-group ${active === "at" ? "is-active" : ""}" data-meteoradar-country="at" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Rakousko">
+          <g class="map-country-group ${isCountryActive("at") ? "is-active" : ""}" data-meteoradar-country="at" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Rakousko">
             <path d="M 160.5 382.8 L 160.0 390.8 L 153.7 395.8 L 145.7 383.3 L 133.1 385.2 L 134.5 405.2 L 149.8 415.1 L 158.5 407.9 L 161.0 414.5 L 173.6 418.6 L 182.3 409.5 L 213.6 403.8 L 212.3 411.8 L 225.1 423.5 L 286.5 436.0 L 301.1 423.6 L 331.7 423.4 L 330.2 415.5 L 339.4 407.3 L 346.2 407.9 L 344.1 389.6 L 352.4 383.6 L 343.4 377.9 L 349.2 373.5 L 364.0 375.9 L 361.4 369.1 L 366.1 362.3 L 356.3 346.4 L 358.1 329.5 L 347.1 325.0 L 333.4 328.1 L 300.5 315.4 L 299.2 326.9 L 294.0 326.6 L 290.7 335.7 L 271.2 335.2 L 264.4 326.9 L 260.9 338.9 L 254.1 335.4 L 248.6 347.7 L 231.1 356.8 L 238.6 369.5 L 235.6 375.2 L 241.0 376.9 L 238.6 387.0 L 231.8 377.5 L 223.2 379.7 L 215.8 374.3 L 214.1 380.5 L 196.7 381.1 L 185.5 390.0 L 160.5 382.8 Z" class="map-country-shape" />
             <text x="257" y="362" class="map-country-flag">🇦🇹</text>
             <text x="257" y="388" class="map-country-label">AT</text>
@@ -4007,6 +3707,9 @@ export const devicesMixin = {
     const deviceClass = String(state?.attributes?.device_class || "");
     if (domain === "weather") return this._weatherConditionLabel(value);
     if (domain === "person" || domain === "device_tracker") {
+      // A person's own name is never their entity's *state* (that's always
+      // home/not_home/a zone) - a name-seeking slot has to read friendly_name.
+      if (kind === "person_name") return String(state?.attributes?.friendly_name || "");
       if (value === "home") return "Doma";
       if (value === "not_home") return "Pryč";
       return state?.state ? String(state.state) : "";
@@ -4056,6 +3759,7 @@ export const devicesMixin = {
     const kind = this._templateSlotKind(meta.label, meta.icon);
     const weatherState = String(binding || "").startsWith("weather.");
     const weatherAttributes = state?.attributes || {};
+    const climateState = String(binding || "").startsWith("climate.");
     let raw = state?.state;
     let forcedUnit = "";
     if (template?.id === "cz_spot_prices" && variableIndex === 5 && Number.isFinite(Number(raw))) {
@@ -4065,6 +3769,21 @@ export const devicesMixin = {
     if (weatherState && normalized.includes("teplot")) {
       raw = weatherAttributes.temperature;
       forcedUnit = weatherAttributes.temperature_unit || "°C";
+    } else if (climateState && kind === "temperature") {
+      // A climate.* entity's own `state` is its HVAC mode ("heat", "off", ...),
+      // never a number - "Cílová teplota" needs the `temperature` attribute
+      // (the setpoint), "Teplota" needs `current_temperature` (what the
+      // thermostat is actually reading right now). Neither is the raw state.
+      raw = normalized.includes("cil")
+        ? state?.attributes?.temperature
+        : state?.attributes?.current_temperature;
+      forcedUnit = state?.attributes?.temperature_unit || "°C";
+    } else if (climateState && normalized.includes("vykon")) {
+      // hvac_action is what the thermostat is doing right now (heating/idle/
+      // off/...) - a much more useful "Výkon topení" than the HVAC *mode*
+      // (heat/auto/off) the bare state would otherwise return.
+      const action = String(state?.attributes?.hvac_action || "").toLowerCase();
+      return { heating: "Topí", idle: "Klid", off: "Vypnuto", cooling: "Chladí", drying: "Vysouší", fan: "Ventilace" }[action] || fallback;
     } else if (kind === "forecast") {
       // The service-backed forecast, not the attribute Home Assistant removed.
       const tomorrow = this._templateForecast(binding)?.[1];
@@ -4192,19 +3911,42 @@ export const devicesMixin = {
     if (has("skladem", "zásob")) return "stock";
     if (has("předpově")) return "forecast";
     if (has("počas")) return "weather";
+    if (has("narozenin")) return "nameday";
     if (has("událost", "kalend")) return "calendar";
     if (has("svátek")) return "nameday";
-    if (has("osob", "přítom", "jméno")) return "person";
+    // A person.*/device_tracker.* entity's *state* is always "home"/"not_home" -
+    // never a name - so a slot asking for a name ("Osoby", "Jméno") and one
+    // asking for a status ("Přítomnost", "Stav osoby") need different kinds:
+    // only the status kind should read the entity's state, the name kind has
+    // to read its friendly_name instead (see _templateStateWords).
+    if (has("jméno")) return "person_name";
+    if (has("osob") && !has("stav")) return "person_name";
+    if (has("osob", "přítom")) return "person_status";
     if (has("teplot", "termostat")) return "temperature";
     if (has("vlhkost")) return "humidity";
+    // "Úspora CO₂" (solar's cumulative kilograms saved) is a completely
+    // different physical quantity from a device_class carbon_dioxide sensor
+    // (a live ppm air-quality reading) despite sharing the words "CO₂" - a
+    // plain sensor is the honest target, not a demand for a ppm sensor.
+    if (has("úspora")) return "generic";
     if (has("co₂", "co2")) return "carbon_dioxide";
     if (has("pm2", "aqi", "kvalit")) return "air_quality";
     if (has("bateri")) return "battery";
     if (has("signál")) return "signal_strength";
     if (has("cena", "tarif", "minimum")) return "monetary";
     if (has("výkon")) return "power";
-    if (has("spotřeb", "výrob")) return "energy";
-    if (has("vod", "zálivk")) return "water";
+    // "výrob" alone (solar's "Výroba …"), not "spotřeb" - that word is shared
+    // with the water template's "Spotřeba vody …" labels below, and checking
+    // it here first used to steal that match before "vod" ever got a turn.
+    if (has("výrob")) return "energy";
+    // "Další zálivka" (garden's *next scheduled watering time*) used to also
+    // match here via a "zálivk" keyword - but that is a schedule, not a water
+    // *consumption* reading, so it needs a timestamp/duration sensor instead
+    // (matched separately below with the rest of the "next X" slots).
+    if (has("vod")) return "water";
+    if (has("svoz", "odpad", "popelnic")) return "waste";
+    if (has("zastáv", "odjezd", "link", "spoj")) return "transport";
+    if (has("vzdálenost")) return "distance";
     if (has("vít")) return "wind_speed";
     if (has("světl")) return "light";
     if (has("zám")) return "lock";
@@ -4213,10 +3955,25 @@ export const devicesMixin = {
     if (has("pohyb")) return "motion";
     if (has("alarm", "režim")) return "alarm";
     if (has("zásilk", "sledovac", "doruč")) return "shipment";
-    if (has("položk", "splněn", "seznam")) return "todo";
+    // "Položky"/"Splněné" bind one item's *name text* (see shopping.js's
+    // design - a checklist row's label), not a reference to a whole todo
+    // list - a todo.* entity's own state is a number (items left), which
+    // would show as the item's name if suggested here. A "remaining count"
+    // wording is the one case that really does want the list entity itself.
+    // The full phrase "počet zbývajících", not a bare "zbývaj" stem: that stem
+    // is also the start of washer's "Zbývající čas" and must still fall through
+    // to the timestamp check below rather than be caught here.
+    if (has("počet zbývajících")) return "todo_count";
+    if (has("položk", "splněn", "seznam")) return "todo_item";
     if (has("program")) return "program";
     if (has("věk", "číslo")) return "generic";
-    if (has("zbývaj", "dokonč", "změn")) return "timestamp";
+    // Requires the full "zbývající čas" phrase, not the bare "zbývaj" stem -
+    // that stem alone also shows up in the shopping template's "Počet
+    // zbývajících" (a remaining-items count, not a duration), which used to
+    // get misclassified as a timestamp/duration sensor because of it.
+    // "zálivk" (garden's "Další zálivka") belongs here too - see the comment
+    // by the water kind above for why it moved.
+    if (has("zbývající čas", "dokonč", "změn", "zálivk")) return "timestamp";
     return "generic";
   },
 
@@ -4231,7 +3988,8 @@ export const devicesMixin = {
       camera: { domains: ["camera", "sensor"] },
 
       calendar: { domains: ["calendar"] },
-      person: { domains: ["person", "device_tracker"] },
+      person_name: { domains: ["person", "device_tracker"] },
+      person_status: { domains: ["person", "device_tracker"] },
       temperature: { domains: ["sensor", "climate"], classes: ["temperature"] },
       humidity: { domains: ["sensor"], classes: ["humidity", "moisture"] },
       carbon_dioxide: { domains: ["sensor"], classes: ["carbon_dioxide"] },
@@ -4242,6 +4000,14 @@ export const devicesMixin = {
       power: { domains: ["sensor"], classes: ["power"], units: ["kw", "w"] },
       energy: { domains: ["sensor"], classes: ["energy"], units: ["kwh", "wh", "mwh"] },
       water: { domains: ["sensor"], classes: ["water"], units: ["l", "m³"] },
+      // Neither has a dedicated device_class - waste collection and transit
+      // departures almost always come from a community integration, most
+      // commonly exposed as a plain sensor (or a calendar entity for waste
+      // schedules), so keyword matching against the entity id/name carries
+      // more of the score here than for classes above.
+      waste: { domains: ["calendar", "sensor"] },
+      transport: { domains: ["sensor"] },
+      distance: { domains: ["sensor"], classes: ["distance"] },
       wind_speed: { domains: ["sensor"], classes: ["wind_speed"] },
       light: { domains: ["light", "switch"] },
       lock: { domains: ["lock"] },
@@ -4249,7 +4015,11 @@ export const devicesMixin = {
       window: { domains: ["binary_sensor", "cover"], classes: ["window", "opening"] },
       motion: { domains: ["binary_sensor"], classes: ["motion", "occupancy", "presence"] },
       alarm: { domains: ["alarm_control_panel"] },
-      todo: { domains: ["todo", "sensor"] },
+      // A todo.* list entity's own state is a number (items left) - the right
+      // fit for a "how many remain" slot, but the wrong fit for a slot that
+      // wants one item's name as text.
+      todo_item: { domains: ["input_text", "sensor"] },
+      todo_count: { domains: ["todo", "sensor", "input_number"] },
       program: { domains: ["sensor", "select", "vacuum", "humidifier"] },
       timestamp: { domains: ["sensor", "input_datetime"], classes: ["timestamp", "duration"] },
       shipment: { domains: ["sensor"] },

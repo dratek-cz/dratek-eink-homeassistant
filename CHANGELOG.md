@@ -2,6 +2,66 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.225] - 2026-08-07
+
+### Opraveno – Interval automatické obnovy displeje konečně skutečně odesílá nový náhled
+- `automation.py`: Volba intervalu obnovy v nastavení displeje ("30 s" až "24 hod") dosud jen omezovala, jak často se displej smí obnovit, když se změnila napojená entita - žádný časovač ale sám o sobě nikdy nespustil obnovu jen proto, že uplynul zvolený čas. Displej napojený na pomalu se měnící data (nebo bez reálné změny vůbec) tak nikdy automaticky neobnovil, ať byl interval nastavený na cokoliv.
+- Jediná výjimka byla šablona Meteoradar, která měla vlastní pevný desetiminutový časovač (`_handle_camera_tick`) - ignoroval ale zvolený interval v nastavení a fungoval jen pro kamerové vazby.
+- Oba nahrazeny jedním obecným mechanismem (`_handle_refresh_tick`): kontrola všech nastavených displejů co `REFRESH_TICK_SECONDS` (30 s), a jakmile displeji uplyne jeho vlastní `refresh_interval_seconds`, naplánuje se mu skutečná obnova - stejnou cestou (`_schedule_refresh` → `_async_refresh_loop`), jakou dosud spouštěly jen změny entit. Odesílá se přitom (stejně jako dosud) jen když se vykreslený obrázek opravdu liší od naposledy odeslaného, takže baterie displeje ani jeho e-ink cykly netrpí zbytečným přepisováním nezměněného obsahu.
+- Zastaralý popis třídy `EntityAutoUpdateManager` ("Keep legacy automation data disabled while manual-only mode is active") nahrazen popisem odpovídajícím tomu, co třída doopravdy dělá.
+
+## [0.1.224] - 2026-08-07
+
+### Rozšířeno – Podrobné návody na zprovoznění pro všech 25 šablon
+- Každá šablona v `templates/<id>.js` má nyní důkladnější `setup`: konkrétní integrace se skutečnými názvy (ne jen "integrace vašeho X"), krok za krokem postup a u řady šablon novou poznámku upozorňující na to, co šablona ve skutečnosti dělá - typicky že karta má pevný počet řádků/dlaždic, ale jen část z nich je skutečně napojitelná na živá data (Kdo je doma, Odjezdy, Nákupní seznam, Zásilka), zbytek je ilustrační grafika.
+
+### Opraveno – Čtyři reálné chyby v automatickém rozpoznávání zdrojů dat
+- `panel-devices.mixin.js` (`_templateSlotKind`): Údaj **Osoby** v šabloně Kdo je doma se napojoval na entitu `person.*`, ale zobrazovala se jen Doma/Pryč místo jména - `person.*` entity totiž ve svém stavu jméno nikdy nenesou. Kategorie `person` rozdělena na `person_name` (čte se `friendly_name`) a `person_status` (čte se stav), takže Osoby teď skutečně ukáže jméno a Přítomnost stav.
+- Obdobně **Teplota**/**Cílová teplota** v šabloně Topení: `climate.*` entita má ve stavu režim topení (heat/off/auto), ne číslo - `_templateDisplayValue` nyní pro tyto údaje čte atributy `current_temperature`/`temperature`, a Výkon topení navíc umí zobrazit skutečnou činnost (Topí/Klid/Vypnuto) z atributu `hvac_action`.
+- **Úspora CO₂** ve Fotovoltaice a **Další zálivka** v Zahradě se kvůli sdíleným slovům ("CO₂", "zálivk") mylně napojovaly na senzor kvality ovzduší (ppm), resp. spotřeby vody (litry) - úplně jiná fyzikální veličina, než o kterou jde (kg uspořeného CO₂, čas příští zálivky). Opraveno na obecný senzor, resp. časový/trvání senzor.
+- **Počet zbývajících** v Nákupním seznamu se kvůli slovu "zbývaj" mylně napojovalo na stejnou kategorii jako "Zbývající čas" pračky (časový senzor) - opraveno na novou kategorii `todo_count`, která správně cílí na `todo.*` entitu (jejíž stav je počet nevyřízených položek).
+- **Jméno** v šabloně Narozeniny přejmenováno na **Jméno z kalendáře** - se stejným slovem jako v Kdo je doma by nově rozdělená kategorie `person_name` mylně nabízela osobu místo kalendáře; přejmenování opravuje i to, že položka narozenin se ve skutečnosti čte jako název kalendářové události, ne stav entity.
+
+## [0.1.223] - 2026-08-07
+
+### Refaktorováno – Každá šablona má vlastní soubor
+- Nová složka `custom_components/dratek_eink/frontend/panel/templates/` obsahuje jeden soubor na jednu šablonu (`weather.js`, `price.js`, `radar.js`, ...). Každý soubor nese úplně vše o dané šabloně: katalogový záznam (číslo, kategorie, název, použité údaje), návod na zprovoznění (jaká integrace je potřeba, kroky nastavení) i samotný kód, který kreslí vzhled šablony na displeji.
+- Dosud byly tyto tři věci rozeseté na třech místech ve dvou velkých souborech - katalog a návody v `panel-devices.mixin.js`, kód vzhledu v `panel-template-svg.mixin.js` - takže úprava jedné šablony znamenala hledat a upravovat na třech různých místech. `panel-devices.mixin.js` a `panel-template-svg.mixin.js` nyní jen importují `templates/index.js` a z něj katalog, návody i vzhledy sestaví - žádná duplicita, jedno místo pravdy na šablonu.
+- Objevena a doplněna zapomenutá šablona **Regálová cenovka** (`priceshelf`) - měla už hotový vzhled i návod na zprovoznění, ale chyběl jí katalogový záznam, takže se v nabídce šablon nikdy nezobrazila. Katalog má nyní 25 šablon místo 24.
+- `tests/test_display_template_shapes.py`: Sken, který hlídá, že žádné dvě šablony nemají stejný tvar, přepsán z hledání pevného sloupce odsazení na sledování hloubky závorek - funguje napříč soubory bez ohledu na to, jak je která šablona odsazená.
+- `tests/test_frontend_tool_library.py`: Sken zdrojového kódu panelu nyní prochází i podsložky (`templates/`), ne jen `panel/*.js`.
+
+## [0.1.222] - 2026-08-07
+
+### Změněno – Katalog šablon zobrazuje vše najednou
+- `panel-devices.mixin.js`: Záložky **Předpřipravené** / **Vlastní nastavení** dosud rozdělovaly katalog na dvě poloviny a defaultně schovávaly deset z dvaceti čtyř šablon, dokud na ně uživatel neklikl. Katalog teď zobrazuje všech 24 šablon (i uživatelské) v jedné mřížce najednou; vyhledávání zůstává. Odznak "Automatické nastavení" / "Vlastní zdroje dat" na každé kartě dál říká, jestli se zdroje dat napojí samy, nebo je potřeba je vybrat ručně.
+- `panel-render-ui.mixin.js` & `panel-inspector.mixin.js`: Odstraněn mrtvý kód po záložkách (přepínač kategorie, jeho stav a styly).
+
+### Opraveno – Automatické napojování zdrojů dat pro šablony Spotřeba vody a Nákupní seznam
+- `panel-devices.mixin.js` (`_templateSlotKind`): Údaje šablony **Spotřeba vody** ("Spotřeba dnes/týden/měsíc") se kvůli sdílenému slovu "spotřeba" napojovaly na senzory s device_class `energy` místo `water` - klíčové slovo pro energii se kontrolovalo dřív než pro vodu. Opraveno pořadí a popisky údajů upřesněny na "Spotřeba vody dnes/týden/měsíc", takže se teď správně napojí na vodoměr.
+- Údaj "Počet zbývajících" v šabloně **Nákupní seznam** se kvůli podřetězci "zbývaj" mylně klasifikoval jako časový/trvání senzor (stejné klíčové slovo jako u "Zbývající čas" pračky). Rozpoznávání teď vyžaduje celou frázi "zbývající čas", takže si obě šablony nepřekáží.
+
+### Přidáno – Rozpoznávání zdrojů dat pro Odpady a Odjezdy
+- `panel-devices.mixin.js`: Šablony **Odpady** a **Odjezdy** dosud neměly žádná klíčová slova pro automatické rozpoznání vhodné entity - všechny jejich údaje spadaly do obecné kategorie a napojení senzoru integrace svozu odpadu nebo dopravce bylo čistě náhodné. Přidány kategorie `waste` (svoz, odpad, popelnice → `calendar`/`sensor`) a `transport` (zastávka, odjezd, linka, spoj → `sensor`), a `narozenin` nyní míří ke stejné kategorii jako svátek. Ověřeno živě: se senzorem `sensor.svoz_odpadu_smesny` a `sensor.pid_zastavka_odjezdy` v Home Assistantu si šablony teď entitu vyberou samy.
+
+## [0.1.221] - 2026-08-07
+
+### Předěláno – Panel s informacemi o displeji v nastavení šablony
+- `panel-devices.mixin.js` & `panel-render-ui.mixin.js`: Panel nad náhledem displeje v nastavení šablony (jméno, adresa, baterie, signál, rozlišení) byl dosud jeden vodorovně scrollovatelný pruh natěsno poskládaný pomocí `!important` oprav. Nově je to přehledná karta se dvěma jasně oddělenými sekcemi - nahoře ikona, jméno a adresa displeje, pod tím samostatný řádek se třemi stejně velkými dlaždicemi (baterie, signál, rozlišení). Žádné vodorovné scrollování, vše čitelné najednou.
+- Výběr intervalu automatické obnovy byl z tohoto panelu odstraněn (konzistentně s předchozím odstraněním z karet na hlavní stránce) - nastavení intervalu zůstává dostupné v dialogu nastavení displeje.
+
+## [0.1.220] - 2026-08-07
+
+### Odstraněno – Ikona a čas obnovy z karet displejů na hlavní stránce
+- `panel-devices.mixin.js`: Karty displejů v přehledu ("Nalezené displeje") dosud v řádku se stavem baterie a signálu zobrazovaly i ovládací prvek intervalu automatické obnovy (ikona `mdi:timer-refresh-outline` a výběr času typu "5 min", "1 hod"...). Ten je nyní z karty úplně odstraněn - nastavení intervalu obnovy zůstává dostupné v nastavení konkrétního displeje, jen se už nezobrazuje na kartě v hlavním přehledu.
+
+## [0.1.219] - 2026-08-07
+
+### Opraveno – Tenké hranice v přehledu celé Evropy a chybějící zvýraznění volby "eu"
+- `meteoradar.py`: Hranice států se kreslí v plném zoomu-6 rozlišení a teprve pak se celý obrázek zmenšuje na velikost displeje - přehled celé střední Evropy pokrývá několikanásobně větší plochu než jeden stát při stejném pixelovém rozpočtu, takže původní tloušťka čáry (2 px) se po zmenšení a kvantizaci na tři barvy prakticky ztrácela. Nová funkce `_scaled_border_width` tloušťku čáry zesílí úměrně tomu, o kolik zmenšení překračuje limit `MAX_NATIVE_DIMENSION` - u jednotlivých států (menší plocha) se vzhled nezmění, u přehledu Evropy zůstanou hranice po zmenšení zřetelně vidět.
+- `meteoradar.py`: Do rohu vykreslené mapy (stejný obrázek pro náhled v nastavení šablony i pro displej) nově funkce `draw_corner_badge` přidává malý štítek se zkráceným názvem státu a časem poslední srážkové snímky z RainVieweru (např. "Česko · 14:32") - dosud mapa žádnou informaci o tom, kdy byla pořízena, neposkytovala.
+- `panel-devices.mixin.js`: Interaktivní mapa výběru státu v nastavení šablony při volbě "Střední Evropa" dosud nezvýrazňovala žádný stát, protože porovnávala vybrané `eu` proti jednotlivým kódům zemí. Nyní se při volbě "eu" zvýrazní všech pět tvarů najednou, stejně jako skutečná vykreslená mapa ukazuje hranice všech pěti zemí.
+
 ## [0.1.218] - 2026-08-07
 
 ### Opraveno – Odesílání se po několika nahráních za sebou postupně zpomalovalo

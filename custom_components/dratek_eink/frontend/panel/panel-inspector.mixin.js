@@ -314,11 +314,6 @@ export const inspectorMixin = {
       this._displayTemplateSearchQuery = event.target.value;
       this._renderKeepingSearchFocus();
     });
-    this.shadowRoot.querySelectorAll("[data-display-template-category]").forEach((button) => button.addEventListener("click", () => {
-      this._displayTemplateCategory = button.dataset.displayTemplateCategory || "prepared";
-      this._render();
-      this._paint();
-    }));
     // `placement` is the explicit choice from either the drop-zone cross or the
     // placement dialog: "full" replaces everything with just this template;
     // "left"/"right"/"top"/"bottom" put it in one half and keep whatever
@@ -1128,7 +1123,6 @@ export const inspectorMixin = {
           ? { ok: true, message: `Šablona „${savedUserTemplate.title}“ byla uložena do seznamu.` }
           : { ok: true, message: "Šablona a její úpravy byly uloženy pro tento displej." };
         if (savedUserTemplate) {
-          this._displayTemplateCategory = "prepared";
           this._displaySettingsView = "templates";
         }
       } catch (err) {

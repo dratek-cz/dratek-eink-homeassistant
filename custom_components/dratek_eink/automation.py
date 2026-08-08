@@ -40,13 +40,11 @@ BATTERY_SAVER_THRESHOLD_PERCENT = 15
 BATTERY_SAVER_MIN_INTERVAL_SECONDS = 3600
 GATEWAY_ROUTE_SCAN_SECONDS = 3
 GATEWAY_ROUTE_CACHE_SECONDS = 5
-# A camera binding (the Meteoradar map) has no HA entity whose *state* changes
-# when a new frame appears - camera.meteoradar's state stays "idle" - so
-# _handle_state_change below never fires for it and it would otherwise never
-# auto-refresh. RainViewer's own data only moves on every ten minutes anyway
-# (see meteoradar.py), so a periodic tick at that same cadence is enough to
-# keep any display showing a camera-bound template current.
-CAMERA_BINDING_REFRESH_INTERVAL_SECONDS = 600
+# Every configured display is checked on this cadence to see whether its own
+# refresh_interval_seconds has elapsed - the shortest interval a user can pick
+# (MIN_REFRESH_INTERVAL_SECONDS) sets the floor, since checking any less often
+# than that would make picking a short interval pointless.
+REFRESH_TICK_SECONDS = MIN_REFRESH_INTERVAL_SECONDS
 
 
 
@@ -155,7 +153,20 @@ def _source_value(state: Any, attribute: str) -> Any:
 
 
 class EntityAutoUpdateManager:
-    """Keep legacy automation data disabled while manual-only mode is active."""
+    """Keep every display's design current: on-demand when a bound entity's
+    state changes, and periodically on the interval chosen in its settings.
+
+    The two triggers cover different gaps. A bound entity changing state
+    (_handle_state_change) refreshes as soon as new data exists, but a camera
+    binding (the Meteoradar map) has no HA entity whose *state* ever changes
+    when a fresh frame appears, and even an ordinary sensor-bound display
+    should still redraw periodically as insurance against a missed event or
+    e-ink ghosting. _handle_refresh_tick is what covers both: every configured
+    display is checked on REFRESH_TICK_SECONDS and re-queued once its own
+    refresh_interval_seconds has actually elapsed - the same interval the
+    settings dropdown lets a user pick, which used to only throttle
+    state-change refreshes rather than drive one on its own.
+    """
 
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
@@ -171,7 +182,7 @@ class EntityAutoUpdateManager:
         self._gateway_route_cache_at = 0.0
         self._gateway_route_lock = asyncio.Lock()
         self._initialized = False
-        self._camera_tick_unsubscribe = None
+        self._refresh_tick_unsubscribe = None
 
     async def async_initialize(self) -> None:
         if self._initialized:
@@ -185,28 +196,20 @@ class EntityAutoUpdateManager:
         }
         self._initialized = True
         self._refresh_listener()
-        if self._camera_tick_unsubscribe is None:
-            self._camera_tick_unsubscribe = async_track_time_interval(
+        if self._refresh_tick_unsubscribe is None:
+            self._refresh_tick_unsubscribe = async_track_time_interval(
                 self.hass,
-                self._handle_camera_tick,
-                timedelta(seconds=CAMERA_BINDING_REFRESH_INTERVAL_SECONDS),
+                self._handle_refresh_tick,
+                timedelta(seconds=REFRESH_TICK_SECONDS),
             )
-
-    def _camera_bound_addresses(self) -> list[str]:
-        """Addresses whose active design includes a camera binding (the Meteoradar map)."""
-        return [
-            address
-            for address, config in self._configs.items()
-            if any(
-                isinstance(binding, dict) and binding.get("type") == "camera"
-                for binding in config.get("bindings", [])
-            )
-        ]
 
     @callback
-    def _handle_camera_tick(self, _now: Any) -> None:
-        for address in self._camera_bound_addresses():
-            self._schedule_refresh(address)
+    def _handle_refresh_tick(self, _now: Any) -> None:
+        now = time.monotonic()
+        for address, config in self._configs.items():
+            interval = self._refresh_interval(config)
+            if now - self._last_refresh_at.get(address, 0.0) >= interval:
+                self._schedule_refresh(address)
 
     @staticmethod
     def _refresh_interval(config: dict[str, Any]) -> int:

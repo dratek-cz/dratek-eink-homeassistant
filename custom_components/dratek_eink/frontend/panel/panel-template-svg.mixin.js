@@ -16,6 +16,7 @@
 // are identical by construction.
 
 import qrcode from "../qrcode-generator.js";
+import { DISPLAY_TEMPLATES } from "./templates/index.js";
 
 const RED = "#e31b1b";
 const BLACK = "#000000";
@@ -1159,6 +1160,14 @@ export const templateSvgMixin = {
   // The only caller that does this is _templateVariableCropBoxes, which needs
   // to know which row a variable index ends up in without caring what value
   // it actually holds.
+  //
+  // Each template's own row layout lives in its own file under ./templates/
+  // (see templates/index.js) - this just rebuilds the live
+  // v/series/ratio/day/event/option closures for the requested template and
+  // hands them to that template's `design` function. The variable indices are
+  // fixed by each template's own catalog entry - v(0) is that template's
+  // first bound entity - so a template's arrangement can change freely but
+  // its numbering cannot.
   _templateSvgSpecs(template, resolveValue) {
     const v = resolveValue || ((index, fallback) => this._templateDisplayValue(template, index, fallback));
     // Charts, meters and dials need numbers rather than formatted strings, and the
@@ -1170,308 +1179,10 @@ export const templateSvgMixin = {
     const day = (index) => this._templateForecastDay(template, index);
     const event = (index) => this._templateCalendarEntry(template, index);
     const option = (name) => this._templateOptionActive(template, name);
-    return {
-      // Twenty templates, twenty shapes. The variable indices are fixed by the
-      // catalog in panel-devices.mixin.js - v(0) is that template's first bound
-      // entity - so the arrangement can change freely but the numbering cannot.
-      weather: () => [
-        { icon: "weather-partly-cloudy", h: 0.19 },
-        { stat: { value: v(0, "23"), unit: "°C", caption: v(1, "Polojasno") }, h: 0.30 },
-        { text: v(3, "23. května"), h: 0.07, size: 0.045 },
-        { rule: true, h: 0.02 },
-        { strip: [day(0), day(1), day(2), day(3)], h: 0.25 },
-        { flex: true },
-        { footer: [{ label: "AKTUALIZOVÁNO", value: v(2, "12:45") }], h: 0.13 },
-      ],
-      energy: () => [
-        { text: "Cena elektřiny", h: 0.075, size: 0.05, bold: true },
-        { stat: { value: v(0, "2,45"), unit: "Kč/kWh", caption: v(1, "12:00–13:00") }, h: 0.27 },
-        { bars: {
-          values: series(2, [1.62, 1.48, 1.36, 1.29, 1.34, 1.51, 1.88, 2.24, 2.06, 1.72, 1.38, 1.12, 0.86, 0.94, 1.08, 1.42, 1.96, 2.58, 2.74, 2.39, 2.05, 1.84, 1.71, 1.63]),
-          labels: ["0", "", "", "", "", "6", "", "", "", "", "", "12", "", "", "", "", "", "18", "", "", "", "", "", "23"],
-          highlight: 12,
-        }, h: 0.43 },
-        { flex: true },
-        { footer: [{ label: "NEJLEVNĚJI DNES", value: v(3, "0,86 Kč") }], h: 0.14 },
-      ],
-      cz_spot_prices: () => {
-        const prices = series(1, [1.62, 1.48, 1.36, 1.29, 1.34, 1.51, 1.88, 2.24, 2.06, 1.72, 1.38, 1.12, 0.86, 0.94, 1.08, 1.42, 1.96, 2.58, 2.74, 2.39, 2.05, 1.84, 1.71, 1.63]);
-        const labels = prices.map((_price, index) => {
-          const hour = Math.round((index * 24) / prices.length);
-          return [0, 6, 12, 18].includes(hour) && index === Math.round((hour * prices.length) / 24) ? String(hour) : "";
-        });
-        const now = new Date();
-        const highlight = Math.min(prices.length - 1, Math.floor((now.getHours() * 60 + now.getMinutes()) * prices.length / 1440));
-        return [
-          { text: "České spotové ceny", h: 0.075, size: 0.048, bold: true },
-          { stat: { value: v(0, "2,45 Kč/kWh"), caption: "aktuální interval", color: "red" }, h: 0.22 },
-          { bars: { values: prices, labels, highlight }, group: "chart", h: 0.36 },
-          { strip: [
-            { label: "MIN", value: v(2, "0,86 Kč") },
-            { label: "MAX", value: v(3, "2,74 Kč"), color: "red" },
-            { label: "POŘADÍ", value: v(5, "12 / 24") },
-          ], h: 0.16 },
-          { flex: true },
-          { footer: [{ label: "ZÍTRA MIN", value: v(4, "1,02 Kč") }], h: 0.13 },
-        ];
-      },
-      home: () => [
-        { icon: "home", h: 0.15, color: "red" },
-        { text: "Dům", h: 0.08, size: 0.058, bold: true },
-        { grid: [
-          { icon: "thermometer", label: "Teplota", value: v(0, "21,5 °C") },
-          { icon: "water-percent", label: "Vlhkost", value: v(1, "45 %") },
-          { icon: "lightbulb-on", label: "Světla", value: v(2, "3 ON") },
-          { icon: "lock", label: "Zámky", value: v(3, "Zamčeno") },
-        ], columns: 2, h: 0.54 },
-        { flex: true },
-        { footer: [{ label: "STAV", value: "Vše v pořádku" }], h: 0.14 },
-      ],
-      waste: () => [
-        { text: "Odpady", h: 0.085, size: 0.058, bold: true },
-        { rule: true, h: 0.02 },
-        { split: [
-          { icon: "trash-can-outline", value: v(0, "ZÍTRA"), label: "Plast", color: "red" },
-          { icon: "recycle", value: v(1, "za 7 dní"), label: "Papír" },
-        ], h: 0.6 },
-        { flex: true },
-        { footer: [{ label: "NEJBLIŽŠÍ SVOZ", value: v(2, "út 24. 5.") }], h: 0.14 },
-      ],
-      solar: () => [
-        { text: "Fotovoltaika", h: 0.075, size: 0.05, bold: true },
-        { ring: { percent: ratio(0, 47), value: v(0, "2,35"), caption: "kW" }, h: 0.42 },
-        { list: [
-          { icon: "weather-sunny", label: "Dnes", value: v(1, "8,2 kWh") },
-          { icon: "calendar-month", label: "Měsíc", value: v(2, "152 kWh") },
-          { icon: "counter", label: "Celkem", value: v(3, "3,45 MWh") },
-        ], h: 0.3 },
-        { flex: true },
-        { footer: [{ label: "ÚSPORA CO₂", value: v(4, "125 kg") }], h: 0.13 },
-      ],
-      washer: () => [
-        { text: "Pračka", h: 0.075, size: 0.055, bold: true },
-        { text: v(0, "Bavlna 60°"), h: 0.09, size: 0.062, bold: true, color: "red" },
-        { rule: true, h: 0.02 },
-        { steps: [
-          { label: "Napouštění", done: true },
-          { label: "Praní", done: true },
-          { label: "Máchání", done: true, color: "red" },
-          { label: "Odstřeďování" },
-          { label: "Hotovo" },
-        ], h: 0.4 },
-        { stat: { value: v(1, "01:15"), caption: "zbývá" }, h: 0.2 },
-        { flex: true },
-        { footer: [{ label: "SKONČÍ V", value: v(2, "14:30") }], h: 0.13 },
-      ],
-      living: () => [
-        { icon: "sofa", h: 0.15 },
-        { stat: { value: v(0, "23,5"), unit: "°C", caption: "Obývák" }, h: 0.3 },
-        { rule: true, h: 0.02 },
-        { meters: [
-          { label: "Vlhkost", value: v(1, "40 %"), percent: ratio(1, 40) },
-          { label: "CO₂", value: v(2, "650 ppm"), percent: ratio(2, 32), color: "red" },
-        ], h: 0.28 },
-        { flex: true },
-        { footer: [{ label: "KOMFORT", value: "Optimální" }], h: 0.13 },
-      ],
-      presence: () => [
-        { text: "Kdo je doma", h: 0.08, size: 0.052, bold: true },
-        { rule: true, h: 0.02 },
-        { grid: [
-          { icon: "account", value: v(0, "Petr"), label: v(1, "Doma"), color: "red" },
-          { icon: "account", value: "Jana", label: "Doma" },
-          { icon: "account", value: "Eliška", label: v(2, "Ve škole") },
-        ], columns: 3, h: 0.5 },
-        { flex: true },
-        { footer: [{ label: "AKTUALIZACE", value: v(3, "12:45") }], h: 0.14 },
-      ],
-      wifi: () => [
-        { text: "Wi-Fi", h: 0.075, size: 0.055, bold: true },
-        // Low redundancy on purpose: it costs four modules of symbol size, and on a
-        // tag this small every module is a device pixel that decides whether a phone
-        // can read the code at all.
-        { qr: { text: `WIFI:T:WPA;S:${v(0, "Home_Network")};P:${v(1, "MyPassword123")};;`, correction: "L" }, h: 0.36 },
-        { band: { label: "SÍŤ", value: v(0, "Home_Network") }, bleed: true, h: 0.16 },
-        { gap: true, h: 0.02 },
-        { band: { label: "HESLO", value: v(1, "MyPassword123"), color: "black" }, bleed: true, h: 0.16 },
-        { flex: true },
-        { footer: [{ label: "NASKENUJ", value: "a připoj se" }], h: 0.13 },
-      ],
-      calendar: () => [
-        { text: "Kalendář", h: 0.075, size: 0.05, bold: true },
-        { rule: true, h: 0.02 },
-        { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, h: 0.27 },
-        { datebox: { day: event(1).day, month: event(1).month, lines: [event(1).title, event(1).detail] }, h: 0.27 },
-        { flex: true },
-        { footer: [{ label: "SVÁTEK MÁ", value: v(2, "Jana") }], h: 0.14 },
-      ],
-      radar: () => [
-        { radarMap: true, bleed: true, h: 1 },
-      ],
-
-
-      security: () => [
-        { icon: "shield-home", h: 0.15 },
-        { band: { label: "ALARM", value: v(0, "ZAPNUTO"), color: "black" }, bleed: true, h: 0.2 },
-        { checklist: [
-          { label: `Dveře · ${v(1, "Zamčeno")}`, done: true },
-          { label: `Okna · ${v(2, "Zavřeno")}`, done: true },
-          { label: `Pohyb · ${v(3, "Klid")}`, done: true },
-        ], marker: "dot", h: 0.36 },
-        { flex: true },
-        { footer: [{ label: "ZÓNY", value: "3 / 3 v pořádku" }], h: 0.14 },
-      ],
-      transport: () => [
-        { text: v(0, "Hlavní nádraží"), h: 0.085, size: 0.052, bold: true },
-        { rule: true, h: 0.02 },
-        { board: [
-          { badge: v(1, "9"), label: "Náměstí", value: v(2, "3 min"), color: "red" },
-          { badge: "4", label: "Univerzita", value: "8 min" },
-          { badge: "12", label: "Nemocnice", value: "14 min" },
-          { badge: "N2", label: "Depo", value: "21 min" },
-        ], h: 0.55 },
-        { flex: true },
-        { footer: [{ label: "ZASTÁVKA", value: v(3, "240 m") }], h: 0.14 },
-      ],
-      shopping: () => [
-        { text: "Nákupní seznam", h: 0.075, size: 0.048, bold: true },
-        { rule: true, h: 0.02 },
-        { checklist: [
-          { label: v(1, "Mléko"), done: true },
-          { label: "Chléb", done: true },
-          { label: v(0, "Jablka") },
-          { label: "Káva" },
-          { label: "Prací gel" },
-        ], marker: "box", strike: true, h: 0.55 },
-        { flex: true },
-        { footer: [{ label: "ZBÝVÁ", value: v(2, "3 položky") }], h: 0.14 },
-      ],
-      air: () => [
-        { text: "Kvalita vzduchu", h: 0.07, size: 0.046, bold: true },
-        { dial: { percent: ratio(0, 21) / 2, value: v(0, "42"), caption: "AQI", min: "0", max: "200" }, h: 0.35 },
-        { rule: true, h: 0.02 },
-        { list: [
-          { icon: "molecule-co2", label: "CO₂", value: v(1, "612 ppm") },
-          { icon: "blur", label: "PM2.5", value: v(2, "8 µg") },
-          { icon: "water-percent", label: "Vlhkost", value: v(3, "46 %") },
-        ], h: 0.31 },
-        { flex: true },
-        { footer: [{ label: "VĚTRÁNÍ", value: "Není třeba" }], h: 0.13 },
-      ],
-      thermostat: () => [
-        { icon: "thermostat", h: 0.15 },
-        { stat: { value: v(0, "21,5"), unit: "°C", caption: "aktuálně" }, h: 0.3 },
-        { split: [
-          { value: v(1, "22 °C"), label: "Cíl" },
-          { value: v(2, "60 %"), label: "Výkon", color: "red" },
-        ], h: 0.28 },
-        { flex: true },
-        { footer: [{ label: "DALŠÍ ZMĚNA", value: v(3, "22:00") }], h: 0.14 },
-      ],
-      water: () => [
-        { text: "Spotřeba vody", h: 0.07, size: 0.046, bold: true },
-        { stat: { value: v(0, "126"), unit: "l", caption: "dnes" }, h: 0.26 },
-        { spark: { values: series(0, [96, 131, 108, 142, 119, 174, 126]), caption: "7 dní" }, h: 0.24 },
-        { rule: true, h: 0.02 },
-        { strip: [
-          { label: "TÝDEN", value: v(1, "0,84 m³") },
-          { label: "MĚSÍC", value: v(2, "3,12 m³") },
-          { label: "ROZDÍL", value: v(3, "−12 %"), color: "red" },
-        ], h: 0.2 },
-        { flex: true },
-        { footer: [{ label: "ODEČET", value: "dnes 06:00" }], h: 0.13 },
-      ],
-      parcel: () => [
-        { icon: "package-variant-closed", h: 0.15 },
-        { text: v(0, "Na cestě"), h: 0.1, size: 0.07, bold: true, color: "red" },
-        { text: v(1, "RR 458 921 730 CZ"), h: 0.07, size: 0.04 },
-        { steps: [
-          { label: "Převzato", done: true },
-          { label: "Depo", done: true },
-          { label: v(2, "Rozvoz"), done: true, color: "red" },
-          { label: "Doručeno" },
-        ], orientation: "horizontal", h: 0.3 },
-        { flex: true },
-        { footer: [{ label: "DORUČENÍ", value: v(3, "13:00–15:00") }], h: 0.14 },
-      ],
-      birthdays: () => [
-        { icon: "cake-variant", h: 0.15 },
-        { stat: { value: v(0, "Lucie"), caption: v(1, "32 let"), color: "red" }, h: 0.28 },
-        { rule: true, h: 0.02 },
-        { datebox: { day: "27", month: "KVĚ", lines: [v(2, "Tomáš"), "za 4 dny"] }, h: 0.25 },
-        { flex: true },
-        { footer: [{ label: "PŘIPOMÍNKA", value: v(3, "Popřát ráno") }], h: 0.14 },
-      ],
-      server: () => [
-        { text: "Home server", h: 0.07, size: 0.046, bold: true },
-        { band: { label: "STAV", value: v(0, "ONLINE") }, bleed: true, h: 0.17 },
-        { meters: [
-          { label: "CPU", value: v(1, "24 %"), percent: ratio(1, 24) },
-          { label: "RAM", value: v(2, "61 %"), percent: ratio(2, 61) },
-          { label: "Disk", value: v(3, "73 %"), percent: ratio(3, 73), color: "red" },
-          { label: "Teplota", value: v(4, "48 °C"), percent: ratio(4, 48) },
-        ], h: 0.48 },
-        { flex: true },
-        { footer: [{ label: "PROVOZ", value: v(5, "18 dní") }], h: 0.13 },
-      ],
-      garden: () => [
-        { text: v(0, "Záhon rajčat"), h: 0.075, size: 0.048, bold: true },
-        { stat: { value: v(1, "36"), unit: "%", caption: "vlhkost půdy" }, h: 0.26 },
-        { spark: { values: series(1, [62, 58, 55, 49, 47, 43, 40, 38, 36]), caption: "7 dní" }, h: 0.27 },
-        { rule: true, h: 0.02 },
-        { list: [
-          { icon: "weather-sunny", label: "Teplota", value: v(2, "24 °C") },
-          { icon: "weather-windy", label: "Vítr", value: v(3, "8 km/h") },
-        ], h: 0.18 },
-        { flex: true },
-        { footer: [{ label: "ZÁLIVKA", value: v(4, "18:30") }], h: 0.13 },
-      ],
-      price: () => {
-        const isSale = option("sale");
-        if (!isSale) {
-          // Plain black-and-white price tag: name, large price, product code in black footer
-          return [
-            { band: { value: "CENOVKA", color: "black" }, bleed: true, h: 0.13 },
-            { text: v(0, "Jablka Golden"), h: 0.14, size: 0.075, bold: true },
-            { pricetag: {
-              price: v(1, "149,-"),
-              currency: "Kč",
-              sale: false,
-            }, h: 0.59 },
-            { flex: true },
-            { footer: [{ label: "KÓD / EAN", value: v(3, "8594001234567") }], color: "black", h: 0.14 },
-          ];
-        }
-        // Sale variant: red band, struck old price, big new price, code in red footer
-        return [
-          { band: { value: "AKCE", color: "red" }, bleed: true, h: 0.13 },
-          { text: v(0, "Jablka Golden"), h: 0.13, size: 0.068, bold: true },
-          { pricetag: {
-            price: v(1, "149,-"),
-            currency: "Kč",
-            was: v(2, "199,- Kč"),
-            sale: true,
-          }, h: 0.60 },
-          { flex: true },
-          { footer: [{ label: "KÓD / EAN", value: v(3, "8594001234567") }], color: "red", h: 0.14 },
-        ];
-      },
-      priceshelf: () => [
-        { band: { value: option("sale") ? "AKCE" : "CENOVKA", color: option("sale") ? "red" : "black" }, bleed: true, h: 0.14 },
-        { text: v(0, "Jablka Golden"), h: 0.11, size: 0.06, bold: true },
-        { pricetag: {
-          price: v(1, "24,90"),
-          currency: "Kč",
-          unit: v(4, "49,80 Kč / kg"),
-          was: v(3, "34,90 Kč"),
-          sale: option("sale"),
-        }, h: 0.46 },
-        { rule: true, h: 0.02 },
-        { list: [{ icon: "package-variant", label: "Skladem", value: v(5, "18 ks") }], h: 0.12 },
-        { flex: true },
-        { footer: [{ label: "KÓD", value: v(2, "8594001234567") }], color: option("sale") ? "red" : "black", h: 0.13 },
-      ],
-    };
+    const helpers = { v, series, ratio, day, event, option };
+    return Object.fromEntries(
+      DISPLAY_TEMPLATES.map((entry) => [entry.catalog.id, () => entry.design(helpers)]),
+    );
   },
 
   _templateSvgRows(template) {

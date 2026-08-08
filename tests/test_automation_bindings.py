@@ -7,6 +7,7 @@ import importlib.util
 from pathlib import Path
 import asyncio
 import sys
+import time
 import types
 import unittest
 from PIL import Image
@@ -359,10 +360,12 @@ class AutomationBindingTests(unittest.TestCase):
 
         self.assertEqual(["FF:FF:92:81:46:32"], scheduled)
 
-    def test_camera_binding_ticks_are_scheduled_regardless_of_entity_state(self):
+    def test_refresh_tick_schedules_every_configured_display_regardless_of_entity_state(self):
         # camera.meteoradar's state never meaningfully changes between RainViewer
         # frames, so a camera-bound display must refresh from the periodic tick
-        # (_handle_camera_tick), not from _handle_state_change.
+        # (_handle_refresh_tick), not from _handle_state_change - and an ordinary
+        # sensor-bound display now gets the exact same periodic insurance, not a
+        # second, separate mechanism just for cameras.
         manager = automation.EntityAutoUpdateManager.__new__(
             automation.EntityAutoUpdateManager
         )
@@ -376,12 +379,47 @@ class AutomationBindingTests(unittest.TestCase):
                 "bindings": [{"id": "temp", "type": "text", "entity_id": "sensor.temperature"}]
             },
         }
+        manager._last_refresh_at = {}
         scheduled = []
         manager._schedule_refresh = scheduled.append
 
-        manager._handle_camera_tick(None)
+        manager._handle_refresh_tick(None)
 
-        self.assertEqual(["FF:FF:92:81:46:32"], scheduled)
+        self.assertEqual({"FF:FF:92:81:46:32", "AA:AA:11:22:33:44"}, set(scheduled))
+
+    def test_refresh_tick_respects_each_displays_own_interval(self):
+        # This is the setting the "refresh interval" dropdown in the device
+        # settings dialog actually controls: before _handle_refresh_tick
+        # existed, that setting only throttled *state-change*-triggered
+        # refreshes and never drove a refresh on its own, so a display bound
+        # to slow-changing data would go long past its chosen interval with
+        # no update at all.
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        now = time.monotonic()
+        manager._configs = {
+            "FF:FF:92:81:46:32": {
+                "refresh_interval_seconds": 3600,
+                "bindings": [{"id": "temp", "type": "text", "entity_id": "sensor.temperature"}],
+            },
+            "AA:AA:11:22:33:44": {
+                "refresh_interval_seconds": 30,
+                "bindings": [{"id": "temp", "type": "text", "entity_id": "sensor.temperature"}],
+            },
+        }
+        # The hour-interval display refreshed a second ago - not due yet. The
+        # 30-second-interval display refreshed a minute ago - overdue.
+        manager._last_refresh_at = {
+            "FF:FF:92:81:46:32": now - 1,
+            "AA:AA:11:22:33:44": now - 60,
+        }
+        scheduled = []
+        manager._schedule_refresh = scheduled.append
+
+        manager._handle_refresh_tick(None)
+
+        self.assertEqual(["AA:AA:11:22:33:44"], scheduled)
 
     def test_custom_element_edit_does_not_schedule_display_in_manual_mode(self):
         manager = automation.EntityAutoUpdateManager.__new__(
