@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DRATEK eInk Panel - Náhled</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #111827;
+      color: #f3f4f6;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    #panel-container {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+  <script>
+    // Custom <ha-icon> implementation using Material Design Icons
+    class HaIcon extends HTMLElement {
+      static get observedAttributes() { return ["icon"]; }
+      attributeChangedCallback() { this.render(); }
+      connectedCallback() { this.render(); }
+      render() {
+        const icon = (this.getAttribute("icon") || "").replace(/^mdi:/, "");
+        if (!icon) { this.innerHTML = ""; return; }
+        this.innerHTML = `<i class="mdi mdi-${icon}" style="font-size:var(--mdc-icon-size, 20px); line-height:1; display:inline-block; vertical-align:middle;"></i>`;
+      }
+    }
+    if (!customElements.get("ha-icon")) customElements.define("ha-icon", HaIcon);
+
+    // Custom <ha-selector> mock implementation for entity selection
+    class HaSelector extends HTMLElement {
+      connectedCallback() {
+        const defaultEntity = this.getAttribute("data-template-default-entity") || "";
+        this.innerHTML = `<select style="width:100%; padding:9px 12px; border:1px solid rgba(0,155,155,0.4); border-radius:9px; background:var(--card-background-color, #fff); color:var(--primary-text-color, #111); font:inherit; font-size:12px;">
+          <option value="${defaultEntity}">${defaultEntity ? defaultEntity + " (Vybraná entita)" : "-- Vyberte entitu Home Assistantu --"}</option>
+          <option value="sensor.teplota_doma">sensor.teplota_doma (Teplota doma)</option>
+          <option value="sensor.vlhkost_doma">sensor.vlhkost_doma (Vlhkost doma)</option>
+          <option value="weather.domov">weather.domov (Předpověď počasí)</option>
+          <option value="sensor.spotreba_elektriny">sensor.spotreba_elektriny (Spotřeba FVE)</option>
+        </select>`;
+      }
+    }
+    if (!customElements.get("ha-selector")) customElements.define("ha-selector", HaSelector);
+  </script>
+  <script type="module">
+    import "./custom_components/dratek_eink/frontend/dratek-eink-panel.js";
+  </script>
+</head>
+<body>
+  <div id="panel-container">
+    <dratek-eink-panel></dratek-eink-panel>
+  </div>
+  <script>
+    // Mock Home Assistant object for standalone browser preview
+    const sampleDevices = [
+      {
+        address: "FF:FF:94:20:10:78",
+        display_name: "Displej Obývák",
+        physical_code: "DRATEK-4.00-01",
+        sdk_type: 75,
+        sw_version: 129,
+        rssi: -62,
+        battery: 3.15,
+        battery_percent: 92,
+        battery_voltage: 3.15,
+        gateway_selection: "gw1",
+        selected_gateway_id: "gw1",
+        preferred_path: { type: "gateway", id: "gw1", name: "ESP32 Gateway Obývák", rssi: -65 }
+      },
+      {
+        address: "EE:DD:CC:BB:AA:99",
+        display_name: "Displej Ložnice",
+        physical_code: "DRATEK-2.90-02",
+        sdk_type: 40,
+        sw_version: 128,
+        rssi: -74,
+        battery: 2.92,
+        battery_percent: 68,
+        battery_voltage: 2.92,
+        gateway_selection: "",
+        selected_gateway_id: "",
+        preferred_path: { type: "gateway", id: "gw1", name: "ESP32 Gateway Obývák", rssi: -74 }
+      }
+    ];
+
+    const sampleGateways = [
+      {
+        id: "gw1",
+        name: "ESP32 Gateway Obývák",
+        host: "dratek-gateway.local",
+        online: true,
+        rssi: -62,
+        firmware_version: "0.1.50-gateway",
+        status: { ok: true, free_heap: 180000, wifi_rssi: -62 }
+      }
+    ];
+
+    const panel = document.querySelector("dratek-eink-panel");
+    if (panel) {
+      panel.hass = {
+        language: "cs",
+        states: {
+          "sensor.teplota_doma": { state: "22.5", attributes: { friendly_name: "Teplota doma", unit_of_measurement: "°C" } },
+          "sensor.vlhkost_doma": { state: "46", attributes: { friendly_name: "Vlhkost", unit_of_measurement: "%" } },
+          "weather.domov": { state: "sunny", attributes: { friendly_name: "Počasí Met.no" } },
+          "camera.meteoradar": { state: "idle", attributes: { entity_picture: "/custom_components/dratek_eink/frontend/dratek-eink-logo.png" } }
+        },
+        callWS: async (msg) => {
+          console.log("Mock WS Call:", msg?.type, msg);
+          if (msg?.type === "dratek_eink/scan" || msg?.type === "dratek_eink/overview") {
+            return {
+              ok: true,
+              devices: sampleDevices,
+              scanner_count: 1
+            };
+          }
+          if (msg?.type === "dratek_eink/gateways/list") {
+            return {
+              ok: true,
+              gateways: sampleGateways
+            };
+          }
+          if (msg?.type === "dratek_eink/devices/get_draft") {
+            return { ok: true, draft: null };
+          }
+          return { ok: true };
+        }
+      };
+    }
+  </script>
+</body>
+</html>
+
