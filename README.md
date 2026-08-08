@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.228
+
+- možnost zrušení čekající úlohy ve frontě odesílání přímo z UI (tlačítko s ikonou křížku u úloh ve stavu `queued`)
+- přidána WebSocket služba `dratek_eink/queue/cancel` a metoda `async_cancel_job` v backendu fronty
+
 ## Novinky ve verzi 0.1.208
 
 - opraven stav, kdy Meteoradar zůstával navždy na "Načítám mapu…" bez jakékoli chyby – po neúspěšném pokusu (nejčastěji: HA po aktualizaci ještě neprošel restartem, takže kamerová entita zatím neexistuje) se nyní zobrazí konkrétní chybová hláška a další pokus proběhne mnohem dřív
