@@ -316,7 +316,10 @@ export const queueMixin = {
         <small>${this._formatTime(job.created_at)}</small>
         ${job.finished_at ? `<small class="queue-duration"><ha-icon icon="mdi:timer-outline"></ha-icon>${this._formatDuration(job.started_at, job.finished_at)}</small>` : ""}
       </div>
-      <span class="pill ${STATUS_PILLS[status] || "muted"}">${STATUS_LABELS[status] || this._escape(status)}</span>
+      <div class="queue-row-end">
+        <span class="pill ${STATUS_PILLS[status] || "muted"}">${STATUS_LABELS[status] || this._escape(status)}</span>
+        ${status === "queued" ? `<button type="button" class="tile-icon-btn queue-cancel-btn" data-cancel-queue-job="${this._escape(job.id || "")}" title="Zrušit frontu"><ha-icon icon="mdi:close-circle-outline"></ha-icon></button>` : ""}
+      </div>
       ${(job.error || logText) ? `<div class="queue-row-log">${this._escape(job.error || logText)}</div>` : ""}
       ${logLines.length ? `<details class="queue-row-details" data-queue-log="${this._escape(job.id || "")}">
         <summary><ha-icon icon="mdi:text-box-search-outline"></ha-icon>Zobrazit celý protokol (${logLines.length} řádků)</summary>

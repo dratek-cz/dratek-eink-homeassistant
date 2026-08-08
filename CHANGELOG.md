@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.228] - 2026-08-08
+
+### Přidáno – Možnost zrušení čekající úlohy ve frontě odesílání z UI
+- `queue.py`, `websocket.py`, `ws_queue.py`: Přidána metoda `async_cancel_job` a nová WebSocket příkazová služba `dratek_eink/queue/cancel`. Umožňuje bezpečně zrušit naplánovanou úlohu odeslání na displej, pokud ještě nezačalo fyzické přenášení bajtů (stav `queued`). Úlohy ve stavu `writing` nelze zrušit, aby nedošlo k zamrznutí e-ink ovladače uprostřed přenosu.
+- `panel-queue.mixin.js`, `panel-inspector.mixin.js`, `panel-render-ui.mixin.js`: U čekajících úloh ve frontě odesílání přibylo tlačítko pro zrušení (`mdi:close-circle-outline`). Po kliknutí se úloha okamžitě přeruší a odstraní z aktivní fronty.
+
 ## [0.1.227] - 2026-08-08
 
 ### Opraveno – Automatická obnova displeje po šablonách nevykreslovala správně texty ani data

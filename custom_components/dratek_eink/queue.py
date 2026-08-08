@@ -43,6 +43,7 @@ class TransferQueue:
         self._manual_pending: dict[str, int] = {}
         self._automatic_tasks: dict[str, tuple[str, asyncio.Task[Any]]] = {}
         self._background_tasks: set[asyncio.Task[Any]] = set()
+        self._job_tasks: dict[str, asyncio.Task[Any]] = {}
         self._preempted_jobs: set[str] = set()
         self._last_finish_at: dict[str, float] = {}
         self._load_lock = asyncio.Lock()
@@ -139,6 +140,17 @@ class TransferQueue:
                         job,
                         "Automatic update cancelled because a manual upload took priority.",
                     )
+                if job.get("status") == "queued":
+                    # Nothing physical happened yet (_execute never ran), so a
+                    # user-initiated cancel (async_cancel_job) can finish this
+                    # job cleanly instead of leaving it stuck as "queued"
+                    # forever. A job already "writing" never reaches here -
+                    # async_cancel_job refuses those, matching the same rule
+                    # _preempt_automatic_update follows for the same reason.
+                    return await self._skip_automatic_update(
+                        job,
+                        "Transfer cancelled by user before it started.",
+                    )
                 raise
             finally:
                 if manual:
@@ -162,6 +174,8 @@ class TransferQueue:
         )
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
+        self._job_tasks[job["id"]] = task
+        task.add_done_callback(lambda _task, job_id=job["id"]: self._job_tasks.pop(job_id, None))
         return {
             "ok": True,
             "queued": True,
@@ -358,6 +372,25 @@ class TransferQueue:
             await self._history_store().async_save(
                 {"jobs": completed[-HISTORY_LIMIT:]}
             )
+
+    def async_cancel_job(self, job_id: str) -> bool:
+        """Cancel a job that has not started writing yet.
+
+        Only "queued" jobs are eligible - the same rule _preempt_automatic_update
+        follows: once _execute has flipped a job to "writing", a physical
+        BLE/gateway transfer may be mid-block, and abruptly cancelling it would
+        leave the display's controller frozen instead of just failing cleanly.
+        Cancelling here just interrupts a job still waiting for its device/
+        transport lock, which is always safe - nothing has been sent yet.
+        """
+        job = next((j for j in self._jobs if j.get("id") == job_id), None)
+        if job is None or job.get("status") != "queued":
+            return False
+        task = self._job_tasks.get(job_id)
+        if task is None or task.done():
+            return False
+        task.cancel()
+        return True
 
     async def async_clear_completed(self) -> None:
         await self._ensure_loaded()

@@ -67,6 +67,11 @@ export const inspectorMixin = {
       await this._hass.callWS({ type: "dratek_eink/queue/clear" });
       await this._loadQueue(true);
     });
+    this.shadowRoot.querySelectorAll("[data-cancel-queue-job]").forEach((button) => button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await this._hass.callWS({ type: "dratek_eink/queue/cancel", job_id: button.dataset.cancelQueueJob });
+      await this._loadQueue(true);
+    }));
     this.shadowRoot.querySelector("#discoverGateways")?.addEventListener("click", () => this._discoverGateways());
     this.shadowRoot.querySelector("#refreshGateways")?.addEventListener("click", () => this._loadGateways(true));
     this.shadowRoot.querySelectorAll("[data-gateway-tab]").forEach((button) => button.addEventListener("click", () => {

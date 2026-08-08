@@ -53,7 +53,7 @@ from .ws_projects import (
     websocket_list_user_templates,
     websocket_save_user_template,
 )
-from .ws_queue import websocket_clear_queue, websocket_transfer_queue
+from .ws_queue import websocket_cancel_queue_job, websocket_clear_queue, websocket_transfer_queue
 from .ws_sending import (
     websocket_commit_design_upload,
     websocket_send_design,
@@ -112,6 +112,7 @@ COMMANDS = (
     websocket_gateway_ota_job,
     websocket_transfer_queue,
     websocket_clear_queue,
+    websocket_cancel_queue_job,
     websocket_render_meteoradar,
 )
 
