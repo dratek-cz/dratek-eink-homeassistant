@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.230] - 2026-08-09
+
+### Opraveno – Automatická aktualizace šablony Počasí (a měřidel u 0.1.229) vykreslovala rozbitý/zdvojený obsah
+- `panel-devices.mixin.js`: U šablon s `ratio()` (Kvalita vzduchu, Obývák, Stav serveru, Fotovoltaika) se hodnota u ciferníku/měřidla kreslila dvakrát přes sebe - jednou starým mechanismem jako přesný textový uzel, podruhé znovu jako součást celého nově překresleného řádku. Variabilní indexy použité v `ratio()` se teď z prostého textového zachytávání vyřazují (`ratioClaimedIndices`), takže je kreslí výhradně nová "ratio" vazba.
+- `render.py`: Do `_render_bound_forecast` přidána pojistka - pokud by meteorologická integrace na `weather.get_forecasts` s `"type": "daily"` odpověděla přesto hodinovými daty (desítky záznamů místo čtyř), pruh předpovědi by se zmenšoval na nečitelnou, přes sebe se překrývající změť. Nyní se počet dnů tvrdě ořízne na očekávaný počet a při příliš úzkých sloupcích (pod 18 px) se pruh vůbec nekreslí, místo aby se nakreslil nečitelně.
+- Ověřeno end-to-end přes testovací harness (`tests/dratek-eink-panel-harness.html`) - skutečné zachycení `clean_background` z prohlížeče provedené skutečným Python vykreslovačem `render.py`.
+
 ## [0.1.229] - 2026-08-09
 
 ### Opraveno – Automatická aktualizace u 10 šablon nevykreslovala grafy, měřidla, předpověď počasí ani kalendář

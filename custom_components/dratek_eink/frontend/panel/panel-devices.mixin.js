@@ -2371,7 +2371,18 @@ export const devicesMixin = {
     this._templateAutomationBindingOverrides ||= {};
 
     for (const template of request.templates) {
+      // A ratio()-driven dial/ring/meter row is fully redrawn by its own
+      // "ratio" binding below (fill, label AND the value text together, the
+      // same way _blockDial/_blockRing/_blockMeters draw it as one shape) -
+      // the variable indices it declares must NOT also get an independent
+      // "text" binding here, or the value would be painted twice: once
+      // small and precisely positioned by this loop, once again as part of
+      // the full row by the ratio renderer.
+      const ratioClaimedIndices = new Set(
+        (template?.automation?.ratio || []).map((entry) => Number(entry.variableIndex))
+      );
       for (let index = 0; index < (template.variables || []).length; index += 1) {
+        if (ratioClaimedIndices.has(index)) continue;
         const meta = { ...this._templateVariableMeta(template.variables[index], index), templateId: template.id };
         const entityId = String(this._templateBinding(template, meta) || "").trim();
         if (!entityId.includes(".") || entityId.startsWith("internal:")) continue;

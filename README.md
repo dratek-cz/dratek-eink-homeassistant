@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.230
+
+- opravena chyba z 0.1.229: u šablon s měřidlem/ciferníkem (Kvalita vzduchu, Obývák, Stav serveru, Fotovoltaika) se hodnota při automatické aktualizaci kreslila dvakrát přes sebe
+- přidána pojistka proti rozbitému vykreslení předpovědi počasí, pokud meteo integrace vrátí neočekávaně mnoho dnů
+
 ## Novinky ve verzi 0.1.229
 
 - opravena automatická aktualizace u 10 šablon (Počasí, Kalendář, Kvalita vzduchu, Obývák, Stav serveru, Fotovoltaika, Cena elektřiny, Zahrada, Spotřeba vody, České spotové ceny) - grafy, měřidla/ciferníky, předpověď počasí a kalendářní události se dosud do automatické aktualizace vůbec nezachytávaly a zůstávaly zamrzlé na hodnotě z posledního ručního odeslání

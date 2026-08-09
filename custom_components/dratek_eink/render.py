@@ -986,9 +986,18 @@ def _render_bound_forecast(binding: dict[str, Any], value: str, force_transparen
             days = []
     except (TypeError, ValueError, json.JSONDecodeError):
         days = []
+    # _async_forecast_days already slices to `binding["days"]` (4), but this
+    # is the last line of defence before drawing: an integration answering
+    # weather.get_forecasts with hourly data instead of daily (ignoring the
+    # "type": "daily" request) would otherwise hand this dozens of entries,
+    # each cell shrinking until every day's three lines of text collapse into
+    # unreadable, overlapping noise across the whole strip.
+    days = [day for day in days if isinstance(day, dict)][: max(1, int(binding.get("days") or 4))]
     if not days:
         return output
     cell_width = width / len(days)
+    if cell_width < 18:
+        return output
     for index, day in enumerate(days):
         if not isinstance(day, dict):
             continue
