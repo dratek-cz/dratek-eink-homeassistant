@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.237
+
+- opraveno, že se displej automaticky obnovil jen jednou a pak už nikdy: zrušený přenos (stačilo ručně odeslat návrh během probíhající automatické aktualizace) zůstal navždy ve stavu „probíhá" a každou další automatickou aktualizaci toho displeje pak fronta tiše zahodila
+- interval automatické obnovy a volba, co ji spouští, se přesunuly z dialogu „Nastavení šablony" k displeji - na vlastní řádek hned pod tlačítko „Odeslat do displeje" (patří k displeji, ne k šabloně)
+- zelené a oranžové stavové odznaky na kartách šablon i displejů jsou nově čitelné i v tmavém režimu; řídí se motivem Home Assistantu, ne nastavením operačního systému
+
 ## Novinky ve verzi 0.1.236
 
 - opraven cizí text kreslený přes dny a teploty v pruhu předpovědi: stačil jeden údaj šablony, který je právě nedostupný, a zachytávání vazeb přiřadilo jedné entitě i buňky pruhu předpovědi - automatická aktualizace pak její hodnotu kreslila přes ně

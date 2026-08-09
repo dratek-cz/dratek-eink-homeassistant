@@ -208,6 +208,17 @@ class DratekEinkPanel extends HTMLElement {
   set hass(hass) {
     const templateLiveDataChanged = this._templateLiveDataChanged?.(this._hass, hass) || false;
     this._hass = hass;
+    // Mirror Home Assistant's own light/dark choice onto the host so the
+    // stylesheet can key off it. A media query alone is not enough: Home
+    // Assistant's theme is chosen in its own settings and can be dark while the
+    // operating system is light, or the other way round. Written as "true"/
+    // "false" rather than toggled, so the prefers-color-scheme fallback (which
+    // the standalone test harness relies on, having no hass to ask) can tell
+    // "Home Assistant says light" apart from "nobody has said anything yet".
+    const darkMode = hass?.themes?.darkMode ? "true" : "false";
+    if (this.getAttribute("data-dratek-dark") !== darkMode) {
+      this.setAttribute("data-dratek-dark", darkMode);
+    }
     if (!this._rendered) {
       this._rendered = true;
       this._render();

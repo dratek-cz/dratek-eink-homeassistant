@@ -2,6 +2,22 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.237] - 2026-08-09
+
+### Opraveno – Automatická aktualizace proběhla jednou a pak už nikdy
+- `queue.py`: `asyncio.CancelledError` nedědí z `Exception`, ale z `BaseException`, takže proletěla kolem `except Exception` ve `_execute` a job zůstal ve stavu `"writing"`. `_prune` aktivní joby nikdy nezahazuje a `_automatic_skip_reason` každý takový job považuje za probíhající přenos, takže se od té chvíle **každá** další automatická aktualizace toho displeje tiše zahodila jako „sloučená". Displej se obnovil jednou a pak už nikdy.
+- Spustit to bylo snadné: `async_set_config` ruší úlohu obnovy při každém ručním nahrání, takže stačilo ručně odeslat návrh ve chvíli, kdy zrovna běžela automatická aktualizace.
+- `_execute` teď zrušený přenos řádně dokončí (stav, `finished_at`) a teprve pak výjimku pošle dál. Dělá to synchronně a bez čekání na zápis historie - úloha už je zrušená a další `await` by šel přerušit dřív, než se stav opraví.
+- `queue.py`: Nový `_is_active_job` je pojistka pro případ, že by úloha zemřela jinou cestou: job, který přežil vlastní časový limit přenosu, přestává platit za aktivní a `_prune` ho pustí do historie. Nic legitimního tak dlouho neběží, takže dřív nebo později se displej odblokuje sám.
+
+### Změněno – Nastavení automatické obnovy se přesunulo k displeji
+- `panel-devices.mixin.js`: Interval automatické obnovy a volba, co ji spouští, byly v dialogu „Nastavení šablony". Nepatří k šabloně, ale k displeji - jednu šablonu lze poslat na víc displejů, každý s jinou kadencí. Nově jsou v liště akcí displeje, na vlastním řádku hned pod tlačítkem „Odeslat do displeje".
+
+### Opraveno – Zelené a oranžové stavové odznaky byly v tmavém režimu nečitelné
+- `panel-render-ui.mixin.js`: Odznaky na kartách šablon i displejů měly barvu napevno - tmavě zelený/oranžový text na téměř průhledném světlém podkladu. To funguje jen na světlé kartě; v tmavém režimu prosvítala tmavá karta a tmavý text na ní nebyl vidět. Barvy jsou teď v proměnných (`--dratek-status-ok-*`, `--dratek-status-warn-*`, `--dratek-status-missing-*`), které se v tmavém režimu přepnou na světlý text nad výraznějším podkladem.
+- `dratek-eink-panel.js`: Panel si zrcadlí `hass.themes.darkMode` na atribut `data-dratek-dark`. Samotný `prefers-color-scheme` by nestačil - motiv Home Assistantu se nastavuje zvlášť a může být tmavý, i když je systém světlý (a naopak); media query zůstává jako záloha pro testovací harness, který žádný `hass` nemá.
+- Ověřeno v prohlížeči: všech osm variant odznaků (karty šablon, odznaky nastavení, karty integrací, poznámka) mění barvu podle motivu.
+
 ## [0.1.236] - 2026-08-09
 
 ### Opraveno – Přes dny a teploty v pruhu předpovědi se kreslil cizí text

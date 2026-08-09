@@ -261,6 +261,28 @@ class TransferQueue:
                 job["error"] = str(result.get("error") or "Prenos selhal.")
             else:
                 job["status"] = "succeeded"
+        except asyncio.CancelledError:
+            # CancelledError derives from BaseException, not Exception, so it
+            # used to sail straight past the handler below with the job still
+            # marked "writing". _prune keeps every "queued"/"writing" job
+            # forever, and _automatic_skip_reason treats any of them as an
+            # active transfer for that display - so one cancelled job merged
+            # away every automatic update for that address for the rest of the
+            # session. That is what made automatic updates fire exactly once
+            # and then go quiet: async_set_config cancels the refresh task on
+            # every manual upload, which is the common way to hit this.
+            #
+            # Finalised synchronously and without awaiting the history write:
+            # this task is already cancelled, and another await here can be
+            # interrupted again before the status is corrected. The next job to
+            # finish persists it, and what actually matters - that this display
+            # no longer looks busy - is in memory immediately.
+            add_log("Transfer cancelled.")
+            job["status"] = "failed"
+            job["error"] = "Transfer cancelled."
+            job["finished_at"] = int(time.time())
+            self._prune()
+            raise
         except Exception as exc:  # BLE and network stacks expose platform errors
             if isinstance(exc, TimeoutError):
                 last_step = next(
@@ -329,13 +351,29 @@ class TransferQueue:
             self._automatic_skip_reason(job["address"], exclude_job_id=job.get("id"))
         )
 
+    @staticmethod
+    def _is_active_job(job: dict[str, Any]) -> bool:
+        """True while a job can still be doing something physical.
+
+        A job whose task died without finalising it would otherwise stay
+        "active" forever - _prune never drops active jobs - and quietly merge
+        away every later automatic update for that display. _execute finalises
+        a cancelled job itself now, so this is only the backstop for a runner
+        that dies some other way; the job's own timeout is the yardstick, since
+        nothing legitimate outlives it.
+        """
+        if job.get("status") not in {"queued", "writing"}:
+            return False
+        started = job.get("started_at") or job.get("created_at") or 0
+        return time.time() - float(started) <= TRANSFER_JOB_TIMEOUT_SECONDS + 60
+
     def _automatic_skip_reason(self, address: str, exclude_job_id: str | None = None) -> str:
         if self._manual_pending.get(address, 0) > 0:
             return "Automatic update skipped because a manual upload is pending."
         if any(
             job.get("id") != exclude_job_id
             and job.get("address") == address
-            and job.get("status") in {"queued", "writing"}
+            and self._is_active_job(job)
             for job in self._jobs
         ):
             return "Automatic update merged because this display already has an active transfer."
@@ -362,8 +400,11 @@ class TransferQueue:
         return result
 
     def _prune(self) -> None:
-        active = [job for job in self._jobs if job.get("status") in {"queued", "writing"}]
-        completed = [job for job in self._jobs if job.get("status") not in {"queued", "writing"}]
+        # A job that outlived its own timeout without finalising is counted with
+        # the completed ones here, so it ages out of history instead of being
+        # kept forever as "active" (see _is_active_job).
+        active = [job for job in self._jobs if self._is_active_job(job)]
+        completed = [job for job in self._jobs if not self._is_active_job(job)]
         self._jobs = completed[-HISTORY_LIMIT:] + active
 
     async def _save_history(self) -> None:

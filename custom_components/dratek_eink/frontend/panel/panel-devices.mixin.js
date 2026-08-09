@@ -1761,15 +1761,11 @@ export const devicesMixin = {
     const mapWidget = isRadarTemplate ? this._renderInteractiveCountryMap(selectedCountry, this._selectedDeviceAddress) : "";
 
     const crop = this._templateVariableCropContext(activeTemplate);
+    // The automatic-refresh controls used to sit here, at the top of the
+    // template settings dialog. They are not a property of the template - they
+    // belong to the display - so they live with the display's own actions now,
+    // right under "Odeslat do displeje" (_renderStudioActions).
     const variableList = `<div class="template-variables-header">
-      <div class="template-guide-interval-box">
-        <div class="template-guide-interval-title">
-          <ha-icon icon="mdi:timer-refresh-outline"></ha-icon>
-          <span>Interval automatické obnovy displeje:</span>
-        </div>
-        ${this._renderRefreshIntervalSelect(this._selectedDeviceAddress, this._refreshIntervalSeconds, "in-dialog")}
-        ${this._renderRefreshTriggerModeSelect(this._selectedDeviceAddress, this._refreshTriggerMode, "in-dialog")}
-      </div>
       <h4><ha-icon icon="mdi:tune-vertical"></ha-icon> Napojení proměnných</h4>
       <p class="template-settings-intro">U každé položky vyberte entitu v Home Assistantu. Systémové údaje (čas, datum) se doplňují automaticky.</p>
     </div>
@@ -1797,6 +1793,13 @@ export const devicesMixin = {
           <ha-icon icon="mdi:${this._templateSending ? "loading" : "send"}" ${this._templateSending ? 'class="spin"' : ""}></ha-icon>
           <span>${this._templateSending ? "Odesílám…" : "Odeslat do displeje"}</span>
         </button>
+        <div class="studio-pro-refresh-settings">
+          <span class="studio-pro-refresh-title">
+            <ha-icon icon="mdi:timer-refresh-outline"></ha-icon> Automatická obnova displeje
+          </span>
+          ${this._renderRefreshIntervalSelect(this._selectedDeviceAddress, this._refreshIntervalSeconds, "in-actions")}
+          ${this._renderRefreshTriggerModeSelect(this._selectedDeviceAddress, this._refreshTriggerMode, "in-actions")}
+        </div>
       </div>`;
   },
 
