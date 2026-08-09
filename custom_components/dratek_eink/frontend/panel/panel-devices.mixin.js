@@ -2214,7 +2214,15 @@ export const devicesMixin = {
     if (eventMatch) {
       const entityId = this._templateEntityForKind(template, ["calendar"]);
       if (!entityId) return null;
-      return { type: "calendar", entity_id: entityId, index: Number(eventMatch[1]), fallback: "", ...geometry };
+      return {
+        type: "calendar", entity_id: entityId, index: Number(eventMatch[1]), fallback: "",
+        // _blockDatebox reads row.datebox.color for the header band and the
+        // first detail line - never captured before, so an automatic refresh
+        // always painted a manual send's red date box (calendar.js's event-0)
+        // black instead.
+        color: row.datebox?.color === "red" ? "red" : "black",
+        ...geometry,
+      };
     }
     if (group === "ratio") {
       const declared = template?.automation?.ratio;
@@ -2262,8 +2270,14 @@ export const devicesMixin = {
       if (!entityId.includes(".") || entityId.startsWith("internal:")) return null;
       const chartType = row.bars ? "bar" : "line";
       const caption = row.spark?.caption != null ? String(row.spark.caption) : "";
+      // _blockBars reads row.bars.labels/highlight to draw the tick labels and
+      // pick out the current-interval bar in red (cz_spot_prices.js, energy.js)
+      // - neither was ever captured, so an automatic refresh drew every bar in
+      // the same row's chart-widget style with no labels and no highlight.
+      const labels = Array.isArray(row.bars?.labels) ? row.bars.labels.map((label) => String(label ?? "")) : [];
+      const highlightIndex = Number.isInteger(row.bars?.highlight) ? row.bars.highlight : -1;
       return {
-        type: "series", entity_id: entityId, chartType, caption,
+        type: "series", entity_id: entityId, chartType, caption, labels, highlight: highlightIndex,
         maxPoints: 96, fallback: "[]", ...geometry,
       };
     }
@@ -2615,6 +2629,18 @@ export const devicesMixin = {
           showGrid: item.showGrid !== false,
           showAxes: item.variant !== "sparkline",
           showValues: item.showValue !== false,
+          // _drawChart (panel-draw-charts.mixin.js) reads all of these from
+          // the same item - never captured before, so a manual send's title,
+          // axis labels, custom min/max and legend font size all silently
+          // reset to render.py's own defaults on every automatic refresh.
+          legendFontSize: Math.max(10, Math.min(24, Number(item.legendFontSize || 12))),
+          chartTitle: String(item.chartTitle || ""),
+          xLabel: String(item.xLabel || ""),
+          yLabel: String(item.yLabel || ""),
+          chartMin: item.chartMin != null && String(item.chartMin).trim() !== "" ? Number(item.chartMin) : "",
+          chartMax: item.chartMax != null && String(item.chartMax).trim() !== "" ? Number(item.chartMax) : "",
+          chartLabels: String(item.chartLabels || ""),
+          barColor: item.barColor || "red",
         });
         continue;
       }

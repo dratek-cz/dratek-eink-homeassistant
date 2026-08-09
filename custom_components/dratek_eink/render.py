@@ -332,7 +332,11 @@ def _render_bound_chart(binding: dict[str, Any], value: str, force_transparent: 
     draw = ImageDraw.Draw(layer)
     values = _chart_values(value, int(binding.get("maxPoints", 48)))
     title = str(binding.get("chartTitle") or "")
-    legend_size = max(6, min(14, int(binding.get("legendFontSize", 8))))
+    # Default and clamp mirror _drawChart's own (panel-draw-charts.mixin.js) -
+    # a captured legendFontSize now always arrives (see the frontend capture
+    # site), but the range still has to agree or a custom size near either
+    # edge would clamp differently on refresh than it did on the manual send.
+    legend_size = max(10, min(24, int(binding.get("legendFontSize", 12))))
     show_axes = binding.get("showAxes") is not False
     show_grid = binding.get("showGrid") is not False
     show_values = bool(binding.get("showValues"))
@@ -547,6 +551,79 @@ def _render_bound_chart(binding: dict[str, Any], value: str, force_transparent: 
     return layer
 
 
+def _render_bound_series(binding: dict[str, Any], value: str, force_transparent: bool = False) -> Image.Image:
+    """A series()-driven template row, redrawn from automation.py's live series read.
+
+    Mirrors _blockBars/_blockSpark (panel-template-svg.mixin.js) - a plain bar
+    row or sparkline with no axes, grid or legend - not the free-form chart
+    widget's axis/grid/legend chart (_render_bound_chart, used by "chart"
+    bindings). A "series" binding used to be routed through that chart
+    renderer too, which drew a completely different, decorated chart style
+    for what a manual send draws as a bare row.
+    """
+    width = max(1, round(float(binding.get("w", 1))))
+    height = max(1, round(float(binding.get("h", 1))))
+    output = Image.new("RGBA", (width, height), (0, 0, 0, 0) if force_transparent else (255, 255, 255, 255))
+    draw = ImageDraw.Draw(output)
+    black = (0, 0, 0, 255)
+    red = (220, 20, 12, 255)
+    values = _chart_values(value, int(binding.get("maxPoints", 96)))
+    if str(binding.get("chartType") or "line") == "bar":
+        if not values:
+            return output
+        labels = [str(label) for label in (binding.get("labels") or [])]
+        has_labels = any(labels)
+        label_height = min(height * 0.28, 13) if has_labels else 0
+        chart_height = max(1, height - label_height)
+        top_value = max(values)
+        bottom_value = min(min(values), 0)
+        span = (top_value - bottom_value) or 1
+        step = width / len(values)
+        bar_width = max(1, step * 0.68)
+        try:
+            highlight_index = int(binding.get("highlight"))
+        except (TypeError, ValueError):
+            highlight_index = -1
+        draw.line([(0, chart_height), (width, chart_height)], fill=black, width=1)
+        for index, item in enumerate(values):
+            bar_height = max(1, ((item - bottom_value) / span) * (chart_height - 1))
+            x0 = index * step + (step - bar_width) / 2
+            color = red if index == highlight_index else black
+            draw.rectangle((x0, chart_height - bar_height, x0 + bar_width, chart_height), fill=color)
+        if has_labels:
+            label_size = max(7, round(label_height * 0.7))
+            for index, label in enumerate(labels[: len(values)]):
+                if not label:
+                    continue
+                label_width = min(width, max(step * 0.95, step * 3.5))
+                raw_x = step * (index + 0.5)
+                label_x = max(label_width / 2, min(width - label_width / 2, raw_x))
+                _draw_centered_text(
+                    draw, label, label_x, chart_height + label_height * 0.58,
+                    round(label_width), round(label_height), label_size, bold=False,
+                )
+        return output
+    if len(values) < 2:
+        return output
+    top_value = max(values)
+    bottom_value = min(values)
+    span = (top_value - bottom_value) or 1
+    step = width / (len(values) - 1)
+    points = [(index * step, height - ((item - bottom_value) / span) * height) for index, item in enumerate(values)]
+    draw.line([(0, height), (width, height)], fill=black, width=1)
+    draw.line(points, fill=black, width=max(1, round(height * 0.05)), joint="curve")
+    last_x, last_y = points[-1]
+    dot_radius = max(1.5, height * 0.08)
+    draw.ellipse((last_x - dot_radius, last_y - dot_radius, last_x + dot_radius, last_y + dot_radius), fill=red)
+    caption = str(binding.get("caption") or "")
+    if caption:
+        caption_size = max(5, round(height * 0.18))
+        font = load_font(caption_size, False)
+        box = draw.textbbox((0, 0), caption, font=font)
+        draw.text((-box[0], round(height * 0.14 - (box[3] - box[1]) / 2 - box[1])), caption, fill=black, font=font)
+    return output
+
+
 def _render_bound_layer(binding: dict[str, Any], value: str, force_transparent: bool = False) -> Image.Image:
     """Render the graphical layer selected by a Home Assistant condition."""
     width = max(1, round(float(binding.get("w", 1))))
@@ -743,7 +820,7 @@ def _render_bound_layer(binding: dict[str, Any], value: str, force_transparent: 
             numeric_val = _extract_item_value(item, render_value, min_val, max_val, 0.5)
             pct = max(0.0, min(1.0, (numeric_val - min_val) / max(0.0001, max_val - min_val)))
             color = colors.get(item.get("color") or "black", colors["black"])
-            margin = 10
+            margin = 12
             show_value = item.get("show_value") is not False
             value_band = min(16, max(11, round(item_height * 0.34))) if show_value else 2
             label_band = min(10, max(7, round(item_height * 0.2)))
@@ -754,7 +831,7 @@ def _render_bound_layer(binding: dict[str, Any], value: str, force_transparent: 
             if fill_w > 0:
                 draw.line([(x + margin, track_y), (x + margin + fill_w, track_y)], fill=color, width=5)
             thumb_x = x + margin + fill_w
-            draw.ellipse((thumb_x - 6, track_y - 6, thumb_x + 6, track_y + 6), fill=color, outline=colors["white"], width=2)
+            draw.ellipse((thumb_x - 9, track_y - 9, thumb_x + 9, track_y + 9), fill=color, outline=colors["white"], width=2)
             label_font = load_font(max(7, min(9, label_band)), False)
             min_text = str(min_val)
             max_text = str(max_val)
@@ -812,11 +889,12 @@ def _render_bound_layer(binding: dict[str, Any], value: str, force_transparent: 
                 draw.arc((cx - r, cy - r, cx + r, cy + r), start_deg, curr_deg, fill=color, width=stroke_w)
             if item.get("show_needle") is not False:
                 rad = math.radians(curr_deg)
-                needle_r = r * 0.8
+                needle_r = r * 0.82
                 nx = cx + math.cos(rad) * needle_r
                 ny = cy + math.sin(rad) * needle_r
-                draw.line([(cx, cy), (nx, ny)], fill=color, width=max(2, stroke_w // 2))
-                draw.ellipse((cx - 4, cy - 4, cx + 4, cy + 4), fill=color)
+                draw.line([(cx, cy), (nx, ny)], fill=color, width=max(2, round(stroke_w * 0.6)))
+                hub_r = max(3, round(stroke_w * 0.7))
+                draw.ellipse((cx - hub_r, cy - hub_r, cx + hub_r, cy + hub_r), fill=color)
             if item.get("show_value") is not False:
                 text_str = f"{round(numeric_val, 1)} {unit}".strip()
                 font_size = max(8, min(16, round(r * 0.34)))
@@ -917,19 +995,26 @@ def _render_bound_ratio(binding: dict[str, Any], value: str, force_transparent: 
         caption = str(binding.get("caption") or "")
         cx = width / 2
         if visual == "dial":
-            cy = height * 0.78
-            r = max(6, min(width, height * 1.3) / 2 - 4)
-            draw.arc((cx - r, cy - r, cx + r, cy + r), 150, 390, fill=colors["black"], width=2)
+            # Radius, centre and the 180deg-360deg sweep all mirror _blockDial
+            # (panel-template-svg.mixin.js) - a flat half-dial open at the top,
+            # not the wider ~240deg speedometer arc this used to draw at an
+            # independently-computed radius.
+            outer = max(6, min(width * 0.46, height * 0.82))
+            inner = outer * 0.7
+            cy = height * 0.5 + outer * 0.4
+            band_r = (outer + inner) / 2
+            band_width = max(2, round(outer - inner))
+            draw.arc((cx - band_r, cy - band_r, cx + band_r, cy + band_r), 180, 360, fill=colors["black"], width=1)
             if percent > 0:
-                draw.arc((cx - r, cy - r, cx + r, cy + r), 150, 150 + percent / 100 * 240, fill=color, width=max(3, round(r * 0.16)))
-            _draw_centered_text(draw, value_text, cx, cy - r * 0.35, r * 1.4, r * 0.5, max(9, round(r * 0.42)))
+                draw.arc((cx - band_r, cy - band_r, cx + band_r, cy + band_r), 180, 180 + percent / 100 * 180, fill=color, width=band_width)
+            _draw_centered_text(draw, value_text, cx, cy - outer * 0.28, inner * 1.8, outer * 0.6, max(9, round(outer * 0.42)))
             if caption:
-                _draw_centered_text(draw, caption, cx, cy + r * 0.15, r * 1.2, r * 0.28, max(7, round(r * 0.2)), bold=False)
+                _draw_centered_text(draw, caption, cx, cy + outer * 0.16, inner * 1.9, outer * 0.32, max(7, round(outer * 0.24)), bold=False)
             min_text, max_text = str(binding.get("min") or ""), str(binding.get("max") or "")
             if min_text:
-                _draw_centered_text(draw, min_text, cx - r * 0.92, cy + r * 0.12, r * 0.5, r * 0.24, max(6, round(r * 0.16)), bold=False)
+                _draw_centered_text(draw, min_text, cx - outer, cy + outer * 0.22, outer * 0.7, outer * 0.28, max(6, round(outer * 0.2)), bold=False)
             if max_text:
-                _draw_centered_text(draw, max_text, cx + r * 0.92, cy + r * 0.12, r * 0.5, r * 0.24, max(6, round(r * 0.16)), bold=False)
+                _draw_centered_text(draw, max_text, cx + outer, cy + outer * 0.22, outer * 0.7, outer * 0.28, max(6, round(outer * 0.2)), bold=False)
         else:
             cy = height / 2
             outer = max(6, min(width, height) * 0.46)
@@ -939,9 +1024,12 @@ def _render_bound_ratio(binding: dict[str, Any], value: str, force_transparent: 
                 draw.pieslice((cx - outer, cy - outer, cx + outer, cy + outer), -90, -90 + percent / 100 * 360, fill=color)
             draw.ellipse((cx - outer, cy - outer, cx + outer, cy + outer), outline=colors["black"], width=1)
             draw.ellipse((cx - inner, cy - inner, cx + inner, cy + inner), fill=hole_fill, outline=colors["black"], width=1)
-            _draw_centered_text(draw, value_text, cx, cy - (inner * 0.2 if caption else 0), inner * 1.6, inner * 0.7, max(9, round(inner * 0.5)))
+            # Text scale mirrors _blockRing (inner*0.62/inner*0.34) - the
+            # previous inner*0.5/inner*0.26 rendered ~20-25% smaller than a
+            # manual send for every ring gauge template (living.js, server.js...).
+            _draw_centered_text(draw, value_text, cx, cy - (inner * 0.2 if caption else 0), inner * 1.7, inner * 0.7, max(9, round(inner * 0.62)))
             if caption:
-                _draw_centered_text(draw, caption, cx, cy + inner * 0.5, inner * 1.4, inner * 0.32, max(7, round(inner * 0.26)), bold=False)
+                _draw_centered_text(draw, caption, cx, cy + inner * 0.46, inner * 1.7, inner * 0.32, max(7, round(inner * 0.34)), bold=False)
         return output
     line_height = height / max(1, len(meters))
     for index, meter in enumerate(meters):
@@ -1048,12 +1136,21 @@ def _render_bound_forecast(binding: dict[str, Any], value: str, force_transparen
     cell_width = width / len(days)
     if cell_width < 18:
         return output
+    # Font/icon sizes mirror _blockStrip (panel-template-svg.mixin.js) with
+    # iconed=true (a forecast day always carries an icon) - both dimensions
+    # (row height and cell width) bound the size, not row height alone, so a
+    # narrow strip (many days, or a small panel) shrinks text the same way
+    # the manual send does instead of running larger than the cell allows.
+    label_size = max(7, round(min(height * 0.23, cell_width * 0.3)))
+    value_size = max(8, round(min(height * 0.3, cell_width * 0.34)))
+    icon_size = max(1, round(min(height * 0.34, cell_width * 0.5)))
+    label_y = height * 0.16
+    value_y = height * 0.85
     for index, day in enumerate(days):
         if not isinstance(day, dict):
             continue
         cx = cell_width * (index + 0.5)
-        _draw_centered_text(draw, str(day.get("label") or ""), cx, height * 0.14, cell_width * 0.92, height * 0.2, max(7, round(height * 0.14)))
-        icon_size = max(1, min(round(cell_width * 0.62), round(height * 0.32)))
+        _draw_centered_text(draw, str(day.get("label") or ""), cx, label_y, cell_width * 0.9, height * 0.2, label_size)
         icon_image = _weather_condition_icon_image(day.get("condition"), icon_size)
         if icon_image is not None:
             output.alpha_composite(
@@ -1064,38 +1161,53 @@ def _render_bound_forecast(binding: dict[str, Any], value: str, force_transparen
             condition = _FORECAST_CONDITION_ABBR.get(str(day.get("condition") or "").lower(), "")
             if condition:
                 _draw_centered_text(draw, condition, cx, height * 0.5, cell_width * 0.92, height * 0.22, max(6, round(height * 0.12)), bold=False)
-        _draw_centered_text(draw, str(day.get("value") or ""), cx, height * 0.82, cell_width * 0.92, height * 0.26, max(8, round(height * 0.2)))
+        _draw_centered_text(draw, str(day.get("value") or ""), cx, value_y, cell_width * 0.9, height * 0.26, value_size)
         if index > 0:
             x = round(cell_width * index)
-            draw.line([(x, round(height * 0.1)), (x, round(height * 0.9))], fill=black, width=1)
+            draw.line([(x, round(height * 0.12)), (x, round(height * 0.88))], fill=black, width=1)
     return output
 
 
 def _render_bound_calendar(binding: dict[str, Any], value: str, force_transparent: bool = False) -> Image.Image:
-    """An event()-driven calendar entry, redrawn from automation.py's live calendar.get_events read."""
+    """An event()-driven calendar entry, redrawn from automation.py's live calendar.get_events read.
+
+    Mirrors _blockDatebox (panel-template-svg.mixin.js): a square date box
+    vertically centred in the row (not a box spanning the full row height),
+    a coloured header band with the month, a black day number, and up to two
+    lines of event text beside it sized off the row's own line height.
+    """
     width = max(1, round(float(binding.get("w", 1))))
     height = max(1, round(float(binding.get("h", 1))))
     output = Image.new("RGBA", (width, height), (0, 0, 0, 0) if force_transparent else (255, 255, 255, 255))
     draw = ImageDraw.Draw(output)
     black = (0, 0, 0, 255)
-    color = (220, 20, 12, 255) if binding.get("color") == "red" else black
+    white = (255, 255, 255, 255)
+    ink = (220, 20, 12, 255) if binding.get("color") == "red" else black
     try:
         entry = json.loads(str(value))
         if not isinstance(entry, dict):
             entry = {}
     except (TypeError, ValueError, json.JSONDecodeError):
         entry = {}
-    box_w = min(height * 0.62, width * 0.26)
-    draw.rectangle((0, 0, box_w, height - 1), outline=color, width=2)
-    _draw_centered_text(draw, str(entry.get("day") or ""), box_w / 2, height * 0.4, box_w * 0.86, height * 0.5, max(10, round(height * 0.42)), fill=color)
-    _draw_centered_text(draw, str(entry.get("month") or ""), box_w / 2, height * 0.8, box_w * 0.86, height * 0.28, max(7, round(height * 0.18)), fill=color, bold=False)
-    text_x = box_w + max(4, width * 0.04)
-    title_font = load_font(max(8, round(height * 0.24)), True)
-    title_box = draw.textbbox((0, 0), str(entry.get("title") or "") or " ", font=title_font)
-    draw.text((text_x, height * 0.22 - (title_box[3] - title_box[1]) / 2 - title_box[1]), str(entry.get("title") or ""), fill=black, font=title_font)
-    detail_font = load_font(max(7, round(height * 0.18)), False)
-    detail_box = draw.textbbox((0, 0), str(entry.get("detail") or "") or " ", font=detail_font)
-    draw.text((text_x, height * 0.6 - (detail_box[3] - detail_box[1]) / 2 - detail_box[1]), str(entry.get("detail") or ""), fill=black, font=detail_font)
+    side = min(height * 0.92, width * 0.3)
+    top = (height - side) / 2
+    draw.rectangle((0, top, side, top + side), outline=black, width=1)
+    band_height = side * 0.28
+    draw.rectangle((0, top, side, top + band_height), fill=ink)
+    _draw_centered_text(draw, str(entry.get("month") or ""), side / 2, top + side * 0.15, side * 0.92, side, max(5, round(side * 0.17)), fill=white, bold=True)
+    _draw_centered_text(draw, str(entry.get("day") or ""), side / 2, top + side * 0.64, side * 0.86, side, max(8, round(side * 0.46)), fill=black)
+    text_x = side + max(3, side * 0.16)
+    lines = [line for line in (str(entry.get("title") or ""), str(entry.get("detail") or "")) if line]
+    line_height = height / max(1, len(lines))
+    for index, line in enumerate(lines):
+        size = max(6, round(line_height * (0.56 if index == 0 else 0.42)))
+        font = load_font(size, index == 0)
+        box = draw.textbbox((0, 0), line, font=font)
+        center_y = line_height * (index + 0.5)
+        draw.text(
+            (text_x - box[0], round(center_y - (box[3] - box[1]) / 2 - box[1])),
+            line, fill=(ink if index == 0 else black), font=font,
+        )
     return output
 
 
@@ -1109,7 +1221,7 @@ def _render_binding_layer(binding: dict[str, Any], value: str, force_transparent
     if binding.get("type") == "chart":
         return _render_bound_chart(binding, value, force_transparent)
     if binding.get("type") == "series":
-        return _render_bound_chart(binding, value, force_transparent)
+        return _render_bound_series(binding, value, force_transparent)
     if binding.get("type") == "ratio":
         return _render_bound_ratio(binding, value, force_transparent)
     if binding.get("type") == "forecast":

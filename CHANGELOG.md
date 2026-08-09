@@ -2,6 +2,18 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.234] - 2026-08-09
+
+### Opraveno – Grafy, měřidla, předpověď a kalendář v automatické aktualizaci měly jiná písma, velikosti a rozložení než ruční odeslání
+- Rozšířené QA porovnání (viz v0.1.233) se dosud soustředilo na obyčejný text; toto kolo prošlo zbylých pět grafických vazeb - graf/sloupce, měřidlo (ciferník i mezikruží), předpověď počasí a kalendářní událost - a odhalilo, že vykreslovací vzorce na pozadí (`render.py`) se u většiny z nich lišily od toho, co skutečně kreslí prohlížeč (`panel-template-svg.mixin.js`), přestože souřadnice/box se už dřív zachytávaly správně.
+- `render.py`: Ciferníkové měřidlo (`_render_bound_ratio`, dial) kreslilo o poznání menší a jinak tvarované měřidlo (~240° "tachometr" místo skutečného 180° půlkruhu otevřeného nahoru) na nezávisle spočítaném poloměru - nyní přesně podle `_blockDial`. Mezikruží (ring) mělo popisky a hodnotu o 20-25 % menší, než kreslí ruční odeslání - opraveno na stejný poměr k vnitřnímu poloměru jako `_blockRing`.
+- `render.py`: Pruh předpovědi počasí (`_render_bound_forecast`) používal pevné velikosti písma podle výšky řádku; u úzkého pruhu (víc dnů, menší panel) tak text vycházel o 30-40 % menší, než kreslí `_blockStrip`, který velikost odvozuje i od šířky buňky. Opraveno na stejný vzorec.
+- `render.py`, `panel-devices.mixin.js`: Kalendářní událost (`_render_bound_calendar`) kreslila datový rámeček přes celou výšku řádku místo čtverce vystředěného na výšku, s písmem o ~14 % menším, než kreslí `_blockDatebox`. Barva rámečku (`row.datebox.color`, např. červené datum u šablony Narozeniny) se navíc vůbec nezachytávala, takže na displeji vždy vyšla černá bez ohledu na návrh - opraveno na obou místech.
+- `render.py`, `panel-devices.mixin.js`: Řádek grafu/sloupců uvnitř šablony (`series()`, např. Spotové ceny, Cena elektřiny) se dosud vykresloval přes stejnou funkci jako volně umístěný grafový prvek designéru - tedy s osami, mřížkou a legendou, které ruční odeslání pro tento řádek vůbec nekreslí (`_blockBars`/`_blockSpark` je čistý sloupcový/spark graf bez ozdob). Nová funkce `_render_bound_series` kreslí přesně tento jednodušší tvar. Popisky sloupců a zvýraznění aktuálního intervalu červeně (`row.bars.labels`/`highlight`, použité u Spotových cen a Ceny elektřiny) se navíc vůbec nezachytávaly - teď ano.
+- `render.py`, `panel-devices.mixin.js`: Volně umístěný grafový prvek designéru (typ `chart`) nikdy nezachytával svůj nadpis, popisky os, ruční rozsah min/max ani velikost legendy - na automatické aktualizaci se tak vždy použily výchozí hodnoty backendu místo skutečného nastavení z návrhu. Výchozí velikost legendy a její rozsah na backendu navíc neodpovídaly frontendu (8, rozsah 6-14 místo 12, rozsah 10-24).
+- `render.py`: Posuvník a otočný ovladač/ciferník (volně umístěné widgety) měly mírně odlišné okraje, poloměr úchytu a velikost ručičky/středového bodu než `_drawSliderWidget`/`_drawPotentiometerWidget` - sladěno.
+- Přidána sada testů pokrývající novou funkci pro graf/sloupce v řádku šablony, barvu kalendářního rámečku a zvýraznění/popisky sloupcového grafu.
+
 ## [0.1.233] - 2026-08-09
 
 ### Opraveno – Rozsáhlé QA porovnání ručního a automatického odeslání u všech 24 šablon odhalilo čtyři další chyby

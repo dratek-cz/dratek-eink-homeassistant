@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.234
+
+- grafy/sloupce, měřidla (ciferník i mezikruží), předpověď počasí a kalendářní událost teď v automatické aktualizaci kreslí stejné fonty, velikosti a rozložení jako ruční odeslání - dosud se lišily formulemi na pozadí, i když se souřadnice zachytávaly správně
+- řádek grafu uvnitř šablony (Spotové ceny, Cena elektřiny) se přestal kreslit jako ozdobný graf s osami a mřížkou a kreslí se jako prostý sloupcový/spark graf, přesně jako ruční odeslání; popisky sloupců a zvýraznění aktuálního intervalu červeně se teď přenášejí taky
+- barva kalendářního rámečku (např. červené datum u Narozenin) se přestala ztrácet na automatické aktualizaci
+
 ## Novinky ve verzi 0.1.233
 
 - opraveny čtyři další rozdíly mezi ručním a automatickým odesláním nalezené rozsáhlým porovnáním všech 24 šablon: přehnaně zvětšený text u seznamů a velkých čísel, mizející pevný text kombinovaný s hodnotou (např. "Dveře · Zamčeno" u Zabezpečení), a chybějící název nejbližší kalendářní události u Narozenin
