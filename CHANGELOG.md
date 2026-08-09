@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.236] - 2026-08-09
+
+### Opraveno – Přes dny a teploty v pruhu předpovědi se kreslil cizí text
+- `panel-devices.mixin.js`: Zachytávání textových vazeb porovnávalo `<text>` běhy zamarkovaného a aktuálního dokumentu **podle pořadí**. To mlčky předpokládá, že oba dokumenty mají stejné běhy ve stejném pořadí - jenže nemají: údaj, který je právě teď prázdný (nedostupná entita, senzor, který ještě nic nenahlásil), nevykreslí žádný `<text>` element (`_svgText` vrací pro prázdný řetězec `""`, ne prázdný element). Vložení markeru tedy jeden běh **přidá** a všechny další se posunou o jedna.
+- Důsledek: od prázdného údaje dál se každý běh porovnal jako změněný a přiřadil se právě zkoumané proměnné - i s geometrií toho běhu, který se na jeho pozici posunul. U šablony Počasí stačila jedna nedostupná entita a jedné entitě se přiřadilo jedenáct běhů, z toho **osm buněk pruhu předpovědi**. Automatická aktualizace pak kreslila hodnotu té entity přes dny a teploty, které si pruh vykresluje sám. Ručního odeslání se to netýkalo, proto to bylo vidět až po první automatické aktualizaci.
+- Nový `_alignTemplateTextRuns` páruje běhy nejdelší společnou podposloupností místo podle pořadí: nezměněné běhy se spárují samy se sebou, změněný běh se spáruje s tím, který nahradil, a vložený běh bez protějšku (což je přesně ten prázdný údaj) se přeskočí - na displeji pro něj žádný text není, takže není co ani kam vázat.
+- `panel-devices.mixin.js`: Textový běh uvnitř řádku `series()`/`ratio()`/`day()`/`event()` se navíc nezachytává vůbec. Celý takový řádek si překresluje jeho vlastní vazba (`_blockBars`/`_blockDial`/`_blockStrip`/`_blockDatebox`) včetně textu, takže druhá vazba na tentýž běh by hodnotu vykreslila dvakrát. Dosud to platilo jen pro řádky `ratio()` (`ratioClaimedIndices`), teď pro všechny.
+- Ověřeno na skutečném panelu v prohlížeči: se šablonou Počasí a nedostupnou entitou počasí vzniká jedna vazba místo dvanácti, a se zdravou entitou zůstávají přesně tři správné vazby jako dosud.
+- **Pozor:** vazby se zachytávají při ručním odeslání. Aby se oprava projevila na displeji, který už problém má, je potřeba návrh jednou znovu ručně odeslat.
+
 ## [0.1.235] - 2026-08-09
 
 ### Opraveno – Automatická aktualizace teď kreslí obsah šablony úplně stejně jako ruční odeslání, ne jen podobně

@@ -2406,6 +2406,75 @@ export const devicesMixin = {
     };
   },
 
+  // Pair up the <text> runs of the marker-injected document with the ones the
+  // template actually renders right now.
+  //
+  // These used to be walked by position, which silently assumed both documents
+  // hold the same runs in the same order. They do not: a value that is empty at
+  // this moment (an unavailable entity, a sensor that has not reported yet)
+  // produces no <text> element at all - _svgText returns "" rather than an empty
+  // element - so injecting a marker *adds* a run, and every run after it shifted
+  // by one. Each of those shifted runs then compared unequal and was credited to
+  // the variable being probed, complete with the geometry of whichever run now
+  // sat at its index. On the weather template one unavailable value was enough to
+  // hand eleven runs to one entity, eight of them cells of the forecast strip - so
+  // every automatic refresh painted that entity's value on top of the days and
+  // temperatures the strip itself draws.
+  //
+  // A longest common subsequence over the run texts pairs the untouched runs
+  // (identical text on both sides) and leaves exactly the marker-changed slots
+  // unpaired, which is what the caller wants to look at. A slot with no current
+  // counterpart is one that renders nothing today: there is no run on the display
+  // to bind, and the caller skips it instead of stealing a neighbour's.
+  _alignTemplateTextRuns(markedTexts, currentTexts) {
+    const textOf = (node) => String(node?.textContent || "");
+    const rows = markedTexts.length;
+    const cols = currentTexts.length;
+    const lengths = Array.from({ length: rows + 1 }, () => new Uint16Array(cols + 1));
+    for (let i = rows - 1; i >= 0; i -= 1) {
+      for (let j = cols - 1; j >= 0; j -= 1) {
+        lengths[i][j] = textOf(markedTexts[i]) === textOf(currentTexts[j])
+          ? lengths[i + 1][j + 1] + 1
+          : Math.max(lengths[i + 1][j], lengths[i][j + 1]);
+      }
+    }
+    const operations = [];
+    let i = 0;
+    let j = 0;
+    while (i < rows || j < cols) {
+      if (i < rows && j < cols && textOf(markedTexts[i]) === textOf(currentTexts[j])) {
+        operations.push({ kind: "same", marked: markedTexts[i], current: currentTexts[j] });
+        i += 1; j += 1;
+      } else if (i < rows && (j >= cols || lengths[i + 1][j] >= lengths[i][j + 1])) {
+        operations.push({ kind: "added", marked: markedTexts[i] });
+        i += 1;
+      } else {
+        operations.push({ kind: "removed", current: currentTexts[j] });
+        j += 1;
+      }
+    }
+    // A slot whose text merely changed shows up as an added run next to a removed
+    // one; rejoining those two recovers the run's current node, which is the whole
+    // point - that node carries the geometry and the value on the display today.
+    const pairs = [];
+    for (let index = 0; index < operations.length; index += 1) {
+      const operation = operations[index];
+      if (operation.kind === "same") {
+        pairs.push({ marked: operation.marked, current: operation.current });
+        continue;
+      }
+      if (operation.kind !== "added") continue;
+      const neighbour = operations[index + 1];
+      if (neighbour?.kind === "removed") {
+        pairs.push({ marked: operation.marked, current: neighbour.current });
+        index += 1;
+        continue;
+      }
+      pairs.push({ marked: operation.marked, current: null });
+    }
+    return pairs;
+  },
+
   async _preparedTemplateEntityBindings(device, width, height) {
     const request = this._currentDisplayTemplateSvgRequest(device);
     if (!request?.templates?.length || typeof DOMParser === "undefined") return { bindings: [], svgTemplate: "" };
@@ -2443,9 +2512,8 @@ export const devicesMixin = {
         const markedDocument = new DOMParser().parseFromString(markedSvg, "image/svg+xml");
         const markedTexts = [...markedDocument.querySelectorAll("text")];
         let occurrence = 0;
-        for (let textIndex = 0; textIndex < markedTexts.length; textIndex += 1) {
-          const markedText = String(markedTexts[textIndex]?.textContent || "");
-          const currentText = currentTexts[textIndex];
+        for (const { marked: markedNode, current: currentText } of this._alignTemplateTextRuns(markedTexts, currentTexts)) {
+          const markedText = String(markedNode?.textContent || "");
           // A slot belongs to this variable when injecting the marker changed the
           // rendered text - whether the marker survived verbatim or the block
           // reformatted it (a number slot, an ellipsis clip, an empty value). The
@@ -2454,7 +2522,16 @@ export const devicesMixin = {
           const drivenByVariable =
             markedText.includes(marker) || markedText !== String(currentText?.textContent || "");
           if (!drivenByVariable) continue;
+          // Nothing is rendered for this slot today, so there is no run on the
+          // display to bind - and no geometry to bind it at.
           if (!currentText) continue;
+          // A run inside a series()/ratio()/day()/event() row is redrawn by that
+          // row's own binding further down, value text and all - the whole row is
+          // one shape to _blockBars/_blockDial/_blockStrip/_blockDatebox. Capturing
+          // it here as well would paint the entity's value a second time, on top of
+          // what the row draws. This is the general form of the ratioClaimedIndices
+          // guard above, which only ever covered ratio() rows.
+          if (currentText.closest?.("[data-template-block]")) continue;
           // A row that writes a literal alongside the bound value in the same
           // run (security.js's checklist: `Dveře · ${v(1, "Zamčeno")}`) diffs
           // out as one binding for the *whole* run - substituting only the

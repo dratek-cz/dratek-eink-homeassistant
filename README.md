@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.236
+
+- opraven cizí text kreslený přes dny a teploty v pruhu předpovědi: stačil jeden údaj šablony, který je právě nedostupný, a zachytávání vazeb přiřadilo jedné entitě i buňky pruhu předpovědi - automatická aktualizace pak její hodnotu kreslila přes ně
+- textový běh uvnitř řádku s grafem, měřidlem, předpovědí nebo kalendářem se už nezachytává zvlášť; celý řádek si překresluje jeho vlastní vazba, takže se hodnota nevykreslí dvakrát
+- pozor: vazby vznikají při ručním odeslání, takže displej, který problém už má, je potřeba jednou znovu ručně odeslat
+
 ## Novinky ve verzi 0.1.235
 
 - automatická aktualizace teď kreslí obsah šablony úplně stejně jako ruční odeslání, ne jen podobně: text i grafické řádky (graf, měřidlo, předpověď, kalendář) se skládají ze stejného SVG, jaké zapsal panel, místo aby se překreslovaly ručně dopočítaným přiblížením
