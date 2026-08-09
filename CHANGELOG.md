@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.231] - 2026-08-09
+
+### Opraveno – Automatická aktualizace šablony Počasí vypisovala anglický stav ("sunny") místo českého slova
+- `panel-devices.mixin.js`: Ve `_templateVariableMeta` detekce "interních" (automaticky doplňovaných) údajů testovala pouhý podřetězec - `"čas"` se shodovalo i uvnitř slova `"počasí"` (po-**čas**-í). Proto byl údaj Stav počasí u šablony Počasí navždy uvězněný jako interní pole: nešlo mu vůbec přiřadit entitu, takže vždy zůstávalo na svém statickém textu z návrhu ("Polojasno") - v ručním odeslání stejně jako v automatické aktualizaci. Detekce nyní porovnává celá slova, ne podřetězec.
+- `panel-devices.mixin.js`, `automation.py`: I po opravě výše zůstal rozdíl mezi ručním a automatickým odesláním - ruční odeslání překládá stavy jako `sunny`/`not_home`/`on` do češtiny (`_templateStateWords`), backend pro automatickou aktualizaci ale žádný takový překlad neměl a vypisoval syrový stav Home Assistantu. Textové bindingy nyní nesou i svůj `kind` a `automation.py` má vlastní český překladový slovník (počasí, zámek, alarm, osoba/tracker, binary_sensor podle device_class) - přesně podle stejné logiky jako panel.
+- Ověřeno end-to-end přes `tests/dratek-eink-panel-harness.html`: skutečné zachycení `clean_background` z prohlížeče, doplněné o skutečně přeloženou hodnotu, složené skutečným `render.py`.
+
 ## [0.1.230] - 2026-08-09
 
 ### Opraveno – Automatická aktualizace šablony Počasí (a měřidel u 0.1.229) vykreslovala rozbitý/zdvojený obsah

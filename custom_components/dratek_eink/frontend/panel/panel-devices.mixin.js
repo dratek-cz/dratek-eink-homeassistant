@@ -2333,6 +2333,12 @@ export const devicesMixin = {
       type: "text",
       entity_id: entityId,
       entity_attribute: weatherTemperature ? "temperature" : "",
+      // Home-Assistant-internal states ("sunny", "not_home", "on") read as
+      // Czech words on a manual send (_templateStateWords, driven by this
+      // same kind) - without it riding along, an automatic refresh had no
+      // way to tell a word-translated slot from a plain numeric one and
+      // fell back to the raw state.
+      kind,
       x: Math.round(x), y: Math.round(y), w: Math.round(boxWidth), h: Math.round(boxHeight),
       fallback: currentText,
       include_unit: !weatherTemperature,
@@ -4076,7 +4082,14 @@ export const devicesMixin = {
   _templateVariableMeta(variable, index = 0) {
     const [icon, label] = variable;
     const normalized = String(label || "").toLocaleLowerCase("cs");
-    const automatic = ["čas", "datum", "aktualizace", "cenový interval"].some((part) => normalized.includes(part));
+    // Word-bounded, not a bare substring test: "čas" as a plain .includes()
+    // also matches inside "počasí" ("po-ČAS-í"), which silently turned
+    // weather.js's "Stav počasí" into an internal/automatic slot - it could
+    // never be bound to an entity at all and always showed its static
+    // design-time fallback text, in a manual send as much as an automatic
+    // refresh.
+    const paddedLabel = ` ${normalized} `;
+    const automatic = ["čas", "datum", "aktualizace", "cenový interval"].some((part) => paddedLabel.includes(` ${part} `));
     const descriptions = {
       teplota: "Senzor teploty místnosti nebo venkovního prostoru.",
       vlhkost: "Senzor relativní vlhkosti vzduchu nebo půdy.",

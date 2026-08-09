@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.231
+
+- opravena chyba, kvůli které šlo Stav počasí navždy jen na statický text z návrhu - nikdy nešel přiřadit k entitě, protože ho detekce "interních" polí omylem zaměnila za čas (slovo "čas" se schovávalo uvnitř "počasí")
+- automatická aktualizace teď stavy jako "sunny"/"not_home"/"zamčeno" překládá do češtiny stejně jako ruční odeslání, místo aby vypsala syrový anglický stav Home Assistantu
+
 ## Novinky ve verzi 0.1.230
 
 - opravena chyba z 0.1.229: u šablon s měřidlem/ciferníkem (Kvalita vzduchu, Obývák, Stav serveru, Fotovoltaika) se hodnota při automatické aktualizaci kreslila dvakrát přes sebe

@@ -165,6 +165,71 @@ def _source_value(state: Any, attribute: str) -> Any:
     return state.attributes.get(attribute) if attribute else state.state
 
 
+# --- Home-Assistant-internal state words -----------------------------------
+#
+# A manual send reads a plain state ("sunny", "not_home", "on", "locked")
+# through _templateStateWords (panel-devices.mixin.js) and shows the Czech
+# word a person actually reads on the display. Nothing on the backend ever
+# did that translation - an automatic refresh's text binding just formatted
+# state.state directly, which for anything other than a temperature/plain
+# number reads as raw English or a Home-Assistant-internal token: a weather
+# condition prints "sunny" instead of "Jasno", a lock prints "locked" instead
+# of "Zamčeno". _templateAutomationTextBinding now captures which `kind` the
+# panel resolved the slot as (the same input _templateStateWords itself
+# takes), so this mirrors it exactly instead of guessing from the entity_id
+# alone.
+
+_WEATHER_CONDITION_LABELS_CS = {
+    "clear-night": "Jasná noc", "cloudy": "Zataženo", "exceptional": "Výjimečné", "fog": "Mlha",
+    "hail": "Krupobití", "lightning": "Bouřky", "lightning-rainy": "Bouřky s deštěm",
+    "partlycloudy": "Polojasno", "pouring": "Vydatný déšť", "rainy": "Déšť", "snowy": "Sněžení",
+    "snowy-rainy": "Déšť se sněhem", "sunny": "Jasno", "windy": "Větrno", "windy-variant": "Větrno",
+}
+
+_ALARM_STATE_LABELS_CS = {
+    "disarmed": "Vypnuto", "armed_home": "Doma", "armed_away": "Mimo dům", "armed_night": "Noc",
+    "arming": "Aktivuji", "pending": "Čekám", "triggered": "POPLACH",
+}
+
+
+def _state_words(entity_id: str, state: Any, kind: str) -> str:
+    """The Czech word a manual send would show for this state, or "" if this
+    slot is not one _templateStateWords translates (a plain sensor reading,
+    for instance) - the caller falls back to the raw formatted value then."""
+    domain = str(entity_id or "").split(".", 1)[0]
+    attributes = state.attributes if state is not None else {}
+    value = str(state.state if state is not None else "").lower()
+    device_class = str(attributes.get("device_class") or "")
+    if domain == "weather":
+        return _WEATHER_CONDITION_LABELS_CS.get(value, "")
+    if domain in ("person", "device_tracker"):
+        if kind == "person_name":
+            return str(attributes.get("friendly_name") or "")
+        if value == "home":
+            return "Doma"
+        if value == "not_home":
+            return "Pryč"
+        return str(state.state) if state is not None and state.state else ""
+    if domain == "lock":
+        return {"locked": "Zamčeno", "unlocked": "Odemčeno"}.get(value, "")
+    if domain in ("light", "switch"):
+        return {"on": "Zapnuto", "off": "Vypnuto"}.get(value, "")
+    if domain == "alarm_control_panel":
+        return _ALARM_STATE_LABELS_CS.get(value, "")
+    if domain == "binary_sensor":
+        on = value == "on"
+        if device_class in ("door", "garage_door", "opening") or kind == "door":
+            return "Otevřeno" if on else "Zavřeno"
+        if device_class == "window" or kind == "window":
+            return "Otevřeno" if on else "Zavřeno"
+        if device_class in ("motion", "occupancy", "presence") or kind == "motion":
+            return "Pohyb" if on else "Klid"
+        if device_class == "moisture":
+            return "Vlhko" if on else "Sucho"
+        return "Ano" if on else "Ne"
+    return ""
+
+
 # --- series()/ratio()/day()/event() resolution -----------------------------
 #
 # These four template design() helpers (panel-template-svg.mixin.js) draw a
@@ -623,6 +688,14 @@ class EntityAutoUpdateManager:
             return str(binding.get("status_on_symbol") or "●") if str(value).strip().lower() in active_values else str(binding.get("status_off_symbol") or "○")
         if isinstance(value, (list, dict, tuple)):
             return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        # Word translation is for what a person reads on the display. The
+        # same _state_value also computes a "layered" binding's __selection__
+        # (which layer id to show) via this same call - that needs the raw
+        # state to match a layer's own id, not "Zapnuto" for "on".
+        if not attribute and binding.get("type") in (None, "", "text"):
+            words = _state_words(str(binding.get("entity_id") or ""), state, str(binding.get("kind") or ""))
+            if words:
+                return words
         unit = state.attributes.get("unit_of_measurement") if binding.get("include_unit") and not attribute else ""
         prefix = str(binding.get("value_prefix") or "")
         suffix = str(binding.get("value_suffix") or "")
