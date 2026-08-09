@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.235] - 2026-08-09
+
+### Opraveno – Automatická aktualizace teď kreslí obsah šablony úplně stejně jako ruční odeslání, ne jen podobně
+- Předchozí dvě kola (v0.1.233, v0.1.234) opravovala jednotlivé odchylky mezi ručním a automatickým odesláním jednu po druhé. Tohle kolo řeší jejich společnou příčinu: nejpoužívanější vykreslovací větev backendu (`render_entity_bound_clean_background_image` - ta, která se zkouší jako první a používá se pro každý návrh uložený současnou verzí panelu) překreslovala text i grafické řádky šablony přes PIL, tedy ručně dopočítaným přiblížením toho, co v prohlížeči kreslí SVG. Nikdy to nemohlo sedět přesně, jen se to k tomu postupnými opravami blížilo.
+- `render.py`: Textové běhy se teď skládají ze stejných `<text>` elementů, jaké zapsal panel (`svg_text.py` je jeho doslovný port), a rasterizují se přes resvg s přibaleným písmem Arimo. PIL text naopak zvětšoval do rámečku (ne jen zmenšoval, aby se vešel) a centroval podle inkoustového obrysu glyfů místo podle střední účaří písma, takže se každá hodnota na každé šabloně vykreslila jinak velká a o kus jinde než při ručním odeslání.
+- Nový `svg_blocks.py`: Doslovný port sedmi funkcí, kterými panel kreslí živé řádky šablony - `_blockBars`, `_blockSpark`, `_blockMeters`, `_blockRing`, `_blockDial`, `_blockStrip` a `_blockDatebox`. Graf/sloupce (`series()`), měřidlo (`ratio()`), předpověď (`day()`) i kalendářní událost (`event()`) se tedy při automatické aktualizaci kreslí ze stejného značkování, jaké by vytvořil prohlížeč, místo aby se jejich oblouky, rozestupy sloupců a velikosti písma dopočítávaly znovu ručně. Mimo jiné tím zmizel rozdíl v desetipixelovém minimu čitelnosti, které `_svgText` uplatňuje na každý popisek a které PIL větev neměla.
+- Ověřeno měřením: stejná šablona (ciferník, pruh předpovědi se skutečnými ikonami počasí, kalendářní rámeček a textový nadpis) se ručním a automatickým odesláním dřív lišila v 6,99 % pixelů, teď v 0,00 % - obrazy jsou bit po bitu shodné.
+- `render.py`: Doplněn chybějící `import math`. `_render_bound_layer` ho používá při kreslení ručičky půlkruhového měřidla (widget designéru s variantou "semicircle"), takže každá automatická aktualizace návrhu s tímto prvkem dosud spadla na `NameError` a neproběhla vůbec.
+- PIL větev zůstává beze změny jako záloha pro platformy, kam se rasterizér (resvg-py) neinstaluje, a nadále je správným modelem pro volně umístěné widgety designéru, které se i při ručním odeslání kreslí na plátno jako boxy. Nově v ní ale text drží zachycenou velikost písma místo dopočítaného zvětšení.
+- Nový `tests/test_svg_blocks_port.py` spouští skutečný `panel-template-svg.mixin.js` v Node a porovnává značkování obou stran znak po znaku, takže se port a předloha nemůžou nepozorovaně rozejít. `tests/test_svg_render.py` navíc nově hlídá, že automatická aktualizace vyjde pixel po pixelu shodně s ručním odesláním.
+
 ## [0.1.234] - 2026-08-09
 
 ### Opraveno – Grafy, měřidla, předpověď a kalendář v automatické aktualizaci měly jiná písma, velikosti a rozložení než ruční odeslání

@@ -3,13 +3,14 @@ from __future__ import annotations
 import base64
 import io
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageMath
 
-from . import svg_render
+from . import svg_blocks, svg_render
 from .const import DEVICE_SIZES
 from .meteoradar import fit_to_size
 from .svg_text import svg_text as build_text_element
@@ -1257,18 +1258,28 @@ def render_entity_bound_image(
     return quantize_bwr_preview(image)
 
 
-def _svg_text_slot(binding: dict[str, Any], value: str) -> str:
+def _svg_text_slot(
+    binding: dict[str, Any],
+    value: str,
+    cover_background: bool = True,
+) -> str:
     """Rebuild one dynamic text slot as an SVG rect + <text>, matching the panel.
 
     The panel captured the slot geometry as hex colours and an anchor point in
     svg.* (panel-devices.mixin.js). The rect repaints the background so the stale
     value baked into the base image is covered - the same job _render_bound_text's
     background fill does in the PIL path.
+
+    `cover_background` is what the clean_background tier turns off: there the
+    background it draws onto is a real, value-free capture of the template, so
+    there is no stale value to hide and painting a flat rectangle over it would
+    destroy whatever art (an icon, a gradient band, a photo) the slot sits on -
+    exactly the guessing that tier exists to avoid.
     """
     svg = binding.get("svg") or {}
     parts: list[str] = []
     background = str(svg.get("bg") or "none")
-    if background and background != "none":
+    if cover_background and background and background != "none":
         parts.append(
             f'<rect x="{float(svg.get("x", 0)):.2f}" y="{float(svg.get("y", 0)):.2f}"'
             f' width="{float(svg.get("w", 1)):.2f}" height="{float(svg.get("h", 1)):.2f}"'
@@ -1289,6 +1300,205 @@ def _svg_text_slot(binding: dict[str, Any], value: str) -> str:
     return "".join(parts)
 
 
+def _binding_box(binding: dict[str, Any]) -> dict[str, float]:
+    """The row box the panel laid this binding's block out in."""
+    return {
+        "x": float(binding.get("x", 0)),
+        "y": float(binding.get("y", 0)),
+        "w": max(1.0, float(binding.get("w", 1))),
+        "h": max(1.0, float(binding.get("h", 1))),
+    }
+
+
+def _decoded_binding_value(value: str, default: Any) -> Any:
+    """A graphic binding's value travels as JSON built by automation.py."""
+    try:
+        decoded = json.loads(str(value))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return default
+    return decoded if isinstance(decoded, type(default)) else default
+
+
+def _svg_graphic_slot(binding: dict[str, Any], value: str) -> str:
+    """Rebuild one live template row as the panel's own block markup.
+
+    series()/ratio()/day()/event() rows are drawn by `_blockBars`/`_blockSpark`,
+    `_blockDial`/`_blockRing`/`_blockMeters`, `_blockStrip` and `_blockDatebox`
+    respectively; svg_blocks.py is a port of all seven, so the markup here is
+    what the browser would have written for the same data.
+    """
+    box = _binding_box(binding)
+    binding_type = binding.get("type")
+
+    if binding_type == "series":
+        values = _decoded_binding_value(value, [])
+        if not values:
+            return ""
+        if str(binding.get("chartType") or "line") == "bar":
+            highlight = binding.get("highlight")
+            return svg_blocks.block_bars(
+                {
+                    "values": values,
+                    "labels": binding.get("labels") or [],
+                    # -1 is the panel's "no interval is current" marker; passing
+                    # it through would still compare equal to nothing, but None
+                    # says so outright.
+                    "highlight": highlight if isinstance(highlight, int) and highlight >= 0 else None,
+                },
+                box,
+            )
+        return svg_blocks.block_spark(
+            {"values": values, "caption": binding.get("caption") or None}, box
+        )
+
+    if binding_type == "ratio":
+        meters = _decoded_binding_value(value, [])
+        meters = [meter for meter in meters if isinstance(meter, dict)]
+        if not meters:
+            return ""
+        visual = str(binding.get("visual") or "bars")
+        if visual in ("dial", "ring"):
+            first = meters[0]
+            # automation.py resolves a fill as a 0-100 percentage; the panel's
+            # own ratio() helper hands the block a 0-1 fraction.
+            source = {
+                "percent": _number_or_zero(first.get("percent")) / 100,
+                "color": first.get("color"),
+                "value": first.get("text") or None,
+                "caption": binding.get("caption") or None,
+            }
+            if visual == "ring":
+                return svg_blocks.block_ring(source, box)
+            return svg_blocks.block_dial(
+                {**source, "min": binding.get("min"), "max": binding.get("max")}, box
+            )
+        return svg_blocks.block_meters(
+            [
+                {
+                    "label": meter.get("label"),
+                    "value": meter.get("text"),
+                    "percent": _number_or_zero(meter.get("percent")) / 100,
+                    "color": meter.get("color"),
+                }
+                for meter in meters
+            ],
+            box,
+        )
+
+    if binding_type == "forecast":
+        days = _decoded_binding_value(value, [])
+        cells = [
+            {
+                "label": day.get("label"),
+                "value": day.get("value"),
+                "icon": _MDI_WEATHER_ICON_PATHS.get(
+                    _WEATHER_CONDITION_ICON_NAMES.get(str(day.get("condition") or "").lower(), ""),
+                    "",
+                ),
+            }
+            for day in days
+            if isinstance(day, dict)
+        ][: max(1, int(binding.get("days") or 4))]
+        return svg_blocks.block_strip(cells, box) if cells else ""
+
+    if binding_type == "calendar":
+        entry = _decoded_binding_value(value, {})
+        if not entry:
+            return ""
+        return svg_blocks.block_datebox(
+            {
+                "day": entry.get("day"),
+                "month": entry.get("month"),
+                "color": binding.get("color"),
+                "lines": [entry.get("title"), entry.get("detail")],
+            },
+            box,
+        )
+
+    return ""
+
+
+def _number_or_zero(value: Any) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return number if math.isfinite(number) else 0.0
+
+
+def _svg_graphic_binding(binding: dict[str, Any]) -> bool:
+    """A live template row svg_blocks.py can redraw exactly."""
+    return binding.get("type") in ("series", "ratio", "forecast", "calendar")
+
+
+def _svg_text_binding(binding: dict[str, Any]) -> bool:
+    """A text slot the panel captured enough SVG geometry to redraw exactly.
+
+    Template runs carry `svg` (cx/cy/size/anchor/colour); the free-form
+    designer's own signal widget is typed "text" but has no such capture and
+    stays on the PIL box renderer, which is the model it was drawn with.
+    """
+    return _is_text_binding(binding) and bool(binding.get("svg"))
+
+
+def _svg_overlay(
+    bindings: list[dict[str, Any]],
+    values: dict[str, str],
+    width: int,
+    height: int,
+    cover_background: bool,
+) -> Image.Image | None:
+    """Rasterise every captured slot the way the manual send drew it.
+
+    One document for all slots rather than one per slot: resvg is invoked once,
+    the slots land on the same pixel grid they did when the browser drew them
+    together, and they keep the z-order the panel captured them in. Returns None
+    only when the rasteriser is unavailable or fails, so every caller keeps its
+    PIL fallback - a set of slots that legitimately draws nothing (an empty
+    value, a forecast that came back empty) still returns a layer, since a
+    manual send would have drawn nothing there either.
+    """
+    if not bindings:
+        return Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    if not svg_render.render_available():
+        return None
+    slots = "".join(
+        _svg_graphic_slot(binding, values.get(str(binding.get("id")), str(binding.get("fallback", ""))))
+        if _svg_graphic_binding(binding)
+        else _svg_text_slot(
+            binding,
+            values.get(str(binding.get("id")), str(binding.get("fallback", ""))),
+            cover_background,
+        )
+        for binding in bindings
+    )
+    document = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}"'
+        f' viewBox="0 0 {width} {height}">{slots}</svg>'
+    )
+    return svg_render.rasterize_svg(document, width, height)
+
+
+def _composite_text_bindings_with_pil(
+    image: Image.Image,
+    bindings: list[dict[str, Any]],
+    values: dict[str, str],
+    force_transparent: bool = False,
+) -> None:
+    """Draw captured text slots through PIL when the rasteriser is unavailable.
+
+    Forces the captured font size instead of PIL's autoFit, which would grow the
+    text to fill its box and produce the oversized look the SVG path exists to
+    avoid.
+    """
+    for binding in bindings:
+        value = values.get(str(binding.get("id")), str(binding.get("fallback", "")))
+        fixed = {**binding, "autoFit": False}
+        _composite_binding(
+            image, fixed, _render_bound_text(fixed, value, force_transparent)
+        )
+
+
 def render_entity_bound_svg_image(
     base_image: str,
     bindings: list[dict[str, Any]],
@@ -1306,38 +1516,23 @@ def render_entity_bound_svg_image(
     svg_text_bindings: list[dict[str, Any]] = []
     for binding in bindings:
         value = values.get(str(binding.get("id")), str(binding.get("fallback", "")))
-        if _is_text_binding(binding) and binding.get("svg"):
+        if _svg_text_binding(binding):
             svg_text_bindings.append(binding)
             continue
         _composite_binding(image, binding, _render_binding_layer(binding, value))
 
-    layer = None
-    if svg_text_bindings:
-        slots = "".join(
-            _svg_text_slot(
-                binding,
-                values.get(str(binding.get("id")), str(binding.get("fallback", ""))),
-            )
-            for binding in svg_text_bindings
-        )
-        width, height = image.size
-        document = (
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}"'
-            f' viewBox="0 0 {width} {height}">{slots}</svg>'
-        )
-        layer = svg_render.rasterize_svg(document, width, height)
-
+    width, height = image.size
+    # Text only: this tier patches over a stale base_image, where the graphic
+    # rows' old pixels are still baked in. Their PIL renderers paint an opaque
+    # box that covers them; fresh SVG markup drawn on top would leave the stale
+    # shape showing through around it.
+    layer = _svg_overlay(svg_text_bindings, values, width, height, True)
     if layer is not None:
         image.alpha_composite(layer)
     else:
-        # No rasteriser (or it failed): draw the very same slots through PIL so the
-        # refresh is never left with missing values. Force the captured font size
-        # instead of PIL's autoFit, which would grow the text to fill the box and
-        # produce the oversized, off-size look this whole path exists to avoid.
-        for binding in svg_text_bindings:
-            value = values.get(str(binding.get("id")), str(binding.get("fallback", "")))
-            fixed = {**binding, "autoFit": False}
-            _composite_binding(image, fixed, _render_bound_text(fixed, value))
+        # No rasteriser (or it failed): draw the very same slots through PIL so
+        # the refresh is never left with missing values.
+        _composite_text_bindings_with_pil(image, svg_text_bindings, values)
 
     return quantize_bwr_preview(image)
 
@@ -1533,6 +1728,18 @@ def render_entity_bound_clean_background_image(
     binding type - not just text - and needs no SVG rasteriser (resvg_py),
     so it works the same on every Home Assistant platform.
 
+    Everything the template itself drew is put back the way the panel drew it:
+    text runs as the very same `<text>` elements, and series()/ratio()/day()/
+    event() rows as the very same block markup (svg_text.py and svg_blocks.py
+    are ports of the panel's own builders), rasterised through resvg. Redrawing
+    those with PIL instead could only approximate them - a text box the font is
+    grown to fill and centred on the glyphs' ink extents rather than the font's
+    central baseline, a gauge arc and bar spacing recomputed by hand - which is
+    the one thing about this tier that was still a resemblance to a manual send
+    rather than a reproduction of it. PIL stays the fallback for platforms the
+    rasteriser has no wheel for, and remains the right model for the free-form
+    designer's own widgets, which were drawn as boxes in the first place.
+
     Returns None - never partially applied - when clean_background cannot be
     decoded, so the caller falls back to the older, resvg-dependent tiers.
     """
@@ -1540,8 +1747,32 @@ def render_entity_bound_clean_background_image(
         image = _decode_data_image(clean_background).convert("RGBA")
     except Exception:
         return None
+
+    def redrawn_by_svg(binding: Any) -> bool:
+        return isinstance(binding, dict) and (
+            _svg_text_binding(binding) or _svg_graphic_binding(binding)
+        )
+
+    svg_bindings = [binding for binding in bindings if redrawn_by_svg(binding)]
+    width, height = image.size
+    # Composited before the remaining bindings, which keeps the z-order the
+    # panel captured: the template's own rows are pushed ahead of the radar
+    # image and the designer's overlay widgets in the binding list, and a manual
+    # send paints those overlay widgets on top of the template SVG too.
+    layer = _svg_overlay(svg_bindings, values, width, height, False)
+    if layer is not None:
+        image.alpha_composite(layer)
+    else:
+        for binding in svg_bindings:
+            value = values.get(str(binding.get("id")), str(binding.get("fallback", "")))
+            # A text slot forces the captured font size rather than PIL's
+            # autoFit, which would grow the text to fill its box.
+            drawn = {**binding, "autoFit": False} if _svg_text_binding(binding) else binding
+            _composite_binding(
+                image, drawn, _render_binding_layer(drawn, value, force_transparent=True)
+            )
     for binding in bindings:
-        if not isinstance(binding, dict):
+        if redrawn_by_svg(binding) or not isinstance(binding, dict):
             continue
         element_id = str(binding.get("id") or "")
         value = values.get(element_id, str(binding.get("fallback", "")))

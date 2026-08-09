@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.235
+
+- automatická aktualizace teď kreslí obsah šablony úplně stejně jako ruční odeslání, ne jen podobně: text i grafické řádky (graf, měřidlo, předpověď, kalendář) se skládají ze stejného SVG, jaké zapsal panel, místo aby se překreslovaly ručně dopočítaným přiblížením
+- na měřené šabloně se ruční a automatické odeslání dřív lišilo v 6,99 % pixelů, teď v 0,00 % - obrazy jsou shodné
+- opraven pád automatické aktualizace u návrhů obsahujících půlkruhové měřidlo s ručičkou (chybějící `import math` v `render.py`) - taková aktualizace dosud neproběhla vůbec
+
 ## Novinky ve verzi 0.1.234
 
 - grafy/sloupce, měřidla (ciferník i mezikruží), předpověď počasí a kalendářní událost teď v automatické aktualizaci kreslí stejné fonty, velikosti a rozložení jako ruční odeslání - dosud se lišily formulemi na pozadí, i když se souřadnice zachytávaly správně
