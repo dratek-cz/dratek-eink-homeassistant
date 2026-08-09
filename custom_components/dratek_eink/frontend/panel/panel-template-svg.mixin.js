@@ -1237,6 +1237,32 @@ export const templateSvgMixin = {
     return boxes;
   },
 
+  // Boxes (and the row spec itself, for its static caption/label/colour
+  // strings) for the graphical rows series()/ratio()/day()/event() draw (a
+  // sparkline, a gauge, a forecast strip, a calendar entry) - keyed by the
+  // row's own `group` tag, the same one _stackTemplateBlocks wraps in
+  // <g data-template-block="..."> so the panel can find and blank the drawn
+  // shape later. Reuses the exact box-collection technique
+  // _templateVariableCropBoxes uses for text slots: box geometry is a side
+  // effect of the real layout pass, not worth recomputing separately.
+  _templateGraphicRowBoxes(template, width, height) {
+    const build = this._templateSvgSpecs(template)[template?.id];
+    const rows = build ? build() : [];
+    if (!rows.length) return {};
+    rows.forEach((row, index) => { row.__rowIndex = index; });
+    const collector = [];
+    this._layoutTemplateSvg(rows, width, height, collector);
+    const rowBoxes = {};
+    collector.forEach(({ rowIndex, box }) => { if (!(rowIndex in rowBoxes)) rowBoxes[rowIndex] = box; });
+    const entries = {};
+    rows.forEach((row) => {
+      if (!row.group) return;
+      const box = rowBoxes[row.__rowIndex];
+      if (box) entries[row.group] = { box, row };
+    });
+    return entries;
+  },
+
   // The crop itself: the same full-template markup real bindings would
   // produce, windowed to just one variable's box via viewBox instead of a
   // redrawn miniature - so it is the actual template at 1:1, not a rendition

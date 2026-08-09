@@ -35,7 +35,7 @@ export const template = {
     { stat: { value: v(0, "23"), unit: "°C", caption: v(1, "Polojasno") }, h: 0.30 },
     { text: v(3, "23. května"), h: 0.07, size: 0.045 },
     { rule: true, h: 0.02 },
-    { strip: [day(0), day(1), day(2), day(3)], h: 0.25 },
+    { strip: [day(0), day(1), day(2), day(3)], group: "forecast", h: 0.25 },
     { flex: true },
     { footer: [{ label: "AKTUALIZOVÁNO", value: v(2, "12:45") }], h: 0.13 },
   ],

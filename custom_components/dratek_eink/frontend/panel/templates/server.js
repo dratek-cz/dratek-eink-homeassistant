@@ -15,6 +15,10 @@ export const template = {
     ],
   },
   prepared: true,
+  // Which variable index feeds each meter bar's live percent fill, in the
+  // same order as the meters row below (see air.js for why this can't be
+  // recovered from the row itself).
+  automation: { ratio: [{ variableIndex: 1 }, { variableIndex: 2 }, { variableIndex: 3 }, { variableIndex: 4 }] },
   setup: {
     summary: "Dostupnost pruhem nahoře, čtyři vodorovné ukazatele (CPU/RAM/Disk/Teplota) uprostřed, doba provozu dole.",
     integrations: [
@@ -40,7 +44,7 @@ export const template = {
       { label: "RAM", value: v(2, "61 %"), percent: ratio(2, 61) },
       { label: "Disk", value: v(3, "73 %"), percent: ratio(3, 73), color: "red" },
       { label: "Teplota", value: v(4, "48 °C"), percent: ratio(4, 48) },
-    ], h: 0.48 },
+    ], group: "ratio", h: 0.48 },
     { flex: true },
     { footer: [{ label: "PROVOZ", value: v(5, "18 dní") }], h: 0.13 },
   ],

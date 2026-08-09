@@ -889,6 +889,149 @@ def _render_bound_weather(binding: dict[str, Any], value: str, force_transparent
     return output
 
 
+def _render_bound_ratio(binding: dict[str, Any], value: str, force_transparent: bool = False) -> Image.Image:
+    """A ratio() dial/ring/bar-list, redrawn from automation.py's live percent+text.
+
+    Standing in for a template's own SVG dial/ring/meters art (panel-template-
+    svg.mixin.js's _blockDial/_blockRing/_blockMeters) - close in shape, not a
+    pixel match, the same tradeoff the freeform "layered" gauge widgets below
+    already make on this PIL tier.
+    """
+    width = max(1, round(float(binding.get("w", 1))))
+    height = max(1, round(float(binding.get("h", 1))))
+    output = Image.new("RGBA", (width, height), (0, 0, 0, 0) if force_transparent else (255, 255, 255, 255))
+    draw = ImageDraw.Draw(output)
+    colors = {"black": (0, 0, 0, 255), "red": (220, 20, 12, 255), "white": (255, 255, 255, 255)}
+    try:
+        meters = json.loads(str(value))
+        if not isinstance(meters, list):
+            meters = []
+    except (TypeError, ValueError, json.JSONDecodeError):
+        meters = []
+    visual = str(binding.get("visual") or "bars")
+    if visual in ("dial", "ring") and meters:
+        meter = meters[0] if isinstance(meters[0], dict) else {}
+        percent = max(0.0, min(100.0, float(meter.get("percent") or 0)))
+        color = colors.get(str(meter.get("color") or "black"), colors["black"])
+        value_text = str(meter.get("text") or "")
+        caption = str(binding.get("caption") or "")
+        cx = width / 2
+        if visual == "dial":
+            cy = height * 0.78
+            r = max(6, min(width, height * 1.3) / 2 - 4)
+            draw.arc((cx - r, cy - r, cx + r, cy + r), 150, 390, fill=colors["black"], width=2)
+            if percent > 0:
+                draw.arc((cx - r, cy - r, cx + r, cy + r), 150, 150 + percent / 100 * 240, fill=color, width=max(3, round(r * 0.16)))
+            _draw_centered_text(draw, value_text, cx, cy - r * 0.35, r * 1.4, r * 0.5, max(9, round(r * 0.42)))
+            if caption:
+                _draw_centered_text(draw, caption, cx, cy + r * 0.15, r * 1.2, r * 0.28, max(7, round(r * 0.2)), bold=False)
+            min_text, max_text = str(binding.get("min") or ""), str(binding.get("max") or "")
+            if min_text:
+                _draw_centered_text(draw, min_text, cx - r * 0.92, cy + r * 0.12, r * 0.5, r * 0.24, max(6, round(r * 0.16)), bold=False)
+            if max_text:
+                _draw_centered_text(draw, max_text, cx + r * 0.92, cy + r * 0.12, r * 0.5, r * 0.24, max(6, round(r * 0.16)), bold=False)
+        else:
+            cy = height / 2
+            outer = max(6, min(width, height) * 0.46)
+            inner = outer * 0.68
+            hole_fill = (0, 0, 0, 0) if force_transparent else colors["white"]
+            if percent > 0:
+                draw.pieslice((cx - outer, cy - outer, cx + outer, cy + outer), -90, -90 + percent / 100 * 360, fill=color)
+            draw.ellipse((cx - outer, cy - outer, cx + outer, cy + outer), outline=colors["black"], width=1)
+            draw.ellipse((cx - inner, cy - inner, cx + inner, cy + inner), fill=hole_fill, outline=colors["black"], width=1)
+            _draw_centered_text(draw, value_text, cx, cy - (inner * 0.2 if caption else 0), inner * 1.6, inner * 0.7, max(9, round(inner * 0.5)))
+            if caption:
+                _draw_centered_text(draw, caption, cx, cy + inner * 0.5, inner * 1.4, inner * 0.32, max(7, round(inner * 0.26)), bold=False)
+        return output
+    line_height = height / max(1, len(meters))
+    for index, meter in enumerate(meters):
+        if not isinstance(meter, dict):
+            continue
+        top = line_height * index
+        label_size = max(7, min(line_height * 0.42, width * 0.1))
+        bar_height = max(2, line_height * 0.28)
+        bar_y = top + line_height * 0.55
+        percent = max(0.0, min(100.0, float(meter.get("percent") or 0))) / 100
+        color = colors.get(str(meter.get("color") or "black"), colors["black"])
+        label_font = load_font(round(label_size), False)
+        value_font = load_font(round(label_size), True)
+        draw.text((2, top + line_height * 0.06), str(meter.get("label") or ""), fill=colors["black"], font=label_font)
+        value_text = str(meter.get("text") or "")
+        value_box = draw.textbbox((0, 0), value_text or " ", font=value_font)
+        draw.text((width - (value_box[2] - value_box[0]) - 2, top + line_height * 0.06), value_text, fill=color, font=value_font)
+        draw.rectangle((0, bar_y, width - 1, bar_y + bar_height), outline=colors["black"], width=1)
+        if percent > 0:
+            draw.rectangle((1, bar_y + 1, max(1, round((width - 2) * percent)), bar_y + bar_height - 1), fill=color)
+    return output
+
+
+_FORECAST_CONDITION_ABBR = {
+    "sunny": "JASNO", "clear-night": "JASNO", "partlycloudy": "OBLAČNO", "cloudy": "ZATAŽENO",
+    "rainy": "DÉŠŤ", "pouring": "DÉŠŤ", "lightning": "BOUŘKA", "lightning-rainy": "BOUŘKA",
+    "snowy": "SNÍH", "snowy-rainy": "SNÍH", "fog": "MLHA", "windy": "VÍTR", "windy-variant": "VÍTR",
+    "hail": "KROUPY", "exceptional": "!",
+}
+
+
+def _render_bound_forecast(binding: dict[str, Any], value: str, force_transparent: bool = False) -> Image.Image:
+    """A day()-driven forecast strip, redrawn from automation.py's live weather.get_forecasts read."""
+    width = max(1, round(float(binding.get("w", 1))))
+    height = max(1, round(float(binding.get("h", 1))))
+    output = Image.new("RGBA", (width, height), (0, 0, 0, 0) if force_transparent else (255, 255, 255, 255))
+    draw = ImageDraw.Draw(output)
+    black = (0, 0, 0, 255)
+    try:
+        days = json.loads(str(value))
+        if not isinstance(days, list):
+            days = []
+    except (TypeError, ValueError, json.JSONDecodeError):
+        days = []
+    if not days:
+        return output
+    cell_width = width / len(days)
+    for index, day in enumerate(days):
+        if not isinstance(day, dict):
+            continue
+        cx = cell_width * (index + 0.5)
+        condition = _FORECAST_CONDITION_ABBR.get(str(day.get("condition") or "").lower(), "")
+        _draw_centered_text(draw, str(day.get("label") or ""), cx, height * 0.14, cell_width * 0.92, height * 0.2, max(7, round(height * 0.14)))
+        if condition:
+            _draw_centered_text(draw, condition, cx, height * 0.5, cell_width * 0.92, height * 0.22, max(6, round(height * 0.12)), bold=False)
+        _draw_centered_text(draw, str(day.get("value") or ""), cx, height * 0.82, cell_width * 0.92, height * 0.26, max(8, round(height * 0.2)))
+        if index > 0:
+            x = round(cell_width * index)
+            draw.line([(x, round(height * 0.1)), (x, round(height * 0.9))], fill=black, width=1)
+    return output
+
+
+def _render_bound_calendar(binding: dict[str, Any], value: str, force_transparent: bool = False) -> Image.Image:
+    """An event()-driven calendar entry, redrawn from automation.py's live calendar.get_events read."""
+    width = max(1, round(float(binding.get("w", 1))))
+    height = max(1, round(float(binding.get("h", 1))))
+    output = Image.new("RGBA", (width, height), (0, 0, 0, 0) if force_transparent else (255, 255, 255, 255))
+    draw = ImageDraw.Draw(output)
+    black = (0, 0, 0, 255)
+    color = (220, 20, 12, 255) if binding.get("color") == "red" else black
+    try:
+        entry = json.loads(str(value))
+        if not isinstance(entry, dict):
+            entry = {}
+    except (TypeError, ValueError, json.JSONDecodeError):
+        entry = {}
+    box_w = min(height * 0.62, width * 0.26)
+    draw.rectangle((0, 0, box_w, height - 1), outline=color, width=2)
+    _draw_centered_text(draw, str(entry.get("day") or ""), box_w / 2, height * 0.4, box_w * 0.86, height * 0.5, max(10, round(height * 0.42)), fill=color)
+    _draw_centered_text(draw, str(entry.get("month") or ""), box_w / 2, height * 0.8, box_w * 0.86, height * 0.28, max(7, round(height * 0.18)), fill=color, bold=False)
+    text_x = box_w + max(4, width * 0.04)
+    title_font = load_font(max(8, round(height * 0.24)), True)
+    title_box = draw.textbbox((0, 0), str(entry.get("title") or "") or " ", font=title_font)
+    draw.text((text_x, height * 0.22 - (title_box[3] - title_box[1]) / 2 - title_box[1]), str(entry.get("title") or ""), fill=black, font=title_font)
+    detail_font = load_font(max(7, round(height * 0.18)), False)
+    detail_box = draw.textbbox((0, 0), str(entry.get("detail") or "") or " ", font=detail_font)
+    draw.text((text_x, height * 0.6 - (detail_box[3] - detail_box[1]) / 2 - detail_box[1]), str(entry.get("detail") or ""), fill=black, font=detail_font)
+    return output
+
+
 def _is_text_binding(binding: dict[str, Any]) -> bool:
     """A binding drawn as a single run of text (the default when no type is set)."""
     return binding.get("type") in (None, "", "text")
@@ -898,6 +1041,14 @@ def _render_binding_layer(binding: dict[str, Any], value: str, force_transparent
     """Rasterise one binding to its own RGBA layer."""
     if binding.get("type") == "chart":
         return _render_bound_chart(binding, value, force_transparent)
+    if binding.get("type") == "series":
+        return _render_bound_chart(binding, value, force_transparent)
+    if binding.get("type") == "ratio":
+        return _render_bound_ratio(binding, value, force_transparent)
+    if binding.get("type") == "forecast":
+        return _render_bound_forecast(binding, value, force_transparent)
+    if binding.get("type") == "calendar":
+        return _render_bound_calendar(binding, value, force_transparent)
     if binding.get("type") == "layered":
         return _render_bound_layer(binding, value, force_transparent)
     if binding.get("type") == "weather":

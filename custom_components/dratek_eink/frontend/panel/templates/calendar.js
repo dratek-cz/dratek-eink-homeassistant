@@ -30,8 +30,8 @@ export const template = {
   design: ({ v, event }) => [
     { text: "Kalendář", h: 0.075, size: 0.05, bold: true },
     { rule: true, h: 0.02 },
-    { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, h: 0.27 },
-    { datebox: { day: event(1).day, month: event(1).month, lines: [event(1).title, event(1).detail] }, h: 0.27 },
+    { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, group: "event-0", h: 0.27 },
+    { datebox: { day: event(1).day, month: event(1).month, lines: [event(1).title, event(1).detail] }, group: "event-1", h: 0.27 },
     { flex: true },
     { footer: [{ label: "SVÁTEK MÁ", value: v(2, "Jana") }], h: 0.14 },
   ],

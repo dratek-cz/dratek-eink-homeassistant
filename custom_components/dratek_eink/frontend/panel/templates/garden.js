@@ -14,6 +14,9 @@ export const template = {
     ],
   },
   prepared: true,
+  // Which variable index feeds the sparkline's live series (see air.js for
+  // why this can't be recovered from the row itself).
+  automation: { series: [{ variableIndex: 1 }] },
   setup: {
     summary: "Vlhkost půdy velkým číslem s křivkou za posledních 7 dní, teplota a vítr jako dva řádky pod ní, další zálivka dole.",
     integrations: [
@@ -31,7 +34,7 @@ export const template = {
   design: ({ v, series }) => [
     { text: v(0, "Záhon rajčat"), h: 0.075, size: 0.048, bold: true },
     { stat: { value: v(1, "36"), unit: "%", caption: "vlhkost půdy" }, h: 0.26 },
-    { spark: { values: series(1, [62, 58, 55, 49, 47, 43, 40, 38, 36]), caption: "7 dní" }, h: 0.27 },
+    { spark: { values: series(1, [62, 58, 55, 49, 47, 43, 40, 38, 36]), caption: "7 dní" }, group: "chart", h: 0.27 },
     { rule: true, h: 0.02 },
     { list: [
       { icon: "weather-sunny", label: "Teplota", value: v(2, "24 °C") },

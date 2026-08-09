@@ -19,6 +19,9 @@ export const template = {
     ],
   },
   prepared: true,
+  // Which variable index feeds the bar chart's live series (see air.js for
+  // why this can't be recovered from the row itself).
+  automation: { series: [{ variableIndex: 1 }] },
   setup: {
     summary: "České spotové ceny elektřiny z integrace Czech Energy Spot Prices podle dat OTE. Šablona automaticky načte aktuální cenu, celý denní průběh, minimum, maximum, cenu na zítřek a pořadí aktuálního intervalu.",
     integrations: [

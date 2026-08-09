@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from datetime import timedelta
+from datetime import datetime, timedelta
 import io
 import json
+import math
 import re
 import time
 from typing import Any
@@ -162,6 +163,176 @@ def _source_value(state: Any, attribute: str) -> Any:
     if state is None:
         return None
     return state.attributes.get(attribute) if attribute else state.state
+
+
+# --- series()/ratio()/day()/event() resolution -----------------------------
+#
+# These four template design() helpers (panel-template-svg.mixin.js) draw a
+# sparkline/bar chart, a gauge/bar fill, a weather forecast strip or a
+# calendar entry. None of them ever produce a <text> node whose content is
+# the literal bound value - a chart draws numbers as bar heights, forecast
+# and calendar data come from a service call the plain v()-marker capture in
+# panel-devices.mixin.js has no way to reach - so an automatic refresh used
+# to leave all four frozen at whatever was true on the last manual send. The
+# functions below are the backend's own read of the same data, mirroring
+# their frontend counterparts (_templateSeries, _templatePercent,
+# _templateForecastDay, _templateCalendarEntry) closely enough that an
+# automatic refresh matches a manual send instead of guessing.
+
+_WEEKDAY_ABBR_CS = ("PO", "ÚT", "ST", "ČT", "PÁ", "SO", "NE")
+_MONTH_ABBR_CS = ("LED", "ÚNO", "BŘE", "DUB", "KVĚ", "ČVN", "ČVC", "SRP", "ZÁŘ", "ŘÍJ", "LIS", "PRO")
+
+
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _ratio_percent(state: Any, divisor: float) -> float:
+    """Percent-fill for a ratio() gauge/bar - mirrors _templatePercent."""
+    if state is None:
+        return 0.0
+    match = re.search(r"-?\d+(?:\.\d+)?", str(state.state))
+    if not match:
+        return 0.0
+    clamped = max(0.0, min(100.0, float(match.group(0))))
+    return clamped / max(0.0001, divisor)
+
+
+def _ratio_text(state: Any) -> str:
+    """The "value unit" text a ratio() meter shows beside its fill."""
+    if state is None:
+        return ""
+    value = state.state
+    if value is None or str(value).strip().lower() in {"unavailable", "unknown"}:
+        return ""
+    unit = str(state.attributes.get("unit_of_measurement") or "")
+    return f"{value}{f' {unit}' if unit else ''}"
+
+
+def _series_numbers(state: Any, max_points: int) -> list[float]:
+    """A live number series straight from entity attributes - mirrors
+    _templateSeries. No service call needed: every source it reads
+    (a timestamp-keyed attribute dict, `.values`/`.prices`/`.data`/
+    `.history`, or the bare state) is already on `state` in Python exactly
+    as it is on the frontend's copy of the same entity."""
+    if state is None:
+        return []
+    attributes = state.attributes or {}
+    timestamp_prices = [
+        (key, value)
+        for key, value in attributes.items()
+        if _parse_iso_datetime(key) is not None and _is_finite_number(value)
+    ]
+    if len(timestamp_prices) > 1:
+        ordered = sorted(timestamp_prices, key=lambda item: item[0])
+        return [float(value) for _key, value in ordered][-max_points:]
+    for candidate in (
+        attributes.get("values"),
+        attributes.get("prices"),
+        attributes.get("data"),
+        attributes.get("history"),
+        state.state,
+    ):
+        value: Any = candidate
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                value = re.split(r"[;,\s]+", value.strip())
+        if isinstance(value, dict):
+            value = list(value.values())
+        if not isinstance(value, list):
+            continue
+        numbers: list[float] = []
+        for item in value:
+            if isinstance(item, dict):
+                item = item.get("value", item.get("price", item.get("state")))
+            try:
+                numbers.append(float(item))
+            except (TypeError, ValueError):
+                continue
+        if len(numbers) > 1:
+            return numbers[-max_points:]
+    return []
+
+
+def _is_finite_number(value: Any) -> bool:
+    try:
+        return math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return False
+
+
+async def _async_forecast_days(hass: HomeAssistant, entity_id: str, count: int) -> list[dict[str, str]]:
+    """The next `count` forecast days - mirrors _templateForecastDay.
+
+    Forecasts stopped being a state attribute in Home Assistant 2024.4; they
+    only come from this service call now, which is why this needs the event
+    loop (hass.async_add_executor_job cannot make service calls) and has to
+    run before the synchronous PIL/SVG compositing step, the same way a
+    camera binding's snapshot is fetched first.
+    """
+    if not entity_id:
+        return []
+    try:
+        response = await hass.services.async_call(
+            "weather", "get_forecasts", {"type": "daily"},
+            target={"entity_id": entity_id}, blocking=True, return_response=True,
+        )
+    except Exception:
+        return []
+    forecast = (response or {}).get(entity_id, {}).get("forecast")
+    if not isinstance(forecast, list):
+        return []
+    days: list[dict[str, str]] = []
+    for entry in forecast[:count]:
+        if not isinstance(entry, dict):
+            days.append({"label": "", "condition": "", "value": ""})
+            continue
+        parsed = _parse_iso_datetime(entry.get("datetime"))
+        label = _WEEKDAY_ABBR_CS[parsed.weekday()] if parsed else ""
+        try:
+            value = f"{round(float(entry.get('temperature')))}°"
+        except (TypeError, ValueError):
+            value = ""
+        days.append({"label": label, "condition": str(entry.get("condition") or ""), "value": value})
+    return days
+
+
+async def _async_calendar_entry(hass: HomeAssistant, entity_id: str, index: int) -> dict[str, str]:
+    """The event `index` positions into the next 21 days - mirrors _templateCalendarEntry."""
+    if not entity_id:
+        return {}
+    try:
+        response = await hass.services.async_call(
+            "calendar", "get_events", {"duration": {"days": 21}},
+            target={"entity_id": entity_id}, blocking=True, return_response=True,
+        )
+    except Exception:
+        return {}
+    events = (response or {}).get(entity_id, {}).get("events")
+    if not isinstance(events, list) or index >= len(events):
+        return {}
+    event = events[index]
+    if not isinstance(event, dict):
+        return {}
+    title = str(event.get("summary") or "")
+    start_raw = str(event.get("start") or "")
+    start = _parse_iso_datetime(start_raw)
+    if start is None:
+        return {"day": "", "month": "", "title": title, "detail": ""}
+    all_day = "T" not in start_raw
+    detail_time = "celý den" if all_day else start.strftime("%H:%M")
+    location = str(event.get("location") or "")
+    return {
+        "day": str(start.day),
+        "month": _MONTH_ABBR_CS[start.month - 1],
+        "title": title,
+        "detail": " · ".join(part for part in (detail_time, location) if part),
+    }
 
 
 class EntityAutoUpdateManager:
@@ -483,6 +654,33 @@ class EntityAutoUpdateManager:
         del series[:-maximum]
         return json.dumps(series, separators=(",", ":"))
 
+    def _ratio_value(self, binding: dict[str, Any]) -> str:
+        """Every meter a ratio() dial/ring/bar-list binding draws, resolved live."""
+        meters = binding.get("meters") if isinstance(binding.get("meters"), list) else []
+        resolved = []
+        for meter in meters:
+            if not isinstance(meter, dict):
+                continue
+            state = self.hass.states.get(str(meter.get("entity_id")))
+            resolved.append({
+                "percent": _ratio_percent(state, float(meter.get("divisor") or 1)),
+                "text": _ratio_text(state),
+                "label": str(meter.get("label") or ""),
+                "color": str(meter.get("color") or "black"),
+            })
+        return json.dumps(resolved, ensure_ascii=False, separators=(",", ":"))
+
+    def _series_value(self, state: Any, binding: dict[str, Any]) -> str:
+        numbers = _series_numbers(state, int(binding.get("maxPoints") or 96))
+        if not numbers:
+            try:
+                fallback = json.loads(str(binding.get("fallback") or "[]"))
+                if isinstance(fallback, list):
+                    numbers = [float(item) for item in fallback if isinstance(item, (int, float))]
+            except (TypeError, ValueError, json.JSONDecodeError):
+                numbers = []
+        return json.dumps(numbers, separators=(",", ":"))
+
     def _current_binding_values(
         self,
         address: str,
@@ -491,10 +689,20 @@ class EntityAutoUpdateManager:
         """Read all binding values through the same path for previews and writes."""
         values: dict[str, str] = {}
         for binding in bindings:
+            binding_type = binding.get("type")
+            # A ratio() binding has no single entity_id of its own - a dial or
+            # ring reads one meter, a bar list several - so it resolves each
+            # meter's own state itself instead of the single lookup below.
+            if binding_type == "ratio":
+                value = self._ratio_value(binding)
+                values[str(binding.get("id"))] = value
+                continue
             state = self.hass.states.get(str(binding.get("entity_id")))
-            if binding.get("type") == "chart":
+            if binding_type == "series":
+                value = self._series_value(state, binding)
+            elif binding_type == "chart":
                 value = self._chart_value(address, state, binding)
-            elif binding.get("type") == "layered":
+            elif binding_type == "layered":
                 entity_values = {
                     "__selection__": self._state_value(state, binding),
                 }
@@ -544,6 +752,22 @@ class EntityAutoUpdateManager:
             )
             if data_url:
                 values[str(binding.get("id"))] = data_url
+        # day() and event() need the same treatment: the forecast/calendar data
+        # they draw only ever comes from a service call, never a state attribute,
+        # so it has to be fetched here (with the event loop) before the
+        # synchronous compositor runs.
+        for binding in bindings:
+            binding_type = binding.get("type")
+            if binding_type == "forecast":
+                days = await _async_forecast_days(
+                    self.hass, str(binding.get("entity_id") or ""), int(binding.get("days") or 4)
+                )
+                values[str(binding.get("id"))] = json.dumps(days, ensure_ascii=False, separators=(",", ":"))
+            elif binding_type == "calendar":
+                entry = await _async_calendar_entry(
+                    self.hass, str(binding.get("entity_id") or ""), int(binding.get("index") or 0)
+                )
+                values[str(binding.get("id"))] = json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
         return await self.hass.async_add_executor_job(
             render_automatic_refresh_image,
             str(config.get("base_image") or ""),

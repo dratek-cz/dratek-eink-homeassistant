@@ -14,6 +14,9 @@ export const template = {
     ],
   },
   prepared: true,
+  // Which variable index feeds the ring's live percent fill (see air.js for
+  // why this can't be recovered from the row itself).
+  automation: { ratio: [{ variableIndex: 0 }] },
   setup: {
     summary: "Okamžitý výkon fotovoltaiky mezikružím, výroba za den/měsíc/celkem a odhad úspory CO₂ dole.",
     integrations: [
@@ -29,7 +32,7 @@ export const template = {
   },
   design: ({ v, ratio }) => [
     { text: "Fotovoltaika", h: 0.075, size: 0.05, bold: true },
-    { ring: { percent: ratio(0, 47), value: v(0, "2,35"), caption: "kW" }, h: 0.42 },
+    { ring: { percent: ratio(0, 47), value: v(0, "2,35"), caption: "kW" }, group: "ratio", h: 0.42 },
     { list: [
       { icon: "weather-sunny", label: "Dnes", value: v(1, "8,2 kWh") },
       { icon: "calendar-month", label: "Měsíc", value: v(2, "152 kWh") },

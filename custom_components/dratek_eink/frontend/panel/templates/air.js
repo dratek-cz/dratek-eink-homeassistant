@@ -13,6 +13,15 @@ export const template = {
     ],
   },
   prepared: true,
+  // Declares which variable index feeds the dial's live percent fill (the
+  // "group" tag on the row below is how the panel finds the drawn shape;
+  // this is how it knows which entity value to recompute it from during an
+  // automatic refresh, since ratio() itself only ever returns a plain
+  // number - by the time a row is built there is no trace of which
+  // variable produced it). divisor matches design()'s own `/ 2` - AQI's
+  // native range is 0-200, one ratio() step further than the 0-100 the
+  // dial fill otherwise assumes.
+  automation: { ratio: [{ variableIndex: 0, divisor: 2 }] },
   setup: {
     summary: "Index kvality vzduchu na budíku (0–200) nahoře, hodnoty CO₂, PM2.5 a vlhkosti jako seznam pod ním.",
     integrations: [
@@ -30,7 +39,7 @@ export const template = {
   },
   design: ({ v, ratio }) => [
     { text: "Kvalita vzduchu", h: 0.07, size: 0.046, bold: true },
-    { dial: { percent: ratio(0, 21) / 2, value: v(0, "42"), caption: "AQI", min: "0", max: "200" }, h: 0.35 },
+    { dial: { percent: ratio(0, 21) / 2, value: v(0, "42"), caption: "AQI", min: "0", max: "200" }, group: "ratio", h: 0.35 },
     { rule: true, h: 0.02 },
     { list: [
       { icon: "molecule-co2", label: "CO₂", value: v(1, "612 ppm") },

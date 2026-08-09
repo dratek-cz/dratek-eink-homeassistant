@@ -13,6 +13,9 @@ export const template = {
     ],
   },
   prepared: false,
+  // Which variable index feeds the bar chart's live series (see air.js for
+  // why this can't be recovered from the row itself).
+  automation: { series: [{ variableIndex: 2 }] },
   setup: {
     summary: "Aktuální cena elektřiny, kdy platí, a sloupcový graf ceny během celého dne s vyznačeným minimem.",
     integrations: [
@@ -34,7 +37,7 @@ export const template = {
       values: series(2, [1.62, 1.48, 1.36, 1.29, 1.34, 1.51, 1.88, 2.24, 2.06, 1.72, 1.38, 1.12, 0.86, 0.94, 1.08, 1.42, 1.96, 2.58, 2.74, 2.39, 2.05, 1.84, 1.71, 1.63]),
       labels: ["0", "", "", "", "", "6", "", "", "", "", "", "12", "", "", "", "", "", "18", "", "", "", "", "", "23"],
       highlight: 12,
-    }, h: 0.43 },
+    }, group: "chart", h: 0.43 },
     { flex: true },
     { footer: [{ label: "NEJLEVNĚJI DNES", value: v(3, "0,86 Kč") }], h: 0.14 },
   ],

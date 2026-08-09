@@ -12,6 +12,10 @@ export const template = {
     ],
   },
   prepared: true,
+  // Which variable index feeds each meter bar's live percent fill, in the
+  // same order as the meters row below (see air.js for why this can't be
+  // recovered from the row itself).
+  automation: { ratio: [{ variableIndex: 1 }, { variableIndex: 2 }] },
   setup: {
     summary: "Teplota v místnosti velkým číslem nahoře, vlhkost a CO₂ jako dva vodorovné ukazatele pod ní.",
     integrations: [
@@ -30,7 +34,7 @@ export const template = {
     { meters: [
       { label: "Vlhkost", value: v(1, "40 %"), percent: ratio(1, 40) },
       { label: "CO₂", value: v(2, "650 ppm"), percent: ratio(2, 32), color: "red" },
-    ], h: 0.28 },
+    ], group: "ratio", h: 0.28 },
     { flex: true },
     { footer: [{ label: "KOMFORT", value: "Optimální" }], h: 0.13 },
   ],

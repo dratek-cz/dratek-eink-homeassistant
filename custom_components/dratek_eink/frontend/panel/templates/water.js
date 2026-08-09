@@ -15,6 +15,9 @@ export const template = {
       ["compare", "Porovnání s minulým obdobím"],
     ],
   },
+  // Which variable index feeds the sparkline's live series (see air.js for
+  // why this can't be recovered from the row itself).
+  automation: { series: [{ variableIndex: 0 }] },
   prepared: false,
   setup: {
     summary: "Spotřeba vody dnes velkým číslem, křivka za posledních 7 dní pod ní, týden/měsíc/rozdíl jako tři čísla dole.",
@@ -33,7 +36,7 @@ export const template = {
   design: ({ v, series }) => [
     { text: "Spotřeba vody", h: 0.07, size: 0.046, bold: true },
     { stat: { value: v(0, "126"), unit: "l", caption: "dnes" }, h: 0.26 },
-    { spark: { values: series(0, [96, 131, 108, 142, 119, 174, 126]), caption: "7 dní" }, h: 0.24 },
+    { spark: { values: series(0, [96, 131, 108, 142, 119, 174, 126]), caption: "7 dní" }, group: "chart", h: 0.24 },
     { rule: true, h: 0.02 },
     { strip: [
       { label: "TÝDEN", value: v(1, "0,84 m³") },

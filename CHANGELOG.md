@@ -2,6 +2,15 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.229] - 2026-08-09
+
+### Opraveno – Automatická aktualizace u 10 šablon nevykreslovala grafy, měřidla, předpověď počasí ani kalendář
+- Šablony postavené na pomocných funkcích `series()` (graf/sparkline), `ratio()` (výplň měřidla/ciferníku), `day()` (denní předpověď počasí) a `event()` (kalendářní událost) - tedy Počasí, Kalendář, Kvalita vzduchu, Obývák, Stav serveru, Fotovoltaika, Cena elektřiny, Zahrada, Spotřeba vody a České spotové ceny - se do zachytávání bindingů pro automatickou aktualizaci vůbec nedostaly. Tyto čtyři funkce nikdy neprodukují `<text>` uzel s doslovnou hodnotou (graf kreslí čísla jako výšku sloupců, `day()`/`event()` čtou data ze service volání), takže je stávající mechanismus (diffování `<text>` uzlů podle vloženého markeru) neviděl. Výsledkem bylo, že se po automatické aktualizaci tyto prvky netvářily jako aktuální stav, ale zůstávaly zamrzlé na hodnotě z posledního ručního odeslání - u šablony Počasí to bylo nejvýraznější, protože čtyřdenní předpověď se tak nikdy sama neaktualizovala.
+- `panel-devices.mixin.js`, `panel-template-svg.mixin.js`: Řádky používající tyto čtyři funkce nesou nově vlastní `group` značku (a u ratio()/series() i deklaraci `automation: { ... }` přímo v souboru šablony - viz `air.js`), podle které se dají dohledat, vyříznout z `clean_background` stejně jako text, a zachytit jako plnohodnotný binding.
+- `automation.py`: Nové resolvery - `_ratio_value`/`_series_value` čtou aktuální stav navázané entity synchronně (žádné service volání není potřeba), `_async_forecast_days`/`_async_calendar_entry` nově volají `weather.get_forecasts` a `calendar.get_events` přímo z backendu (dosud to uměl jen prohlížeč při ručním zobrazení editoru).
+- `render.py`: Nové vykreslovací funkce `_render_bound_ratio` (ciferník/mezikruží/vodorovné pruhy), `_render_bound_forecast` (pruh čtyř dnů) a `_render_bound_calendar` (datový rámeček) zapojené do stejné cesty jako ostatní typy bindingů (`clean_background` i záložní PIL vrstva).
+- Přidána sada testů pokrývající backend resolvery, vykreslování i frontendové zachytávání bindingů.
+
 ## [0.1.228] - 2026-08-08
 
 ### Přidáno – Možnost zrušení čekající úlohy ve frontě odesílání z UI

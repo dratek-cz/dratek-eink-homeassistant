@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.229
+
+- opravena automatická aktualizace u 10 šablon (Počasí, Kalendář, Kvalita vzduchu, Obývák, Stav serveru, Fotovoltaika, Cena elektřiny, Zahrada, Spotřeba vody, České spotové ceny) - grafy, měřidla/ciferníky, předpověď počasí a kalendářní události se dosud do automatické aktualizace vůbec nezachytávaly a zůstávaly zamrzlé na hodnotě z posledního ručního odeslání
+- backend nyní pro předpověď počasí a kalendářní události sám volá `weather.get_forecasts` / `calendar.get_events`, stejně jako to dosud dělal jen prohlížeč
+
 ## Novinky ve verzi 0.1.228
 
 - možnost zrušení čekající úlohy ve frontě odesílání přímo z UI (tlačítko s ikonou křížku u úloh ve stavu `queued`)

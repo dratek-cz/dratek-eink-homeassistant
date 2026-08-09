@@ -2195,6 +2195,81 @@ export const devicesMixin = {
     return fallback;
   },
 
+  // Builds the automation binding for one series()/ratio()/day()/event()-driven
+  // row, keyed by the row's own `group` name. `group` alone is enough for a
+  // forecast strip ("forecast") or a calendar entry ("event-0"/"event-1") -
+  // both resolve their entity the same way the live helpers already do
+  // (_templateEntityForKind), and the index rides on the group suffix. A
+  // ratio()/series() row also needs template.automation (declared next to
+  // design() in the template file) to know which variable index feeds it,
+  // since by the time a row exists ratio()/series() have already collapsed
+  // to a plain number and there is no trace of where it came from.
+  _templateAutomationGraphicBinding(template, group, row, geometry) {
+    if (group === "forecast") {
+      const entityId = this._templateEntityForKind(template, ["forecast", "weather"]);
+      if (!entityId) return null;
+      return { type: "forecast", entity_id: entityId, days: 4, fallback: "", ...geometry };
+    }
+    const eventMatch = group.match(/^event-(\d+)$/);
+    if (eventMatch) {
+      const entityId = this._templateEntityForKind(template, ["calendar"]);
+      if (!entityId) return null;
+      return { type: "calendar", entity_id: entityId, index: Number(eventMatch[1]), fallback: "", ...geometry };
+    }
+    if (group === "ratio") {
+      const declared = template?.automation?.ratio;
+      if (!Array.isArray(declared) || !declared.length) return null;
+      let visual = "bars";
+      let sources = [];
+      if (row.dial) { visual = "dial"; sources = [row.dial]; }
+      else if (row.ring) { visual = "ring"; sources = [row.ring]; }
+      else if (row.meters) { visual = "bars"; sources = row.meters; }
+      const meters = declared
+        .map((entry, index) => {
+          const variableIndex = Number(entry.variableIndex);
+          const variable = template?.variables?.[variableIndex];
+          if (!variable) return null;
+          const meta = this._templateVariableMeta(variable, variableIndex);
+          const entityId = String(this._templateBinding(template, meta) || "").trim();
+          if (!entityId.includes(".") || entityId.startsWith("internal:")) return null;
+          const source = sources[index] || {};
+          return {
+            entity_id: entityId,
+            divisor: Number(entry.divisor) || 1,
+            label: source.label != null ? String(source.label) : "",
+            color: source.color === "red" ? "red" : "black",
+          };
+        })
+        .filter(Boolean);
+      if (!meters.length) return null;
+      const single = sources[0] || {};
+      return {
+        type: "ratio", visual, meters,
+        caption: single.caption != null ? String(single.caption) : "",
+        min: single.min != null ? String(single.min) : "0",
+        max: single.max != null ? String(single.max) : "100",
+        fallback: "", ...geometry,
+      };
+    }
+    if (group === "chart") {
+      const declared = template?.automation?.series?.[0];
+      if (!declared) return null;
+      const index = Number(declared.variableIndex);
+      const variable = template?.variables?.[index];
+      if (!variable) return null;
+      const meta = this._templateVariableMeta(variable, index);
+      const entityId = String(this._templateBinding(template, meta) || "").trim();
+      if (!entityId.includes(".") || entityId.startsWith("internal:")) return null;
+      const chartType = row.bars ? "bar" : "line";
+      const caption = row.spark?.caption != null ? String(row.spark.caption) : "";
+      return {
+        type: "series", entity_id: entityId, chartType, caption,
+        maxPoints: 96, fallback: "[]", ...geometry,
+      };
+    }
+    return null;
+  },
+
   _templateAutomationTextBinding(documentNode, textNode, entityId, meta, occurrence, width, height) {
     const offset = this._templateAutomationNodeOffset(textNode);
     const centerX = offset.x + Number(textNode.getAttribute("x") || 0);
@@ -2330,6 +2405,42 @@ export const devicesMixin = {
         }
       }
     }
+    // series()/ratio()/day()/event() rows (a sparkline, a gauge, a forecast
+    // strip, a calendar entry) never produce a <text> node whose content is
+    // the raw bound value - a chart draws numbers as bar heights, day()/
+    // event() call a service the backend cannot reach from inside the plain
+    // v()-marker loop above - so none of them were ever captured for
+    // automatic refresh; they stayed frozen at whatever was true on the last
+    // manual send. Each such row is tagged with a `group` in its template's
+    // design() (see air.js and weather.js), wrapped by _stackTemplateBlocks
+    // in <g data-template-block="...">, and resolved here into its own
+    // binding the same way camera/text bindings are.
+    const slots = request.templates.length > 1 && request.layout !== "single"
+      ? (request.layout === "stacked"
+        ? [{ x: 0, y: 0, w: width, h: height / 2 }, { x: 0, y: height / 2, w: width, h: height / 2 }]
+        : [{ x: 0, y: 0, w: width / 2, h: height }, { x: width / 2, y: 0, w: width / 2, h: height }])
+      : [{ x: 0, y: 0, w: width, h: height }];
+    const graphicOccurrences = {};
+    request.templates.forEach((template, slotIndex) => {
+      const slot = slots[slotIndex] || slots[0];
+      const graphicRows = this._templateGraphicRowBoxes(template, slot.w, slot.h);
+      for (const [group, { box, row }] of Object.entries(graphicRows)) {
+        const occurrenceKey = `${template.id}:${group}`;
+        const occurrence = graphicOccurrences[occurrenceKey] || 0;
+        graphicOccurrences[occurrenceKey] = occurrence + 1;
+        const nodes = [...currentDocument.querySelectorAll(`[data-template-block="${group}"]`)];
+        const node = nodes[occurrence];
+        if (!node) continue;
+        const binding = this._templateAutomationGraphicBinding(template, group, row, {
+          x: Math.round(slot.x + box.x), y: Math.round(slot.y + box.y),
+          w: Math.round(box.w), h: Math.round(box.h),
+        });
+        if (!binding) continue;
+        binding.id = `template-${template.id}-${group}-${occurrence}`;
+        node.setAttribute("id", binding.id);
+        bindings.push(binding);
+      }
+    });
     // The Meteoradar row (and anything else built from _blockRadarMap) embeds a
     // live camera snapshot as a plain <image>, not a bound HA entity value, so it
     // is tagged and captured the same way but carries its own binding type: an
@@ -2392,7 +2503,7 @@ export const devicesMixin = {
         node.removeAttribute("href");
         continue;
       }
-      if (binding.type === "text") {
+      if (["text", "ratio", "series", "forecast", "calendar"].includes(binding.type)) {
         node.remove();
       }
     }
