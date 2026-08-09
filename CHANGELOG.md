@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.232] - 2026-08-09
+
+### Vylepšeno – Automatická aktualizace šablony Počasí teď kreslí skutečné ikony předpovědi, ne jen text
+- `render.py`: Předpověď na 4 dny dosud v automatické aktualizaci ukazovala jen zkratku textem ("JASNO", "DÉŠŤ"...) místo skutečné ikony, protože backend neuměl vykreslit MDI ikony jako prohlížeč. Nově se pro 14 stavů počasí (stejná mapa jako `_weatherConditionIcon` v panelu) vykresluje skutečná ikona přes stejný SVG rasterizér (`resvg`), jaký backend už používá pro text - se stejnou grafikou, jakou kreslí ruční odeslání. Pokud `resvg` na dané instalaci není k dispozici nebo stav počasí nemá namapovanou ikonu, zůstává textová zkratka jako záloha.
+- Ověřeno end-to-end přes `tests/dratek-eink-panel-harness.html` - skutečné zachycení `clean_background`, skutečné hodnoty, skutečně vykreslené ikony.
+
 ## [0.1.231] - 2026-08-09
 
 ### Opraveno – Automatická aktualizace šablony Počasí vypisovala anglický stav ("sunny") místo českého slova

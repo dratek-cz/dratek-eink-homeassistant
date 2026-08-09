@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.232
+
+- předpověď počasí v automatické aktualizaci teď kreslí skutečné ikony (slunce, mrak, déšť, sníh...) místo textové zkratky - stejná grafika jako u ručního odeslání
+
 ## Novinky ve verzi 0.1.231
 
 - opravena chyba, kvůli které šlo Stav počasí navždy jen na statický text z návrhu - nikdy nešel přiřadit k entitě, protože ho detekce "interních" polí omylem zaměnila za čas (slovo "čas" se schovávalo uvnitř "počasí")
