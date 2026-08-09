@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.233
+
+- opraveny čtyři další rozdíly mezi ručním a automatickým odesláním nalezené rozsáhlým porovnáním všech 24 šablon: přehnaně zvětšený text u seznamů a velkých čísel, mizející pevný text kombinovaný s hodnotou (např. "Dveře · Zamčeno" u Zabezpečení), a chybějící název nejbližší kalendářní události u Narozenin
+
 ## Novinky ve verzi 0.1.232
 
 - předpověď počasí v automatické aktualizaci teď kreslí skutečné ikony (slunce, mrak, déšť, sníh...) místo textové zkratky - stejná grafika jako u ručního odeslání

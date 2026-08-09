@@ -192,6 +192,29 @@ _ALARM_STATE_LABELS_CS = {
 }
 
 
+def _format_czech_number(value: Any) -> str:
+    """Mirrors Intl.NumberFormat("cs-CZ", {maximumFractionDigits: 2}): comma
+    as the decimal separator, up to 2 decimals, no padded trailing zeros.
+
+    A manual send formats every numeric value this way (_templateDisplayValue
+    in panel-devices.mixin.js); _state_value used to just str()-format the
+    raw value, which for a Python float prints "21.4" - a decimal point, not
+    the Czech comma a manual send shows for the exact same reading.
+    Non-numeric values pass through unchanged, same as the frontend falling
+    back to String(raw) when Number(raw) is not finite.
+    """
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if not math.isfinite(number):
+        return str(value)
+    text = f"{round(number, 2):.2f}".rstrip("0").rstrip(".")
+    if text in ("", "-"):
+        text = "0"
+    return text.replace(".", ",")
+
+
 def _state_words(entity_id: str, state: Any, kind: str) -> str:
     """The Czech word a manual send would show for this state, or "" if this
     slot is not one _templateStateWords translates (a plain sensor reading,
@@ -688,6 +711,17 @@ class EntityAutoUpdateManager:
             return str(binding.get("status_on_symbol") or "●") if str(value).strip().lower() in active_values else str(binding.get("status_off_symbol") or "○")
         if isinstance(value, (list, dict, tuple)):
             return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        # A row that writes `Dveře · ${v(1, "Zamčeno")}` (security.js's
+        # checklist) captures as one binding whose currentText is the whole
+        # run - prefix and suffix are whatever surrounded the marker when
+        # the panel diffed it out, empty for a slot that is the entire run.
+        # They belong around *every* return below, not just the plain
+        # formatted-number tail: skipping them for a word-translated value
+        # ("Zavřeno") would silently drop "Dveře · " during an automatic
+        # refresh even though the manual send that produced this binding
+        # showed it.
+        prefix = str(binding.get("value_prefix") or "")
+        suffix = str(binding.get("value_suffix") or "")
         # Word translation is for what a person reads on the display. The
         # same _state_value also computes a "layered" binding's __selection__
         # (which layer id to show) via this same call - that needs the raw
@@ -695,11 +729,9 @@ class EntityAutoUpdateManager:
         if not attribute and binding.get("type") in (None, "", "text"):
             words = _state_words(str(binding.get("entity_id") or ""), state, str(binding.get("kind") or ""))
             if words:
-                return words
+                return f"{prefix}{words}{suffix}"
         unit = state.attributes.get("unit_of_measurement") if binding.get("include_unit") and not attribute else ""
-        prefix = str(binding.get("value_prefix") or "")
-        suffix = str(binding.get("value_suffix") or "")
-        return f"{prefix}{value}{f' {unit}' if unit else ''}{suffix}"
+        return f"{prefix}{_format_czech_number(value)}{f' {unit}' if unit else ''}{suffix}"
 
     def _chart_value(self, address: str, state: Any, binding: dict[str, Any]) -> str:
         if state is None:
@@ -841,6 +873,25 @@ class EntityAutoUpdateManager:
                     self.hass, str(binding.get("entity_id") or ""), int(binding.get("index") or 0)
                 )
                 values[str(binding.get("id"))] = json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
+            elif binding_type in (None, "", "text") and str(binding.get("kind") or "") == "calendar":
+                # A plain text slot classified as kind "calendar" (birthdays.js's
+                # "Jméno z kalendáře") reads a calendar entity directly, not
+                # through day()/event() - a manual send still special-cases it
+                # to the first upcoming event's title (_templateDisplayValue),
+                # not the entity's own on/off state. Mirrors that here instead
+                # of falling through to _state_value, which has no way to tell
+                # this apart from a plain state-backed text binding and would
+                # print the raw "on"/"off" state.
+                entry = await _async_calendar_entry(self.hass, str(binding.get("entity_id") or ""), 0)
+                title = str(entry.get("title") or "").strip()
+                prefix = str(binding.get("value_prefix") or "")
+                suffix = str(binding.get("value_suffix") or "")
+                # Always overwrite, even without an event: the synchronous
+                # pass above already ran _state_value on this binding and
+                # left the entity's raw "on"/"off" state sitting in `values`,
+                # which a manual send never shows for this kind either - it
+                # falls back to the binding's own fallback text instead.
+                values[str(binding.get("id"))] = f"{prefix}{title}{suffix}" if title else str(binding.get("fallback") or "")
         return await self.hass.async_add_executor_job(
             render_automatic_refresh_image,
             str(config.get("base_image") or ""),

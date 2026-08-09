@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.233] - 2026-08-09
+
+### Opraveno – Rozsáhlé QA porovnání ručního a automatického odeslání u všech 24 šablon odhalilo čtyři další chyby
+- `panel-devices.mixin.js`: Zachycená šířka boxu pro automatickou aktualizaci textu byla odvozená ze vzdálenosti ke kraji panelu, ne ze skutečné šířky textu. Backendový PIL renderer bere tento box jako cíl, který se snaží vyplnit (ne jen limit, ke kterému text zmenší), takže krátká hodnota v širokém boxu se zvětšila - u seznamů (např. CO₂/PM2.5/Vlhkost u šablony Kvalita vzduchu) až 3×, u velkých nadpisových čísel (např. "47 %" u Zahrady) natolik, že přesahovala do sousedního obsahu. Box se nyní odvozuje především ze skutečné šířky aktuálně zobrazeného textu.
+- `panel-devices.mixin.js`, `automation.py`: Řádek kombinující pevný text s vázanou hodnotou v jednom běhu (např. šablona Zabezpečení: `` `Dveře · ${v(1, "Zamčeno")}` ``) se zachytí jako jedna vazba pro celý běh - automatická aktualizace dosud nahrazovala celý text jen vyřešenou hodnotou a tichě tak mazala pevný text "Dveře · ". Zachytávání teď z odděleného markeru vytáhne i to, co ho obklopovalo, a backend to skládá zpátky kolem výsledné hodnoty (i po překladu do češtiny).
+- `automation.py`: Textové pole s druhem (kind) "calendar" navázané přímo na kalendářovou entitu (např. šablona Narozeniny, pole "Jméno z kalendáře") čte při ručním odeslání název nejbližší události, ne surový stav entity zapnuto/vypnuto - backend tuto výjimku vůbec neznal a vypisoval doslova "on".
+- Všechny čtyři chyby nalezeny a ověřeny přes nové end-to-end QA porovnání: skutečné vykreslení všech 24 šablon ručně i automaticky vedle sebe.
+
 ## [0.1.232] - 2026-08-09
 
 ### Vylepšeno – Automatická aktualizace šablony Počasí teď kreslí skutečné ikony předpovědi, ne jen text

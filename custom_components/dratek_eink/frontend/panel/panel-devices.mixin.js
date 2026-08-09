@@ -2270,15 +2270,41 @@ export const devicesMixin = {
     return null;
   },
 
-  _templateAutomationTextBinding(documentNode, textNode, entityId, meta, occurrence, width, height) {
+  _templateAutomationTextBinding(documentNode, textNode, entityId, meta, occurrence, width, height, valuePrefix = "", valueSuffix = "") {
     const offset = this._templateAutomationNodeOffset(textNode);
     const centerX = offset.x + Number(textNode.getAttribute("x") || 0);
     const centerY = offset.y + Number(textNode.getAttribute("y") || 0);
     const fontSize = Math.max(6, Number(textNode.getAttribute("font-size") || 12));
     const anchor = String(textNode.getAttribute("text-anchor") || "middle");
-    const maxWidth = anchor === "middle"
+    const bold = Number(textNode.getAttribute("font-weight") || 400) >= 600;
+    const currentText = String(textNode.textContent || "");
+    // Distance to whichever panel edge this run's anchor faces. Correct for
+    // "middle" (bounded on both sides), but for "end"/"start" it measures
+    // all the way back to the panel origin - a right-aligned value sitting
+    // well clear of the left edge (a list row's number, after its label)
+    // gets a "space available" reading of hundreds of pixels that has
+    // nothing to do with how much room it actually has before the label.
+    const geometricMaxWidth = anchor === "middle"
       ? Math.max(1, Math.min(width, 2 * Math.min(centerX, width - centerX)))
       : Math.max(1, anchor === "end" ? centerX : width - centerX);
+    // The backend's PIL tier treats this box as an autoFit *target* - it
+    // grows the font to fill whatever width it's given, not just shrinks to
+    // avoid overflow. Driving the box off this run's own current width (with
+    // a small fixed margin, not a multiple of it - a multiple scales with
+    // font size, so a big headline number with only two or three digits got
+    // handed a huge absolute margin and autoFit grew it well past its
+    // captured size) keeps that autoFit a no-op instead of inflating a
+    // short value to fill unused row width.
+    // autoFit's shrink-to-fit already keeps a longer future value from
+    // overflowing (it searches for the largest font that still fits), so
+    // this margin only has to absorb the gap between _svgTextWidth's glyph
+    // table and the bundled font's real metrics - not leave room to grow.
+    // Two adjacent short lines in the same row (a band's label above its
+    // value, a footer's label above its number) sit close enough that even
+    // a modest few-pixel-per-character margin was enough for the value's
+    // box to grow into the label above it.
+    const currentTextWidth = this._svgTextWidth(currentText, fontSize, bold);
+    const maxWidth = Math.min(geometricMaxWidth, currentTextWidth + Math.max(6, fontSize * 0.3));
     const boxWidth = Math.max(8, Math.min(maxWidth, fontSize * 13));
     const boxHeight = Math.max(8, Math.min(height, Math.ceil(fontSize * 1.65)));
     const x = Math.max(0, Math.min(width - boxWidth,
@@ -2316,13 +2342,11 @@ export const devicesMixin = {
     const state = this._hass?.states?.[entityId];
     const kind = this._templateSlotKind(meta.label, meta.icon);
     const weatherTemperature = String(entityId).startsWith("weather.") && kind === "temperature";
-    const bold = Number(textNode.getAttribute("font-weight") || 400) >= 600;
     // A max width that never shrinks the value the panel just showed: the box
     // bound, but at least this run's own text width, so re-rendering the current
     // value through svg_text.py is a no-op fit and stays byte-identical, while a
     // future longer value is still clamped instead of overflowing.
-    const currentText = String(textNode.textContent || "");
-    const svgMaxWidth = Math.max(maxWidth, this._svgTextWidth(currentText, fontSize, bold) + 1);
+    const svgMaxWidth = Math.max(maxWidth, currentTextWidth + 1);
     const bindingId = `template-${String(meta.templateId || "slot")}-${meta.key}-${occurrence}`;
     // Stamped onto the live node so the caller's captured svg_template can be
     // searched for this exact element later - the backend replaces it by this
@@ -2342,7 +2366,8 @@ export const devicesMixin = {
       x: Math.round(x), y: Math.round(y), w: Math.round(boxWidth), h: Math.round(boxHeight),
       fallback: currentText,
       include_unit: !weatherTemperature,
-      value_suffix: weatherTemperature ? ` ${state?.attributes?.temperature_unit || "°C"}` : "",
+      value_prefix: valuePrefix,
+      value_suffix: (weatherTemperature ? ` ${state?.attributes?.temperature_unit || "°C"}` : "") + valueSuffix,
       backgroundColor,
       color,
       fontSize: Math.round(fontSize),
@@ -2416,8 +2441,24 @@ export const devicesMixin = {
             markedText.includes(marker) || markedText !== String(currentText?.textContent || "");
           if (!drivenByVariable) continue;
           if (!currentText) continue;
+          // A row that writes a literal alongside the bound value in the same
+          // run (security.js's checklist: `Dveře · ${v(1, "Zamčeno")}`) diffs
+          // out as one binding for the *whole* run - substituting only the
+          // resolved value during an automatic refresh would silently drop
+          // "Dveře · ". Splitting the marked text on the still-verbatim
+          // marker recovers exactly what surrounded it, empty for the (far
+          // more common) case where the variable is the entire run. Only
+          // possible when the marker survived intact - a reformatting slot
+          // (number/ellipsis) has nothing stable to split on and gets none.
+          let valuePrefix = "";
+          let valueSuffix = "";
+          if (markedText.includes(marker)) {
+            const markerIndex = markedText.indexOf(marker);
+            valuePrefix = markedText.slice(0, markerIndex);
+            valueSuffix = markedText.slice(markerIndex + marker.length);
+          }
           bindings.push(this._templateAutomationTextBinding(
-            currentDocument, currentText, entityId, meta, occurrence++, width, height
+            currentDocument, currentText, entityId, meta, occurrence++, width, height, valuePrefix, valueSuffix
           ));
         }
       }
