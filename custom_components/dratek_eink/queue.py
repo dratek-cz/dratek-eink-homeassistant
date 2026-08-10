@@ -248,7 +248,7 @@ class TransferQueue:
         normalized_address = job["address"].upper()
         last_finish = self._last_finish_at.get(normalized_address)
         if last_finish is not None:
-            cooldown = 6.0 if int(job.get("sdk_type") or 0) in {75, 264, 267, 270} or int(job.get("payload_size") or 0) >= 20000 else 3.0
+            cooldown = 15.0 if int(job.get("sdk_type") or 0) in {75, 264, 267, 270} or int(job.get("payload_size") or 0) >= 20000 else 6.0
             elapsed = time.monotonic() - last_finish
             wait_time = cooldown - elapsed
             if wait_time > 0:

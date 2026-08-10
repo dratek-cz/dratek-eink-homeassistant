@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.252] - 2026-08-10
+
+### Opraveno – Obnovení fyzických pauz po obnovení obrazovky displeje
+- **`transfer.py` / `queue.py`**: Navráceny bezpečné pauzy pro fyzický reconnect (6.0s pro standardní displeje, 15.0s pro velké panely). Příliš agresivní opakované pripojování během fyzického EPD překreslování HW displeje způsobovalo vícenásobné vypršení časových limitů na vývojových strojích s 100+ nahráváními.
+
 ## [0.1.251] - 2026-08-10
 
 ### Opraveno – Zachování BLEDevice v paměti skeneru pro bleskové opacity opakovaných aktualizací

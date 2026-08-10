@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.252
+
+- obnoveny bezpečné HW pauzy mezi opakováním aktualizací displejů pro zabránění vypršení časových limitů při intenzivním testování (100+ odeslání)
+
 ## Novinky ve verzi 0.1.251
 
 - opraveno zpomalení 2. a dalších cyklů automatických aktualizací pro více displejů: zachována rychlá vyhledávací mezipaměť BLE zařízení v Home Assistantu
