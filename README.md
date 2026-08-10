@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.247
+
+- vylepšena diagnostika a směrování pro displeje mimo dosah Bluetooth adaptéru HA (`No backend with an available connection slot...`)
+
 ## Novinky ve verzi 0.1.246
 
 - vyřešeno varování `BleakClient.connect() called without bleak-retry-connector` v logu Home Assistantu pomocí bezpečné integrace `establish_connection` s fallbackem

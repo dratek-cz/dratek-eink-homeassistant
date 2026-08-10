@@ -128,7 +128,7 @@ class DratekTransfer:
             if wait_seconds > 0:
                 await asyncio.sleep(wait_seconds)
         client = None
-        if establish_connection is not None:
+        if establish_connection is not None and not isinstance(connection_target, str):
             try:
                 client = await establish_connection(
                     BleakClient,
@@ -143,6 +143,11 @@ class DratekTransfer:
                 client = BleakClient(connection_target, timeout=20.0)
                 await client.connect()
         else:
+            if isinstance(connection_target, str):
+                self.log(
+                    f"Display {address} has not been detected by Home Assistant Bluetooth scanner yet. "
+                    "Ensure the display is powered on, within range of the Bluetooth adapter, or routed via an ESP32 Gateway."
+                )
             client = BleakClient(connection_target, timeout=20.0)
             await client.connect()
         try:

@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.247] - 2026-08-10
+
+### Opraveno – Ošetření nedetekovaných BLE zařízení v rozhraní Home Assistantu
+- **`transfer.py`**: Pokud Home Assistant skener ještě nedetekoval MAC adresu displeje (zařízení mimo dosah lokálního BT adaptéru nebo vypnuté), `establish_connection` bezpečně ignoruje skener a zobrazí jasné diagnostické doporučení pro přepnutí trasy na ESP32 Gateway.
+
 ## [0.1.246] - 2026-08-10
 
 ### Opraveno – Potlačení varování BleakClient.connect() v logu HA
