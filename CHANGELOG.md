@@ -2,6 +2,19 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.238] - 2026-08-10
+
+### Opraveno – Gatewaye postupně zpomalily BLE přenosy, i ty, které přes ně vůbec nešly
+Na instalaci s připojenými gatewayemi se přenosy po čase protáhly z ~10 s na jednotky minut. Netýkalo se to jen přenosů přes gateway – zpomalilo i odesílání přímo přes Bluetooth Home Assistantu. Příčina není v software cestě, ale ve fyzice: adaptér Home Assistantu i každý ESP32 vysílají do stejného pásma 2,4 GHz, obvykle pár metrů od sebe i od displejů. BLE spojení, které přijde o connection events, **neselže** – jen se zpomalí, takže se v logu neobjeví jediná chyba.
+
+- **Firmware gatewaye (`main.cpp`, verze `0.1.51-gateway`):** `connectToDisplay()` spouštěl před **každým** pokusem o připojení šestisekundový aktivní BLE scan – i u přenosů, které by prošly rovnou. Aktivní scan je to nejdražší, co firmware může s pásmem udělat: na každý zachycený advertisement odpovídá vlastním `SCAN_REQ`, takže šest sekund scanu je šest sekund téměř nepřetržitého vysílání. Přitom scan na šťastné cestě nikdy nebyl potřeba – NimBLE se umí připojit rovnou na známou adresu, a adresu má každý volající k dispozici. Nově se zkouší přímé připojení první a scan zůstává jako záloha. Aby vypnutý displej nestál víc než dřív, používá přímý pokus kratší `setConnectTimeout` (6 s) než následný scan-assisted (18 s).
+- **Firmware gatewaye:** Oba scany (`connectToDisplay()` i `GET /api/scan`) jely s duty cycle 75 % (`setInterval(80)` / `setWindow(60)`). Nově 25 % (`setInterval(160)` / `setWindow(40)`) – displej vysílající v běžném intervalu se pořád najde uvnitř šestisekundového okna, za třetinu vysílacího času. Discovery zůstává aktivní scan záměrně: identifikuje displeje podle DRATEK manufacturer payloadu, který by pasivní scan na firmwaru nesoucím ho ve scan response minul.
+- **`ws_devices.py`:** `websocket_scan` posílal scan do všech gatewayí přes `asyncio.gather`. Vypadalo to jako zadarmo získaná paralelita – každý požadavek jde na jiný ESP32 přes HTTP – ale fyzicky to znamenalo, že všechny gatewaye začaly aktivně skenovat v tutéž chvíli, navrch k tomu, co zrovna dělal lokální adaptér. Nově se skenuje sériově.
+- **Nový `radio.py`:** `TransferQueue` serializovala přenosy per displej (`_device_locks`) a per transport (`_locks`), takže lokální přenos na jeden displej a gateway přenosy na dva další běžely současně – v software jsou to opravdu nezávislé cesty. Rádio nezávislé není. Nový sdílený „radio slot" drží každá fyzická BLE operace; bere se **uvnitř** transportního zámku, aby se tři zámky nemohly zablokovat navzájem. **Stojí to propustnost**: dva displeje na dvou různých gatewayích na sebe teď čekají. To je vědomě zaplacená cena za to, aby jedna cesta tiše nedegradovala druhou.
+- **`ws_devices.py`:** Discovery scan si rádio bere jen s časovým limitem (5 s) a když ho nedostane, vrátí to, co Home Assistant už zná, místo aby se zařadil za přenos, který může legitimně běžet minuty. Panel tak nikdy nevypadá zaseknutě.
+
+> **Pozor:** Firmwarová část se projeví až po aktualizaci gatewayí na `0.1.51-gateway` (OTA v detailu gatewaye). Části v Home Assistantu se projeví hned po restartu integrace.
+
 ## [0.1.237] - 2026-08-09
 
 ### Opraveno – Automatická aktualizace proběhla jednou a pak už nikdy

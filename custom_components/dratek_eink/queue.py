@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN, PANEL_VERSION
+from .radio import async_radio_slot
 
 QUEUE_STORE_KEY = "dratek_eink.transfer_queue"
 QUEUE_STORE_VERSION = 1
@@ -223,19 +224,26 @@ class TransferQueue:
         skipped: dict[str, Any] | None = None
 
         async def run_attempt(log_line: Callable[[str], None]) -> dict[str, Any]:
-            """Hold the transport lock for one attempt only.
+            """Hold the transport lock, then the radio, for one attempt only.
 
             An automatic retry waits out a Bluetooth cooldown between attempts. If
             that wait happened while the transport lock was held, every other
             display on the same gateway - or every local display, since they all
             share the "local" transport - would stall for the whole cooldown.
+
+            The radio slot is innermost and taken in this same order everywhere,
+            so the three locks cannot deadlock against each other. It is what
+            stops a gateway transfer and a local one from transmitting over each
+            other; see radio.py for why that matters even though the two paths
+            are otherwise independent.
             """
             nonlocal skipped
             async with resource_lock:
                 if self._should_skip_automatic_update(job):
                     skipped = await self._skip_automatic_update(job)
                     return skipped
-                return await runner(log_line)
+                async with async_radio_slot(self.hass):
+                    return await runner(log_line)
 
         normalized_address = job["address"].upper()
         last_finish = self._last_finish_at.get(normalized_address)

@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.50-gateway";
+static const char* FIRMWARE_VERSION = "0.1.51-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -218,9 +218,14 @@ void handleScan() {
   ensureBleInitialized();
 
   NimBLEScan* scan = NimBLEDevice::getScan();
+  // Discovery stays an active scan: the DRATEK manufacturer payload this
+  // endpoint reports is what identifies a display, and a passive scan would
+  // miss it on any firmware that carries it in the scan response. The duty
+  // cycle drops from 75% to 25% instead, so a user-initiated discovery no
+  // longer saturates the band that Home Assistant's own adapter is using.
   scan->setActiveScan(true);
-  scan->setInterval(80);
-  scan->setWindow(60);
+  scan->setInterval(160);
+  scan->setWindow(40);
 
   NimBLEScanResults results = scan->start(seconds, false);
   lastScanDevices.clear();
@@ -335,35 +340,66 @@ bool findTransferChars(
   return false;
 }
 
+// A gateway shares one 2.4 GHz radio with its own Wi-Fi, with every other
+// gateway, and with the air around the Home Assistant host's own Bluetooth
+// adapter. An active scan is the most expensive thing this firmware can do to
+// that shared air: it answers every advertisement it hears with a SCAN_REQ of
+// its own, so a six-second scan is six seconds of near-continuous
+// transmission - and this ran before *every* connect, including the ones that
+// were going to succeed anyway. With several gateways refreshing on their own
+// schedules, that is enough to push Home Assistant's own direct transfers from
+// seconds into minutes.
+//
+// The scan was never needed on the happy path: NimBLE connects straight to a
+// known address, and the address is exactly what every caller already has.
+// Trying that first makes a healthy transfer cost zero scan airtime, and
+// leaves the scan for the case it is genuinely useful for - resolving a
+// display the direct connect cannot reach on its own.
+//
+// The direct probe uses a shorter connect timeout than the scan-assisted one
+// that follows it. A display that is powered off does not answer either way,
+// and without that the new ordering would spend the full connect timeout
+// before even starting to look for it.
+static const uint32_t DIRECT_CONNECT_TIMEOUT_SECONDS = 6;
+static const uint32_t SCANNED_CONNECT_TIMEOUT_SECONDS = 18;
+
 bool connectToDisplay(NimBLEClient*& client, const String& address, TransferLogSink& log) {
   String target = address;
   target.toLowerCase();
   for (int attempt = 1; attempt <= 3; attempt++) {
     addLog(log, "BLE connect attempt " + String(attempt) + "/3.");
+    addLog(log, "Trying direct address connect.");
+    client->setConnectTimeout(DIRECT_CONNECT_TIMEOUT_SECONDS);
+    if (client->connect(NimBLEAddress(address.c_str()))) return true;
+
+    addLog(log, "Direct connect failed; falling back to a scan-assisted connect.");
+    client->setConnectTimeout(SCANNED_CONNECT_TIMEOUT_SECONDS);
     NimBLEScan* scan = NimBLEDevice::getScan();
     scan->setActiveScan(true);
-    scan->setInterval(80);
-    scan->setWindow(60);
+    // 25% duty cycle instead of 75%. A display advertising at a normal
+    // interval is still found well inside the six-second window, at a third of
+    // the airtime cost to everything else sharing the band.
+    scan->setInterval(160);
+    scan->setWindow(40);
     NimBLEScanResults results = scan->start(6, false);
+    bool connected = false;
     for (int i = 0; i < results.getCount(); i++) {
       NimBLEAdvertisedDevice device = results.getDevice(i);
       String found = device.getAddress().toString().c_str();
       found.toLowerCase();
       if (found != target) continue;
       addLog(log, "Target display seen in scan, RSSI " + String(device.getRSSI()) + ".");
-      bool connected = client->connect(&device);
-      scan->clearResults();
-      if (connected) return true;
-      addLog(log, "Connect via advertised device failed.");
+      connected = client->connect(&device);
+      if (!connected) addLog(log, "Connect via advertised device failed.");
       break;
     }
     scan->clearResults();
-    addLog(log, "Trying direct address connect.");
-    if (client->connect(NimBLEAddress(address.c_str()))) return true;
+    if (connected) return true;
+
     NimBLEDevice::deleteClient(client);
     delay(250);
     client = NimBLEDevice::createClient();
-    client->setConnectTimeout(18);
+    client->setConnectTimeout(SCANNED_CONNECT_TIMEOUT_SECONDS);
     delay(700);
   }
   return false;
@@ -371,7 +407,7 @@ bool connectToDisplay(NimBLEClient*& client, const String& address, TransferLogS
 
 bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& payload, uint8_t softwareVersion, TransferLogSink& log, bool partial = false, uint32_t partialX = 0, uint32_t partialY = 0, uint32_t partialWidth = 0, uint32_t partialHeight = 0) {
   NimBLEClient* client = NimBLEDevice::createClient();
-  client->setConnectTimeout(18);
+  client->setConnectTimeout(SCANNED_CONNECT_TIMEOUT_SECONDS);
   addLog(log, "Connecting to display " + address + ".");
   bool connected = connectToDisplay(client, address, log);
   if (!connected) {

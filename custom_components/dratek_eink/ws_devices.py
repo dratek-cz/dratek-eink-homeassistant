@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from typing import Any
-import asyncio
 import base64
 import io
 import time
@@ -23,6 +22,7 @@ from .gateway import (
     async_scan_gateway,
 )
 from .queue import get_transfer_queue
+from .radio import async_try_radio_slot
 from .routing import paths_allowed_by_gateway_lock
 from .transfer import DratekTransfer
 from .ws_shared import (
@@ -34,6 +34,14 @@ from .ws_shared import (
     _project_store,
     _save_gateway_preferences,
 )
+
+# How long a discovery scan waits for an in-flight transfer to release the
+# radio. Long enough to ride out the gap between two queued transfers, short
+# enough that the panel never looks frozen; past it the scan returns what Home
+# Assistant already knows rather than queueing behind a transfer that can
+# legitimately run for minutes.
+GATEWAY_SCAN_RADIO_WAIT_SECONDS = 5.0
+
 
 @websocket_api.websocket_command(
     {
@@ -229,11 +237,29 @@ async def websocket_scan(
             }
 
     gateways = await async_load_gateways(hass)
-    gateway_results = await asyncio.gather(
-        *(async_scan_gateway(hass, gateway["id"], 5) for gateway in gateways),
-        return_exceptions=True,
-    )
-    for gateway, scan_result in zip(gateways, gateway_results, strict=False):
+    # Scanning every gateway at once looked like free concurrency - each request
+    # goes to a different ESP32 over HTTP. Physically it made every gateway
+    # transmit an active BLE scan into the same band at the same moment, on top
+    # of whatever the local adapter was already doing. Sequential scanning under
+    # the shared radio slot costs a few seconds of wall clock and stops
+    # discovery from being the noisiest thing this integration does.
+    scanned_gateways: list[dict[str, Any]] = []
+    gateway_results: list[Any] = []
+    async with async_try_radio_slot(hass, GATEWAY_SCAN_RADIO_WAIT_SECONDS) as radio_free:
+        if gateways and not radio_free:
+            debug.append(
+                "Gateway BLE scan skipped: a display transfer is currently using "
+                "the radio. Displays Home Assistant already knows are still listed."
+            )
+        elif gateways:
+            for gateway in gateways:
+                scanned_gateways.append(gateway)
+                try:
+                    gateway_results.append(await async_scan_gateway(hass, gateway["id"], 5))
+                except Exception as exc:  # one unreachable gateway must not hide the rest
+                    gateway_results.append(exc)
+
+    for gateway, scan_result in zip(scanned_gateways, gateway_results, strict=False):
         gateway_name = gateway.get("name") or "DRATEK eInk gateway"
         if isinstance(scan_result, Exception):
             debug.append(f"Gateway {gateway_name}: scan failed: {scan_result}")

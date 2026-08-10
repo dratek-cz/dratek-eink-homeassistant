@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.238
+
+- opraveno postupující zpomalování BLE přenosů (i lokálních) při připojení více gatewayí: přenosy se tiše zpomalovaly kvůli zahlcení pásma 2.4 GHz aktivními BLE scany z ESP32
+- firmware gatewaye (0.1.51-gateway): `connectToDisplay()` nově zkouší nejprve přímé připojení na známou BLE adresu bez předchozího 6s scanu; duty cycle scanů snížen ze 75 % na 25 %
+- Home Assistant: nový `radio.py` zavádí sdílený zámek (radio slot) pro všechny fyzické BLE operace (lokální i přes gatewaye) a skenování gatewayí v `ws_devices.py` probíhá sériově místo současně
+
 ## Novinky ve verzi 0.1.237
 
 - opraveno, že se displej automaticky obnovil jen jednou a pak už nikdy: zrušený přenos (stačilo ručně odeslat návrh během probíhající automatické aktualizace) zůstal navždy ve stavu „probíhá" a každou další automatickou aktualizaci toho displeje pak fronta tiše zahodila
