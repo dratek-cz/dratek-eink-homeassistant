@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.241] - 2026-08-10
+
+### Opraveno – Varování Zeroconf instancí a přímého pripojení BleakClient
+- **`gateway.py`**: Detekce gatewayí v síti přes mDNS (`async_discover_gateways`) nově využívá sdílenou instanci Zeroconf z Home Assistantu (`await homeassistant.components.zeroconf.async_get_instance(hass)`), čímž se zamezilo vytváření druhé samostatné instance Zeroconf a souvisejícímu varování v logu.
+- **`transfer.py`**: Lokální BLE připojení k displeji při existenci `bleak_retry_connector` v Home Assistantu automaticky využívá `establish_connection()`, což zvyšuje spolehlivost BLE spojení a předchází varování v logu.
+
 ## [0.1.240] - 2026-08-10
 
 ### Opraveno – Překompilovány binárky ESP32 gatewaye pro OTA na 0.1.52-gateway

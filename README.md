@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.241
+
+- opraveno varování v logu Home Assistantu o druhé instanci Zeroconf (`async_discover_gateways` nově využívá sdílenou instanci z HA)
+- lokální Bluetooth přenosy nově využívají `bleak_retry_connector` (pokud je k dispozici v HA), čímž se odstraňuje varování v logu a zlepšuje spolehlivost BLE spojení
+
 ## Novinky ve verzi 0.1.240
 
 - opraveno OTA selhání u ESP32 gatewayí: přibaleny správně zkompilované binární soubory `0.1.52-gateway` pro všechny čipy (ESP32 i ESP32-S3), takže OTA aktualizace projde a správně přejde na novou verzi

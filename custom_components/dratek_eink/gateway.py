@@ -497,19 +497,20 @@ async def async_send_gateway_payload(
     return {"ok": True, "gateway_id": gateway_id, "address": address, "log": log}
 
 
-def _discover_gateways_sync(seconds: int) -> list[dict[str, Any]]:
+async def async_discover_gateways(hass: HomeAssistant, seconds: int = 10) -> list[dict[str, Any]]:
     try:
-        from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
+        from homeassistant.components.zeroconf import async_get_instance
+        from zeroconf import ServiceBrowser, ServiceListener
     except Exception as exc:
         raise RuntimeError(f"zeroconf library is not available: {exc}") from exc
 
     found: dict[str, dict[str, Any]] = {}
 
     class Listener(ServiceListener):
-        def add_service(self, zc: Zeroconf, service_type: str, name: str) -> None:
+        def add_service(self, zc: Any, service_type: str, name: str) -> None:
             self.update_service(zc, service_type, name)
 
-        def update_service(self, zc: Zeroconf, service_type: str, name: str) -> None:
+        def update_service(self, zc: Any, service_type: str, name: str) -> None:
             info = zc.get_service_info(service_type, name, timeout=3000)
             if not info or not info.addresses:
                 return
@@ -529,20 +530,17 @@ def _discover_gateways_sync(seconds: int) -> list[dict[str, Any]]:
                 "server": info.server.rstrip("."),
             }
 
-        def remove_service(self, zc: Zeroconf, service_type: str, name: str) -> None:
+        def remove_service(self, zc: Any, service_type: str, name: str) -> None:
             return
 
-    zc = Zeroconf()
+    aiozc = await async_get_instance(hass)
+    zc = getattr(aiozc, "zeroconf", aiozc)
+    browser = ServiceBrowser(zc, DISCOVERY_SERVICE, Listener())
     try:
-        ServiceBrowser(zc, DISCOVERY_SERVICE, Listener())
-        time.sleep(max(1, min(15, seconds)))
+        await asyncio.sleep(max(1, min(15, seconds)))
     finally:
-        zc.close()
+        browser.cancel()
     return list(found.values())
-
-
-async def async_discover_gateways(hass: HomeAssistant, seconds: int = 10) -> list[dict[str, Any]]:
-    return await hass.async_add_executor_job(_discover_gateways_sync, seconds)
 
 
 def _is_flashable_serial_device(device: str, vid: int | None = None, pid: int | None = None) -> bool:
