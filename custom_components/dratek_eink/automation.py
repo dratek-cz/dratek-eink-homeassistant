@@ -474,6 +474,27 @@ class EntityAutoUpdateManager:
                 timedelta(seconds=REFRESH_TICK_SECONDS),
             )
 
+    async def async_stop(self) -> None:
+        """Cancel all timers, listeners, and pending tasks on integration unload."""
+        if self._unsubscribe is not None:
+            self._unsubscribe()
+            self._unsubscribe = None
+        if self._refresh_tick_unsubscribe is not None:
+            self._refresh_tick_unsubscribe()
+            self._refresh_tick_unsubscribe = None
+        for timer in list(self._timers.values()):
+            try:
+                timer()
+            except Exception:
+                pass
+        self._timers.clear()
+        for task in list(self._refresh_tasks.values()):
+            if not task.done():
+                task.cancel()
+        self._refresh_tasks.clear()
+        self._pending_refreshes.clear()
+        self._initialized = False
+
     @callback
     def _handle_refresh_tick(self, _now: Any) -> None:
         now = time.monotonic()

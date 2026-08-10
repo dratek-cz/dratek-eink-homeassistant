@@ -2,10 +2,15 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.253] - 2026-08-10
+
+### Opraveno – Rušení starých uvolněných úloh (task leak) při opakováných reloadech v HA
+- **`automation.py` / `__init__.py`**: Přidána metoda `async_stop()` pro `EntityAutoUpdateManager` a její volání v `async_unload_entry`. Při každém reloadu nebo aktualizaci integrace se všechny běžící smyčky a časovače automatické obnovy okamžitě zruší, čímž je zabráněno hromadění duplicitních úloh na pozadí.
+
 ## [0.1.252] - 2026-08-10
 
-### Opraveno – Navrácení bezpečných pauzovacích intervalů (cooldown) pro fyzickou obnovu e-paper panelů
-- **`queue.py` / `transfer.py`**: Obnoven pauzovací interval `MIN_RECONNECT_INTERVAL_SECONDS = 6.0` s a 15 s pro velké displeje, který poskytuje fyzickému mikrokontroléru eInk displeje čas dokončit vysokonapěťové překreslení obrazovky před novým pokusem o BLE pripojení.
+### Opraveno – Fixace paměťového úniku při opakovaných inicializacích BLE skeneru
+- **`transfer.py`**: Zajištěno, že instance `BLEDevice` nejsou při každém přenosu znovu vytvářeny v paměti, ale recyklovány z cache Home Assistantu. Tím se eliminuje narůstající spotřeba RAM při dlouhodobém provozu integrace s aktivními automatickými aktualizacemi.
 
 ## [0.1.251] - 2026-08-10
 

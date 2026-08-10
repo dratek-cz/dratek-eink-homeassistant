@@ -1,4 +1,4 @@
-const DRATEK_EINK_OVERVIEW_VERSION = "0.1.252";
+const DRATEK_EINK_OVERVIEW_VERSION = "0.1.253";
 const DRATEK_EINK_PANEL_PATH = "/dratek-eink";
 const overviewStore = {
   devices: [],
@@ -162,16 +162,16 @@ class DratekEinkOverviewCard extends HTMLElement {
     notifyOverviewCards();
 
     const gatewayRequest = this._hass.callWS({ type: "dratek_eink/gateways/list" })
-        .then((result) => {
-          overviewStore.gateways = Array.isArray(result?.gateways) ? result.gateways : [];
-        })
-        .catch((error) => {
-          overviewStore.error = error?.message || String(error);
-        })
-        .finally(() => {
-          overviewStore.loadingGateways = false;
-          notifyOverviewCards();
-        });
+      .then((result) => {
+        overviewStore.gateways = Array.isArray(result?.gateways) ? result.gateways : [];
+      })
+      .catch((error) => {
+        overviewStore.error = error?.message || String(error);
+      })
+      .finally(() => {
+        overviewStore.loadingGateways = false;
+        notifyOverviewCards();
+      });
 
     overviewStore.request = (async () => {
       try {

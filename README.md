@@ -4,9 +4,9 @@
 
 # DRATEK eInk pro Home Assistant
 
-## Novinky ve verzi 0.1.252
+## Novinky ve verzi 0.1.253
 
-- navrácení bezpečných fyzických pauzovacích intervalů pro HW mikrokontroléry e-paper displejů při intenzivním testování a opakovaných reloadech integrace
+- vyřešeno hromadění starých úloh na pozadí při opakovaném reloadu integrace ve vývoji: automatické rušení smyček v `async_unload_entry`
 
 ## Novinky ve verzi 0.1.251
 
