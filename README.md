@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.242
+
+- opravena chyba `[org.bluez.Error.NotPermitted] Write acquired` při lokálním Bluetooth přenosu do displeje: obnoveno přímé připojení `BleakClient` pro dávkový zápis obrázků
+
 ## Novinky ve verzi 0.1.241
 
 - opraveno varování v logu Home Assistantu o druhé instanci Zeroconf (`async_discover_gateways` nově využívá sdílenou instanci z HA)

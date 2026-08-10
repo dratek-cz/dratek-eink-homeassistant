@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.242] - 2026-08-10
+
+### Opraveno – Zrušení bleak_retry_connector u přímých BLE streamovacích přenosů
+- **`transfer.py`**: Návrat k přímé instanciaci `BleakClient`. Použití wraperu `bleak_retry_connector.establish_connection` způsobovalo v BlueZ DBus rozhraní chybu `[org.bluez.Error.NotPermitted] Write acquired` při sekvenčním zapisování datových bloků displeje bez potvrzení.
+
 ## [0.1.241] - 2026-08-10
 
 ### Opraveno – Varování Zeroconf instancí a přímého pripojení BleakClient
