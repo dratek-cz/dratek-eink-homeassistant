@@ -6,7 +6,7 @@
 
 ## Novinky ve verzi 0.1.252
 
-- obnoveny bezpečné HW pauzy mezi opakováním aktualizací displejů pro zabránění vypršení časových limitů při intenzivním testování (100+ odeslání)
+- navrácení bezpečných fyzických pauzovacích intervalů pro HW mikrokontroléry e-paper displejů při intenzivním testování a opakovaných reloadech integrace
 
 ## Novinky ve verzi 0.1.251
 

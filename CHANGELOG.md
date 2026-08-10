@@ -4,8 +4,8 @@ Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
 ## [0.1.252] - 2026-08-10
 
-### Opraveno – Obnovení fyzických pauz po obnovení obrazovky displeje
-- **`transfer.py` / `queue.py`**: Navráceny bezpečné pauzy pro fyzický reconnect (6.0s pro standardní displeje, 15.0s pro velké panely). Příliš agresivní opakované pripojování během fyzického EPD překreslování HW displeje způsobovalo vícenásobné vypršení časových limitů na vývojových strojích s 100+ nahráváními.
+### Opraveno – Navrácení bezpečných pauzovacích intervalů (cooldown) pro fyzickou obnovu e-paper panelů
+- **`queue.py` / `transfer.py`**: Obnoven pauzovací interval `MIN_RECONNECT_INTERVAL_SECONDS = 6.0` s a 15 s pro velké displeje, který poskytuje fyzickému mikrokontroléru eInk displeje čas dokončit vysokonapěťové překreslení obrazovky před novým pokusem o BLE pripojení.
 
 ## [0.1.251] - 2026-08-10
 
