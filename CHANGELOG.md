@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.239] - 2026-08-10
+
+### Změněno – Navýšení verze firmware gatewayí na 0.1.52-gateway
+- Navýšení verze firmware gatewaye na `0.1.52-gateway` a příslušných konstant v rozhraní (`CURRENT_GATEWAY_FIRMWARES` a `GATEWAY_FIRMWARE_VERSION`), aby panel Home Assistantu správně detekoval novější verzi a nabídl tlačítko **Aktualizovat firmware (OTA)** pro všechny připojené gatewaye.
+
 ## [0.1.238] - 2026-08-10
 
 ### Opraveno – Gatewaye postupně zpomalily BLE přenosy, i ty, které přes ně vůbec nešly

@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.239
+
+- navýšena cílová verze firmware gatewayí na `0.1.52-gateway` v panelu i v integraci, aby Home Assistant u připojených gatewayí správně detekoval novou verzi a umožnil jejich OTA aktualizaci
+
 ## Novinky ve verzi 0.1.238
 
 - opraveno postupující zpomalování BLE přenosů (i lokálních) při připojení více gatewayí: přenosy se tiše zpomalovaly kvůli zahlcení pásma 2.4 GHz aktivními BLE scany z ESP32
