@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.244] - 2026-08-10
+
+### Opraveno – Zrychlení nahrávání a odstranění zbytečného vynucování GATT ACK
+- **`transfer.py`**: Opraven vyhodnocovací výraz `require_gatt_response`. Pokud charakteristika podporuje `write-without-response`, použije se nepotvrzovaný přenos bloku (`response=False`), což zrychluje přenos z 80 sekund na ~2 sekundy.
+- **`queue.py` / `transfer.py`**: Sníženy nucené pauzy (cooldown) mezi novým pripojením ze 6-15 s na 2-3 s, což dramaticky zrychluje odesílání návrhů na displeje.
+
 ## [0.1.243] - 2026-08-10
 
 ### Opraveno – Chyba syntaxe v transfer.py bránící importu integrace

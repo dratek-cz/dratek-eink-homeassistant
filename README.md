@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.244
+
+- radikální zrychlení nahrávání do displejů (z ~80 s na ~2 s): opraveno zbytečné vynucování ATT ACK potvrzování pro každý ze 40 bloků a zkráceny čekací pauzy před novým připojením
+
 ## Novinky ve verzi 0.1.243
 
 - opravena chyba syntaxe v `transfer.py` z verze 0.1.242 (`SyntaxError: expected 'except' or 'finally' block`), díky čemuž se integrace po restartu Home Assistantu v pořádku načte

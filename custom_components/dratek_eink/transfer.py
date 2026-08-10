@@ -35,7 +35,7 @@ MAX_BLOCK_REQUEST_RETRIES = 5
 GATT_OPERATION_TIMEOUT = 8
 TEARDOWN_OPERATION_TIMEOUT = 5
 STREAM_WRITE_DELAY = 0.04
-MIN_RECONNECT_INTERVAL_SECONDS = 6.0
+MIN_RECONNECT_INTERVAL_SECONDS = 2.0
 
 
 # Keyed by normalised address, shared across every DratekTransfer instance for
@@ -478,10 +478,7 @@ class DratekTransfer:
                 streaming_mode = bool(int(software_version or 0) & 0x80)
                 if streaming_mode and "write" not in write_char.properties:
                     self.log("Display does not expose acknowledged block writes; using unconfirmed fallback stream.")
-                require_gatt_response = (
-                    "write" in write_char.properties
-                    and (int(sdk_type) in WRITE_ACK_SDK_TYPES or streaming_mode)
-                ) or ("write-without-response" not in write_char.properties)
+                require_gatt_response = "write-without-response" not in write_char.properties
 
 
                 write_mode = (
