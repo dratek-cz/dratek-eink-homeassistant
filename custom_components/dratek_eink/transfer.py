@@ -478,7 +478,10 @@ class DratekTransfer:
                 streaming_mode = bool(int(software_version or 0) & 0x80)
                 if streaming_mode and "write" not in write_char.properties:
                     self.log("Display does not expose acknowledged block writes; using unconfirmed fallback stream.")
-                require_gatt_response = "write-without-response" not in write_char.properties
+                require_gatt_response = (
+                    "write" in write_char.properties
+                    and (int(sdk_type) in WRITE_ACK_SDK_TYPES or streaming_mode)
+                ) or ("write-without-response" not in write_char.properties)
 
 
                 write_mode = (

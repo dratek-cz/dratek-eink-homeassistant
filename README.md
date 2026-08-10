@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.245
+
+- opraveno fyzické překreslování displejů: obnoveno potvrzování bloků (Write With Response / GATT ACK), které mikrokontrolér eInk displeje vyžaduje pro uložení snímku do paměti a spuštění obnovy e-paper panelu
+
 ## Novinky ve verzi 0.1.244
 
 - radikální zrychlení nahrávání do displejů (z ~80 s na ~2 s): opraveno zbytečné vynucování ATT ACK potvrzování pro každý ze 40 bloků a zkráceny čekací pauzy před novým připojením

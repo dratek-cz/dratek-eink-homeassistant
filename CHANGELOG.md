@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.245] - 2026-08-10
+
+### Opraveno – Obnovení potvrzovaných zápisů bloků (display-acknowledged GATT flow control)
+- **`transfer.py`**: Navrácena podmínka `require_gatt_response`. Mikrokontrolér eInk displeje (SDK 51) vyžaduje potvrzení každého bloku (GATT Write ACK / Write With Response), bez kterého neuloží snímek do flash paměti a neprovode fyzické prekreslení obrazovky.
+
 ## [0.1.244] - 2026-08-10
 
 ### Opraveno – Zrychlení nahrávání a odstranění zbytečného vynucování GATT ACK
