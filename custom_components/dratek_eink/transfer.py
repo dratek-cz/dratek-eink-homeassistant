@@ -125,7 +125,6 @@ class DratekTransfer:
         client = BleakClient(connection_target, timeout=20.0)
         try:
             await client.connect()
-        try:
             yield client
         finally:
             try:

@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.243
+
+- opravena chyba syntaxe v `transfer.py` z verze 0.1.242 (`SyntaxError: expected 'except' or 'finally' block`), díky čemuž se integrace po restartu Home Assistantu v pořádku načte
+
 ## Novinky ve verzi 0.1.242
 
 - opravena chyba `[org.bluez.Error.NotPermitted] Write acquired` při lokálním Bluetooth přenosu do displeje: obnoveno přímé připojení `BleakClient` pro dávkový zápis obrázků

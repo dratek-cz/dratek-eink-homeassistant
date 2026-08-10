@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.243] - 2026-08-10
+
+### Opraveno – Chyba syntaxe v transfer.py bránící importu integrace
+- **`transfer.py`**: Odstraněn duplicitní blok `try:` vzniklý při opravě v 0.1.242, který způsoboval `SyntaxError: expected 'except' or 'finally' block` a bránil načtení integrace `dratek_eink` při startu Home Assistantu.
+
 ## [0.1.242] - 2026-08-10
 
 ### Opraveno – Zrušení bleak_retry_connector u přímých BLE streamovacích přenosů
