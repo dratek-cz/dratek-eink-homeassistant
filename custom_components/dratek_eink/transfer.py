@@ -395,15 +395,28 @@ class DratekTransfer:
         for attempt in range(1, max_attempts + 1):
             self.log(f"Transfer attempt {attempt}/{max_attempts}.")
             try:
-                await self._send_once(
-                    address,
-                    sdk_type,
-                    image,
-                    transform,
-                    partial,
-                    orientation,
-                    software_version,
-                )
+                if self._hass is not None:
+                    from .radio import async_radio_slot
+                    async with async_radio_slot(self._hass):
+                        await self._send_once(
+                            address,
+                            sdk_type,
+                            image,
+                            transform,
+                            partial,
+                            orientation,
+                            software_version,
+                        )
+                else:
+                    await self._send_once(
+                        address,
+                        sdk_type,
+                        image,
+                        transform,
+                        partial,
+                        orientation,
+                        software_version,
+                    )
                 self.log("Transfer completed.")
                 return
             except Exception as exc:  # BLE stack can raise platform-specific exceptions

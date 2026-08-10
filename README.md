@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.249
+
+- vyřešeno zpomalení při nahrávání do více displejů současně: přímé přenosy nově striktně dodržují rádio slot, takže přenosy nekolidují v paměti Bluetooth adaptéru
+
 ## Novinky ve verzi 0.1.248
 
 - automatické uvolňování BlueZ D-Bus socketů a 5ms pacing pro prevenci postupného zpomalování Bluetooth adaptéru v Linuxu

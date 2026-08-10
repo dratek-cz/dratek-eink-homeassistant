@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.249] - 2026-08-10
+
+### Opraveno – Synchronizace fyzického rádio slotu u přímých nahrávání pro více displejů současně
+- **`transfer.py`**: Zajištěno přísné zamykání `async_radio_slot` i u přímých volání `send_image`. Při odesílání do více displejů současně nyní přenosy nekolidují v paměti jednoho Bluetooth adaptéru, ale řadí se korektně za sebe, čímž se eliminuje jejich vzájemné zpomalení.
+
 ## [0.1.248] - 2026-08-10
 
 ### Opraveno – Automatické uvolňování BlueZ soketů a mikro-pauzy pro předcházení hromadění paměti
