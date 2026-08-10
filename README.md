@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.246
+
+- vyřešeno varování `BleakClient.connect() called without bleak-retry-connector` v logu Home Assistantu pomocí bezpečné integrace `establish_connection` s fallbackem
+
 ## Novinky ve verzi 0.1.245
 
 - opraveno fyzické překreslování displejů: obnoveno potvrzování bloků (Write With Response / GATT ACK), které mikrokontrolér eInk displeje vyžaduje pro uložení snímku do paměti a spuštění obnovy e-paper panelu

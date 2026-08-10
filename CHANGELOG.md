@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.246] - 2026-08-10
+
+### Opraveno – Potlačení varování BleakClient.connect() v logu HA
+- **`transfer.py`**: Integrováno volání `establish_connection` z knihovny `bleak_retry_connector` s ošetřeným záložním fallbackem na přímý `BleakClient`. Tím je eliminována výstraha `habluetooth.wrappers` v logu Home Assistantu bez rizika pádů přenosu.
+
 ## [0.1.245] - 2026-08-10
 
 ### Opraveno – Obnovení potvrzovaných zápisů bloků (display-acknowledged GATT flow control)

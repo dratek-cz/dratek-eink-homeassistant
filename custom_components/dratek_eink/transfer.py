@@ -10,6 +10,11 @@ from typing import TYPE_CHECKING, Any
 from bleak import BleakClient
 from PIL import Image
 
+try:
+    from bleak_retry_connector import establish_connection
+except ImportError:
+    establish_connection = None
+
 from .const import (
     CONTROL_CHARS,
     DRATEK_COMPANY_ID,
@@ -122,9 +127,25 @@ class DratekTransfer:
             wait_seconds = MIN_RECONNECT_INTERVAL_SECONDS - (loop.time() - last_disconnect)
             if wait_seconds > 0:
                 await asyncio.sleep(wait_seconds)
-        client = BleakClient(connection_target, timeout=20.0)
-        try:
+        client = None
+        if establish_connection is not None:
+            try:
+                client = await establish_connection(
+                    BleakClient,
+                    connection_target,
+                    address,
+                    max_attempts=2,
+                )
+            except Exception as exc:
+                self.log(
+                    f"bleak_retry_connector establish_connection fallback ({exc}); attempting direct connect."
+                )
+                client = BleakClient(connection_target, timeout=20.0)
+                await client.connect()
+        else:
+            client = BleakClient(connection_target, timeout=20.0)
             await client.connect()
+        try:
             yield client
         finally:
             try:
