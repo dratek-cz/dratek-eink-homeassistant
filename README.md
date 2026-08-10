@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.251
+
+- opraveno zpomalení 2. a dalších cyklů automatických aktualizací pro více displejů: zachována rychlá vyhledávací mezipaměť BLE zařízení v Home Assistantu
+
 ## Novinky ve verzi 0.1.250
 
 - opraveno zablokování přenosu na `Transfer attempt 1/3`: rádio zámek `async_radio_slot` upraven na re-entrantní režim pro vnořené úlohy fronty

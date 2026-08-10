@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.251] - 2026-08-10
+
+### Opraveno – Zachování BLEDevice v paměti skeneru pro bleskové opacity opakovaných aktualizací
+- **`transfer.py`**: Odstraněno nucené promazávání skeneru (`async_rediscover_address`). Home Assistant si tak pamatuje detekované BLE zařízení mezi opakovanými cykly automatických aktualizací, což zabraňuje 20s prodlevám při znovunalezení rozhraní u 2. a dalších cyklů.
+
 ## [0.1.250] - 2026-08-10
 
 ### Opraveno – Odstranění zablokování rádio zamknutí (re-entrant radio slot lock)

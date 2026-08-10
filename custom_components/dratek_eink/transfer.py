@@ -161,14 +161,6 @@ class DratekTransfer:
                     f"Disconnect cleanup raised {exc}; the Bluetooth slot may take "
                     "longer than usual to free."
                 )
-            if self._hass is not None:
-                try:
-                    from homeassistant.components import bluetooth
-                    rediscover = getattr(bluetooth, "async_rediscover_address", None)
-                    if rediscover is not None:
-                        rediscover(self._hass, address)
-                except Exception:
-                    pass
             _LAST_DISCONNECT_AT[normalized_address] = asyncio.get_running_loop().time()
 
     async def _async_pack(
