@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.250] - 2026-08-10
+
+### Opraveno – Odstranění zablokování rádio zamknutí (re-entrant radio slot lock)
+- **`radio.py`**: Předěláno zamykání `async_radio_slot` a `async_try_radio_slot` na re-entrantní režim svázaný s aktuální asyncio úlohou. Tím je odstraněn deadlock vznikající na `Transfer attempt 1/3`, když fronta `TransferQueue` vyvolá vnořený přenos `send_image`.
+
 ## [0.1.249] - 2026-08-10
 
 ### Opraveno – Synchronizace fyzického rádio slotu u přímých nahrávání pro více displejů současně

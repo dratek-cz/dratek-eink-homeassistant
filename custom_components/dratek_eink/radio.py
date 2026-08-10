@@ -31,6 +31,8 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 RADIO_LOCK_KEY = "dratek_eink_radio_lock"
+RADIO_TASK_KEY = "dratek_eink_radio_task"
+RADIO_COUNT_KEY = "dratek_eink_radio_count"
 
 
 def get_radio_lock(hass: HomeAssistant) -> asyncio.Lock:
@@ -44,27 +46,45 @@ def get_radio_lock(hass: HomeAssistant) -> asyncio.Lock:
 
 @asynccontextmanager
 async def async_radio_slot(hass: HomeAssistant) -> AsyncIterator[None]:
-    """Hold the radio for one physical Bluetooth operation.
+    """Hold the radio for one physical Bluetooth operation (re-entrant)."""
+    current_task = asyncio.current_task()
+    lock = get_radio_lock(hass)
+    owner = hass.data.get(RADIO_TASK_KEY)
 
-    Acquire this *inside* any per-display or per-transport lock, never around
-    one. Every caller taking the locks in the same order is what keeps the
-    combination deadlock-free.
-    """
-    async with get_radio_lock(hass):
-        yield
+    if owner is current_task:
+        count = int(hass.data.get(RADIO_COUNT_KEY) or 1) + 1
+        hass.data[RADIO_COUNT_KEY] = count
+        try:
+            yield
+        finally:
+            c = int(hass.data.get(RADIO_COUNT_KEY) or 1) - 1
+            hass.data[RADIO_COUNT_KEY] = c
+            if c <= 0:
+                hass.data.pop(RADIO_TASK_KEY, None)
+                hass.data.pop(RADIO_COUNT_KEY, None)
+        return
+
+    async with lock:
+        hass.data[RADIO_TASK_KEY] = current_task
+        hass.data[RADIO_COUNT_KEY] = 1
+        try:
+            yield
+        finally:
+            hass.data.pop(RADIO_TASK_KEY, None)
+            hass.data.pop(RADIO_COUNT_KEY, None)
 
 
 @asynccontextmanager
 async def async_try_radio_slot(
     hass: HomeAssistant, timeout: float
 ) -> AsyncIterator[bool]:
-    """Hold the radio if it becomes free within ``timeout``, else yield False.
+    """Hold the radio if it becomes free within ``timeout``, else yield False (re-entrant)."""
+    current_task = asyncio.current_task()
+    owner = hass.data.get(RADIO_TASK_KEY)
+    if owner is current_task:
+        yield True
+        return
 
-    For work that is worth skipping rather than queueing behind a transfer.
-    A discovery scan is the case this exists for: waiting out an in-flight
-    transfer could block the panel for minutes, and a scan that reports only
-    what Home Assistant already knows is far better than one that hangs.
-    """
     lock = get_radio_lock(hass)
     try:
         async with asyncio.timeout(timeout):
@@ -73,6 +93,10 @@ async def async_try_radio_slot(
         yield False
         return
     try:
+        hass.data[RADIO_TASK_KEY] = current_task
+        hass.data[RADIO_COUNT_KEY] = 1
         yield True
     finally:
+        hass.data.pop(RADIO_TASK_KEY, None)
+        hass.data.pop(RADIO_COUNT_KEY, None)
         lock.release()

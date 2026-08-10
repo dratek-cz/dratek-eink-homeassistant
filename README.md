@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.250
+
+- opraveno zablokování přenosu na `Transfer attempt 1/3`: rádio zámek `async_radio_slot` upraven na re-entrantní režim pro vnořené úlohy fronty
+
 ## Novinky ve verzi 0.1.249
 
 - vyřešeno zpomalení při nahrávání do více displejů současně: přímé přenosy nově striktně dodržují rádio slot, takže přenosy nekolidují v paměti Bluetooth adaptéru
