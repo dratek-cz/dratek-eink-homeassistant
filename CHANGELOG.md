@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.248] - 2026-08-10
+
+### Opraveno – Automatické uvolňování BlueZ soketů a mikro-pauzy pro předcházení hromadění paměti
+- **`transfer.py`**: Přidáno automatické invalidování a uvolňování neaktivních GATT repozitářů v HA pomoci `async_rediscover_address` po ukončení spojení.
+- **`transfer.py`**: Přidána 5 ms mikro-pauza mezi potvrzovanými zápisy bloků (`Write With Response`), která dává Linuxovému BlueZ a D-Bus smyčce čas zpracovat přijatá potvrzení bez zahlcení vyrovnávací paměti.
+
 ## [0.1.247] - 2026-08-10
 
 ### Opraveno – Ošetření nedetekovaných BLE zařízení v rozhraní Home Assistantu

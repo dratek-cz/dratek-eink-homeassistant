@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.248
+
+- automatické uvolňování BlueZ D-Bus socketů a 5ms pacing pro prevenci postupného zpomalování Bluetooth adaptéru v Linuxu
+
 ## Novinky ve verzi 0.1.247
 
 - vylepšena diagnostika a směrování pro displeje mimo dosah Bluetooth adaptéru HA (`No backend with an available connection slot...`)

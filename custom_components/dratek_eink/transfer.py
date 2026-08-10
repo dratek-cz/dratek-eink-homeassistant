@@ -161,6 +161,14 @@ class DratekTransfer:
                     f"Disconnect cleanup raised {exc}; the Bluetooth slot may take "
                     "longer than usual to free."
                 )
+            if self._hass is not None:
+                try:
+                    from homeassistant.components import bluetooth
+                    rediscover = getattr(bluetooth, "async_rediscover_address", None)
+                    if rediscover is not None:
+                        rediscover(self._hass, address)
+                except Exception:
+                    pass
             _LAST_DISCONNECT_AT[normalized_address] = asyncio.get_running_loop().time()
 
     async def _async_pack(
@@ -829,6 +837,8 @@ class DratekTransfer:
                 # adding another delay only slows large displays down.
                 if not require_response:
                     await asyncio.sleep(STREAM_WRITE_DELAY)
+                else:
+                    await asyncio.sleep(0.005)
                 return
             except Exception as exc:  # BLE stacks expose platform-specific write errors
                 # A timed-out ATT request may already have reached the display.
