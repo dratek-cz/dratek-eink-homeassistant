@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.240] - 2026-08-10
+
+### Opraveno – Překompilovány binárky ESP32 gatewaye pro OTA na 0.1.52-gateway
+- Předchozí build verze 0.1.239 obsahoval starou binárku `dratek-eink-gateway-esp32.bin`, takže se ESP32 gateway po OTA probudila zpět s verzí `0.1.51-gateway` a OTA selhalo na kontrole očekávané verze.
+- Všechny binární OTA soubory (`esp32` i `esp32s3`) byly znova v plné kompilaci sestaveny s verzí `0.1.52-gateway`. Akceptovaný seznam verzí v panelu nyná obsahuje `0.1.51-gateway` i `0.1.52-gateway`.
+
 ## [0.1.239] - 2026-08-10
 
 ### Změněno – Navýšení verze firmware gatewayí na 0.1.52-gateway

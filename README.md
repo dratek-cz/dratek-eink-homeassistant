@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.240
+
+- opraveno OTA selhání u ESP32 gatewayí: přibaleny správně zkompilované binární soubory `0.1.52-gateway` pro všechny čipy (ESP32 i ESP32-S3), takže OTA aktualizace projde a správně přejde na novou verzi
+
 ## Novinky ve verzi 0.1.239
 
 - navýšena cílová verze firmware gatewayí na `0.1.52-gateway` v panelu i v integraci, aby Home Assistant u připojených gatewayí správně detekoval novou verzi a umožnil jejich OTA aktualizaci
