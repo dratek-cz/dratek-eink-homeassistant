@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.276] - 2026-08-11
+
+### Vylepšeno – První úroveň ikony přímo v kořenu repozitáře (HACS fallback)
+- Přidány soubory `icon.png`, `icon@2x.png`, `logo.png`, `logo@2x.png` přímo do kořenového adresáře GitHub repozitáře.
+- HACS i Home Assistant frontend tak mohou načíst ikonu bez ohledu na to, zda dotaz směřuje na kořen repozitáře, složku `/brand/` nebo `custom_components/dratek_eink/`.
+
 ## [0.1.275] - 2026-08-11
 
 ### Opraveno – Zobrazování brand ikony v Home Assistantu místo MDI ikony
