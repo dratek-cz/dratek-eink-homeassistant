@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.255] - 2026-08-11
+
+### Opraveno – Registrace EVENT_HOMEASSISTANT_STOP pro čisté ukončení úloh na pozadí při restartu HA
+- **`__init__.py`**: Přidán listener události `EVENT_HOMEASSISTANT_STOP`, který při vypínání nebo restartu Home Assistantu automaticky zavolá `auto_update.async_stop()`. Tím se okamžitě ukončí všechny běžící smyčky a časovače automatické obnovy displejů a předchází se výstraze `Task pending ... was still running after final writes shutdown stage`.
+
 ## [0.1.254] - 2026-08-11
 
 ### Přidáno & Opraveno – Mazání uživatelských šablon, parciality dělených rozvržení a čitelnost SVG textů

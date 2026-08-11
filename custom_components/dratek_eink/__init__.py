@@ -7,7 +7,7 @@ import voluptuous as vol
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 
@@ -93,6 +93,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN]["entries"][entry.entry_id] = entry.data
     await _async_register_panel(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    from .automation import get_entity_auto_update_manager
+    auto_update = get_entity_auto_update_manager(hass)
+
+    async def _async_on_stop(_event: Any) -> None:
+        await auto_update.async_stop()
+
+    entry.async_on_unload(
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_on_stop)
+    )
     return True
 
 
