@@ -223,6 +223,8 @@
     const uploadedAddress = new URLSearchParams(window.location.search).get("uploaded") || "";
     const settingsAddress = new URLSearchParams(window.location.search).get("settings") || "";
     const settingsView = new URLSearchParams(window.location.search).get("settingsView") || "templates";
+    const initialTab = new URLSearchParams(window.location.search).get("tab") || "";
+    const demoQueue = new URLSearchParams(window.location.search).get("queue") === "demo";
     const drafts = {
       "FF:FF:92:81:46:32": {
         width:296, height:128, background_color:"white", invert_colors:false,
@@ -357,11 +359,31 @@
         if (type === "dratek_eink/gateways/list" || type === "dratek_eink/gateways/refresh") return { gateways };
         if (type === "dratek_eink/gateways/serial_ports") return { ports: [] };
         if (type === "dratek_eink/queue/list") {
+          const now = Math.floor(Date.now() / 1000);
+          // ?queue=demo naplní frontu všemi stavy včetně chyby a protokolu.
+          // Bez něj zůstává mock prázdný, protože časy dokončení řídí i zvýraznění
+          // "právě nahráno" v mapě připojení a na kartách displejů.
+          const demo = demoQueue ? [
+            { id:"demo-queued-1", address:"FF:FF:91:31:18:11", status:"queued", operation:"text", transport_type:"gateway", transport_name:"Gateway kancelář", created_at:now - 2 },
+            { id:"demo-skipped-1", address:"FF:FF:96:41:12:54", status:"skipped", operation:"entity_update", transport_type:"local", transport_name:"Home Assistant Bluetooth", created_at:now - 240, started_at:now - 240, finished_at:now - 240 },
+            { id:"demo-failed-1", address:"FF:FF:96:41:12:54", status:"failed", operation:"design", transport_type:"gateway", transport_name:"Gateway sklad", created_at:now - 600, started_at:now - 598, finished_at:now - 570, error:"Displej neodpověděl na ATT write, spojení vypršelo po 28 s", log:["connect: FF:FF:96:41:12:54", "mtu: 23 (bez negotiace)", "write: blok 4/61", "error: timeout"] },
+            { id:"demo-succeeded-1", address:"FF:FF:92:81:46:32", status:"succeeded", operation:"partial_design", transport_type:"gateway", transport_name:"Gateway dílna", created_at:now - 1800, started_at:now - 1798, finished_at:now - 1776, log:["connect: FF:FF:92:81:46:32", "mtu: 247", "write: 61/61 bloků", "refresh: ok"] },
+          ] : [];
           const jobs = [
-            ...(writingAddress ? [{ id:"local-writing-job", address:writingAddress, status:"writing", operation:"design", transport_type:"gateway", transport_name:"Gateway dílna", created_at:Math.floor(Date.now() / 1000) - 4, started_at:Math.floor(Date.now() / 1000) - 4 }] : []),
-            ...(uploadedAddress ? [{ id:"local-uploaded-job", address:uploadedAddress, status:"succeeded", operation:"entity_update", transport_type:"local", transport_name:"Home Assistant Bluetooth", created_at:Math.floor(Date.now() / 1000) - 30, started_at:Math.floor(Date.now() / 1000) - 30, finished_at:Math.floor(Date.now() / 1000) }] : []),
+            ...(writingAddress ? [{ id:"local-writing-job", address:writingAddress, status:"writing", operation:"design", transport_type:"gateway", transport_name:"Gateway dílna", resource:"gateway:gateway-workshop", created_at:now - 4, started_at:now - 4 }] : []),
+            ...(uploadedAddress ? [{ id:"local-uploaded-job", address:uploadedAddress, status:"succeeded", operation:"entity_update", transport_type:"local", transport_name:"Home Assistant Bluetooth", created_at:now - 30, started_at:now - 30, finished_at:now }] : []),
+            ...demo,
           ];
-          return { jobs, queued:0, writing:writingAddress ? 1 : 0, succeeded:uploadedAddress ? 1 : 0, failed:0 };
+          const count = (status) => jobs.filter((job) => job.status === status).length;
+          return {
+            jobs,
+            queued:count("queued"),
+            writing:count("writing"),
+            succeeded:count("succeeded"),
+            skipped:count("skipped"),
+            failed:count("failed"),
+            backend_version: "0.1.272",
+          };
         }
         if (type === "dratek_eink/devices/set_name") {
           const device = devices.find((item) => item.address === msg.address);
@@ -418,6 +440,17 @@
       panel._restoreDisplayTemplateConfig(drafts[String(settingsAddress).toUpperCase()]?.template_config);
       panel._displaySettingsView = settingsView === "designer" ? "designer" : "templates";
       panel._activeTab = "display-settings";
+      panel._render();
+      panel._paint();
+    }
+
+    // ?tab=topology otevře náhled rovnou na dané záložce. Mapa připojení potřebuje
+    // navíc seznam gatewayí, který si jinak natáhne až obsluha kliknutí na záložku.
+    if (initialTab && ["devices", "topology", "queue", "gateways"].includes(initialTab)) {
+      if (initialTab === "topology") await panel._loadGateways(false);
+      if (initialTab === "queue") await panel._loadQueue(false);
+      if (initialTab === "gateways") await Promise.all([panel._loadGateways(false), panel._loadQueue(false)]);
+      panel._activeTab = initialTab;
       panel._render();
       panel._paint();
     }

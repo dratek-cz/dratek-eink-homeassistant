@@ -78,9 +78,19 @@ export const inspectorMixin = {
     this.shadowRoot.querySelectorAll("[data-gateway-tab]").forEach((button) => button.addEventListener("click", () => {
       this._gatewaySubtab = button.dataset.gatewayTab;
       this._gatewayResult = null;
+      this._gatewayScrollTop = 0;
       this._render();
       this._paint();
     }));
+    // Plocha s kartami roluje sama, ale _render() vymění celý strom. Bez tohohle
+    // by odrolovaný seznam skočil zpět nahoru při každém pollu fronty.
+    const gatewayScroller = this.shadowRoot.querySelector(".gateway-workspace-content");
+    if (gatewayScroller) {
+      if (this._gatewayScrollTop) gatewayScroller.scrollTop = this._gatewayScrollTop;
+      gatewayScroller.addEventListener("scroll", () => {
+        this._gatewayScrollTop = gatewayScroller.scrollTop;
+      }, { passive: true });
+    }
     this.shadowRoot.querySelectorAll("[data-add-discovered-gateway]").forEach((button) => button.addEventListener("click", () => this._addDiscoveredGateway(button.dataset.addDiscoveredGateway)));
     const syncFlashButton = () => {
       const flashButton = this.shadowRoot.querySelector("#flashGateway");
@@ -205,8 +215,12 @@ export const inspectorMixin = {
         ]);
       }
       if (this._activeTab === "gateways") {
+        // Kapacita gatewaye i dlaždice "Zapisují" čtou frontu přes
+        // _gatewayActiveJob(). Bez jejího načtení hlásila každá online gateway
+        // "Volná pro další displej", i když zrovna zapisovala.
         await Promise.all([
           this._loadGateways(true),
+          this._loadQueue(false),
           this._loadSerialPorts(),
         ]);
       }

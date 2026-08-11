@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.272] - 2026-08-11
+
+### Vylepšeno – Grafické vylepšení USB Flashing & Konfigurace ESP32 Gateway
+- **`panel-gateway.mixin.js`**: Přepracováno rozhraní záložky **Nová gateway (USB)**. Přidána hero karta s popisem, moderní vizuální kaskáda kroků 1–4, karty typů desek s odznaky a HW specifikacemi (ESP32-S3 s označením *Doporučeno*).
+- **`panel-gateway.mixin.js`**: Přeměněno varování chybějícího USB portu na zřetelný alert panel s checklistem doporučení (datový kabel, napájení desky).
+- **`panel-gateway.mixin.js`**: Diagnostika USB a flashování má nyní novou vývojářskou konzoli (`.gateway-log`) v dark rozhraní s Mac-style záhlavím a barevně odlišenými stavovými hláškami.
+- **`panel-render-ui.mixin.js`**: Doplněny moderní CSS styly, animovaný rotující indikátor (`.spin`), zjemněné stíny a zúžená typografie pro Light Mode i Dark Mode.
+
 ## [0.1.271] - 2026-08-11
 
 ### Opraveno – Přenosy přes nalezené gatewaye

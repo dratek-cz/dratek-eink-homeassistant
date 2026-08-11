@@ -142,12 +142,52 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("Moje gatewaye", self.source)
         self.assertIn("Najít v síti", self.source)
         self.assertIn("Nová gateway", self.source)
-        self.assertIn('class="gateway-visual-slot"', self.source)
-        self.assertIn(".gateway-compact-card{grid-template-rows:auto auto minmax(140px,1fr)", self.source)
-        self.assertIn('class="gateway-routing-guide"', self.source)
+        # Karta shora dolů: obrázek desky, pod ním informace, dole lišta tlačítek.
+        self.assertIn(".gateway-compact-card{--gw-accent:", self.source)
+        self.assertIn("grid-template-rows:auto minmax(0,1fr) auto", self.source)
+        self.assertIn('class="gateway-card-board"', self.source)
+        self.assertIn('class="gateway-card-board-art"', self.source)
+        self.assertIn('class="gateway-card-body"', self.source)
+        # Patička s tlačítky visí na kartě, ne uvnitř těla - jinak by neseděla dole.
+        self.assertIn('</div>\n        <footer class="gateway-card-actions">', self.source)
+        self.assertIn(".gateway-card-actions{display:flex", self.source)
+        self.assertIn("border-top:1px solid var(--divider-color);background:var(--secondary-background-color)}", self.source)
+        # Stránka je pevný shell: pruh s čísly i rail stojí, roluje jen plocha
+        # s kartami. Bez toho rail vynucoval scroll celé stránky.
+        self.assertIn(
+            ".tab-panel.gateways-panel{display:grid;grid-template-rows:auto auto minmax(0,1fr)",
+            self.source,
+        )
+        self.assertIn("height:calc(100vh - var(--dratek-sticky-top,12px) - 34px)", self.source)
+        self.assertIn(".gateways-panel .gateway-workspace-content{min-height:0;height:100%;overflow-y:auto", self.source)
+        self.assertIn(".gateways-panel .gateway-workspace-tabs{position:static;height:100%;overflow:hidden}", self.source)
+        # Vnitřní scroll musí přežít překreslení, jinak ho poll fronty odroluje nahoru.
+        self.assertIn("this._gatewayScrollTop = gatewayScroller.scrollTop", self.source)
+        self.assertNotIn('class="gateway-visual-slot"', self.source)
+        self.assertNotIn("grid-template-rows:auto auto minmax(140px,1fr)", self.source)
+        # Podzáložky drží svislý rail v levém sloupci. Nesmí se ale roztáhnout na
+        # výšku obsahu jako dřív (238 x 1562 px) - proto align-self:start a sticky.
+        self.assertIn(".gateway-workspace{display:grid;grid-template-columns:238px minmax(0,1fr)", self.source)
+        self.assertIn("align-self:start", self.source)
+        self.assertIn(".gateway-workspace-tabs{position:sticky", self.source)
+        self.assertIn('class="gateway-tab-copy"', self.source)
+        self.assertNotIn('class="gateway-section-head"', self.source)
+        # Návod ke směrování je dokumentace, drží se sbalený v <details>.
+        self.assertIn('<details class="gateway-routing-guide">', self.source)
         self.assertIn("Volná gateway se použije od −80 dBm", self.source)
         self.assertIn("_gatewayActiveJob(gateway)", self.source)
-        self.assertIn('class="gateway-routing-state ${activeJob ? "is-busy" : "is-free"}"', self.source)
+        # Kapacita má tři stavy, ne dva: offline gateway není "volná", jen se přes
+        # ni nedá zapisovat. Test dřív pinoval starší dvoustavovou podobu.
+        self.assertIn(
+            'const routingClass = activeJob ? "is-busy" : routingAvailable ? "is-free" : "is-unavailable";',
+            self.source,
+        )
+        self.assertIn("const routingAvailable = online && !activeJob;", self.source)
+        # Pojmenované je jen OTA, protože nese stav firmwaru; zbytek je ikonová lišta.
+        self.assertIn('class="gateway-icon-actions"', self.source)
+        self.assertIn('data-gateway-${attr}="${this._escape(gateway.id)}"', self.source)
+        for attr in ("scan", "rename", "refresh", "delete"):
+            self.assertIn(f'iconAction("{attr}"', self.source)
 
     def test_gateway_board_picker_has_no_store_buttons(self):
         self.assertNotIn('class="board-option-cart"', self.source)
@@ -160,7 +200,23 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".stat-tile{display:grid;grid-template-columns:auto minmax(0,1fr)", self.source)
         self.assertIn(".stat-tile-copy strong{font-size:20px;font-weight:900", self.source)
         self.assertIn('<div class="stat-tiles">', self.source)
-        self.assertIn('<span class="stat-tile-copy"><strong>${this._gateways.length}</strong><small>Celkem</small></span>', self.source)
+        self.assertIn('<span class="stat-tile-copy"><strong>${value}</strong><small>${label}</small></span>', self.source)
+        for label in ("Celkem", "Online", "Volné", "Zapisují"):
+            self.assertIn(f'"{label}"', self.source)
+        # Barvu nese stav, ne jeho počet. Ikona si červenou/zelenou drží i při
+        # nule - ztlumí se jen číslo, jinak by prázdná fronta byla celá šedá.
+        self.assertIn('${value ? "" : "is-zero"}', self.source)
+        self.assertIn('${Number(value || 0) ? "" : "is-zero"}', self.source)
+        self.assertIn(".stat-tile.is-plain{--stat-accent:var(--secondary-text-color)}", self.source)
+        self.assertNotIn(".stat-tile.is-zero{--stat-accent:", self.source)
+        self.assertIn(".stat-tile.is-zero .stat-tile-copy strong{color:var(--secondary-text-color)}", self.source)
+        for modifier, accent in (
+            ("is-good", "var(--dratek-status-ok-fg,#16803c)"),
+            ("is-bad", "var(--dratek-status-bad-fg,#c62828)"),
+            ("is-warn", "var(--dratek-orange-dark,#d95700)"),
+            ("is-skipped", "var(--dratek-status-warn-fg,#b45309)"),
+        ):
+            self.assertIn(f".stat-tile.{modifier}{{--stat-accent:{accent}}}", self.source)
         # Gradientní hlavičky nahradil plochý nadpis a stejné dlaždice.
         self.assertNotIn('class="gateway-page-hero"', self.source)
         self.assertNotIn('class="gateway-page-metrics"', self.source)
@@ -752,7 +808,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("Úspěšně nahráno · displej se vykresluje", self.source)
         self.assertIn(".connection-device.is-writing", self.source)
         self.assertIn(".connection-device.is-uploaded", self.source)
-        self.assertIn('["queue", "devices", "topology"].includes(this._activeTab)', self.source)
+        self.assertIn('["queue", "devices", "topology", "gateways"].includes(this._activeTab)', self.source)
         self.assertIn("this._queuePollTimer = window.setTimeout", self.source)
         self.assertIn("Number(this._queue?.queued || 0) + Number(this._queue?.writing || 0) > 0", self.source)
         self.assertIn("window.clearTimeout(this._queuePollTimer)", self.source)
@@ -973,7 +1029,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".display-preview-slot>.display-writing-state", self.source)
         self.assertIn("position:absolute", self.source)
         self.assertIn(
-            '["queue", "devices", "topology"].includes(this._activeTab)',
+            '["queue", "devices", "topology", "gateways"].includes(this._activeTab)',
             self.source,
         )
 

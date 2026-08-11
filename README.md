@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.272
+
+- kompletní grafické a rozvrhové vylepšení záložky **Nová gateway (USB Flash)**
+- nová kaskáda kroků s přehlednými odznaky desek ESP32 / ESP32-S3 a specifikacemi
+- zřetelný alert panel s checklistem pro případ chybějícího USB portu
+- nová vývojářská konzole USB diagnostiky a nahrávání v dark terminálovém rozhraní
+
 ## Novinky ve verzi 0.1.271
 
 - opraveno neočekávané odesílání přes lokální Bluetooth, když krátký sken právě nezachytil displej dostupný přes gateway

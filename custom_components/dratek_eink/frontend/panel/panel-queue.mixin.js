@@ -76,7 +76,7 @@ export const queueMixin = {
     }
     if (Number(this._queue?.queued || 0) + Number(this._queue?.writing || 0) > 0) {
       this._queuePollTimer = window.setTimeout(() => {
-        const visible = ["queue", "devices", "topology"].includes(this._activeTab);
+        const visible = ["queue", "devices", "topology", "gateways"].includes(this._activeTab);
         this._loadQueue(visible);
       }, 1000);
     }
@@ -220,8 +220,10 @@ export const queueMixin = {
 
     // Metriky jsou zároveň filtr stavu - proto už pod hledáním nejsou žádné
     // čipy se stejnými stavy, jen zbylé filtry.
+    // Barvu nese stav, ne jeho počet. Nulová dlaždice se jen ztlumí, takže
+    // prázdná fronta nesvítí pěti barvami a plná je čitelná na první pohled.
     const stat = (status, icon, value, label, cls = "") => `
-      <button class="stat-tile ${filters.status === status ? "active" : ""} ${cls}" data-queue-status="${status}" title="Zobrazit jen ${label.toLowerCase()}">
+      <button class="stat-tile ${filters.status === status ? "active" : ""} ${cls} ${Number(value || 0) ? "" : "is-zero"}" data-queue-status="${status}" title="Zobrazit jen ${label.toLowerCase()}">
         <span class="stat-tile-icon"><ha-icon icon="${icon}"></ha-icon></span>
         <span class="stat-tile-copy"><strong>${value || 0}</strong><small>${label}</small></span>
       </button>`;
@@ -230,10 +232,10 @@ export const queueMixin = {
     <div class="queue-page">
       <div class="stat-tiles">
         ${stat("queued", "mdi:tray-full", queue.queued, "Ve frontě")}
-        ${stat("writing", "mdi:progress-upload", queue.writing, "Zapisuje", queue.writing ? "is-warn" : "")}
+        ${stat("writing", "mdi:progress-upload", queue.writing, "Zapisuje", "is-warn")}
         ${stat("succeeded", "mdi:check-circle-outline", queue.succeeded, "Dokončeno", "is-good")}
-        ${stat("skipped", "mdi:skip-next-circle-outline", queue.skipped, "Přeskočeno", queue.skipped ? "is-skipped" : "")}
-        ${stat("failed", "mdi:alert-circle-outline", queue.failed, "Selhalo", queue.failed ? "is-bad" : "")}
+        ${stat("skipped", "mdi:skip-next-circle-outline", queue.skipped, "Přeskočeno", "is-skipped")}
+        ${stat("failed", "mdi:alert-circle-outline", queue.failed, "Selhalo", "is-bad")}
       </div>
 
       ${skipWarningBanner}
@@ -354,7 +356,7 @@ export const queueMixin = {
       </div>
       <div class="queue-route">
         <span class="queue-route-icon"><ha-icon icon="${gateway ? "mdi:router-wireless" : "mdi:home-assistant"}"></ha-icon></span>
-        <div><strong>${this._escape(job.transport_name || (gateway ? "DRATEK gateway" : "Home Assistant"))}</strong><small>${gateway ? "DRATEK gateway" : "Home Assistant Bluetooth"}</small></div>
+        <div><strong>${this._escape(job.transport_name || (gateway ? "DRATEK gateway" : "Home Assistant"))}</strong>${job.transport_name ? `<small>${gateway ? "DRATEK gateway" : "Home Assistant Bluetooth"}</small>` : ""}</div>
       </div>
       <div class="queue-timing">
         <small>${this._formatTime(job.created_at)}</small>
