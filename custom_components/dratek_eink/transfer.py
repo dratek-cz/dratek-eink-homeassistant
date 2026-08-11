@@ -135,6 +135,7 @@ class DratekTransfer:
                     connection_target,
                     address,
                     max_attempts=2,
+                    use_services_cache=False,
                 )
             except Exception as exc:
                 self.log(
@@ -162,6 +163,15 @@ class DratekTransfer:
                     "longer than usual to free."
                 )
             _LAST_DISCONNECT_AT[normalized_address] = asyncio.get_running_loop().time()
+            if self._hass is not None:
+                try:
+                    from homeassistant.components import bluetooth
+
+                    rediscover = getattr(bluetooth, "async_rediscover_address", None)
+                    if callable(rediscover):
+                        rediscover(self._hass, address)
+                except Exception:
+                    pass
 
     async def _async_pack(
         self,

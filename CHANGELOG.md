@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.256] - 2026-08-11
+
+### Opraveno – Prevence degradace a zpomalování BLE přenosů při dlouhodobém provozu (~24h)
+- **`transfer.py`**: Do `establish_connection` z `bleak_retry_connector` přidán parametr `use_services_cache=False`. Tím je vynuceno čerstvé vyhledání GATT služeb při každém připojení a zamezeno používání zastaralé mezipaměti služeb z předchozích cyklů, která po delší době způsobuje 8s i dlouhé časové prodlevy u jednotlivých bloků.
+- **`transfer.py`**: Po odpojení zařízení se nově volá `bluetooth.async_rediscover_address(hass, address)`, čímž se v Home Assistantu bezpečně promazává starý odkaz na `BLEDevice` a skener vyhledává displeje vždy s čerstvými parametry.
+
 ## [0.1.255] - 2026-08-11
 
 ### Opraveno – Registrace EVENT_HOMEASSISTANT_STOP pro čisté ukončení úloh na pozadí při restartu HA

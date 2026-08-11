@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.256
+
+- vyřešeno postupné zpomalování přenosů po celodenním běhu (ze 10s na stovky sekund): deaktivováno ukládání zastaralých GATT služeb do paměti (`use_services_cache=False`) a přidáno čistění odkazů skeneru po odpojení (`async_rediscover_address`)
+
 ## Novinky ve verzi 0.1.255
 
 - automatické rušení všech běžících smyček automatické obnovy při vypínání a restartu Home Assistantu (`EVENT_HOMEASSISTANT_STOP`)
