@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.271
+
+- opraveno neočekávané odesílání přes lokální Bluetooth, když krátký sken právě nezachytil displej dostupný přes gateway
+- ručně zvolená gateway se nyní zachová také při odesílání nové šablony
+
 ## Novinky ve verzi 0.1.270
 
 - opraveno vyjednávání ATT MTU (247 bajtů vs 23 bajtů): vyřešeno uvíznutí na malém MTU, které způsobovalo zpomalení přenosu ze 3.4 s na 134 s

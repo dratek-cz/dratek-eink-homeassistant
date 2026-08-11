@@ -131,6 +131,17 @@ class ManualUploadClearsStateTests(unittest.TestCase):
         ):
             self.assertIn(cache, source)
 
+    def test_manual_upload_reads_the_persisted_gateway_preference(self):
+        source = (COMPONENT / "ws_sending.py").read_text(encoding="utf-8")
+        route_helper = next(
+            node
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.AsyncFunctionDef)
+            and node.name == "_async_route_preference"
+        )
+        self.assertIn("_load_project_data", _called_names(route_helper))
+        self.assertIn("device_gateway_preferences", ast.unparse(route_helper))
+
 
 if __name__ == "__main__":
     unittest.main()

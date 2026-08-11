@@ -2,7 +2,7 @@ DOMAIN = "dratek_eink"
 
 DRATEK_COMPANY_ID = 0x5053
 
-PANEL_VERSION = "0.1.270"
+PANEL_VERSION = "0.1.271"
 GATEWAY_FIRMWARE_VERSION = "0.1.52-gateway"
 
 CONTROL_CHARS = {
@@ -144,3 +144,9 @@ PARTIAL_UPDATE_CONFIRMED_SDK_TYPES = {2635}
 # Home Assistant Bluetooth adapter instead of a gateway. Gateways are addressed
 # by their generated id, so a reserved word cannot collide with one.
 LOCAL_ROUTE_ID = "local"
+
+# Discovery results are shared by the device panel and the transfer router.
+# Keeping a recently observed route lets a transfer use a gateway even when a
+# short on-demand scan happens to miss the display's advertisement.
+DISCOVERY_CACHE_KEY = "dratek_eink.discovery_cache"
+DISCOVERY_GRACE_SECONDS = 5 * 60

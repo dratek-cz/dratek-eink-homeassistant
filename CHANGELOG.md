@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.271] - 2026-08-11
+
+### Opraveno – Přenosy přes nalezené gatewaye
+- **`automation.py`**: Pokud krátký živý sken nezachytí reklamu displeje, směrování použije ještě platnou cestu z posledního vyhledání zařízení namísto neočekávaného přepnutí na lokální Bluetooth Home Assistantu.
+- **`ws_sending.py`**: Ruční odeslání zachovává samostatně uloženou volbu gatewaye i poté, co zruší automatizaci předchozí šablony.
+- Jedna gateway nadále zapisuje vždy jen do jednoho displeje, zatímco různé gatewaye mohou obsluhovat více přenosů souběžně.
+
 ## [0.1.270] - 2026-08-11
 
 ### Opraveno – Prevence zpomalení přenosu z 3.4 s na 134 s z důvodu ATT MTU=23

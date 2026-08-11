@@ -55,6 +55,8 @@ def _load_automation_module():
 
     local_modules = {
         "const": {
+            "DISCOVERY_CACHE_KEY": "dratek_eink.discovery_cache",
+            "DISCOVERY_GRACE_SECONDS": 300,
             "DOMAIN": "dratek_eink",
             "LOCAL_ROUTE_ID": "local",
             "PARTIAL_UPDATE_CONFIRMED_SDK_TYPES": {2635},
@@ -1078,6 +1080,59 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(-48, route["rssi"])
         self.assertEqual(route, cached_route)
         self.assertCountEqual(["workshop", "office"], scan_calls)
+
+    async def test_uses_recent_discovery_route_when_short_scan_misses_display(self):
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager.hass = types.SimpleNamespace(
+            data={
+                "dratek_eink.discovery_cache": {
+                    address: {
+                        "last_seen_at": time.time(),
+                        "paths": [
+                            {
+                                "type": "gateway",
+                                "id": "office",
+                                "name": "Gateway kancelář",
+                                "rssi": -51,
+                            }
+                        ],
+                    }
+                }
+            }
+        )
+        manager._gateway_route_cache = {}
+        manager._gateway_route_cache_at = 0.0
+        manager._gateway_route_lock = asyncio.Lock()
+
+        async def load_gateways(_hass):
+            return [{"id": "office", "name": "Gateway kancelář"}]
+
+        async def scan_gateway(_hass, _gateway_id, _seconds):
+            return {"ok": True, "devices": []}
+
+        original_load = automation.async_load_gateways
+        original_scan = automation.async_scan_gateway
+        automation.async_load_gateways = load_gateways
+        automation.async_scan_gateway = scan_gateway
+        try:
+            routes = await manager._async_gateway_routes(address)
+        finally:
+            automation.async_load_gateways = original_load
+            automation.async_scan_gateway = original_scan
+
+        self.assertEqual(
+            [
+                {
+                    "id": "office",
+                    "name": "Gateway kancelář",
+                    "rssi": -51.0,
+                }
+            ],
+            routes,
+        )
 
     async def test_automatic_refresh_uses_the_fresh_strongest_gateway(self):
         address = "FF:FF:92:81:46:32"

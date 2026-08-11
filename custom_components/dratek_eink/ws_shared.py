@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .automation import get_entity_auto_update_manager
-from .const import DOMAIN
+from .const import DISCOVERY_CACHE_KEY, DISCOVERY_GRACE_SECONDS, DOMAIN
 from .project_storage import normalize_project_data
 
 PROJECT_STORE_KEY = "dratek_eink.projects"
@@ -19,8 +19,6 @@ GATEWAY_PREFERENCES_STORE_VERSION = 1
 PROJECT_STORE_DATA_KEY = "project_store"
 GATEWAY_PREFERENCES_STORE_DATA_KEY = "gateway_preferences_store"
 PROJECT_DATA_CACHE_KEY = "project_data_cache"
-DISCOVERY_CACHE_KEY = "dratek_eink.discovery_cache"
-DISCOVERY_GRACE_SECONDS = 5 * 60
 
 
 async def _clear_previous_entity_automation(

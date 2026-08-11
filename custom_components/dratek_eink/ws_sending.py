@@ -12,7 +12,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
 import voluptuous as vol
 
-from .const import DOMAIN
+from .const import DOMAIN, LOCAL_ROUTE_ID
 from .display_preview import async_save_display_preview
 from .render import render_text_image
 from .queue import get_transfer_queue
@@ -23,6 +23,7 @@ from .ws_shared import (
     _clear_entity_automation_if_matches,
     _clear_previous_entity_automation,
     _install_entity_automation,
+    _load_project_data,
     _request_entity_automation_refresh,
 )
 
@@ -32,6 +33,25 @@ DESIGN_UPLOAD_CHUNK_BYTES = 64 * 1024
 DESIGN_UPLOAD_MAX_CHUNKS = 128
 DESIGN_UPLOAD_MAX_BYTES = 8 * 1024 * 1024
 DESIGN_UPLOAD_TTL_SECONDS = 10 * 60
+
+
+async def _async_route_preference(
+    hass: HomeAssistant, address: str
+) -> tuple[Any, str, str]:
+    """Return routing settings without depending on an active automation."""
+    manager = get_entity_auto_update_manager(hass)
+    config = manager._configs.get(address.upper()) or {}
+    project_data = await _load_project_data(hass)
+    saved_route = str(
+        project_data.get("device_gateway_preferences", {}).get(address.upper()) or ""
+    )
+    if saved_route:
+        return manager, "manual", saved_route
+    return (
+        manager,
+        str(config.get("gateway_selection") or "auto"),
+        str(config.get("manual_gateway_id") or ""),
+    )
 
 
 async def _async_submit_routed_transfer(
@@ -44,12 +64,15 @@ async def _async_submit_routed_transfer(
     wait_for_completion: bool,
 ) -> dict[str, Any]:
     """Submit through a pinned route or the smart multi-gateway pool."""
-    manager = get_entity_auto_update_manager(hass)
-    config = manager._configs.get(address.upper()) or {}
-    gateway_selection = str(config.get("gateway_selection") or "auto")
-    manual_route = str(config.get("manual_gateway_id") or "")
+    manager, gateway_selection, manual_route = await _async_route_preference(
+        hass, address
+    )
     queue = get_transfer_queue(hass)
-    if gateway_selection == "manual" and manual_route and manual_route != "local":
+    if (
+        gateway_selection == "manual"
+        and manual_route
+        and manual_route != LOCAL_ROUTE_ID
+    ):
         route = {"id": manual_route, "name": "DRATEK eInk gateway", "rssi": None}
         return await queue.async_submit(
             resource=f"gateway:{manual_route}",
@@ -124,14 +147,13 @@ async def websocket_send_design(
 
         target_gateway_id = str(msg.get("gateway_id") or "")
         transport_name = ""
-        manager = get_entity_auto_update_manager(hass)
-        config = manager._configs.get(address.upper()) or {}
-        manual_route = str(config.get("manual_gateway_id") or "")
-        gateway_selection = str(config.get("gateway_selection") or "auto")
+        manager, gateway_selection, manual_route = await _async_route_preference(
+            hass, address
+        )
         gateway_routes: list[dict[str, Any]] = []
 
         if not target_gateway_id and gateway_selection == "manual" and manual_route:
-            if manual_route != "local":
+            if manual_route != LOCAL_ROUTE_ID:
                 target_gateway_id = manual_route
         elif not target_gateway_id and gateway_selection != "manual":
             gateway_routes = await manager._async_gateway_routes(address)
@@ -140,7 +162,7 @@ async def websocket_send_design(
                 target_gateway_id = str(best["id"])
                 transport_name = str(best["name"])
 
-        use_gateway = bool(target_gateway_id and target_gateway_id != "local")
+        use_gateway = bool(target_gateway_id and target_gateway_id != LOCAL_ROUTE_ID)
 
         def gateway_runner_factory(route: dict[str, Any]):
             selected_gateway_id = str(route.get("id") or target_gateway_id)

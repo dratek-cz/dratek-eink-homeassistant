@@ -19,7 +19,13 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.storage import Store
 from PIL import Image, ImageChops
 
-from .const import DOMAIN, LOCAL_ROUTE_ID, PARTIAL_UPDATE_CONFIRMED_SDK_TYPES
+from .const import (
+    DISCOVERY_CACHE_KEY,
+    DISCOVERY_GRACE_SECONDS,
+    DOMAIN,
+    LOCAL_ROUTE_ID,
+    PARTIAL_UPDATE_CONFIRMED_SDK_TYPES,
+)
 from .gateway import async_gateway_status, async_load_gateways, async_scan_gateway, async_send_gateway_payload
 from .queue import get_transfer_queue
 from .render import (
@@ -1281,9 +1287,8 @@ class EntityAutoUpdateManager:
                     return_exceptions=True,
                 )
             except Exception:  # one unavailable gateway must not break local automation
-                self._gateway_route_cache = {}
-                self._gateway_route_cache_at = time.monotonic()
-                return []
+                gateways = []
+                scan_results = []
             scanned_gateways = [gateway for gateway in gateways if gateway.get("id")]
             routes: dict[str, list[dict[str, Any]]] = {}
             for gateway, scan_result in zip(scanned_gateways, scan_results, strict=False):
@@ -1306,6 +1311,55 @@ class EntityAutoUpdateManager:
                         ),
                         "rssi": rssi,
                     })
+
+            # BLE advertisements are intentionally intermittent.  A three-second
+            # scan can therefore return nothing even though the device panel saw
+            # the same display through a gateway moments earlier.  Reuse those
+            # still-fresh observations as a fallback instead of unexpectedly
+            # routing the write through Home Assistant's local adapter.
+            configured_gateways = {
+                str(gateway.get("id") or ""): gateway
+                for gateway in gateways
+                if gateway.get("id")
+            }
+            discovery_cache = getattr(self.hass, "data", {}).get(
+                DISCOVERY_CACHE_KEY, {}
+            )
+            for cached_address, cached_device in discovery_cache.items():
+                normalized_address = str(cached_address or "").upper()
+                cached_at = float(cached_device.get("last_seen_at") or 0)
+                if not cached_at or time.time() - cached_at > DISCOVERY_GRACE_SECONDS:
+                    continue
+                live_ids = {
+                    str(route.get("id") or "")
+                    for route in routes.get(normalized_address, [])
+                }
+                for path in cached_device.get("paths", []):
+                    gateway_id = str(path.get("id") or "")
+                    gateway = configured_gateways.get(gateway_id)
+                    if (
+                        path.get("type") != "gateway"
+                        or not gateway
+                        or gateway_id in live_ids
+                    ):
+                        continue
+                    try:
+                        rssi = float(path.get("rssi"))
+                    except (TypeError, ValueError):
+                        rssi = -999.0
+                    routes.setdefault(normalized_address, []).append(
+                        {
+                            "id": gateway_id,
+                            "name": str(
+                                path.get("name")
+                                or gateway.get("name")
+                                or gateway.get("host")
+                                or "DRATEK eInk gateway"
+                            ),
+                            "rssi": rssi,
+                        }
+                    )
+                    live_ids.add(gateway_id)
 
             for device_routes in routes.values():
                 device_routes.sort(key=lambda route: float(route["rssi"]), reverse=True)
