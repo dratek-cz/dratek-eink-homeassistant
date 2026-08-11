@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.259] - 2026-08-11
+
+### Opraveno – Zrychlení BLE přenosu & Oprava logování v Home Assistant
+- **`transfer.py`**: Odstraněn nekompatibilní argument `use_services_cache` při volání `establish_connection`. Tento argument vyvolával v `bleak_retry_connector` výjimku `TypeError`, kvůli které integrace padala do neoptimalizovaného přímého `BleakClient.connect()`, což způsobovalo varovné hlášky v logu a zásadní zpomalování přenosu po několika nahráních.
+- **`transfer.py` & `queue.py`**: Všechny kroky přenosu (připojení, MTU, zápis bloků, dokončení) se nyní zapisují s úrovní `WARNING`, takže jsou okamžitě viditelné v `ha core logs` bez nutnosti nastavování úrovně logování v `configuration.yaml`.
+
 ## [0.1.258] - 2026-08-11
 
 ### Opraveno – Oprava ReferenceError `request is not defined` při ručním odesílání návrhu

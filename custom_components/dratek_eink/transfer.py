@@ -74,6 +74,7 @@ class DratekTransfer:
 
     def log(self, message: str) -> None:
         self._log(message)
+        _LOGGER.warning("%s", message)
 
     @asynccontextmanager
     async def _connected_client(self, connection_target: Any, address: str) -> AsyncIterator[BleakClient]:
@@ -135,7 +136,6 @@ class DratekTransfer:
                     connection_target,
                     address,
                     max_attempts=2,
-                    use_services_cache=False,
                 )
             except Exception as exc:
                 self.log(

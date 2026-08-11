@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -11,6 +12,8 @@ from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN, PANEL_VERSION
 from .radio import async_radio_slot
+
+_LOGGER = logging.getLogger(__name__)
 
 QUEUE_STORE_KEY = "dratek_eink.transfer_queue"
 QUEUE_STORE_VERSION = 1
@@ -225,6 +228,7 @@ class TransferQueue:
         def add_log(message: str) -> None:
             job["log"].append(str(message))
             job["log"] = job["log"][-80:]
+            _LOGGER.warning("[%s] %s", job["address"], message)
 
         resource_lock = self._locks.setdefault(job["resource"], asyncio.Lock())
         skipped: dict[str, Any] | None = None

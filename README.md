@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.259
+
+- opraveno zpomalování po několika nahráních: odstraněn neplatný parametr `use_services_cache`, který způsoboval fallback na neoptimalizovaný přímý `BleakClient`
+- zprovozněno okamžité viditelné logování všech kroků přenosu pro `ha core logs`
+
 ## Novinky ve verzi 0.1.258
 
 - opraveno ruční odesílání návrhu z panelu: odstraněna chyba `ReferenceError: request is not defined` v JavaScriptu panelu
