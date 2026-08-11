@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.266] - 2026-08-11
+
+### Opraveno – Přesný stav fronty "writing" a zotavení při vypršení časového limitu bloku
+- **`queue.py`**: Úloha je nyní označena stavem `writing` (Zapisuje) až ve chvíli, kdy fyzicky získá přístup k přenosovému zámku a rozhraní Bluetooth. Předchozí čekající úlohy zůstávají správně ve stavu `queued`.
+- **`transfer.py`**: Zachování výjimky `TimeoutError` při zápisu obrázkového bloku tak, aby selhání bloku okamžitě vyvolalo čistý fail-fast a obnovení spojení místo uvíznutí.
+
 ## [0.1.265] - 2026-08-11
 
 ### Nová funkce – Nastavení prvků Meteoradaru (zaškrtávací políčka)

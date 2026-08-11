@@ -222,7 +222,6 @@ class TransferQueue:
             return await self._execute(job, runner)
 
     async def _execute(self, job: dict[str, Any], runner: TransferRunner) -> dict[str, Any]:
-        job["status"] = "writing"
         job["started_at"] = int(time.time())
 
         def add_log(message: str) -> None:
@@ -238,17 +237,12 @@ class TransferQueue:
 
             An automatic retry waits out a Bluetooth cooldown between attempts. If
             that wait happened while the transport lock was held, every other
-            display on the same gateway - or every local display, since they all
-            share the "local" transport - would stall for the whole cooldown.
-
-            The radio slot is innermost and taken in this same order everywhere,
-            so the three locks cannot deadlock against each other. It is what
-            stops a gateway transfer and a local one from transmitting over each
             other; see radio.py for why that matters even though the two paths
             are otherwise independent.
             """
             nonlocal skipped
             async with resource_lock:
+                job["status"] = "writing"
                 if self._should_skip_automatic_update(job):
                     skipped = await self._skip_automatic_update(job)
                     return skipped

@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.266
+
+- opraveno zobrazování stavu `Zapisuje`: úloha je označena jako zapisující až v momentu získání Bluetooth rozhraní
+- vylepšena reakce na vypršení časového limitu zápisu bloku pro okamžité obnovení přenosu
+
 ## Novinky ve verzi 0.1.265
 
 - přidána nastavitelná zaškrtávací políčka u Meteoradaru pro volbu zobrazení srážek, tečkovaného rasteru a větrných šipek přímo v administraci displeje

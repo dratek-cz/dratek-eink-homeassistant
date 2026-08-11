@@ -854,6 +854,8 @@ class DratekTransfer:
             else:
                 await asyncio.sleep(0.005)
         except Exception as exc:
+            if isinstance(exc, TimeoutError):
+                raise
             raise RuntimeError(f"Image block {block_number} write failed: {exc}") from exc
 
     async def _request_block_size(self, client, control_char, responses: asyncio.Queue[bytes]) -> int:
