@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.262] - 2026-08-11
+
+### Opraveno – Vynucení rychlého režimu streaming (3.4 s) i při neúplných vysílacích datech BLE
+- **`transfer.py`**: V metodě `_resolve_software_version()` přidána záložní detekce přes `connectable=False` a výchozí hodnota `0x81` (129, streaming mode). Pokud se data výrobce z BLE adv nepodařilo načíst, integrace dříve spadla do neoptimálního pomalého režimu s 8s čekáním na notifikaci u každého bloku (způsobovalo čas 455 s). Nyní vždy běží v bleskovém režimu streaming.
+
 ## [0.1.261] - 2026-08-11
 
 ### Opraveno – Eliminace 455sekundového záseku při výpadku/degradaci GATT zápisů

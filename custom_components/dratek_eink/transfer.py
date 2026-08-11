@@ -672,34 +672,33 @@ class DratekTransfer:
                 await self._stop_notify(client, control_char)
 
 
-    def _resolve_software_version(
-        self,
-        address: str,
-        supplied_version: int | None,
-    ) -> int:
+    def _resolve_software_version(self, address: str, supplied_version: int | None = None) -> int:
         """Use the advertised SW byte even for service calls without a panel payload."""
         if supplied_version:
             return int(supplied_version)
-        if self._hass is None:
-            return int(supplied_version or 0)
-        try:
-            from homeassistant.components import bluetooth
+        if self._hass is not None:
+            try:
+                from homeassistant.components import bluetooth
 
-            get_service_info = getattr(bluetooth, "async_last_service_info", None)
-            if get_service_info is None:
-                return int(supplied_version or 0)
-            service_info = get_service_info(
-                self._hass,
-                address,
-                connectable=True,
-            )
-            manufacturer_data = getattr(service_info, "manufacturer_data", {}) or {}
-            data = manufacturer_data.get(DRATEK_COMPANY_ID)
-            if data and len(data) > 2:
-                return int(data[2])
-        except Exception:  # HA Bluetooth compatibility varies by core version
-            pass
-        return int(supplied_version or 0)
+                get_service_info = getattr(bluetooth, "async_last_service_info", None)
+                if get_service_info is not None:
+                    service_info = get_service_info(
+                        self._hass,
+                        address,
+                        connectable=True,
+                    ) or get_service_info(
+                        self._hass,
+                        address,
+                        connectable=False,
+                    )
+                    manufacturer_data = getattr(service_info, "manufacturer_data", {}) or {}
+                    data = manufacturer_data.get(DRATEK_COMPANY_ID)
+                    if data and len(data) > 2:
+                        return int(data[2])
+            except Exception:  # HA Bluetooth compatibility varies by core version
+                pass
+        # Default to 0x81 (streaming mode) so transfers never fall back to 455s legacy notification pacing
+        return int(supplied_version or 0x81)
 
     def _connection_target(self, address: str) -> Any:
         if self._hass is None:

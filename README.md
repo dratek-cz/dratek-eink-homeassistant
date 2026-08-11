@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.262
+
+- vyřešen rozdíl rychlostí mezi displeji (3.4 s vs 455 s): opravena detekce verze firmware tak, aby všechny přenosy automaticky běžely v rychlém režimu streaming
+
 ## Novinky ve verzi 0.1.261
 
 - opraven 455s zásek: zavedena fail-fast ochrana při selhání zápisu bloku – poškozené spojení se okamžitě ukončí a nahradí novým přenosem místo 455sekundového zacyklení po blocích
