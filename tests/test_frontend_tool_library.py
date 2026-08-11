@@ -143,7 +143,11 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("Najít v síti", self.source)
         self.assertIn("Nová gateway", self.source)
         self.assertIn('class="gateway-visual-slot"', self.source)
-        self.assertIn(".gateway-compact-card{grid-template-rows:auto minmax(140px,1fr)", self.source)
+        self.assertIn(".gateway-compact-card{grid-template-rows:auto auto minmax(140px,1fr)", self.source)
+        self.assertIn('class="gateway-routing-guide"', self.source)
+        self.assertIn("Volná gateway se použije od −80 dBm", self.source)
+        self.assertIn("_gatewayActiveJob(gateway)", self.source)
+        self.assertIn('class="gateway-routing-state ${activeJob ? "is-busy" : "is-free"}"', self.source)
 
     def test_gateway_board_picker_has_no_store_buttons(self):
         self.assertNotIn('class="board-option-cart"', self.source)

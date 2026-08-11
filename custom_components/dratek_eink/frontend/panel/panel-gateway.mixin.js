@@ -425,7 +425,7 @@ export const gatewayMixin = {
     if (this._gatewaySubtab === "create") {
       return `${shellStart}<div class="gateway-section-head"><div><span class="gateway-section-icon"><ha-icon icon="mdi:usb-flash-drive-outline"></ha-icon></span><div><h2>Připravit novou gateway</h2><p>Připojte ESP32 přímo k Home Assistantu, vyberte port a nastavte Wi-Fi.</p></div></div><button id="refreshSerialPorts" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:usb-port"></ha-icon>Načíst porty</button></div>${this._renderNoSerialPortsWarning()}<div class="gateway-setup-grid"><div class="gateway-panel gateway-form-panel"><div class="gateway-step-title"><span>1</span><div><strong>Připojení přes USB</strong><small>Vyberte port, ve kterém je deska zapojená</small></div></div>${this._renderGatewayPortPicker()}<div class="gateway-step-title"><span>2</span><div><strong>Typ desky</strong><small>Podle desky se vybere správný firmware</small></div></div>${this._renderGatewayBoardPicker()}<div class="gateway-step-title"><span>3</span><div><strong>Síťové nastavení</strong><small>Údaje se bezpečně odešlou přes USB</small></div></div><div class="field"><label>Název gatewaye</label><input id="flashHostname" value="${this._escape(this._flashForm.hostname)}" placeholder="dratek-eink-gateway-dilna"></div><div class="field"><label>Wi-Fi SSID</label><input id="flashSsid" value="${this._escape(this._flashForm.ssid)}" placeholder="Název Wi-Fi"></div><div class="field"><label>Wi-Fi heslo</label><input id="flashPassword" type="password" value="${this._escape(this._flashForm.password)}" placeholder="Heslo"></div></div><div class="gateway-panel gateway-install-panel"><div class="gateway-step-title"><span>4</span><div><strong>Instalace a diagnostika</strong><small>Průběh zůstane viditelný v tomto panelu</small></div></div><div class="gateway-install-actions"><button id="flashGateway" ${this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid ? "disabled" : ""}><ha-icon icon="mdi:chip"></ha-icon>Nahrát firmware</button><button id="serialWifi" class="secondary" ${this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid ? "disabled" : ""}><ha-icon icon="mdi:wifi-cog"></ha-icon>Poslat jen Wi-Fi</button><button id="serialStatus" class="secondary" ${this._gatewayBusy || !this._flashForm.port ? "disabled" : ""}><ha-icon icon="mdi:console"></ha-icon>Ověřit USB</button></div><div class="gateway-install-placeholder"><ha-icon icon="mdi:progress-wrench"></ha-icon><strong>${this._gatewayBusy ? "Probíhá operace…" : "Připraveno k instalaci"}</strong><small>${this._escape(this._selectedGatewayBoard().firmware)}</small></div>${this._renderFlashResult()}${this._renderSerialResult()}</div></div>${shellEnd}`;
     }
-    return `${shellStart}<div class="gateway-section-head"><div><span class="gateway-section-icon"><ha-icon icon="mdi:router-wireless"></ha-icon></span><div><h2>Přehled gatewayí</h2><p>Stav sítě, připojené displeje, diagnostika a firmware na jednom místě.</p></div></div><button id="refreshGateways" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>${this._gatewayBusy ? "Obnovuji…" : "Obnovit stav"}</button></div>${this._renderGatewayCards()}${this._renderOtaResult()}${this._renderGatewayResult()}${shellEnd}`;
+    return `${shellStart}<div class="gateway-section-head"><div><span class="gateway-section-icon"><ha-icon icon="mdi:router-wireless"></ha-icon></span><div><h2>Chytré směrování gatewayí</h2><p>Home Assistant automaticky rozděluje zápisy podle signálu a aktuálního vytížení.</p></div></div><button id="refreshGateways" class="secondary" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:refresh"></ha-icon>${this._gatewayBusy ? "Obnovuji…" : "Obnovit stav"}</button></div><div class="gateway-routing-guide"><span><ha-icon icon="mdi:signal"></ha-icon><strong>1. Nejlepší signál</strong><small>Vybere se nejsilnější gateway, která displej vidí.</small></span><ha-icon icon="mdi:chevron-right"></ha-icon><span><ha-icon icon="mdi:router-wireless-settings"></ha-icon><strong>2. Kontrola vytížení</strong><small>Obsazená gateway obsluhuje pouze jeden displej.</small></span><ha-icon icon="mdi:chevron-right"></ha-icon><span><ha-icon icon="mdi:call-split"></ha-icon><strong>3. Bezpečná alternativa</strong><small>Volná gateway se použije od −80 dBm, jinak požadavek počká.</small></span></div>${this._renderGatewayCards()}${this._renderOtaResult()}${this._renderGatewayResult()}${shellEnd}`;
   },
 
   _normalizeGatewayIdentity(value) {
@@ -672,6 +672,13 @@ export const gatewayMixin = {
     });
   },
 
+  _gatewayActiveJob(gateway) {
+    const resource = `gateway:${String(gateway?.id || "")}`;
+    return (this._queue?.jobs || []).find((job) =>
+      job.resource === resource && ["queued", "writing"].includes(job.status)
+    ) || null;
+  },
+
   _formatGatewayUptime(value) {
     const seconds = Math.max(0, Math.floor(Number(value || 0) / 1000));
     if (!seconds) return "-";
@@ -702,10 +709,15 @@ export const gatewayMixin = {
       const boardPreview = BOARD_PREVIEWS[boardChip] || BOARD_PREVIEWS.esp32;
       const webUrl = this._gatewayWebUrl(gateway);
       const displays = this._gatewayConnectedDisplays(gateway);
-      return `<article class="gateway-compact-card ${stateClass}">
+      const activeJob = this._gatewayActiveJob(gateway);
+      const routingText = activeJob?.status === "writing"
+        ? `Zapisuje do ${this._deviceTitle(activeJob)}`
+        : activeJob ? `Ve frontě: ${this._deviceTitle(activeJob)}` : "Volná pro další displej";
+      return `<article class="gateway-compact-card ${stateClass} ${activeJob ? "is-busy" : "is-free"}">
         <header class="gateway-compact-head"><span class="gateway-device-icon"><ha-icon icon="mdi:router-wireless"></ha-icon><i></i></span><div class="gateway-card-title">${editing
           ? `<div class="gateway-name-edit"><input data-gateway-name-input="${this._escape(gateway.id)}" value="${this._escape(this._gatewayNameDraft)}"><button class="icon-btn" data-gateway-name-save="${this._escape(gateway.id)}" title="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button><button class="icon-btn secondary" data-gateway-name-cancel title="Zrušit"><ha-icon icon="mdi:close"></ha-icon></button></div>`
           : `<strong>${this._escape(gateway.name)}</strong><span>${this._escape(status.hostname || gateway.host)}</span>`}</div><span class="gateway-state ${stateClass}"><i></i>${stateText}</span></header>
+        <div class="gateway-routing-state ${activeJob ? "is-busy" : "is-free"}"><ha-icon icon="mdi:${activeJob ? "progress-upload" : "check-circle-outline"}"></ha-icon><span><small>Kapacita gatewaye</small><strong>${this._escape(routingText)}</strong></span></div>
         <div class="gateway-visual-slot">
           <div class="gateway-visual-board">${boardPreview}<strong>${this._escape(chip)}</strong></div>
           <div class="gateway-visual-caption"><span><ha-icon icon="mdi:tablet-dashboard"></ha-icon></span><div><strong>${displays.length} ${displays.length === 1 ? "připojený displej" : displays.length >= 2 && displays.length <= 4 ? "připojené displeje" : "připojených displejů"}</strong><small>${displays.length ? displays.slice(0, 4).map((device) => this._deviceTitle(device)).join(" · ") : "Připravená pro přiřazení v mapě"}</small></div></div>

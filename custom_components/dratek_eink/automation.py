@@ -449,7 +449,7 @@ class EntityAutoUpdateManager:
         self._pending_refreshes: set[str] = set()
         self._last_refresh_at: dict[str, float] = {}
         self._chart_series: dict[str, list[float]] = {}
-        self._gateway_route_cache: dict[str, dict[str, Any]] = {}
+        self._gateway_route_cache: dict[str, list[dict[str, Any]]] = {}
         self._gateway_route_cache_at = 0.0
         self._gateway_route_lock = asyncio.Lock()
         self._initialized = False
@@ -1079,6 +1079,7 @@ class EntityAutoUpdateManager:
         transport_name = str(config.get("transport_name") or "")
         gateway_selection = str(config.get("gateway_selection") or "auto")
         manual_route = str(config.get("manual_gateway_id") or "")
+        gateway_routes: list[dict[str, Any]] = []
         if gateway_selection == "manual" and manual_route == LOCAL_ROUTE_ID:
             route_type = "local"
             gateway_id = ""
@@ -1087,11 +1088,16 @@ class EntityAutoUpdateManager:
             route_type = "gateway"
             gateway_id = manual_route
         else:
-            best_gateway = await self._async_best_gateway_route(address)
-            if best_gateway:
+            gateway_routes = await self._async_gateway_routes(address)
+            if gateway_routes:
+                best_gateway = gateway_routes[0]
                 route_type = "gateway"
                 gateway_id = str(best_gateway["id"])
                 transport_name = str(best_gateway["name"])
+            else:
+                route_type = "local"
+                gateway_id = ""
+                transport_name = "Home Assistant Bluetooth"
         sdk_type = int(config["sdk_type"])
         software_version = int(config.get("software_version") or 0)
         transform = config.get("transform")
@@ -1128,48 +1134,80 @@ class EntityAutoUpdateManager:
         )
 
         if route_type == "gateway" and gateway_id:
-            gateway_partial = False
-            if use_partial:
-                gateway = next(
-                    (item for item in await async_load_gateways(self.hass) if str(item.get("id")) == gateway_id),
-                    None,
+            def gateway_runner_factory(route: dict[str, Any]):
+                selected_gateway_id = str(route.get("id") or gateway_id)
+                selected_gateway_name = str(
+                    route.get("name") or transport_name or "DRATEK eInk gateway"
                 )
-                status = await async_gateway_status(self.hass, gateway) if gateway else {}
-                gateway_partial = bool(status.get("partial_update"))
 
-            async def run_gateway(add_log):
-                add_log(f"Automatic entity update via {transport_name or 'gateway'}.")
-                if gateway_partial:
-                    add_log(f"Only changed area x={x0}, y={y0}, width={partial[2]}, height={partial[3]} will be sent.")
-                elif use_partial:
-                    add_log("Gateway firmware does not support safe area writes yet; sending the complete image.")
-                result = await async_send_gateway_payload(
-                    self.hass,
-                    gateway_id,
-                    address,
-                    sdk_type,
-                    region if gateway_partial else image,
-                    None if gateway_partial else transform,
-                    None if gateway_partial else orientation,
-                    software_version,
-                    log_callback=add_log,
-                    partial=partial if gateway_partial else None,
+                async def run_gateway(add_log):
+                    gateway_partial = False
+                    if use_partial:
+                        configured_gateways = await async_load_gateways(self.hass)
+                        gateway = next(
+                            (
+                                item
+                                for item in configured_gateways
+                                if str(item.get("id")) == selected_gateway_id
+                            ),
+                            None,
+                        )
+                        status = (
+                            await async_gateway_status(self.hass, gateway)
+                            if gateway
+                            else {}
+                        )
+                        gateway_partial = bool(status.get("partial_update"))
+                    add_log(
+                        f"Automatic entity update via {selected_gateway_name} "
+                        f"(display RSSI {route.get('rssi', 'unknown')} dBm)."
+                    )
+                    if gateway_partial:
+                        add_log(f"Only changed area x={x0}, y={y0}, width={partial[2]}, height={partial[3]} will be sent.")
+                    elif use_partial:
+                        add_log("Gateway firmware does not support safe area writes yet; sending the complete image.")
+                    result = await async_send_gateway_payload(
+                        self.hass,
+                        selected_gateway_id,
+                        address,
+                        sdk_type,
+                        region if gateway_partial else image,
+                        None if gateway_partial else transform,
+                        None if gateway_partial else orientation,
+                        software_version,
+                        log_callback=add_log,
+                        partial=partial if gateway_partial else None,
+                    )
+                    if result and result.get("ok") is not False:
+                        await self._remember_rendered_image(address, image)
+                        try:
+                            await async_save_display_preview(self.hass, address, image, orientation)
+                        except Exception as exc:
+                            add_log(f"Display updated, but its preview could not be saved: {exc}")
+                    return result or {"ok": False, "error": "Gateway was not found.", "log": []}
+
+                return run_gateway
+
+            if gateway_selection != "manual" and gateway_routes:
+                return await queue.async_submit_gateway_routes(
+                    routes=gateway_routes,
+                    address=address,
+                    operation="entity_update",
+                    runner_factory=gateway_runner_factory,
                 )
-                if result and result.get("ok") is not False:
-                    await self._remember_rendered_image(address, image)
-                    try:
-                        await async_save_display_preview(self.hass, address, image, orientation)
-                    except Exception as exc:
-                        add_log(f"Display updated, but its preview could not be saved: {exc}")
-                return result or {"ok": False, "error": "Gateway was not found.", "log": []}
 
+            manual_gateway_route = {
+                "id": gateway_id,
+                "name": transport_name or "DRATEK eInk gateway",
+                "rssi": None,
+            }
             return await queue.async_submit(
                 resource=f"gateway:{gateway_id}",
                 transport_type="gateway",
                 transport_name=transport_name or "DRATEK eInk gateway",
                 address=address,
                 operation="entity_update",
-                runner=run_gateway,
+                runner=gateway_runner_factory(manual_gateway_route),
             )
 
         async def run_local(add_log):
@@ -1217,16 +1255,16 @@ class EntityAutoUpdateManager:
             runner=run_local,
         )
 
-    async def _async_best_gateway_route(self, address: str) -> dict[str, Any] | None:
-        """Return the gateway currently receiving this display with the strongest RSSI."""
+    async def _async_gateway_routes(self, address: str) -> list[dict[str, Any]]:
+        """Return every gateway receiving this display, strongest first."""
         now = time.monotonic()
         if now - self._gateway_route_cache_at < GATEWAY_ROUTE_CACHE_SECONDS:
-            return self._gateway_route_cache.get(address.upper())
+            return list(self._gateway_route_cache.get(address.upper(), []))
 
         async with self._gateway_route_lock:
             now = time.monotonic()
             if now - self._gateway_route_cache_at < GATEWAY_ROUTE_CACHE_SECONDS:
-                return self._gateway_route_cache.get(address.upper())
+                return list(self._gateway_route_cache.get(address.upper(), []))
 
             try:
                 gateways = await async_load_gateways(self.hass)
@@ -1245,9 +1283,9 @@ class EntityAutoUpdateManager:
             except Exception:  # one unavailable gateway must not break local automation
                 self._gateway_route_cache = {}
                 self._gateway_route_cache_at = time.monotonic()
-                return None
+                return []
             scanned_gateways = [gateway for gateway in gateways if gateway.get("id")]
-            routes: dict[str, dict[str, Any]] = {}
+            routes: dict[str, list[dict[str, Any]]] = {}
             for gateway, scan_result in zip(scanned_gateways, scan_results, strict=False):
                 if isinstance(scan_result, Exception) or not scan_result or not scan_result.get("ok"):
                     continue
@@ -1259,10 +1297,7 @@ class EntityAutoUpdateManager:
                         rssi = float(device.get("rssi"))
                     except (TypeError, ValueError):
                         rssi = -999.0
-                    current = routes.get(device_address)
-                    if current is not None and float(current["rssi"]) >= rssi:
-                        continue
-                    routes[device_address] = {
+                    routes.setdefault(device_address, []).append({
                         "id": str(gateway["id"]),
                         "name": str(
                             gateway.get("name")
@@ -1270,11 +1305,19 @@ class EntityAutoUpdateManager:
                             or "DRATEK eInk gateway"
                         ),
                         "rssi": rssi,
-                    }
+                    })
+
+            for device_routes in routes.values():
+                device_routes.sort(key=lambda route: float(route["rssi"]), reverse=True)
 
             self._gateway_route_cache = routes
             self._gateway_route_cache_at = time.monotonic()
-            return routes.get(address.upper())
+            return list(routes.get(address.upper(), []))
+
+    async def _async_best_gateway_route(self, address: str) -> dict[str, Any] | None:
+        """Compatibility helper returning the strongest observed gateway."""
+        routes = await self._async_gateway_routes(address)
+        return routes[0] if routes else None
 
 
 def get_entity_auto_update_manager(hass: HomeAssistant) -> EntityAutoUpdateManager:

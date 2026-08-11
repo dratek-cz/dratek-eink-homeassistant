@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.269] - 2026-08-11
+
+### Vylepšeno – Robustní zpracování Bluetooth fronty a stabilní gateway routing
+- **`queue.py` & `radio.py`**: Zpřesněna správa přenosových zámků a fronty pro zamezení blokování místního rozhraní Bluetooth při paralelním odesílání na více displejů.
+- **`automation.py` & `ws_sending.py`**: Vylepšené ošetření parametrů šablon a manuálního nahrávání s automatickým rušením zastaralých úloh.
+- **Vylepšená sada unit testů**: Rozšířeny testy pro prověřování robustnosti fronty a odesílání.
+
 ## [0.1.268] - 2026-08-11
 
 ### Opraveno a vylepšeno – skutečný směr větru a jasná odezva odeslání

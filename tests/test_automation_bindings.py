@@ -214,31 +214,42 @@ class AutomationBindingTests(unittest.TestCase):
                     for node in ast.walk(handler)
                     if isinstance(node, ast.AsyncFunctionDef) and node is not handler
                 ]
-                self.assertEqual(1, len(runners), f"{name} has no queued runner")
+                self.assertGreaterEqual(len(runners), 1, f"{name} has no queued runner")
+                runner_nodes = {
+                    descendant
+                    for runner in runners
+                    for descendant in ast.walk(runner)
+                }
                 installed = [
                     call
                     for call in ast.walk(handler)
                     if isinstance(call, ast.Call)
                     and getattr(call.func, "id", "") == "_install_entity_automation"
-                    and call not in set(ast.walk(runners[0]))
+                    and call not in runner_nodes
                 ]
                 self.assertTrue(
                     installed,
                     f"{name} does not listen for entity changes until its slow "
                     "display write has already finished.",
                 )
-                rolled_back = any(
-                    isinstance(call, ast.Call)
-                    and getattr(call.func, "id", "")
-                    == "_clear_entity_automation_if_matches"
-                    for call in ast.walk(runners[0])
+                rolled_back = all(
+                    any(
+                        isinstance(call, ast.Call)
+                        and getattr(call.func, "id", "")
+                        == "_clear_entity_automation_if_matches"
+                        for call in ast.walk(runner)
+                    )
+                    for runner in runners
                 )
                 self.assertTrue(rolled_back, f"{name} leaves automation active after a failed write")
-                reconciled = any(
-                    isinstance(call, ast.Call)
-                    and getattr(call.func, "id", "")
-                    == "_request_entity_automation_refresh"
-                    for call in ast.walk(runners[0])
+                reconciled = all(
+                    any(
+                        isinstance(call, ast.Call)
+                        and getattr(call.func, "id", "")
+                        == "_request_entity_automation_refresh"
+                        for call in ast.walk(runner)
+                    )
+                    for runner in runners
                 )
                 self.assertTrue(
                     reconciled,
@@ -1054,6 +1065,7 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
         automation.async_load_gateways = load_gateways
         automation.async_scan_gateway = scan_gateway
         try:
+            routes = await manager._async_gateway_routes("ff:ff:92:81:46:32")
             route = await manager._async_best_gateway_route("ff:ff:92:81:46:32")
             cached_route = await manager._async_best_gateway_route("FF:FF:92:81:46:32")
         finally:
@@ -1061,6 +1073,7 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
             automation.async_scan_gateway = original_scan
 
         self.assertEqual("office", route["id"])
+        self.assertEqual(["office", "workshop"], [item["id"] for item in routes])
         self.assertEqual("Gateway kancelář", route["name"])
         self.assertEqual(-48, route["rssi"])
         self.assertEqual(route, cached_route)
@@ -1089,9 +1102,9 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
         )
         manager._changed_region = lambda _previous, _current: (0, 0, 10, 8)
         manager._remember_rendered_image = lambda *_args: asyncio.sleep(0)
-        manager._async_best_gateway_route = lambda _address: asyncio.sleep(
+        manager._async_gateway_routes = lambda _address: asyncio.sleep(
             0,
-            result={"id": "office", "name": "Gateway kancelář", "rssi": -48},
+            result=[{"id": "office", "name": "Gateway kancelář", "rssi": -48}],
         )
         submitted = {}
 
@@ -1099,6 +1112,13 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
             async def async_submit(self, **kwargs):
                 submitted.update(kwargs)
                 return await kwargs["runner"](lambda _line: None)
+
+            async def async_submit_gateway_routes(self, **kwargs):
+                route = kwargs["routes"][0]
+                submitted.update(kwargs)
+                submitted["resource"] = f"gateway:{route['id']}"
+                submitted["transport_name"] = route["name"]
+                return await kwargs["runner_factory"](route)(lambda _line: None)
 
         async def send_gateway(_hass, gateway_id, *_args, **_kwargs):
             submitted["sent_gateway_id"] = gateway_id

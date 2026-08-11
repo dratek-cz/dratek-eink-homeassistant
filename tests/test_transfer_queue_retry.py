@@ -304,20 +304,8 @@ class TransferQueueRetryTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.gather(*hass.tasks)
         self.assertEqual(attempts, 2)
 
-    async def test_two_gateways_take_turns_instead_of_transmitting_at_once(self):
-        """Independent transports still share one 2.4 GHz band.
-
-        Two gateways used to write in parallel, because in software they really
-        are independent: different transport locks, different displays. The
-        radio is not. A gateway transmitting on top of another transfer does not
-        make it fail, it makes it lose connection events - which is how a
-        ten-second transfer quietly became a five-minute one on the one
-        installation that had gateways attached.
-
-        Both transfers are still accepted immediately and both still complete;
-        they just no longer overlap. That is the throughput being traded away on
-        purpose. See radio.py.
-        """
+    async def test_two_different_gateways_can_transmit_in_parallel(self):
+        """Each ESP32 has an independent BLE adapter and may serve one display."""
         hass = FakeHass()
         queue = queue_module.TransferQueue(hass)
         queue._loaded = True
@@ -369,10 +357,115 @@ class TransferQueueRetryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             peak_concurrent,
-            1,
-            "two gateways transmitted into the same band at the same time",
+            2,
+            "independent gateways were unnecessarily serialized",
         )
         self.assertTrue(all(job["status"] == "succeeded" for job in queue._jobs))
+
+    async def test_busy_strongest_gateway_uses_free_acceptable_alternative(self):
+        hass = FakeHass()
+        queue = queue_module.TransferQueue(hass)
+        queue._loaded = True
+        async def save_history():
+            return None
+        queue._save_history = save_history
+        routes = [
+            {"id": "strong", "name": "Strong", "rssi": -45},
+            {"id": "backup", "name": "Backup", "rssi": -72},
+        ]
+        both_started = asyncio.Event()
+        release = asyncio.Event()
+        active: set[str] = set()
+
+        def factory(route):
+            async def runner(_add_log):
+                active.add(route["id"])
+                if len(active) == 2:
+                    both_started.set()
+                await release.wait()
+                return {"ok": True}
+
+            return runner
+
+        await queue.async_submit_gateway_routes(
+            routes=routes,
+            address="AA:BB:CC:DD:EE:01",
+            operation="design",
+            runner_factory=factory,
+            wait_for_completion=False,
+        )
+        await asyncio.sleep(0)
+        await queue.async_submit_gateway_routes(
+            routes=routes,
+            address="AA:BB:CC:DD:EE:02",
+            operation="design",
+            runner_factory=factory,
+            wait_for_completion=False,
+        )
+
+        await asyncio.wait_for(both_started.wait(), timeout=1)
+        self.assertEqual(active, {"strong", "backup"})
+        self.assertCountEqual(
+            ["gateway:strong", "gateway:backup"],
+            [job["resource"] for job in queue._jobs],
+        )
+        release.set()
+        await asyncio.gather(*hass.tasks)
+
+    async def test_weak_alternative_waits_for_the_strong_gateway(self):
+        hass = FakeHass()
+        queue = queue_module.TransferQueue(hass)
+        queue._loaded = True
+        async def save_history():
+            return None
+        queue._save_history = save_history
+        routes = [
+            {"id": "strong", "name": "Strong", "rssi": -45},
+            {"id": "weak", "name": "Weak", "rssi": -81},
+        ]
+        first_started = asyncio.Event()
+        second_started = asyncio.Event()
+        release_first = asyncio.Event()
+        call_count = 0
+
+        def factory(route):
+            async def runner(_add_log):
+                nonlocal call_count
+                call_count += 1
+                self.assertEqual(route["id"], "strong")
+                if call_count == 1:
+                    first_started.set()
+                    await release_first.wait()
+                else:
+                    second_started.set()
+                return {"ok": True}
+
+            return runner
+
+        await queue.async_submit_gateway_routes(
+            routes=routes,
+            address="AA:BB:CC:DD:EE:11",
+            operation="design",
+            runner_factory=factory,
+            wait_for_completion=False,
+        )
+        await first_started.wait()
+        await queue.async_submit_gateway_routes(
+            routes=routes,
+            address="AA:BB:CC:DD:EE:12",
+            operation="design",
+            runner_factory=factory,
+            wait_for_completion=False,
+        )
+        await asyncio.sleep(0.05)
+        self.assertFalse(second_started.is_set())
+        self.assertEqual(
+            ["gateway:strong", "gateway:strong"],
+            [job["resource"] for job in queue._jobs],
+        )
+        release_first.set()
+        await asyncio.wait_for(second_started.wait(), timeout=1)
+        await asyncio.gather(*hass.tasks)
 
 
 class QueueCancelJobTests(unittest.IsolatedAsyncioTestCase):

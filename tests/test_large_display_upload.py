@@ -70,18 +70,21 @@ class LargeDisplayUploadTests(unittest.TestCase):
                 node
                 for node in ast.walk(handler)
                 if isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "async_submit"
+                and (
+                    isinstance(node.func, ast.Attribute)
+                    and node.func.attr in {"async_submit", "async_submit_gateway_routes"}
+                )
             ]
-            self.assertEqual(1, len(submit_calls), name)
-            wait_keywords = [
-                keyword
-                for keyword in submit_calls[0].keywords
-                if keyword.arg == "wait_for_completion"
-            ]
-            self.assertEqual(1, len(wait_keywords), name)
-            self.assertIsInstance(wait_keywords[0].value, ast.Constant)
-            self.assertIs(wait_keywords[0].value.value, False)
+            self.assertGreaterEqual(len(submit_calls), 1, name)
+            for submit_call in submit_calls:
+                wait_keywords = [
+                    keyword
+                    for keyword in submit_call.keywords
+                    if keyword.arg == "wait_for_completion"
+                ]
+                self.assertEqual(1, len(wait_keywords), name)
+                self.assertIsInstance(wait_keywords[0].value, ast.Constant)
+                self.assertIs(wait_keywords[0].value.value, False)
 
 
 if __name__ == "__main__":

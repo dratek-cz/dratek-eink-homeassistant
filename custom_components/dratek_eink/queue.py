@@ -34,6 +34,8 @@ RETRYABLE_BLUETOOTH_ERROR_MARKERS = (
 )
 
 TransferRunner = Callable[[Callable[[str], None]], Awaitable[dict[str, Any]]]
+GatewayRunnerFactory = Callable[[dict[str, Any]], TransferRunner]
+GATEWAY_FALLBACK_MIN_RSSI_DBM = -80.0
 
 
 class TransferQueue:
@@ -195,6 +197,79 @@ class TransferQueue:
             "queue_status": "queued",
         }
 
+    async def async_submit_gateway_routes(
+        self,
+        *,
+        routes: list[dict[str, Any]],
+        address: str,
+        operation: str,
+        runner_factory: GatewayRunnerFactory,
+        wait_for_completion: bool = True,
+    ) -> dict[str, Any]:
+        """Choose a gateway atomically and submit one transfer through it.
+
+        The strongest observed route is preferred.  If it already has a queued
+        or writing job, the strongest free alternative is used only while its
+        RSSI is still acceptable.  Otherwise the job deliberately queues on the
+        strongest gateway instead of risking a weak, unreliable connection.
+
+        There is no suspension point between choosing a route and appending its
+        job in ``async_submit`` (``_ensure_loaded`` is already satisfied), so two
+        concurrent websocket requests cannot both mistake the same gateway for
+        free before either reservation becomes visible.
+        """
+        await self._ensure_loaded()
+        route = self._select_gateway_route(routes)
+        if route is None:
+            return {
+                "ok": False,
+                "address": address.upper(),
+                "error": "No gateway currently receives this display.",
+                "log": [],
+            }
+        gateway_id = str(route.get("id") or "")
+        gateway_name = str(
+            route.get("name") or route.get("host") or "DRATEK eInk gateway"
+        )
+        return await self.async_submit(
+            resource=f"gateway:{gateway_id}",
+            transport_type="gateway",
+            transport_name=gateway_name,
+            address=address,
+            operation=operation,
+            runner=runner_factory(route),
+            wait_for_completion=wait_for_completion,
+        )
+
+    def _select_gateway_route(
+        self, routes: list[dict[str, Any]]
+    ) -> dict[str, Any] | None:
+        """Return strongest free acceptable route, or queue on the strongest."""
+        ranked = sorted(
+            (route for route in routes if str(route.get("id") or "")),
+            key=lambda route: self._route_rssi(route),
+            reverse=True,
+        )
+        if not ranked:
+            return None
+        for route in ranked:
+            if self._route_rssi(route) < GATEWAY_FALLBACK_MIN_RSSI_DBM:
+                continue
+            resource = f"gateway:{route['id']}"
+            if not any(
+                job.get("resource") == resource and self._is_active_job(job)
+                for job in self._jobs
+            ):
+                return route
+        return ranked[0]
+
+    @staticmethod
+    def _route_rssi(route: dict[str, Any]) -> float:
+        try:
+            return float(route.get("rssi"))
+        except (TypeError, ValueError):
+            return -999.0
+
     def _preempt_automatic_update(self, address: str) -> None:
         active = self._automatic_tasks.get(address)
         if not active:
@@ -246,6 +321,13 @@ class TransferQueue:
                 if self._should_skip_automatic_update(job):
                     skipped = await self._skip_automatic_update(job)
                     return skipped
+                # Each ESP32 gateway owns its own BLE adapter and its resource
+                # lock already guarantees one display per gateway.  Only the
+                # local Home Assistant adapter needs the process-wide radio
+                # slot; serialising independent gateways here prevented the
+                # parallel transfers the gateway pool is meant to provide.
+                if job.get("transport_type") == "gateway":
+                    return await runner(log_line)
                 async with async_radio_slot(self.hass):
                     return await runner(log_line)
 

@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.269
+
+- vylepšeno zpracování Bluetooth fronty a směrování přenosů pro ještě stabilnější odesílání na více displejů současně
+- rozšířeny automatizované testy spolehlivosti fronty a správy zámků rádio rozhraní
+
 ## Novinky ve verzi 0.1.268
 
 - šipky Meteoradaru ukazují skutečný aktuální směr proudění podle více bodů Open-Meteo

@@ -1,23 +1,9 @@
-"""One radio slot shared by every Bluetooth path this integration drives.
+"""One radio slot for transfers driven by Home Assistant's local BLE adapter.
 
-Home Assistant's own adapter and every ESP32 gateway transmit into the same
-2.4 GHz band, usually within a few metres of each other and of the displays.
-Nothing in the transport layer knew that: TransferQueue serialises per display
-(``_device_locks``) and per transport (``_locks``, keyed by ``"local"`` or a
-gateway id), so a local transfer to one display and gateway transfers to two
-others all ran at once by design.
-
-That design is right about the software - those paths really are independent -
-and wrong about the physics. A gateway that is scanning or streaming is
-transmitting into the same air the local adapter needs for its own connection
-events, and a BLE connection that loses connection events does not fail, it
-just gets slower. Enough overlap turns a ten-second transfer into a
-multi-minute one without a single error being logged anywhere.
-
-This module is the one place that says "the radio is busy". It deliberately
-costs throughput: two displays on two different gateways now wait for each
-other. That is the trade being made, and it is the only way to keep one path
-from silently degrading another.
+Local writes share one physical adapter and therefore remain serialized. Each
+ESP32 gateway owns a separate BLE adapter and is protected by its own resource
+lock in ``TransferQueue`` instead, allowing different gateways to serve
+different displays in parallel while each gateway still handles only one.
 """
 
 from __future__ import annotations

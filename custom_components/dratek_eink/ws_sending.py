@@ -34,6 +34,53 @@ DESIGN_UPLOAD_MAX_BYTES = 8 * 1024 * 1024
 DESIGN_UPLOAD_TTL_SECONDS = 10 * 60
 
 
+async def _async_submit_routed_transfer(
+    hass: HomeAssistant,
+    *,
+    address: str,
+    operation: str,
+    local_runner,
+    gateway_runner_factory,
+    wait_for_completion: bool,
+) -> dict[str, Any]:
+    """Submit through a pinned route or the smart multi-gateway pool."""
+    manager = get_entity_auto_update_manager(hass)
+    config = manager._configs.get(address.upper()) or {}
+    gateway_selection = str(config.get("gateway_selection") or "auto")
+    manual_route = str(config.get("manual_gateway_id") or "")
+    queue = get_transfer_queue(hass)
+    if gateway_selection == "manual" and manual_route and manual_route != "local":
+        route = {"id": manual_route, "name": "DRATEK eInk gateway", "rssi": None}
+        return await queue.async_submit(
+            resource=f"gateway:{manual_route}",
+            transport_type="gateway",
+            transport_name=str(route["name"]),
+            address=address,
+            operation=operation,
+            runner=gateway_runner_factory(route),
+            wait_for_completion=wait_for_completion,
+        )
+    if gateway_selection != "manual":
+        routes = await manager._async_gateway_routes(address)
+        if routes:
+            return await queue.async_submit_gateway_routes(
+                routes=routes,
+                address=address,
+                operation=operation,
+                runner_factory=gateway_runner_factory,
+                wait_for_completion=wait_for_completion,
+            )
+    return await queue.async_submit(
+        resource="local",
+        transport_type="local",
+        transport_name="Home Assistant Bluetooth",
+        address=address,
+        operation=operation,
+        runner=local_runner,
+        wait_for_completion=wait_for_completion,
+    )
+
+
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/send_design",
@@ -81,27 +128,35 @@ async def websocket_send_design(
         config = manager._configs.get(address.upper()) or {}
         manual_route = str(config.get("manual_gateway_id") or "")
         gateway_selection = str(config.get("gateway_selection") or "auto")
+        gateway_routes: list[dict[str, Any]] = []
 
         if not target_gateway_id and gateway_selection == "manual" and manual_route:
             if manual_route != "local":
                 target_gateway_id = manual_route
         elif not target_gateway_id and gateway_selection != "manual":
-            best = await manager._async_best_gateway_route(address)
-            if best:
+            gateway_routes = await manager._async_gateway_routes(address)
+            if gateway_routes:
+                best = gateway_routes[0]
                 target_gateway_id = str(best["id"])
                 transport_name = str(best["name"])
 
         use_gateway = bool(target_gateway_id and target_gateway_id != "local")
 
-        async def run_transfer(add_log) -> dict[str, Any]:
-            try:
-                if use_gateway:
+        def gateway_runner_factory(route: dict[str, Any]):
+            selected_gateway_id = str(route.get("id") or target_gateway_id)
+            selected_gateway_name = str(
+                route.get("name") or transport_name or "DRATEK eInk gateway"
+            )
+
+            async def run_gateway(add_log) -> dict[str, Any]:
+                try:
                     add_log(
-                        f"Sending editor design {image.width}x{image.height} via gateway {transport_name or target_gateway_id}."
+                        f"Sending editor design {image.width}x{image.height} via gateway "
+                        f"{selected_gateway_name} (display RSSI {route.get('rssi', 'unknown')} dBm)."
                     )
                     res = await async_send_gateway_payload(
                         hass,
-                        target_gateway_id,
+                        selected_gateway_id,
                         address,
                         sdk_type,
                         image,
@@ -120,41 +175,70 @@ async def websocket_send_design(
                         await _request_entity_automation_refresh(hass, address, automation)
                         return res
                     return res or {"ok": False, "error": "Gateway transfer failed."}
-                else:
-                    add_log(f"Sending editor design {image.width}x{image.height} to SDK type {sdk_type}.")
-                    if transform:
-                        add_log(f"Using display transform: {transform}.")
-                    transfer = DratekTransfer(log=add_log, hass=hass)
-                    await transfer.send_image(
-                        address,
-                        sdk_type,
-                        image,
-                        transform,
-                        orientation,
-                        msg.get("software_version"),
+                except BaseException:
+                    await _clear_entity_automation_if_matches(hass, address, automation)
+                    raise
+
+            return run_gateway
+
+        async def run_local(add_log) -> dict[str, Any]:
+            try:
+                add_log(f"Sending editor design {image.width}x{image.height} to SDK type {sdk_type}.")
+                if transform:
+                    add_log(f"Using display transform: {transform}.")
+                transfer = DratekTransfer(log=add_log, hass=hass)
+                await transfer.send_image(
+                    address,
+                    sdk_type,
+                    image,
+                    transform,
+                    orientation,
+                    msg.get("software_version"),
+                )
+                add_log("Design sent.")
+                try:
+                    await async_save_display_preview(
+                        hass, address, image, orientation, list(msg.get("template_ids") or [])
                     )
-                    add_log("Design sent.")
-                    try:
-                        await async_save_display_preview(
-                            hass, address, image, orientation, list(msg.get("template_ids") or [])
-                        )
-                    except Exception as exc:
-                        add_log(f"Display updated, but its preview could not be saved: {exc}")
-                    await _request_entity_automation_refresh(hass, address, automation)
-                    return {"ok": True, "address": address, "log": []}
+                except Exception as exc:
+                    add_log(f"Display updated, but its preview could not be saved: {exc}")
+                await _request_entity_automation_refresh(hass, address, automation)
+                return {"ok": True, "address": address, "log": []}
             except BaseException:
                 await _clear_entity_automation_if_matches(hass, address, automation)
                 raise
 
-        result = await get_transfer_queue(hass).async_submit(
-            resource=f"gateway:{target_gateway_id}" if use_gateway else "local",
-            transport_type="gateway" if use_gateway else "local",
-            transport_name=transport_name or ("DRATEK eInk gateway" if use_gateway else "Home Assistant Bluetooth"),
-            address=address,
-            operation="design",
-            runner=run_transfer,
-            wait_for_completion=False,
-        )
+        queue = get_transfer_queue(hass)
+        if use_gateway and gateway_selection != "manual" and gateway_routes:
+            result = await queue.async_submit_gateway_routes(
+                routes=gateway_routes,
+                address=address,
+                operation="design",
+                runner_factory=gateway_runner_factory,
+                wait_for_completion=False,
+            )
+        elif use_gateway:
+            result = await queue.async_submit(
+                resource=f"gateway:{target_gateway_id}",
+                transport_type="gateway",
+                transport_name=transport_name or "DRATEK eInk gateway",
+                address=address,
+                operation="design",
+                runner=gateway_runner_factory(
+                    {"id": target_gateway_id, "name": transport_name, "rssi": None}
+                ),
+                wait_for_completion=False,
+            )
+        else:
+            result = await queue.async_submit(
+                resource="local",
+                transport_type="local",
+                transport_name="Home Assistant Bluetooth",
+                address=address,
+                operation="design",
+                runner=run_local,
+                wait_for_completion=False,
+            )
 
 
     except Exception as exc:  # BLE stack can raise platform-specific exceptions
@@ -315,13 +399,49 @@ async def websocket_commit_design_upload(
                 await _clear_entity_automation_if_matches(hass, address, automation)
                 raise
 
-        result = await get_transfer_queue(hass).async_submit(
-            resource="local",
-            transport_type="local",
-            transport_name="Home Assistant Bluetooth",
+        def gateway_runner_factory(route: dict[str, Any]):
+            async def run_gateway(add_log) -> dict[str, Any]:
+                try:
+                    add_log(
+                        f"Chunked editor design {image.width}x{image.height} routed via "
+                        f"{route.get('name') or route['id']} ({route.get('rssi', 'unknown')} dBm)."
+                    )
+                    result = await async_send_gateway_payload(
+                        hass,
+                        str(route["id"]),
+                        address,
+                        sdk_type,
+                        image,
+                        msg.get("transform"),
+                        msg.get("orientation", "landscape"),
+                        msg.get("software_version"),
+                        log_callback=add_log,
+                    )
+                    if result and result.get("ok") is not False:
+                        try:
+                            await async_save_display_preview(
+                                hass,
+                                address,
+                                image,
+                                msg.get("orientation", "landscape"),
+                                list(msg.get("template_ids") or []),
+                            )
+                        except Exception as exc:
+                            add_log(f"Display updated, but its preview could not be saved: {exc}")
+                        await _request_entity_automation_refresh(hass, address, automation)
+                    return result or {"ok": False, "error": "Gateway transfer failed."}
+                except BaseException:
+                    await _clear_entity_automation_if_matches(hass, address, automation)
+                    raise
+
+            return run_gateway
+
+        result = await _async_submit_routed_transfer(
+            hass,
             address=address,
             operation="design",
-            runner=run_transfer,
+            local_runner=run_transfer,
+            gateway_runner_factory=gateway_runner_factory,
             wait_for_completion=False,
         )
     except Exception as exc:
@@ -398,13 +518,32 @@ async def websocket_send_partial_design(
             add_log("Partial design sent.")
             return {"ok": True, "address": address, "log": []}
 
-        result = await get_transfer_queue(hass).async_submit(
-            resource="local",
-            transport_type="local",
-            transport_name="Home Assistant Bluetooth",
+        def gateway_runner_factory(route: dict[str, Any]):
+            async def run_gateway(add_log) -> dict[str, Any]:
+                add_log(
+                    f"Sending partial design via {route.get('name') or route['id']} "
+                    f"({route.get('rssi', 'unknown')} dBm)."
+                )
+                result = await async_send_gateway_payload(
+                    hass,
+                    str(route["id"]),
+                    address,
+                    sdk_type,
+                    image,
+                    software_version=0,
+                    log_callback=add_log,
+                    partial=(msg["x"], msg["y"], msg["width"], msg["height"]),
+                )
+                return result or {"ok": False, "error": "Gateway transfer failed."}
+
+            return run_gateway
+
+        result = await _async_submit_routed_transfer(
+            hass,
             address=address,
             operation="partial_design",
-            runner=run_transfer,
+            local_runner=run_transfer,
+            gateway_runner_factory=gateway_runner_factory,
             wait_for_completion=False,
         )
     except Exception as exc:  # BLE stack can raise platform-specific exceptions
@@ -462,13 +601,36 @@ async def websocket_send_text(
                 add_log(f"Display updated, but its preview could not be saved: {exc}")
             return {"ok": True, "address": address, "text": text, "log": []}
 
-        result = await get_transfer_queue(hass).async_submit(
-            resource="local",
-            transport_type="local",
-            transport_name="Home Assistant Bluetooth",
+        def gateway_runner_factory(route: dict[str, Any]):
+            async def run_gateway(add_log) -> dict[str, Any]:
+                add_log(
+                    f"Sending text via {route.get('name') or route['id']} "
+                    f"({route.get('rssi', 'unknown')} dBm)."
+                )
+                result = await async_send_gateway_payload(
+                    hass,
+                    str(route["id"]),
+                    address,
+                    sdk_type,
+                    image,
+                    log_callback=add_log,
+                )
+                if result and result.get("ok") is not False:
+                    try:
+                        await async_save_display_preview(hass, address, image, template_ids=[])
+                    except Exception as exc:
+                        add_log(f"Display updated, but its preview could not be saved: {exc}")
+                return result or {"ok": False, "error": "Gateway transfer failed."}
+
+            return run_gateway
+
+        result = await _async_submit_routed_transfer(
+            hass,
             address=address,
             operation="text",
-            runner=run_transfer,
+            local_runner=run_transfer,
+            gateway_runner_factory=gateway_runner_factory,
+            wait_for_completion=True,
         )
     except Exception as exc:  # BLE stack can raise platform-specific exceptions
         log(f"Send failed: {exc}")

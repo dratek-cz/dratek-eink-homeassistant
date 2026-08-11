@@ -33,7 +33,11 @@ def _submitted_operations(node: ast.AST) -> set[str]:
         if not isinstance(inner, ast.Call):
             continue
         name = inner.func.attr if isinstance(inner.func, ast.Attribute) else getattr(inner.func, "id", "")
-        if name != "async_submit":
+        if name not in {
+            "async_submit",
+            "async_submit_gateway_routes",
+            "_async_submit_routed_transfer",
+        }:
             continue
         for keyword in inner.keywords:
             if keyword.arg == "operation" and isinstance(keyword.value, ast.Constant):
