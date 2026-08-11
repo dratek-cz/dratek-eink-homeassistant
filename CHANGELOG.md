@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.260] - 2026-08-11
+
+### Opraveno – Pročištění logování v Home Assistant
+- **`transfer.py`**: Odstraněno duplicitní logování varování, aby se v `ha core logs` každý krok přenosu zobrazoval přehledně pouze jednou.
+
 ## [0.1.259] - 2026-08-11
 
 ### Opraveno – Zrychlení BLE přenosu & Oprava logování v Home Assistant

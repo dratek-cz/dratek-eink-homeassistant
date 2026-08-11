@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.260
+
+- odstraněny duplicitní výpisy v logu `ha core logs` pro maximální přehlednost
+
 ## Novinky ve verzi 0.1.259
 
 - opraveno zpomalování po několika nahráních: odstraněn neplatný parametr `use_services_cache`, který způsoboval fallback na neoptimalizovaný přímý `BleakClient`
