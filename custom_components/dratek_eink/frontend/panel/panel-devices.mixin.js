@@ -2801,6 +2801,7 @@ export const devicesMixin = {
   },
 
   async _displayTemplateEntityAutomation(image, device, gatewayId = "") {
+    const request = this._currentDisplayTemplateSvgRequest(device);
     const size = this._devicePreviewSize(device);
     const landscape = this._displayTemplateOrientation !== "portrait";
     const width = landscape ? Math.max(size.width, size.height) : Math.min(size.width, size.height);

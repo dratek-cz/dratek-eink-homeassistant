@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.258] - 2026-08-11
+
+### Opraveno – Oprava ReferenceError `request is not defined` při ručním odesílání návrhu
+- **`panel-devices.mixin.js`**: Přidána chybějící deklarace proměnné `request` v metodě `_displayTemplateEntityAutomation()`. Tím je odstraněna chyba `ReferenceError: request is not defined` vyvolávaná při ručním odesílání náhledu na displej z panelu.
+
 ## [0.1.257] - 2026-08-11
 
 ### Přidáno & Opraveno – Ochrana automatických aktualizací pro displeje mimo dosah a nedostupné displeje

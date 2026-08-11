@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.258
+
+- opraveno ruční odesílání návrhu z panelu: odstraněna chyba `ReferenceError: request is not defined` v JavaScriptu panelu
+
 ## Novinky ve verzi 0.1.257
 
 - ochrana automatických aktualizací pro displeje mimo dosah nebo vypnuté: bleskové přeskočení (0 ms) při neexistenci BLE vysílání a 15minutový penalizační backoff po selhání přenosu (ruční nahrávání "Odeslat" zůstává vždy aktivní)
