@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.273
+
+- vyřešeno zobrazování nového loga a ikony v HACS při vyhledání aktualizace i před stažením
+- aktualizovány všechny brand ikony integrace pro světelný i tmavý režim Home Assistantu
+
 ## Novinky ve verzi 0.1.272
 
 - kompletní grafické a rozvrhové vylepšení záložky **Nová gateway (USB Flash)**

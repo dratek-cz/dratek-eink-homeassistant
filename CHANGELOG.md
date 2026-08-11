@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.273] - 2026-08-11
+
+### Vylepšeno – Nová oficiální loga a ikony v HACS a Home Assistantu
+- Vygenerovány všechny velikosti a světlé/tmavé varianty brand assetů (`icon.png`, `logo.png`, `dark_icon.png`, `dark_logo.png`) v kořenové složce `brand/` i v komponentě `custom_components/dratek_eink/brand/` a `custom_components/dratek_eink/icon.png`.
+- Vyřešeno načítání náhledu ikony v HACS rozhraní ještě před stažením aktualizace.
+
 ## [0.1.272] - 2026-08-11
 
 ### Vylepšeno – Grafické vylepšení USB Flashing & Konfigurace ESP32 Gateway
