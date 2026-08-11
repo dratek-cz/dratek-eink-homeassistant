@@ -470,8 +470,8 @@ class DratekTransfer:
                 raise RuntimeError("DRATEK eInk transfer characteristics were not found.")
 
             self.log(f"Using service {service_uuid}")
-            await self._negotiate_mtu(client)
             await self._start_notify(client, control_char, notify_handler)
+            await self._negotiate_mtu(client)
             write_notify_enabled = False
             if "notify" in write_char.properties or "indicate" in write_char.properties:
                 try:
@@ -768,6 +768,11 @@ class DratekTransfer:
 
     async def _negotiate_mtu(self, client) -> None:
         """Request the large MTU used by the official Picksmart client on BlueZ."""
+        mtu_size = int(getattr(client, "mtu_size", 0) or 0)
+        if mtu_size >= 100:
+            self.log(f"Negotiated ATT MTU: {mtu_size} bytes.")
+            return
+
         backend = getattr(client, "_backend", None)
         acquire_mtu = getattr(backend, "_acquire_mtu", None)
         if callable(acquire_mtu):
@@ -775,13 +780,20 @@ class DratekTransfer:
                 async with asyncio.timeout(MTU_NEGOTIATION_TIMEOUT):
                     await acquire_mtu()
             except Exception as exc:  # private BlueZ hook differs by Bleak version
+                err_msg = str(exc).strip()
                 self.log(
-                    f"Explicit MTU negotiation was unavailable ({exc}); "
+                    f"Explicit MTU negotiation was unavailable{f' ({err_msg})' if err_msg else ''}; "
                     "continuing with the MTU selected by BlueZ."
                 )
 
         mtu_size = int(getattr(client, "mtu_size", 0) or 0)
-        self.log(f"Negotiated ATT MTU: {mtu_size or 'unknown'} bytes.")
+        if mtu_size > 0 and mtu_size <= 64:
+            self.log(
+                f"Negotiated ATT MTU: {mtu_size} bytes. "
+                "Warning: Low MTU will cause BlueZ packet fragmentation and slow down transfer."
+            )
+        else:
+            self.log(f"Negotiated ATT MTU: {mtu_size or 'unknown'} bytes.")
 
     async def _start_notify(
         self,

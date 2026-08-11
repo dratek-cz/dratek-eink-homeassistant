@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.270] - 2026-08-11
+
+### Opraveno – Prevence zpomalení přenosu z 3.4 s na 134 s z důvodu ATT MTU=23
+- **`transfer.py`**: Příkaz vyjednání vysokého MTU (`_negotiate_mtu`) byl přesunut až za zapnutí notifikací `_start_notify`, kdy má D-Bus v BlueZ vytvořený aktivní socket. Pokud BlueZ vrátil výchozí 23-bajtové MTU, nešlo přes rozhraní vyjednat 247 bajtů, což způsobovalo fragmentaci každého bloku na 13 fyzických paketů.
+- **`transfer.py`**: Přidána automatická detekce a varování při nízkém MTU, aby byl v protokolu okamžitě viditelný důvod případného zpomalení.
+
 ## [0.1.269] - 2026-08-11
 
 ### Vylepšeno – Robustní zpracování Bluetooth fronty a stabilní gateway routing

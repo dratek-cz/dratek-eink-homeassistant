@@ -710,14 +710,17 @@ export const gatewayMixin = {
       const webUrl = this._gatewayWebUrl(gateway);
       const displays = this._gatewayConnectedDisplays(gateway);
       const activeJob = this._gatewayActiveJob(gateway);
-      const routingText = activeJob?.status === "writing"
+      const routingAvailable = online && !activeJob;
+      const routingText = !online
+        ? "Nedostupná – nelze přes ni zapisovat"
+        : activeJob?.status === "writing"
         ? `Zapisuje do ${this._deviceTitle(activeJob)}`
         : activeJob ? `Ve frontě: ${this._deviceTitle(activeJob)}` : "Volná pro další displej";
-      return `<article class="gateway-compact-card ${stateClass} ${activeJob ? "is-busy" : "is-free"}">
+      return `<article class="gateway-compact-card ${stateClass} ${activeJob ? "is-busy" : routingAvailable ? "is-free" : "is-unavailable"}">
         <header class="gateway-compact-head"><span class="gateway-device-icon"><ha-icon icon="mdi:router-wireless"></ha-icon><i></i></span><div class="gateway-card-title">${editing
           ? `<div class="gateway-name-edit"><input data-gateway-name-input="${this._escape(gateway.id)}" value="${this._escape(this._gatewayNameDraft)}"><button class="icon-btn" data-gateway-name-save="${this._escape(gateway.id)}" title="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button><button class="icon-btn secondary" data-gateway-name-cancel title="Zrušit"><ha-icon icon="mdi:close"></ha-icon></button></div>`
           : `<strong>${this._escape(gateway.name)}</strong><span>${this._escape(status.hostname || gateway.host)}</span>`}</div><span class="gateway-state ${stateClass}"><i></i>${stateText}</span></header>
-        <div class="gateway-routing-state ${activeJob ? "is-busy" : "is-free"}"><ha-icon icon="mdi:${activeJob ? "progress-upload" : "check-circle-outline"}"></ha-icon><span><small>Kapacita gatewaye</small><strong>${this._escape(routingText)}</strong></span></div>
+        <div class="gateway-routing-state ${activeJob ? "is-busy" : routingAvailable ? "is-free" : "is-unavailable"}"><ha-icon icon="mdi:${activeJob ? "progress-upload" : routingAvailable ? "check-circle-outline" : "router-wireless-off"}"></ha-icon><span><small>Kapacita gatewaye</small><strong>${this._escape(routingText)}</strong></span></div>
         <div class="gateway-visual-slot">
           <div class="gateway-visual-board">${boardPreview}<strong>${this._escape(chip)}</strong></div>
           <div class="gateway-visual-caption"><span><ha-icon icon="mdi:tablet-dashboard"></ha-icon></span><div><strong>${displays.length} ${displays.length === 1 ? "připojený displej" : displays.length >= 2 && displays.length <= 4 ? "připojené displeje" : "připojených displejů"}</strong><small>${displays.length ? displays.slice(0, 4).map((device) => this._deviceTitle(device)).join(" · ") : "Připravená pro přiřazení v mapě"}</small></div></div>
