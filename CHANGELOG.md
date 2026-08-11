@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.261] - 2026-08-11
+
+### Opraveno – Eliminace 455sekundového záseku při výpadku/degradaci GATT zápisů
+- **`transfer.py`**: Zrušena vnitřní smyčka 3 opakovaných pokusů pro jednotlivé obrázkové bloky v `_write_image_block()`. Při selhání nebo vypršení časového limitu zápisu bloku integrace okamžitě selže (fail-fast), ukončí poškozené/zastaralé BLE spojení a provede čisté znovupřipojení. Tím se zamezilo řetězení retrií (až 455s) a přenos se v případě výpadku obnoví během 3 sekund.
+- **`transfer.py`**: Zkrácen časový limit v `_wait_for_next_transfer_response()` z 20s na 8s pro bleskové zotavení při čekání na potvrzení procesu.
+
 ## [0.1.260] - 2026-08-11
 
 ### Opraveno – Pročištění logování v Home Assistant

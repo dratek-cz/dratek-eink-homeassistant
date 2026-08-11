@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.261
+
+- opraven 455s zásek: zavedena fail-fast ochrana při selhání zápisu bloku – poškozené spojení se okamžitě ukončí a nahradí novým přenosem místo 455sekundového zacyklení po blocích
+
 ## Novinky ve verzi 0.1.260
 
 - odstraněny duplicitní výpisy v logu `ha core logs` pro maximální přehlednost

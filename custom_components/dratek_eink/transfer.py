@@ -836,37 +836,21 @@ class DratekTransfer:
         require_response: bool,
         operation_timeout: float = GATT_OPERATION_TIMEOUT,
     ) -> None:
-        max_attempts = 3 if require_response else 1
-        for attempt in range(1, max_attempts + 1):
-            try:
-                await self._write_char(
-                    client,
-                    write_char,
-                    data,
-                    f"block {block_number}",
-                    response=require_response,
-                    operation_timeout=operation_timeout,
-                )
-                # A successful ATT response is already the flow-control gate;
-                # adding another delay only slows large displays down.
-                if not require_response:
-                    await asyncio.sleep(STREAM_WRITE_DELAY)
-                else:
-                    await asyncio.sleep(0.005)
-                return
-            except Exception as exc:  # BLE stacks expose platform-specific write errors
-                # A timed-out ATT request may already have reached the display.
-                # Repeating the same raw image block would shift/corrupt the
-                # display buffer, so restart the whole prepared transfer instead.
-                if isinstance(exc, TimeoutError):
-                    raise
-                if attempt >= max_attempts:
-                    raise
-                self.log(
-                    f"Image block {block_number} was not acknowledged ({exc}); "
-                    f"retrying {attempt + 1}/{max_attempts}."
-                )
-                await asyncio.sleep(0.1)
+        try:
+            await self._write_char(
+                client,
+                write_char,
+                data,
+                f"block {block_number}",
+                response=require_response,
+                operation_timeout=operation_timeout,
+            )
+            if not require_response:
+                await asyncio.sleep(STREAM_WRITE_DELAY)
+            else:
+                await asyncio.sleep(0.005)
+        except Exception as exc:
+            raise RuntimeError(f"Image block {block_number} write failed: {exc}") from exc
 
     async def _request_block_size(self, client, control_char, responses: asyncio.Queue[bytes]) -> int:
         attempts: list[bool] = []
@@ -946,7 +930,7 @@ class DratekTransfer:
     async def _wait_for_next_transfer_response(
         self,
         responses: asyncio.Queue[bytes],
-        timeout: int = 20,
+        timeout: int = 8,
     ) -> bytes:
         deadline = asyncio.get_running_loop().time() + timeout
         while asyncio.get_running_loop().time() < deadline:
