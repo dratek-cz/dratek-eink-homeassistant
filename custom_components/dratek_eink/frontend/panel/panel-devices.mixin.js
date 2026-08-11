@@ -1072,11 +1072,10 @@ export const devicesMixin = {
               <button type="button" class="${orientation === "landscape" ? "is-active" : ""}" data-template-orientation="landscape" title="Na šířku"><ha-icon icon="mdi:phone-rotate-landscape"></ha-icon></button>
             </div>
           </div>
-          <button type="button" class="display-template-send-button" data-template-send ${assignedTemplates.length && !this._templateSending ? "" : "disabled"}>
-            <ha-icon icon="mdi:${this._templateSending ? "loading" : "send"}" ${this._templateSending ? 'class="spin"' : ""}></ha-icon>
-            <span><strong>${this._templateSending ? "Odesílám náhled…" : "Odeslat do displeje"}</strong><small>${assignedTemplates.length ? "Zapíše aktuální obsah displeje" : "Nejprve přetáhněte šablonu"}</small></span>
+          <button type="button" class="display-template-send-button ${!this._templateSending && this._templateSendResult?.ok ? "is-success" : !this._templateSending && this._templateSendResult ? "is-error" : ""}" data-template-send ${assignedTemplates.length && !this._templateSending ? "" : "disabled"} title="${this._templateSendResult ? this._escape(this._templateSendResult.message) : "Odeslat aktuální obsah do displeje"}">
+            <ha-icon icon="mdi:${this._templateSending ? "loading" : this._templateSendResult?.ok ? "check-circle" : this._templateSendResult ? "alert-circle" : "send"}" ${this._templateSending ? 'class="spin"' : ""}></ha-icon>
+            <span><strong>${this._templateSending ? "Odesílám náhled…" : this._templateSendResult?.ok ? "Odesláno do displeje" : this._templateSendResult ? "Odeslání se nezdařilo" : "Odeslat do displeje"}</strong><small>${this._templateSendResult?.ok ? "Hotovo · přenos byl přijat" : this._templateSendResult ? "Podrobnosti zobrazíte podržením kurzoru" : assignedTemplates.length ? "Zapíše aktuální obsah displeje" : "Nejprve přetáhněte šablonu"}</small></span>
           </button>
-          ${this._templateSendResult ? `<div class="template-send-result ${this._templateSendResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSendResult.ok ? "check-circle-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSendResult.message)}</span></div>` : ""}
         </aside>
         <section class="display-template-library">
           <div class="card devices-toolbar-card display-template-toolbar">
@@ -1662,10 +1661,17 @@ export const devicesMixin = {
         + `<rect y="${h/2}" width="${w}" height="${h/2}" fill="#d41414"/>`
         + `<polygon points="0,0 ${w*0.48},${h/2} 0,${h}" fill="#11457e"/>`;
     } else if (id === "sk") {
+      const shieldX = h * 0.24;
+      const shieldY = h * 0.24;
+      const shieldW = h * 0.43;
+      const shieldH = h * 0.52;
+      const crossX = shieldX + shieldW * 0.5;
       inner = `<rect width="${w}" height="${h/3}" fill="#ffffff"/>`
         + `<rect y="${h/3}" width="${w}" height="${h/3}" fill="#0b4ea2"/>`
         + `<rect y="${(h*2)/3}" width="${w}" height="${h/3}" fill="#ee1c25"/>`
-        + `<path d="M ${w*0.22} ${h*0.28} v ${h*0.46} m -${w*0.08} -${h*0.28} h ${w*0.16} m -${w*0.12} -${h*0.1} h ${w*0.24}" stroke="#ffffff" stroke-width="1.2" fill="none"/>`;
+        + `<path d="M ${shieldX} ${shieldY} H ${shieldX + shieldW} V ${shieldY + shieldH * 0.55} Q ${shieldX + shieldW} ${shieldY + shieldH * 0.84} ${crossX} ${shieldY + shieldH} Q ${shieldX} ${shieldY + shieldH * 0.84} ${shieldX} ${shieldY + shieldH * 0.55} Z" fill="#ee1c25" stroke="#ffffff" stroke-width="${Math.max(0.55, h * 0.04)}"/>`
+        + `<path d="M ${shieldX + shieldW * 0.08} ${shieldY + shieldH * 0.79} Q ${shieldX + shieldW * 0.24} ${shieldY + shieldH * 0.62} ${shieldX + shieldW * 0.38} ${shieldY + shieldH * 0.78} Q ${crossX} ${shieldY + shieldH * 0.54} ${shieldX + shieldW * 0.62} ${shieldY + shieldH * 0.78} Q ${shieldX + shieldW * 0.78} ${shieldY + shieldH * 0.62} ${shieldX + shieldW * 0.92} ${shieldY + shieldH * 0.79} V ${shieldY + shieldH * 0.9} H ${shieldX + shieldW * 0.08} Z" fill="#0b4ea2"/>`
+        + `<path d="M ${crossX} ${shieldY + shieldH * 0.19} V ${shieldY + shieldH * 0.72} M ${shieldX + shieldW * 0.27} ${shieldY + shieldH * 0.36} H ${shieldX + shieldW * 0.73} M ${shieldX + shieldW * 0.34} ${shieldY + shieldH * 0.52} H ${shieldX + shieldW * 0.66}" stroke="#ffffff" stroke-width="${Math.max(0.75, h * 0.055)}" stroke-linecap="round" fill="none"/>`;
     } else if (id === "de") {
       inner = `<rect width="${w}" height="${h/3}" fill="#000000"/>`
         + `<rect y="${h/3}" width="${w}" height="${h/3}" fill="#dd0000"/>`
@@ -1785,7 +1791,7 @@ export const devicesMixin = {
           </label>
           <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
             <input type="checkbox" id="mrOptWind" ${showWind ? "checked" : ""} data-device-address="${this._escape(address)}" />
-            <span>💨 Orientační proudění (šipky)</span>
+            <span>💨 Aktuální směr větru (šipky)</span>
           </label>
         </div>
       </div>
@@ -3092,6 +3098,16 @@ export const devicesMixin = {
       this._templateSending = false;
       this._render();
       this._paint();
+      window.clearTimeout(this._templateSendResultTimer);
+      const displayedResult = this._templateSendResult;
+      if (displayedResult) {
+        this._templateSendResultTimer = window.setTimeout(() => {
+          if (this._templateSendResult !== displayedResult) return;
+          this._templateSendResult = null;
+          this._render();
+          this._paint();
+        }, displayedResult.ok ? 4500 : 8000);
+      }
     }
   },
 

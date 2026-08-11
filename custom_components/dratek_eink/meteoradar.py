@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 RAINVIEWER_INDEX_URL = "https://api.rainviewer.com/public/weather-maps.json"
+OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 TILE_SIZE = 512
 ZOOM = 6
 COLOR_SCHEME = 2
@@ -58,6 +59,7 @@ PRECIPITATION_COLOR = (220, 20, 12)
 BORDER_COLOR = (0, 0, 0)
 INDEX_RECHECK_INTERVAL_SECONDS = 60
 HTTP_TIMEOUT_SECONDS = 15
+WIND_RECHECK_INTERVAL_SECONDS = 15 * 60
 # The final image is downscaled at least twice after compositing - once here
 # (any composed crop wider/taller than this gets shrunk before caching) and
 # again in render.py's fit_to_size() to whatever the display slot needs. Border
@@ -501,6 +503,22 @@ COUNTRY_NAMES: dict[str, str] = {
     "eu": "Střední Evropa 🇪🇺",
 }
 
+# Representative inland points spread across each selectable country.  A
+# single country-centre direction made every arrow identical even when a front
+# crossed the map; five current 10 m wind samples let each arrow use the nearest
+# model cell while still requiring only one multi-coordinate API request.
+COUNTRY_WIND_POINTS: dict[str, tuple[tuple[float, float], ...]] = {
+    # (latitude, longitude)
+    "cz": ((50.08, 14.44), (49.75, 13.38), (49.20, 16.61), (49.82, 18.26), (50.21, 15.83)),
+    "sk": ((48.15, 17.11), (49.22, 18.74), (48.72, 21.26), (48.74, 19.15), (49.06, 20.30)),
+    "de": ((52.52, 13.41), (53.55, 9.99), (51.34, 12.37), (50.11, 8.68), (48.14, 11.58)),
+    "at": ((48.21, 16.37), (47.81, 13.04), (47.07, 15.44), (47.27, 11.39), (46.62, 14.31)),
+    "pl": ((52.23, 21.01), (54.35, 18.65), (51.11, 17.03), (50.06, 19.94), (53.13, 23.16)),
+}
+COUNTRY_WIND_POINTS["eu"] = tuple(
+    points[0] for key, points in COUNTRY_WIND_POINTS.items() if key != "eu"
+)
+
 def mercator_pixel(lat: float, lon: float, zoom: int, tile_size: int) -> tuple[float, float]:
     """Project (lat, lon) to a pixel in the world-wide Web Mercator raster at `zoom`.
 
@@ -532,6 +550,33 @@ def tile_bounds(
         int(math.floor(max(xs))),
         int(math.floor(max(ys))),
     )
+
+
+def wind_flow_vector(direction_from_degrees: float, length: float) -> tuple[float, float]:
+    """Convert meteorological wind direction into an on-map flow vector.
+
+    Weather services report where wind comes *from*: 270° is a westerly wind.
+    An arrow must point where it goes, so 270° becomes an eastward (+x)
+    vector.  Image y grows southward, hence the cosine sign below.
+    """
+    flow_bearing = math.radians((float(direction_from_degrees) + 180.0) % 360.0)
+    return math.sin(flow_bearing) * length, -math.cos(flow_bearing) * length
+
+
+def _project_wind_samples(
+    samples: tuple[tuple[float, float, float, float], ...],
+    *,
+    zoom: int,
+    tile_size: int,
+    origin_x: float,
+    origin_y: float,
+) -> tuple[tuple[float, float, float, float], ...]:
+    """Project (lon, lat, direction-from, speed) samples into tile pixels."""
+    projected = []
+    for lon, lat, direction, speed in samples:
+        px, py = mercator_pixel(lat, lon, zoom, tile_size)
+        projected.append((px - origin_x, py - origin_y, direction, speed))
+    return tuple(projected)
 
 
 def _scaled_border_width(extent_px: float, base_width: int) -> int:
@@ -637,22 +682,22 @@ def _paint_precipitation(
     )
 
 
-def _draw_wind_vectors(image: Image.Image, polygon: list[tuple[float, float]], extent: float) -> None:
-    """Draw bold, filled wind arrows clipped precisely to a country shape."""
+def _draw_wind_vectors(
+    image: Image.Image,
+    polygon: list[tuple[float, float]],
+    extent: float,
+    wind_samples: tuple[tuple[float, float, float, float], ...],
+) -> None:
+    """Draw current wind arrows, using the nearest projected model sample."""
+    if not wind_samples:
+        return
     xs = [p[0] for p in polygon]
     ys = [p[1] for p in polygon]
     min_x, max_x = min(xs), max(xs)
     min_y, max_y = min(ys), max(ys)
 
     spacing = max(44, int(extent / 5.5))
-    arrow_length = max(18, int(spacing * 0.52))
     stroke_width = _scaled_border_width(extent, 2)
-    head_length = arrow_length * 0.34
-    head_width = max(5, stroke_width * 2.6)
-
-    angle_rad = math.radians(65)
-    dx = math.cos(angle_rad) * arrow_length
-    dy = -math.sin(angle_rad) * arrow_length
 
     country_mask = Image.new("1", image.size, 0)
     ImageDraw.Draw(country_mask).polygon(polygon, fill=1)
@@ -662,15 +707,29 @@ def _draw_wind_vectors(image: Image.Image, polygon: list[tuple[float, float]], e
     for y in range(int(min_y) + spacing // 2, int(max_y), spacing):
         for x in range(int(min_x) + spacing // 2, int(max_x), spacing):
             if country_mask.getpixel((x, y)):
+                _sample_x, _sample_y, direction_from, speed = min(
+                    wind_samples,
+                    key=lambda sample: (sample[0] - x) ** 2 + (sample[1] - y) ** 2,
+                )
+                speed_factor = 0.72 + min(70.0, max(0.0, speed)) / 100.0
+                arrow_length = max(18, spacing * 0.52 * speed_factor)
+                dx, dy = wind_flow_vector(direction_from, arrow_length)
+                vector_length = max(1.0, math.hypot(dx, dy))
+                unit_x, unit_y = dx / vector_length, dy / vector_length
+                normal_x, normal_y = -unit_y, unit_x
+                head_length = arrow_length * 0.34
+                head_width = max(5, stroke_width * 2.6)
                 x1, y1 = x - dx / 2, y - dy / 2
                 x2, y2 = x + dx / 2, y + dy / 2
                 draw.line([(x1, y1), (x2, y2)], fill=1, width=stroke_width)
-                base_x = x2 - math.cos(angle_rad) * head_length
-                base_y = y2 + math.sin(angle_rad) * head_length
-                normal_x = math.sin(angle_rad) * head_width
-                normal_y = math.cos(angle_rad) * head_width
+                base_x = x2 - unit_x * head_length
+                base_y = y2 - unit_y * head_length
                 draw.polygon(
-                    [(x2, y2), (base_x + normal_x, base_y + normal_y), (base_x - normal_x, base_y - normal_y)],
+                    [
+                        (x2, y2),
+                        (base_x + normal_x * head_width, base_y + normal_y * head_width),
+                        (base_x - normal_x * head_width, base_y - normal_y * head_width),
+                    ],
                     fill=1,
                 )
 
@@ -694,6 +753,7 @@ def compose_country_radar_image(
     show_precipitation: bool = True,
     dotted_light: bool = True,
     show_wind: bool = False,
+    wind_samples: tuple[tuple[float, float, float, float], ...] = (),
 ) -> Image.Image:
     """Stitch fetched tiles and draw the black-outlined, red/white precipitation map.
 
@@ -713,6 +773,13 @@ def compose_country_radar_image(
         (px - origin_x, py - origin_y)
         for px, py in (mercator_pixel(lat, lon, zoom, tile_size) for lon, lat in border)
     ]
+    projected_wind_samples = _project_wind_samples(
+        wind_samples,
+        zoom=zoom,
+        tile_size=tile_size,
+        origin_x=origin_x,
+        origin_y=origin_y,
+    )
 
     country_mask = Image.new("L", composite.size, 0)
     ImageDraw.Draw(country_mask).polygon(polygon, fill=255)
@@ -735,7 +802,7 @@ def compose_country_radar_image(
 
     draw = ImageDraw.Draw(output)
     if show_wind:
-        _draw_wind_vectors(output, polygon, extent)
+        _draw_wind_vectors(output, polygon, extent, projected_wind_samples)
 
     draw.polygon(polygon, outline=BORDER_COLOR, width=_scaled_border_width(extent, border_width))
 
@@ -764,6 +831,7 @@ def compose_multi_country_radar_image(
     show_precipitation: bool = True,
     dotted_light: bool = True,
     show_wind: bool = False,
+    wind_samples: tuple[tuple[float, float, float, float], ...] = (),
 ) -> Image.Image:
     """The Europe-overview counterpart to `compose_country_radar_image`."""
     grid_width = (x_max - x_min + 1) * tile_size
@@ -781,6 +849,13 @@ def compose_multi_country_radar_image(
         ]
         for _name, border in borders
     ]
+    projected_wind_samples = _project_wind_samples(
+        wind_samples,
+        zoom=zoom,
+        tile_size=tile_size,
+        origin_x=origin_x,
+        origin_y=origin_y,
+    )
 
     countries_mask = Image.new("L", composite.size, 0)
     mask_draw = ImageDraw.Draw(countries_mask)
@@ -807,7 +882,7 @@ def compose_multi_country_radar_image(
     output_draw = ImageDraw.Draw(output)
     for polygon in polygons:
         if show_wind:
-            _draw_wind_vectors(output, polygon, extent)
+            _draw_wind_vectors(output, polygon, extent, projected_wind_samples)
         output_draw.polygon(polygon, outline=BORDER_COLOR, width=scaled_width)
 
     crop_box = (
@@ -832,14 +907,68 @@ def fit_to_size(image: Image.Image, width: int, height: int) -> Image.Image:
 
 
 _cache: dict[str, dict[str, object]] = {}
+_wind_cache: dict[str, dict[str, object]] = {}
 
 
-async def _async_fetch_json(hass: "HomeAssistant", url: str) -> dict:
+async def _async_fetch_json(hass: "HomeAssistant", url: str) -> object:
     from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
     session = async_get_clientsession(hass)
     async with session.get(url, timeout=HTTP_TIMEOUT_SECONDS) as response:
         return await response.json(content_type=None)
+
+
+async def _async_current_wind_samples(
+    hass: "HomeAssistant", country: str
+) -> tuple[tuple[tuple[float, float, float, float], ...], str]:
+    """Fetch current 10 m wind and return (samples, observation cache key)."""
+    country_key = str(country or "cz").lower()
+    points = COUNTRY_WIND_POINTS.get(country_key, COUNTRY_WIND_POINTS["cz"])
+    now = time.monotonic()
+    cached = _wind_cache.get(country_key)
+    if cached and now - float(cached.get("checked_at", 0)) < WIND_RECHECK_INTERVAL_SECONDS:
+        return cached.get("samples", ()), str(cached.get("observation_key", ""))  # type: ignore[return-value]
+
+    latitudes = ",".join(f"{latitude:.4f}" for latitude, _longitude in points)
+    longitudes = ",".join(f"{longitude:.4f}" for _latitude, longitude in points)
+    url = (
+        f"{OPEN_METEO_FORECAST_URL}?latitude={latitudes}&longitude={longitudes}"
+        "&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=kmh&forecast_days=1"
+    )
+    try:
+        data = await _async_fetch_json(hass, url)
+        payloads = data if isinstance(data, list) else [data]
+        samples: list[tuple[float, float, float, float]] = []
+        observation_parts: list[str] = []
+        for (latitude, longitude), payload in zip(points, payloads):
+            if not isinstance(payload, dict):
+                continue
+            current = payload.get("current")
+            if not isinstance(current, dict):
+                continue
+            direction = float(current["wind_direction_10m"])
+            speed = float(current["wind_speed_10m"])
+            if not math.isfinite(direction) or not math.isfinite(speed):
+                continue
+            samples.append((longitude, latitude, direction % 360.0, max(0.0, speed)))
+            observation_parts.append(str(current.get("time") or ""))
+        result = tuple(samples)
+        observation_key = "|".join(observation_parts)
+        _wind_cache[country_key] = {
+            "samples": result,
+            "observation_key": observation_key,
+            "checked_at": now,
+        }
+        return result, observation_key
+    except Exception:  # live weather must never prevent the radar from rendering
+        if cached:
+            return cached.get("samples", ()), str(cached.get("observation_key", ""))  # type: ignore[return-value]
+        _wind_cache[country_key] = {
+            "samples": (),
+            "observation_key": "",
+            "checked_at": now,
+        }
+        return (), ""
 
 
 async def _async_fetch_tile(hass: "HomeAssistant", url: str) -> Image.Image | None:
@@ -884,6 +1013,8 @@ async def _async_composed_base_image(
 
     try:
         index = await _async_fetch_json(hass, RAINVIEWER_INDEX_URL)
+        if not isinstance(index, dict):
+            raise TypeError("RainViewer index is not an object")
         frames = (index.get("radar") or {}).get("past") or []
         if not frames:
             return cached.get("composed") if cached else None  # type: ignore[return-value]
@@ -895,7 +1026,16 @@ async def _async_composed_base_image(
     frame_key = f"{host}{path}"
     if not host or not path:
         return cached.get("composed") if cached else None  # type: ignore[return-value]
-    if cached and cached.get("frame_key") == frame_key and cached.get("composed") is not None:
+    if show_wind:
+        wind_samples, wind_key = await _async_current_wind_samples(hass, country_key)
+    else:
+        wind_samples, wind_key = (), ""
+    if (
+        cached
+        and cached.get("frame_key") == frame_key
+        and cached.get("wind_key", "") == wind_key
+        and cached.get("composed") is not None
+    ):
         return cached["composed"]  # type: ignore[return-value]
 
     x_min, y_min, x_max, y_max = tile_bounds(all_points, ZOOM, TILE_SIZE)
@@ -928,6 +1068,7 @@ async def _async_composed_base_image(
                 show_precipitation=show_precipitation,
                 dotted_light=dotted_light,
                 show_wind=show_wind,
+                wind_samples=wind_samples,
             )
         )
     else:
@@ -945,11 +1086,13 @@ async def _async_composed_base_image(
                 show_precipitation=show_precipitation,
                 dotted_light=dotted_light,
                 show_wind=show_wind,
+                wind_samples=wind_samples,
             )
         )
     _cache[key] = {
         "composed": composed,
         "frame_key": frame_key,
+        "wind_key": wind_key,
         "checked_at": now,
     }
     return composed

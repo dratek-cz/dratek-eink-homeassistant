@@ -10,6 +10,7 @@ lazily, inside the functions that actually need it.
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import math
 from pathlib import Path
@@ -227,12 +228,21 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
 
     def test_wind_arrows_are_bold_and_clipped_to_the_country(self) -> None:
         plain = self._compose((0, 0, 0, 0), show_wind=False)
-        windy = self._compose((0, 0, 0, 0), show_wind=True)
+        windy = self._compose(
+            (0, 0, 0, 0),
+            show_wind=True,
+            wind_samples=((0.0, 0.0, 270.0, 25.0),),
+        )
         plain_black = sum(pixel == meteoradar.BORDER_COLOR for pixel in plain.getdata())
         windy_black = sum(pixel == meteoradar.BORDER_COLOR for pixel in windy.getdata())
         self.assertGreater(windy_black, plain_black)
         self.assertEqual(windy.getpixel((0, 0)), (255, 255, 255))
         self.assertEqual(windy.getpixel((windy.width - 1, 0)), (255, 255, 255))
+
+    def test_no_fake_arrows_are_drawn_without_live_wind_samples(self) -> None:
+        plain = self._compose((0, 0, 0, 0), show_wind=False)
+        unavailable = self._compose((0, 0, 0, 0), show_wind=True)
+        self.assertEqual(list(unavailable.getdata()), list(plain.getdata()))
 
     def test_no_text_badge_is_baked_into_the_radar_image(self) -> None:
         source = (COMPONENT / "meteoradar.py").read_text(encoding="utf-8")
@@ -309,6 +319,53 @@ class FitToSizeTests(unittest.TestCase):
         # A 4:1 source fit into a square must leave white bars top and bottom.
         self.assertEqual(fitted.getpixel((50, 0)), (255, 255, 255))
         self.assertEqual(fitted.getpixel((50, 99)), (255, 255, 255))
+
+
+class CurrentWindTests(unittest.TestCase):
+    def test_westerly_wind_points_east(self) -> None:
+        dx, dy = meteoradar.wind_flow_vector(270.0, 20.0)
+        self.assertAlmostEqual(dx, 20.0)
+        self.assertAlmostEqual(dy, 0.0)
+
+    def test_northerly_wind_points_south_on_the_image(self) -> None:
+        dx, dy = meteoradar.wind_flow_vector(0.0, 20.0)
+        self.assertAlmostEqual(dx, 0.0)
+        self.assertAlmostEqual(dy, 20.0)
+
+    def test_current_wind_samples_are_read_from_open_meteo(self) -> None:
+        payloads = [
+            {
+                "current": {
+                    "time": "2026-08-11T12:00",
+                    "wind_speed_10m": 18.5 + index,
+                    "wind_direction_10m": 270 + index,
+                }
+            }
+            for index in range(len(meteoradar.COUNTRY_WIND_POINTS["cz"]))
+        ]
+        requested_urls: list[str] = []
+
+        async def fake_fetch(_hass, url: str):
+            requested_urls.append(url)
+            return payloads
+
+        original_fetch = meteoradar._async_fetch_json
+        meteoradar._wind_cache.clear()
+        meteoradar._async_fetch_json = fake_fetch
+        try:
+            samples, observation_key = asyncio.run(
+                meteoradar._async_current_wind_samples(object(), "cz")
+            )
+        finally:
+            meteoradar._async_fetch_json = original_fetch
+            meteoradar._wind_cache.clear()
+
+        first_latitude, first_longitude = meteoradar.COUNTRY_WIND_POINTS["cz"][0]
+        self.assertEqual(samples[0], (first_longitude, first_latitude, 270.0, 18.5))
+        self.assertEqual(len(samples), len(payloads))
+        self.assertIn("2026-08-11T12:00", observation_key)
+        self.assertIn("current=wind_speed_10m,wind_direction_10m", requested_urls[0])
+        self.assertIn("wind_speed_unit=kmh", requested_urls[0])
 
 
 class CameraPlatformWiringTests(unittest.TestCase):

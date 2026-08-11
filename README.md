@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.268
+
+- šipky Meteoradaru ukazují skutečný aktuální směr proudění podle více bodů Open-Meteo
+- tlačítko **Odeslat do displeje** po úspěchu dočasně zezelená a zobrazí potvrzovací ikonu
+- opravena podoba slovenské vlajky v nastavení Meteoradaru
+
 ## Novinky ve verzi 0.1.267
 
 - Meteoradar nyní rozlišuje slabé, střední a silné srážky pomocí čitelných e-Paper vzorů

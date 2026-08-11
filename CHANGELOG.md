@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.268] - 2026-08-11
+
+### Opraveno a vylepšeno – skutečný směr větru a jasná odezva odeslání
+- **`meteoradar.py`**: Větrné šipky již nejsou orientační ani pevně natočené. Používají aktuální 10m vítr z několika bodů Open-Meteo pro vybraný stát. Meteorologický směr „odkud fouká“ se převádí na směr proudění „kam fouká“; při nedostupnosti dat se zavádějící šipky nezobrazí.
+- **`panel-devices.mixin.js`**: Tlačítko **Odeslat do displeje** po úspěšném přenosu na několik sekund zezelená a zobrazí potvrzovací ikonu. Samostatná stavová zpráva pod levým tlačítkem byla odstraněna.
+- **`panel-devices.mixin.js`**: Opravena slovenská vlajka – obsahuje bílo-modro-červenou trikolóru a správný znak s dvojkřížem a trojvrším.
+
 ## [0.1.267] - 2026-08-11
 
 ### Vylepšeno – Čitelnější Meteoradar bez spodního textového štítku
