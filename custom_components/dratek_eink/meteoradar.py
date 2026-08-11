@@ -31,10 +31,9 @@ import functools
 import io
 import math
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PIL import Image, ImageChops, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -50,7 +49,11 @@ SNOW = 1
 # rather than real rain. Requiring roughly half the max alpha keeps that halo out of
 # the red mask without needing to know the exact colour-to-dBZ mapping of whichever
 # scheme is requested.
-PRECIPITATION_ALPHA_THRESHOLD = 128
+# Universal Blue encodes weak reflectivity primarily in alpha until roughly
+# 5 dBZ (about alpha 191); stronger echoes are opaque and continue in RGB.
+# Keeping the first texture boundary at 192 follows that published colour table
+# and avoids turning nearly every measurable drizzle cell into "heavy" rain.
+PRECIPITATION_ALPHA_THRESHOLD = 192
 PRECIPITATION_COLOR = (220, 20, 12)
 BORDER_COLOR = (0, 0, 0)
 INDEX_RECHECK_INTERVAL_SECONDS = 60
@@ -63,13 +66,6 @@ HTTP_TIMEOUT_SECONDS = 15
 # antialiased, sub-pixel streak once both downscales and BWR quantization have
 # had a turn at it.
 MAX_NATIVE_DIMENSION = 800
-# A small black-on-white label baked into the composed image's corner, sized
-# relative to the image so it scales sensibly whether it is a tight Czech crop
-# or the much larger Europe overview.
-CORNER_BADGE_MARGIN = 6
-CORNER_BADGE_PADDING = 6
-CORNER_BADGE_FONT_SIZE_RATIO = 0.045
-CORNER_BADGE_MIN_FONT_SIZE = 12
 
 # Czech Republic border as (lon, lat) pairs, closed (first point repeats last).
 # Sourced from the Czech Office for Surveying, Mapping and Cadastre (ČÚZK) via
@@ -505,19 +501,6 @@ COUNTRY_NAMES: dict[str, str] = {
     "eu": "Střední Evropa 🇪🇺",
 }
 
-# Short, emoji-free labels for the corner badge - the bundled Arimo font has no
-# colour-emoji glyphs, so reusing COUNTRY_NAMES verbatim would draw a tofu box
-# where the flag should be.
-COUNTRY_SHORT_LABELS: dict[str, str] = {
-    "cz": "Česko",
-    "sk": "Slovensko",
-    "de": "Německo",
-    "at": "Rakousko",
-    "pl": "Polsko",
-    "eu": "Evropa",
-}
-
-
 def mercator_pixel(lat: float, lon: float, zoom: int, tile_size: int) -> tuple[float, float]:
     """Project (lat, lon) to a pixel in the world-wide Web Mercator raster at `zoom`.
 
@@ -566,94 +549,133 @@ def _scaled_border_width(extent_px: float, base_width: int) -> int:
     return base_width if ratio <= 1 else max(base_width, round(base_width * ratio))
 
 
-def _load_badge_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    bundled_font = Path(__file__).parent / "frontend" / "fonts" / "Arimo-wght.ttf"
-    try:
-        font = ImageFont.truetype(str(bundled_font), int(size))
-        if hasattr(font, "set_variation_by_axes"):
-            font.set_variation_by_axes([700])
-        return font
-    except (OSError, TypeError, ValueError):
-        return ImageFont.load_default()
-
-
-def draw_corner_badge(image: Image.Image, text: str) -> Image.Image:
-    """Stamp a small black-on-white label into the image's bottom-right corner.
-
-    Pure and side-effect-free like the compose_* functions above: takes a
-    finished composite and returns it with the badge drawn in place, so the
-    same call works whether the caller wants a country name, an update time,
-    or both - `_async_composed_base_image` is the only caller today, combining
-    both into one string.
-    """
-    if not text:
-        return image
-    font_size = max(CORNER_BADGE_MIN_FONT_SIZE, round(min(image.width, image.height) * CORNER_BADGE_FONT_SIZE_RATIO))
-    font = _load_badge_font(font_size)
-    draw = ImageDraw.Draw(image)
-    bbox = draw.textbbox((0, 0), text, font=font)
-    text_width = bbox[2] - bbox[0]
-    text_height = bbox[3] - bbox[1]
-    box_right = image.width - CORNER_BADGE_MARGIN
-    box_bottom = image.height - CORNER_BADGE_MARGIN
-    box_left = box_right - (text_width + CORNER_BADGE_PADDING * 2)
-    box_top = box_bottom - (text_height + CORNER_BADGE_PADDING * 2)
-    draw.rectangle((box_left, box_top, box_right, box_bottom), fill=(255, 255, 255), outline=BORDER_COLOR, width=1)
-    draw.text((box_left + CORNER_BADGE_PADDING - bbox[0], box_top + CORNER_BADGE_PADDING - bbox[1]), text, font=font, fill=BORDER_COLOR)
-    return image
-
-
-def _generate_dotted_pattern_image(
-    size: tuple[int, int],
-    foreground: tuple[int, int, int],
-    background: tuple[int, int, int] = (255, 255, 255),
+def _generate_precipitation_pattern(
+    size: tuple[int, int], *, dense: bool
 ) -> Image.Image:
-    """Generate a 50% stippled/dotted pattern image of requested size."""
-    w, h = size
-    tile = Image.new("RGB", (2, 2), background)
-    tile.putpixel((0, 0), foreground)
-    tile.putpixel((1, 1), foreground)
+    """Create an e-ink-safe rain texture that survives the final downscale.
 
-    block_size = 64
-    block = Image.new("RGB", (block_size, block_size))
-    for bx in range(0, block_size, 2):
-        for by in range(0, block_size, 2):
-            block.paste(tile, (bx, by))
-
-    pattern = Image.new("RGB", size)
-    for x in range(0, w, block_size):
-        for y in range(0, h, block_size):
-            pattern.paste(block, (x, y))
+    The former 1-pixel checkerboard was usually averaged into pale noise when a
+    zoom-6 map was reduced to a 250x128 display.  These marks scale with the
+    source canvas, so light rain stays visibly dotted and moderate rain becomes
+    a clear diagonal hatch while heavy rain can remain solid red.
+    """
+    scale = max(1, math.ceil(max(size) / MAX_NATIVE_DIMENSION))
+    period = (7 if dense else 10) * scale
+    stroke = max(1, (2 if dense else 1) * scale)
+    pattern = Image.new("RGB", size, "white")
+    draw = ImageDraw.Draw(pattern)
+    if dense:
+        for offset in range(-size[1], size[0] + size[1], period):
+            draw.line(
+                ((offset, size[1]), (offset + size[1], 0)),
+                fill=PRECIPITATION_COLOR,
+                width=stroke,
+            )
+    else:
+        radius = max(1, scale)
+        for y in range(period // 2, size[1], period):
+            row_offset = period // 2 if (y // period) % 2 else 0
+            for x in range(period // 2 + row_offset, size[0], period):
+                draw.ellipse(
+                    (x - radius, y - radius, x + radius, y + radius),
+                    fill=PRECIPITATION_COLOR,
+                )
     return pattern
 
 
-def _draw_wind_vectors(draw: ImageDraw.ImageDraw, polygon: list[tuple[float, float]], extent: float) -> None:
-    """Draw a grid of wind direction arrows over the country shape."""
+def _paint_precipitation(
+    output: Image.Image,
+    composite: Image.Image,
+    area_mask: Image.Image,
+    *,
+    alpha_threshold: int,
+    dotted_light: bool,
+) -> None:
+    """Paint three readable precipitation intensities into ``output``."""
+    alpha = composite.getchannel("A")
+    if not dotted_light:
+        precipitation_mask = alpha.point(lambda value: 255 if value >= 50 else 0).convert("1")
+        output.paste(
+            Image.new("RGB", composite.size, PRECIPITATION_COLOR),
+            mask=ImageChops.logical_and(area_mask, precipitation_mask),
+        )
+        return
+
+    light_threshold = max(50, alpha_threshold // 3)
+    light_mask = alpha.point(
+        lambda value: 255 if light_threshold <= value < alpha_threshold else 0
+    ).convert("1")
+    translucent_moderate = alpha.point(
+        lambda value: 255 if alpha_threshold <= value < 255 else 0
+    ).convert("1")
+
+    # Once Universal Blue reaches full opacity, its RGB carries the remaining
+    # reflectivity scale: ordinary rain is blue/cyan (B > R), while the strong
+    # yellow/orange/red/magenta echoes have R >= B.  Splitting those opaque
+    # pixels keeps genuinely strong cells solid without flattening every normal
+    # shower into the same red blob.
+    red, _green, blue, _alpha = composite.split()
+    opaque = alpha.point(lambda value: 255 if value == 255 else 0).convert("1")
+    blue_over_red = ImageChops.subtract(blue, red).point(
+        lambda value: 255 if value > 0 else 0
+    ).convert("1")
+    opaque_moderate = ImageChops.logical_and(opaque, blue_over_red)
+    moderate_mask = ImageChops.logical_or(translucent_moderate, opaque_moderate)
+    heavy_mask = ImageChops.logical_and(opaque, ImageChops.invert(blue_over_red))
+
+    output.paste(
+        _generate_precipitation_pattern(composite.size, dense=False),
+        mask=ImageChops.logical_and(area_mask, light_mask),
+    )
+    output.paste(
+        _generate_precipitation_pattern(composite.size, dense=True),
+        mask=ImageChops.logical_and(area_mask, moderate_mask),
+    )
+    output.paste(
+        Image.new("RGB", composite.size, PRECIPITATION_COLOR),
+        mask=ImageChops.logical_and(area_mask, heavy_mask),
+    )
+
+
+def _draw_wind_vectors(image: Image.Image, polygon: list[tuple[float, float]], extent: float) -> None:
+    """Draw bold, filled wind arrows clipped precisely to a country shape."""
     xs = [p[0] for p in polygon]
     ys = [p[1] for p in polygon]
     min_x, max_x = min(xs), max(xs)
     min_y, max_y = min(ys), max(ys)
 
-    spacing = max(40, int(extent / 6))
-    arrow_length = max(10, int(spacing * 0.4))
+    spacing = max(44, int(extent / 5.5))
+    arrow_length = max(18, int(spacing * 0.52))
+    stroke_width = _scaled_border_width(extent, 2)
+    head_length = arrow_length * 0.34
+    head_width = max(5, stroke_width * 2.6)
 
     angle_rad = math.radians(65)
     dx = math.cos(angle_rad) * arrow_length
     dy = -math.sin(angle_rad) * arrow_length
 
+    country_mask = Image.new("1", image.size, 0)
+    ImageDraw.Draw(country_mask).polygon(polygon, fill=1)
+    arrow_mask = Image.new("1", image.size, 0)
+    draw = ImageDraw.Draw(arrow_mask)
+
     for y in range(int(min_y) + spacing // 2, int(max_y), spacing):
         for x in range(int(min_x) + spacing // 2, int(max_x), spacing):
-            if min_x + 10 <= x <= max_x - 10 and min_y + 10 <= y <= max_y - 10:
+            if country_mask.getpixel((x, y)):
                 x1, y1 = x - dx / 2, y - dy / 2
                 x2, y2 = x + dx / 2, y + dy / 2
-                draw.line([(x1, y1), (x2, y2)], fill=BORDER_COLOR, width=2)
-                head_angle = math.radians(145)
-                hx1 = x2 + math.cos(angle_rad + head_angle) * (arrow_length * 0.4)
-                hy1 = y2 - math.sin(angle_rad + head_angle) * (arrow_length * 0.4)
-                hx2 = x2 + math.cos(angle_rad - head_angle) * (arrow_length * 0.4)
-                hy2 = y2 - math.sin(angle_rad - head_angle) * (arrow_length * 0.4)
-                draw.line([(x2, y2), (hx1, hy1)], fill=BORDER_COLOR, width=2)
-                draw.line([(x2, y2), (hx2, hy2)], fill=BORDER_COLOR, width=2)
+                draw.line([(x1, y1), (x2, y2)], fill=1, width=stroke_width)
+                base_x = x2 - math.cos(angle_rad) * head_length
+                base_y = y2 + math.sin(angle_rad) * head_length
+                normal_x = math.sin(angle_rad) * head_width
+                normal_y = math.cos(angle_rad) * head_width
+                draw.polygon(
+                    [(x2, y2), (base_x + normal_x, base_y + normal_y), (base_x - normal_x, base_y - normal_y)],
+                    fill=1,
+                )
+
+    clipped_arrows = ImageChops.logical_and(country_mask, arrow_mask)
+    image.paste(Image.new("RGB", image.size, BORDER_COLOR), mask=clipped_arrows)
 
 
 def compose_country_radar_image(
@@ -703,31 +725,17 @@ def compose_country_radar_image(
     output = Image.new("RGB", composite.size, "white")
 
     if show_precipitation:
-        alpha = composite.getchannel("A")
-        if dotted_light:
-            light_threshold = max(50, alpha_threshold // 2)
-            light_mask = alpha.point(lambda value: 255 if light_threshold <= value < alpha_threshold else 0).convert("1")
-            heavy_mask = alpha.point(lambda value: 255 if value >= alpha_threshold else 0).convert("1")
-
-            dotted_pattern = _generate_dotted_pattern_image(composite.size, PRECIPITATION_COLOR, (255, 255, 255))
-            output.paste(
-                dotted_pattern,
-                mask=ImageChops.logical_and(country_mask, light_mask),
-            )
-            output.paste(
-                Image.new("RGB", composite.size, PRECIPITATION_COLOR),
-                mask=ImageChops.logical_and(country_mask, heavy_mask),
-            )
-        else:
-            precipitation_mask = alpha.point(lambda value: 255 if value >= 50 else 0).convert("1")
-            output.paste(
-                Image.new("RGB", composite.size, PRECIPITATION_COLOR),
-                mask=ImageChops.logical_and(country_mask, precipitation_mask),
-            )
+        _paint_precipitation(
+            output,
+            composite,
+            country_mask,
+            alpha_threshold=alpha_threshold,
+            dotted_light=dotted_light,
+        )
 
     draw = ImageDraw.Draw(output)
     if show_wind:
-        _draw_wind_vectors(draw, polygon, extent)
+        _draw_wind_vectors(output, polygon, extent)
 
     draw.polygon(polygon, outline=BORDER_COLOR, width=_scaled_border_width(extent, border_width))
 
@@ -788,32 +796,18 @@ def compose_multi_country_radar_image(
     output = Image.new("RGB", composite.size, "white")
 
     if show_precipitation:
-        alpha = composite.getchannel("A")
-        if dotted_light:
-            light_threshold = max(50, alpha_threshold // 2)
-            light_mask = alpha.point(lambda value: 255 if light_threshold <= value < alpha_threshold else 0).convert("1")
-            heavy_mask = alpha.point(lambda value: 255 if value >= alpha_threshold else 0).convert("1")
-
-            dotted_pattern = _generate_dotted_pattern_image(composite.size, PRECIPITATION_COLOR, (255, 255, 255))
-            output.paste(
-                dotted_pattern,
-                mask=ImageChops.logical_and(countries_mask, light_mask),
-            )
-            output.paste(
-                Image.new("RGB", composite.size, PRECIPITATION_COLOR),
-                mask=ImageChops.logical_and(countries_mask, heavy_mask),
-            )
-        else:
-            precipitation_mask = alpha.point(lambda value: 255 if value >= 50 else 0).convert("1")
-            output.paste(
-                Image.new("RGB", composite.size, PRECIPITATION_COLOR),
-                mask=ImageChops.logical_and(countries_mask, precipitation_mask),
-            )
+        _paint_precipitation(
+            output,
+            composite,
+            countries_mask,
+            alpha_threshold=alpha_threshold,
+            dotted_light=dotted_light,
+        )
 
     output_draw = ImageDraw.Draw(output)
     for polygon in polygons:
         if show_wind:
-            _draw_wind_vectors(output_draw, polygon, extent)
+            _draw_wind_vectors(output, polygon, extent)
         output_draw.polygon(polygon, outline=BORDER_COLOR, width=scaled_width)
 
     crop_box = (
@@ -823,14 +817,6 @@ def compose_multi_country_radar_image(
         min(output.height, int(max(ys)) + margin),
     )
     return output.crop(crop_box)
-
-
-def _compose_and_badge(compose_fn, tiles, badge_text: str, **kwargs) -> Image.Image:
-    """Run `compose_fn` (either compose function above) and stamp the corner
-    badge on its result in the same executor job, so the badge never shows up
-    as a separate flicker once the composed image is cached and reused.
-    """
-    return draw_corner_badge(compose_fn(tiles, **kwargs), badge_text)
 
 
 def fit_to_size(image: Image.Image, width: int, height: int) -> Image.Image:
@@ -903,7 +889,6 @@ async def _async_composed_base_image(
             return cached.get("composed") if cached else None  # type: ignore[return-value]
         host = str(index.get("host") or "")
         path = str(frames[-1].get("path") or "")
-        frame_epoch = frames[-1].get("time")
     except Exception:
         return cached.get("composed") if cached else None  # type: ignore[return-value]
 
@@ -928,21 +913,11 @@ async def _async_composed_base_image(
     if not tiles:
         return cached.get("composed") if cached else None  # type: ignore[return-value]
 
-    time_label = ""
-    if isinstance(frame_epoch, (int, float)):
-        from homeassistant.util import dt as dt_util
-
-        time_label = dt_util.as_local(dt_util.utc_from_timestamp(frame_epoch)).strftime("%H:%M")
-    country_label = COUNTRY_SHORT_LABELS.get(country_key, country_key.upper())
-    badge_text = f"{country_label} · {time_label}" if time_label else country_label
-
     if is_europe:
         composed = await hass.async_add_executor_job(
             functools.partial(
-                _compose_and_badge,
                 compose_multi_country_radar_image,
                 tiles,
-                badge_text,
                 zoom=ZOOM,
                 tile_size=TILE_SIZE,
                 x_min=x_min,
@@ -958,10 +933,8 @@ async def _async_composed_base_image(
     else:
         composed = await hass.async_add_executor_job(
             functools.partial(
-                _compose_and_badge,
                 compose_country_radar_image,
                 tiles,
-                badge_text,
                 zoom=ZOOM,
                 tile_size=TILE_SIZE,
                 x_min=x_min,
@@ -1006,4 +979,3 @@ async def async_render_meteoradar(
     scale = MAX_NATIVE_DIMENSION / max(base.width, base.height)
     size = (max(1, round(base.width * scale)), max(1, round(base.height * scale)))
     return await hass.async_add_executor_job(base.resize, size, Image.Resampling.LANCZOS)
-

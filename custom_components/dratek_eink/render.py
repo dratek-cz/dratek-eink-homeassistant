@@ -1588,11 +1588,16 @@ async def async_render_camera_binding_data_url(
     from homeassistant.components.camera import async_get_image
     from .meteoradar import async_render_meteoradar
 
+    # Meteoradar has render-time options (country, rain texture and wind).  Its
+    # HA camera entity always exposes the default Czech map, so reading that
+    # snapshot here would silently discard those options.  Render it directly;
+    # ordinary user camera bindings keep the standard camera path below.
     camera_image = None
-    try:
-        camera_image = await async_get_image(hass, entity_id)
-    except Exception:
-        camera_image = None
+    if entity_id != "camera.meteoradar":
+        try:
+            camera_image = await async_get_image(hass, entity_id)
+        except Exception:
+            camera_image = None
 
     if camera_image is not None and getattr(camera_image, "content", None):
         def _prepare_camera() -> bytes | None:

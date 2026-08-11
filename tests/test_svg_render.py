@@ -580,7 +580,7 @@ class AsyncCameraBindingFetchTests(unittest.TestCase):
 
         self._camera_module.async_get_image = fake_async_get_image
         result = self.asyncio.run(
-            render.async_render_camera_binding_data_url(self._FakeHass(), "camera.meteoradar", 20, 10)
+            render.async_render_camera_binding_data_url(self._FakeHass(), "camera.test", 20, 10)
         )
         self.assertIsNotNone(result)
         self.assertTrue(result.startswith("data:image/png;base64,"))
@@ -593,9 +593,40 @@ class AsyncCameraBindingFetchTests(unittest.TestCase):
 
         self._camera_module.async_get_image = fake_async_get_image
         result = self.asyncio.run(
-            render.async_render_camera_binding_data_url(self._FakeHass(), "camera.meteoradar", 20, 10)
+            render.async_render_camera_binding_data_url(self._FakeHass(), "camera.test", 20, 10)
         )
         self.assertIsNone(result)
+
+    def test_meteoradar_renders_directly_with_all_selected_options(self) -> None:
+        async def camera_must_not_be_used(*_args, **_kwargs):
+            raise AssertionError("camera.meteoradar would discard its render options")
+
+        captured = {}
+
+        async def fake_render(_hass, **kwargs):
+            captured.update(kwargs)
+            return Image.new("RGB", (40, 20), render.BWR_RED)
+
+        self._camera_module.async_get_image = camera_must_not_be_used
+        radar_module = sys.modules[f"{PACKAGE}.meteoradar"]
+        original = radar_module.async_render_meteoradar
+        radar_module.async_render_meteoradar = fake_render
+        try:
+            result = self.asyncio.run(
+                render.async_render_camera_binding_data_url(
+                    self._FakeHass(), "camera.meteoradar", 20, 10,
+                    country="pl", show_precipitation=True,
+                    dotted_light=False, show_wind=True,
+                )
+            )
+        finally:
+            radar_module.async_render_meteoradar = original
+
+        self.assertIsNotNone(result)
+        self.assertEqual("pl", captured["country"])
+        self.assertTrue(captured["show_precipitation"])
+        self.assertFalse(captured["dotted_light"])
+        self.assertTrue(captured["show_wind"])
 
 
 if __name__ == "__main__":

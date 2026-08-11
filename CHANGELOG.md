@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.267] - 2026-08-11
+
+### Vylepšeno – Čitelnější Meteoradar bez spodního textového štítku
+- **`meteoradar.py`**: Odstraněn textový štítek se státem a časem z obrazu displeje. Síla sražek se nyní určuje podle oficiální RGBA škály RainVieweru: slabé sražky používají odolnější tečkový rastr, střední diagonální šrafování a silné souvislou červenou. Vzory zůstávají rozlišitelné i po zmenšení na fyzické rozlišení e-Paperu.
+- **`meteoradar.py`**: Šipky orientačního proudění jsou výraznější, mají plnou špičku a jsou přesně oříznuté hranicí zvoleného státu.
+- **`panel-devices.mixin.js`, `render.py`**: Zvolený stát a volby sražek, tečkování a proudění se nově přenášejí také do automatické obnovy. Interní kamera Meteoradaru už nemůže tyto volby obejít, takže ruční odeslání i automatická aktualizace vykreslí stejný obraz.
+
 ## [0.1.266] - 2026-08-11
 
 ### Opraveno – Přesný stav fronty "writing" a zotavení při vypršení časového limitu bloku

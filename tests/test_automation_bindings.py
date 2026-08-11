@@ -666,9 +666,15 @@ class AutomationBindingTests(unittest.TestCase):
         manager._chart_series = {}
         captured = {}
 
-        async def fake_camera_render(_hass, entity_id, width, height, country="cz"):
+        async def fake_camera_render(
+            _hass, entity_id, width, height, country="cz",
+            show_precipitation=True, dotted_light=True, show_wind=False,
+        ):
             captured["entity_id"] = entity_id
             captured["country"] = country
+            captured["show_precipitation"] = show_precipitation
+            captured["dotted_light"] = dotted_light
+            captured["show_wind"] = show_wind
             return "data:image/png;base64,AA=="
 
         original = automation.async_render_camera_binding_data_url
@@ -688,6 +694,9 @@ class AutomationBindingTests(unittest.TestCase):
                                 "width": 400,
                                 "height": 300,
                                 "country": "pl",
+                                "show_precipitation": True,
+                                "dotted_light": False,
+                                "show_wind": True,
                             }
                         ],
                     },
@@ -698,6 +707,9 @@ class AutomationBindingTests(unittest.TestCase):
 
         self.assertEqual("camera.meteoradar", captured["entity_id"])
         self.assertEqual("pl", captured["country"])
+        self.assertTrue(captured["show_precipitation"])
+        self.assertFalse(captured["dotted_light"])
+        self.assertTrue(captured["show_wind"])
 
     def test_ratio_binding_computes_live_percent_with_its_divisor(self):
         # air.js's AQI dial: ratio(0, 21) / 2 - the /2 rides along as the
@@ -1389,4 +1401,3 @@ class SplitLayoutAutomationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

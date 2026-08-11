@@ -1785,7 +1785,7 @@ export const devicesMixin = {
           </label>
           <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
             <input type="checkbox" id="mrOptWind" ${showWind ? "checked" : ""} data-device-address="${this._escape(address)}" />
-            <span>💨 Směr větru (šipky)</span>
+            <span>💨 Orientační proudění (šipky)</span>
           </label>
         </div>
       </div>
@@ -2778,6 +2778,9 @@ export const devicesMixin = {
         w: radarWidth,
         h: radarHeight,
         country: this._meteoradarCountry || this._displayTemplateConfig?.meteoradar_country || "cz",
+        show_precipitation: this._displayTemplateConfig?.meteoradar_show_precipitation !== false,
+        dotted_light: this._displayTemplateConfig?.meteoradar_dotted_light !== false,
+        show_wind: this._displayTemplateConfig?.meteoradar_show_wind === true,
       });
     }
     // currentDocument's tagged nodes are what the backend substitutes fresh

@@ -167,7 +167,7 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
 
     def test_precipitation_is_clipped_to_the_country_shape(self) -> None:
         # An opaque grid everywhere: without clipping, red would fill the frame.
-        image = self._compose((0, 100, 200, 255))
+        image = self._compose((220, 20, 12, 255))
         corners = [
             image.getpixel((0, 0)),
             image.getpixel((image.width - 1, 0)),
@@ -184,7 +184,7 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         self.assertNotIn(meteoradar.PRECIPITATION_COLOR, list(image.getdata()))
 
     def test_high_alpha_precipitation_is_drawn_in_the_display_red(self) -> None:
-        image = self._compose((0, 100, 200, 255))
+        image = self._compose((220, 20, 12, 255))
         self.assertIn(meteoradar.PRECIPITATION_COLOR, list(image.getdata()))
 
     def test_a_missing_tile_is_treated_as_transparent_not_an_error(self) -> None:
@@ -203,7 +203,7 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         self.assertIn(meteoradar.BORDER_COLOR, list(image.getdata()))
 
     def test_output_is_a_flat_rgb_image_safe_for_the_eink_palette(self) -> None:
-        image = self._compose((0, 100, 200, 255))
+        image = self._compose((220, 20, 12, 255))
         self.assertEqual(image.mode, "RGB")
         colors = set(list(image.getdata()))
         self.assertTrue(colors <= {(255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.BORDER_COLOR})
@@ -211,10 +211,33 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
     def test_light_precipitation_renders_dotted_pattern(self) -> None:
         image = self._compose((0, 100, 200, 80))
         cx, cy = image.width // 2, image.height // 2
-        # A 50% stipple pattern contains both white and red pixels inside the light precipitation zone
-        neighbors = [image.getpixel((cx, cy)), image.getpixel((cx + 1, cy))]
-        self.assertIn(meteoradar.PRECIPITATION_COLOR, neighbors)
-        self.assertIn((255, 255, 255), neighbors)
+        patch = [image.getpixel((x, y)) for y in range(cy - 15, cy + 16) for x in range(cx - 15, cx + 16)]
+        self.assertIn(meteoradar.PRECIPITATION_COLOR, patch)
+        self.assertIn((255, 255, 255), patch)
+
+    def test_moderate_precipitation_uses_a_denser_hatch_than_light_rain(self) -> None:
+        light = self._compose((0, 100, 200, 80))
+        moderate = self._compose((0, 100, 200, 220))
+        cx, cy = light.width // 2, light.height // 2
+        area = [(x, y) for y in range(cy - 25, cy + 26) for x in range(cx - 25, cx + 26)]
+        light_red = sum(light.getpixel(point) == meteoradar.PRECIPITATION_COLOR for point in area)
+        moderate_red = sum(moderate.getpixel(point) == meteoradar.PRECIPITATION_COLOR for point in area)
+        self.assertGreater(moderate_red, light_red)
+        self.assertLess(moderate_red, len(area))
+
+    def test_wind_arrows_are_bold_and_clipped_to_the_country(self) -> None:
+        plain = self._compose((0, 0, 0, 0), show_wind=False)
+        windy = self._compose((0, 0, 0, 0), show_wind=True)
+        plain_black = sum(pixel == meteoradar.BORDER_COLOR for pixel in plain.getdata())
+        windy_black = sum(pixel == meteoradar.BORDER_COLOR for pixel in windy.getdata())
+        self.assertGreater(windy_black, plain_black)
+        self.assertEqual(windy.getpixel((0, 0)), (255, 255, 255))
+        self.assertEqual(windy.getpixel((windy.width - 1, 0)), (255, 255, 255))
+
+    def test_no_text_badge_is_baked_into_the_radar_image(self) -> None:
+        source = (COMPONENT / "meteoradar.py").read_text(encoding="utf-8")
+        self.assertNotIn("draw_corner_badge", source)
+        self.assertNotIn("CORNER_BADGE_", source)
 
 
 class ComposeMultiCountryRadarImageTests(unittest.TestCase):
@@ -252,7 +275,7 @@ class ComposeMultiCountryRadarImageTests(unittest.TestCase):
     def test_precipitation_is_clipped_to_the_union_of_both_countries(self) -> None:
         # An opaque grid everywhere: without per-country clipping, red would
         # fill the whole crop, including the gap between the two rectangles.
-        image = self._compose((0, 100, 200, 255))
+        image = self._compose((220, 20, 12, 255))
         width, height = image.size
         mid_y = height // 2
         left_country_x = width // 8
@@ -268,7 +291,7 @@ class ComposeMultiCountryRadarImageTests(unittest.TestCase):
         self.assertIn(meteoradar.BORDER_COLOR, list(image.getdata()))
 
     def test_output_is_a_flat_rgb_image_safe_for_the_eink_palette(self) -> None:
-        image = self._compose((0, 100, 200, 255))
+        image = self._compose((220, 20, 12, 255))
         self.assertEqual(image.mode, "RGB")
         colors = set(list(image.getdata()))
         self.assertTrue(colors <= {(255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.BORDER_COLOR})

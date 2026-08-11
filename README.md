@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.267
+
+- Meteoradar nyní rozlišuje slabé, střední a silné srážky pomocí čitelných e-Paper vzorů
+- odstraněn spodní textový štítek a vylepšeny šipky orientačního proudění
+- automatická obnova zachovává stejný stát a radarové volby jako ruční odeslání
+
 ## Novinky ve verzi 0.1.266
 
 - opraveno zobrazování stavu `Zapisuje`: úloha je označena jako zapisující až v momentu získání Bluetooth rozhraní
