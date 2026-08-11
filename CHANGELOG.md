@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.277] - 2026-08-11
+
+### Vylepšeno – Registrace brand API tras v Home Assistant HTTP serveru
+- **`__init__.py`**: Registrovány přímo statické cesty `/api/brands/dratek_eink` a `/api/brands/custom_integrations/dratek_eink` do Home Assistant HTTP serveru.
+- Tím se zajistí, že dotazy rozhraní Home Assistantu na ikony domény v lokální síti vrátí `200 OK` s novou PNG ikonou bez závislosti na externím CDN.
+
 ## [0.1.276] - 2026-08-11
 
 ### Vylepšeno – První úroveň ikony přímo v kořenu repozitáře (HACS fallback)

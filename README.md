@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.277
+
+- zaregistrovány lokální API brand cesty pro Home Assistant frontend server (`/api/brands/dratek_eink` a `/api/brands/custom_integrations/dratek_eink`)
+
 ## Novinky ve verzi 0.1.276
 
 - přidány ikony `icon.png` a `logo.png` přímo do kořene GitHub repozitáře pro maximální kompatibilitu s HACS

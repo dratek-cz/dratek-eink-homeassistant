@@ -138,9 +138,11 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
         )
         brand_path = Path(__file__).parent / "brand"
         if brand_path.exists() and not brand_registered:
-            static_configs.append(
-                StaticPathConfig(f"/{DOMAIN}_brand", str(brand_path), cache_headers=True)
-            )
+            static_configs.extend([
+                StaticPathConfig(f"/{DOMAIN}_brand", str(brand_path), cache_headers=True),
+                StaticPathConfig(f"/api/brands/{DOMAIN}", str(brand_path), cache_headers=True),
+                StaticPathConfig(f"/api/brands/custom_integrations/{DOMAIN}", str(brand_path), cache_headers=True),
+            ])
         await hass.http.async_register_static_paths(static_configs)
         registered_panel_paths.add(PANEL_STATIC_PATH)
         if brand_path.exists():
