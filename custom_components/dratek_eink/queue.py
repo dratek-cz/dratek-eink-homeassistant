@@ -21,6 +21,7 @@ HISTORY_LIMIT = 100
 # so the outer safety net must cover that reliable fallback as well.
 TRANSFER_JOB_TIMEOUT_SECONDS = 600
 AUTOMATIC_BLUETOOTH_RETRY_DELAY_SECONDS = 20
+OFFLINE_BACKOFF_SECONDS = 900  # 15 minutes backoff for unreachable/failed displays
 LEGACY_COMPLETION_TIMEOUT_MARKER = "waiting for the display to confirm the completed refresh"
 RETRYABLE_BLUETOOTH_ERROR_MARKERS = (
     "available connection slot",
@@ -47,6 +48,7 @@ class TransferQueue:
         self._job_tasks: dict[str, asyncio.Task[Any]] = {}
         self._preempted_jobs: set[str] = set()
         self._last_finish_at: dict[str, float] = {}
+        self._last_failure_at: dict[str, float] = {}
         self._load_lock = asyncio.Lock()
 
         self._save_lock = asyncio.Lock()
@@ -116,8 +118,12 @@ class TransferQueue:
             "log": [],
         }
         manual = operation != "entity_update"
-        if not manual:
-            skip_reason = self._automatic_skip_reason(normalized_address)
+        if manual:
+            self._last_failure_at.pop(normalized_address, None)
+        else:
+            skip_reason = self._automatic_skip_reason(
+                normalized_address, transport_type=transport_type
+            )
             if skip_reason:
                 self._jobs.append(job)
                 self._prune()
@@ -314,6 +320,10 @@ class TransferQueue:
             result = {"ok": False, "address": job["address"], "error": error, "log": list(job["log"])}
         finally:
             self._last_finish_at[normalized_address] = time.monotonic()
+            if job.get("status") == "failed" and job.get("error") != "Transfer cancelled.":
+                self._last_failure_at[normalized_address] = time.monotonic()
+            elif job.get("status") == "succeeded":
+                self._last_failure_at.pop(normalized_address, None)
 
         job["finished_at"] = int(time.time())
         result["queue_job_id"] = job["id"]
@@ -356,7 +366,11 @@ class TransferQueue:
 
     def _should_skip_automatic_update(self, job: dict[str, Any]) -> bool:
         return job.get("operation") == "entity_update" and bool(
-            self._automatic_skip_reason(job["address"], exclude_job_id=job.get("id"))
+            self._automatic_skip_reason(
+                job["address"],
+                exclude_job_id=job.get("id"),
+                transport_type=job.get("transport_type"),
+            )
         )
 
     @staticmethod
@@ -375,7 +389,31 @@ class TransferQueue:
         started = job.get("started_at") or job.get("created_at") or 0
         return time.time() - float(started) <= TRANSFER_JOB_TIMEOUT_SECONDS + 60
 
-    def _automatic_skip_reason(self, address: str, exclude_job_id: str | None = None) -> str:
+    def _is_local_device_in_range(self, address: str) -> bool:
+        """Return True if HA's Bluetooth scanner has recently seen this address."""
+        if not self.hass:
+            return True
+        try:
+            from homeassistant.components import bluetooth
+
+            ble_device = bluetooth.async_ble_device_from_address(
+                self.hass, address, connectable=True
+            )
+            if ble_device is not None:
+                return True
+            ble_device = bluetooth.async_ble_device_from_address(
+                self.hass, address, connectable=False
+            )
+            return ble_device is not None
+        except Exception:
+            return True
+
+    def _automatic_skip_reason(
+        self,
+        address: str,
+        exclude_job_id: str | None = None,
+        transport_type: str | None = None,
+    ) -> str:
         if self._manual_pending.get(address, 0) > 0:
             return "Automatic update skipped because a manual upload is pending."
         if any(
@@ -385,11 +423,32 @@ class TransferQueue:
             for job in self._jobs
         ):
             return "Automatic update merged because this display already has an active transfer."
+
+        last_failure = self._last_failure_at.get(address)
+        if last_failure is not None:
+            elapsed = time.monotonic() - last_failure
+            if elapsed < OFFLINE_BACKOFF_SECONDS:
+                remaining = int(OFFLINE_BACKOFF_SECONDS - elapsed)
+                return (
+                    f"Automatic update skipped: display is unreachable or failed recently "
+                    f"({int(elapsed)}s ago; backing off for {remaining}s)."
+                )
+
+        if transport_type != "gateway" and not self._is_local_device_in_range(address):
+            return (
+                "Automatic update skipped: display is out of Bluetooth range or powered off "
+                "(no BLE advertisements detected)."
+            )
+
         return ""
 
     async def _skip_automatic_update(self, job: dict[str, Any], message: str | None = None) -> dict[str, Any]:
         now = int(time.time())
-        message = message or self._automatic_skip_reason(job["address"], exclude_job_id=job.get("id"))
+        message = message or self._automatic_skip_reason(
+            job["address"],
+            exclude_job_id=job.get("id"),
+            transport_type=job.get("transport_type"),
+        )
         message = message or "Automatic update skipped because a newer transfer takes priority."
         job["status"] = "skipped"
         job["started_at"] = now

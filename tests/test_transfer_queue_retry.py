@@ -586,6 +586,45 @@ class CancelledJobDoesNotWedgeAutomationTests(unittest.IsolatedAsyncioTestCase):
         queue._jobs[0]["started_at"] = int(time.time())
         self.assertIn("active transfer", queue._automatic_skip_reason(self.ADDRESS))
 
+    async def test_failed_automatic_update_triggers_backoff(self):
+        queue = self._queue()
+
+        async def failing_runner(_add_log):
+            return {"ok": False, "error": "Display unreachable."}
+
+        result = await self._submit_automatic(queue, failing_runner)
+        self.assertFalse(result.get("ok"))
+        skip_reason = queue._automatic_skip_reason(self.ADDRESS)
+        self.assertIn("unreachable or failed recently", skip_reason)
+
+    async def test_manual_upload_bypasses_failure_backoff(self):
+        queue = self._queue()
+
+        async def failing_runner(_add_log):
+            return {"ok": False, "error": "Display unreachable."}
+
+        await self._submit_automatic(queue, failing_runner)
+        self.assertIn("unreachable or failed recently", queue._automatic_skip_reason(self.ADDRESS))
+
+        ran = asyncio.Event()
+
+        async def manual_runner(_add_log):
+            ran.set()
+            return {"ok": True, "log": []}
+
+        result = await queue.async_submit(
+            resource="local",
+            transport_type="local",
+            transport_name="Bluetooth",
+            address=self.ADDRESS,
+            operation="design",
+            runner=manual_runner,
+        )
+        self.assertTrue(ran.is_set())
+        self.assertEqual(result.get("queue_status"), "succeeded")
+        self.assertEqual("", queue._automatic_skip_reason(self.ADDRESS))
+
 
 if __name__ == "__main__":
     unittest.main()
+

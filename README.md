@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.257
+
+- ochrana automatických aktualizací pro displeje mimo dosah nebo vypnuté: bleskové přeskočení (0 ms) při neexistenci BLE vysílání a 15minutový penalizační backoff po selhání přenosu (ruční nahrávání "Odeslat" zůstává vždy aktivní)
+
 ## Novinky ve verzi 0.1.256
 
 - vyřešeno postupné zpomalování přenosů po celodenním běhu (ze 10s na stovky sekund): deaktivováno ukládání zastaralých GATT služeb do paměti (`use_services_cache=False`) a přidáno čistění odkazů skeneru po odpojení (`async_rediscover_address`)

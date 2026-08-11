@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.257] - 2026-08-11
+
+### Přidáno & Opraveno – Ochrana automatických aktualizací pro displeje mimo dosah a nedostupné displeje
+- **`queue.py`**: Přidána okamžitá detekce dosahu `_is_local_device_in_range(address)`. Pokud Home Assistant nedostává BLE advertisements z MAC adresy displeje (např. při vypnutí nebo odnesení mimo dosah), automatická aktualizace se okamžitě přeskočí (0 ms delay), aby neblokovala přenosy ostatních displejů.
+- **`queue.py`**: Přidán 15minutový penalizační backoff (`OFFLINE_BACKOFF_SECONDS = 900`). Při selhání automatické obnovy se další automatické pokusy pro daný displej na 15 minut pozastaví a nezatěžují rádio opakováním nefunkčních přenosů. Ruční nahrávání z panelu ("Odeslat") tento backoff okamžitě vynuluje a provede přímý pokus.
+
 ## [0.1.256] - 2026-08-11
 
 ### Opraveno – Prevence degradace a zpomalování BLE přenosů při dlouhodobém provozu (~24h)
