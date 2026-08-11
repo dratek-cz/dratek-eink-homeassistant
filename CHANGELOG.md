@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.275] - 2026-08-11
+
+### Opraveno – Zobrazování brand ikony v Home Assistantu místo MDI ikony
+- **`manifest.json`**: Odstraněn klíč `"icon": "mdi:tag-multiple-outline"`, který nuceně přepisoval brand obrázky integrace za obecnou MDI ikonku štítků v rozhraní Home Assistantu.
+- Nyní Home Assistant správně načítá PNG brand ikony a loga integrace ze složek `/brand/` a `custom_components/dratek_eink/`.
+
 ## [0.1.274] - 2026-08-11
 
 ### Úprava – Odstraněn duplicitní nadpis a kompaktní výška sekce Gatewaye

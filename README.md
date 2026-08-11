@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.275
+
+- opraveno zobrazování obrázkové PNG ikony v rozhraní Home Assistantu (odstraněn zbytečný override na MDI ikonku štítku v `manifest.json`)
+
 ## Novinky ve verzi 0.1.274
 
 - odstraněn duplicitní nadpis sekce Gatewaye z rozvržení
