@@ -28,10 +28,10 @@ class HacsBrandAssetTests(unittest.TestCase):
 
     def test_repository_and_installed_integration_have_matching_icons(self):
         expected_sizes = {
-            "icon.png": (256, 256),
-            "icon@2x.png": (512, 512),
-            "dark_icon.png": (256, 256),
-            "dark_icon@2x.png": (512, 512),
+            "icon.png": (512, 512),
+            "icon@2x.png": (1024, 1024),
+            "dark_icon.png": (512, 512),
+            "dark_icon@2x.png": (1024, 1024),
         }
         for name, size in expected_sizes.items():
             repository_icon = REPOSITORY_BRAND / name

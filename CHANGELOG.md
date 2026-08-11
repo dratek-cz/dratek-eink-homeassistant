@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.278] - 2026-08-11
+
+### Vylepšeno – Oficiální 512x512 PNG kvalita brand ikon pro HACS tabulky a obchody
+- Všechny PNG brand ikony (`icon.png`, `dark_icon.png`, `logo.png`, `dark_logo.png`) přegenerovány ve vysokém rozlišení 512x512 a 1024x1024.
+- Dodržena přesná specifikace Home Assistant Brands & HACS store pro vykreslení náhledů v tabulkách custom repozitářů bez hlášky *image not available*.
+
 ## [0.1.277] - 2026-08-11
 
 ### Vylepšeno – Registrace brand API tras v Home Assistant HTTP serveru

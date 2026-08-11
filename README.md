@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.278
+
+- přegenerovány všechny PNG ikony v plné 512x512 / 1024x1024 velikosti dle specifikace HACS UI tabulky custom repozitářů
+
 ## Novinky ve verzi 0.1.277
 
 - zaregistrovány lokální API brand cesty pro Home Assistant frontend server (`/api/brands/dratek_eink` a `/api/brands/custom_integrations/dratek_eink`)
