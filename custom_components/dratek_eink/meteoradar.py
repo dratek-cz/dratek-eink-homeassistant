@@ -603,6 +603,30 @@ def draw_corner_badge(image: Image.Image, text: str) -> Image.Image:
     return image
 
 
+def _generate_dotted_pattern_image(
+    size: tuple[int, int],
+    foreground: tuple[int, int, int],
+    background: tuple[int, int, int] = (255, 255, 255),
+) -> Image.Image:
+    """Generate a 50% stippled/dotted pattern image of requested size."""
+    w, h = size
+    tile = Image.new("RGB", (2, 2), background)
+    tile.putpixel((0, 0), foreground)
+    tile.putpixel((1, 1), foreground)
+
+    block_size = 64
+    block = Image.new("RGB", (block_size, block_size))
+    for bx in range(0, block_size, 2):
+        for by in range(0, block_size, 2):
+            block.paste(tile, (bx, by))
+
+    pattern = Image.new("RGB", size)
+    for x in range(0, w, block_size):
+        for y in range(0, h, block_size):
+            pattern.paste(block, (x, y))
+    return pattern
+
+
 def compose_country_radar_image(
     tiles: dict[tuple[int, int], Image.Image],
     *,
@@ -637,7 +661,9 @@ def compose_country_radar_image(
     ]
 
     alpha = composite.getchannel("A")
-    precipitation_mask = alpha.point(lambda value: 255 if value >= alpha_threshold else 0).convert("1")
+    light_threshold = max(50, alpha_threshold // 2)
+    light_mask = alpha.point(lambda value: 255 if light_threshold <= value < alpha_threshold else 0).convert("1")
+    heavy_mask = alpha.point(lambda value: 255 if value >= alpha_threshold else 0).convert("1")
 
     country_mask = Image.new("L", composite.size, 0)
     ImageDraw.Draw(country_mask).polygon(polygon, fill=255)
@@ -648,10 +674,20 @@ def compose_country_radar_image(
     extent = max(max(xs) - min(xs), max(ys) - min(ys))
 
     output = Image.new("RGB", composite.size, "white")
+
+    # Light/moderate precipitation: dotted red pattern
+    dotted_pattern = _generate_dotted_pattern_image(composite.size, PRECIPITATION_COLOR, (255, 255, 255))
+    output.paste(
+        dotted_pattern,
+        mask=ImageChops.logical_and(country_mask, light_mask),
+    )
+
+    # Heavy precipitation: solid red
     output.paste(
         Image.new("RGB", composite.size, PRECIPITATION_COLOR),
-        mask=ImageChops.logical_and(country_mask, precipitation_mask),
+        mask=ImageChops.logical_and(country_mask, heavy_mask),
     )
+
     ImageDraw.Draw(output).polygon(polygon, outline=BORDER_COLOR, width=_scaled_border_width(extent, border_width))
 
     crop_box = (
@@ -702,7 +738,9 @@ def compose_multi_country_radar_image(
     ]
 
     alpha = composite.getchannel("A")
-    precipitation_mask = alpha.point(lambda value: 255 if value >= alpha_threshold else 0).convert("1")
+    light_threshold = max(50, alpha_threshold // 2)
+    light_mask = alpha.point(lambda value: 255 if light_threshold <= value < alpha_threshold else 0).convert("1")
+    heavy_mask = alpha.point(lambda value: 255 if value >= alpha_threshold else 0).convert("1")
 
     countries_mask = Image.new("L", composite.size, 0)
     mask_draw = ImageDraw.Draw(countries_mask)
@@ -712,16 +750,19 @@ def compose_multi_country_radar_image(
 
     xs = [x for polygon in polygons for x, _y in polygon]
     ys = [y for polygon in polygons for _x, y in polygon]
-    # The overview's combined extent is what actually gets downscaled, not any
-    # single country's - a thin line here is the exact "borders too thin once
-    # it's shrunk" complaint the extent-based scaling exists to fix.
     extent = max(max(xs) - min(xs), max(ys) - min(ys))
     scaled_width = _scaled_border_width(extent, border_width)
 
     output = Image.new("RGB", composite.size, "white")
+
+    dotted_pattern = _generate_dotted_pattern_image(composite.size, PRECIPITATION_COLOR, (255, 255, 255))
+    output.paste(
+        dotted_pattern,
+        mask=ImageChops.logical_and(countries_mask, light_mask),
+    )
     output.paste(
         Image.new("RGB", composite.size, PRECIPITATION_COLOR),
-        mask=ImageChops.logical_and(countries_mask, precipitation_mask),
+        mask=ImageChops.logical_and(countries_mask, heavy_mask),
     )
     output_draw = ImageDraw.Draw(output)
     for polygon in polygons:

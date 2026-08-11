@@ -208,6 +208,14 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         colors = set(list(image.getdata()))
         self.assertTrue(colors <= {(255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.BORDER_COLOR})
 
+    def test_light_precipitation_renders_dotted_pattern(self) -> None:
+        image = self._compose((0, 100, 200, 80))
+        cx, cy = image.width // 2, image.height // 2
+        # A 50% stipple pattern contains both white and red pixels inside the light precipitation zone
+        neighbors = [image.getpixel((cx, cy)), image.getpixel((cx + 1, cy))]
+        self.assertIn(meteoradar.PRECIPITATION_COLOR, neighbors)
+        self.assertIn((255, 255, 255), neighbors)
+
 
 class ComposeMultiCountryRadarImageTests(unittest.TestCase):
     """Two well-separated synthetic "countries" stand in for the Europe overview."""

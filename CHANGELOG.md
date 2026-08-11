@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.264] - 2026-08-11
+
+### Nová funkce – Tečkovaný vzor pro slabší srážky v Meteoradaru
+- **`meteoradar.py`**: Vylepšeno vykreslování živé srážkové mapy na 3barevných e-Paper displejích. Slabší/mírné srážky (mrholení, slabý déšť/sníh) se nyní vykreslují jako jemný **tečkovaný červený vzor**, zatímco silné srážky/bouřky zůstávají **plnou červenou barvou**. Díky tomu jsou různé intenzity srážek na displeji okamžitě rozpoznatelné.
+
 ## [0.1.263] - 2026-08-11
 
 ### Přidáno & Opraveno – Export protokolu z fronty a bleskové selhání u neexistujících BLE zařízení

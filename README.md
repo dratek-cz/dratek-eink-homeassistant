@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.264
+
+- přidáno rozlišení intenzity srážek na Meteoradaru: slabší srážky se vykreslují jako **tečkovaný červený vzor**, silné srážky jako **plná červená barva**
+
 ## Novinky ve verzi 0.1.263
 
 - přidáno tlačítko **"Stáhnout protokol"** pro stažení kompletní historie fronty a detailních logů do `.txt` souboru
