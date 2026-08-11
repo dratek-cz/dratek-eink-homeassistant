@@ -185,7 +185,7 @@ def block_spark(spark: dict[str, Any], box: dict[str, float]) -> str:
                 caption,
                 box["x"],
                 box["y"] + box["h"] * 0.14,
-                max(5, box["h"] * 0.18),
+                max(8.5, box["h"] * 0.22),
                 anchor="start",
                 max_width=box["w"] * 0.6,
             )
@@ -335,7 +335,7 @@ def block_strip(cells: list[dict[str, Any]], box: dict[str, float]) -> str:
         parts.append(
             svg_text(
                 cell.get("label"), cx, label_y,
-                max(7, min(box["h"] * 0.23, cell_width * 0.3)),
+                max(8.5, min(box["h"] * 0.25, cell_width * 0.32)),
                 bold=True, max_width=cell_width * 0.9,
             )
         )
@@ -349,7 +349,7 @@ def block_strip(cells: list[dict[str, Any]], box: dict[str, float]) -> str:
         parts.append(
             svg_text(
                 cell.get("value"), cx, value_y,
-                max(8, min(box["h"] * 0.3, cell_width * 0.34)),
+                max(10, min(box["h"] * 0.32, cell_width * 0.36)),
                 bold=True, color=ink(cell.get("color")), max_width=cell_width * 0.9,
             )
         )
@@ -367,11 +367,11 @@ def block_datebox(date: dict[str, Any], box: dict[str, float]) -> str:
         f'<rect x="{left:.2f}" y="{top:.2f}" width="{side:.2f}"'
         f' height="{side * 0.28:.2f}" fill="{ink(date.get("color"))}"></rect>',
         svg_text(
-            date.get("month"), left + side / 2, top + side * 0.15, max(5, side * 0.17),
+            date.get("month"), left + side / 2, top + side * 0.15, max(8.5, side * 0.22),
             color="#ffffff", bold=True, max_width=side * 0.92,
         ),
         svg_text(
-            date.get("day"), left + side / 2, top + side * 0.64, max(8, side * 0.46),
+            date.get("day"), left + side / 2, top + side * 0.64, max(11, side * 0.5),
             bold=True, max_width=side * 0.86,
         ),
     ]
@@ -383,7 +383,7 @@ def block_datebox(date: dict[str, Any], box: dict[str, float]) -> str:
         size = line_height * (0.56 if index == 0 else 0.42)
         parts.append(
             svg_text(
-                line, text_x, box["y"] + line_height * (index + 0.5), max(6, size),
+                line, text_x, box["y"] + line_height * (index + 0.5), max(8.5, size),
                 anchor="start", bold=index == 0,
                 color=ink(date.get("color")) if index == 0 else BLACK,
                 max_width=right - text_x,

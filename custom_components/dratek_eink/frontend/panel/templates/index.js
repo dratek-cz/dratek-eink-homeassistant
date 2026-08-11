@@ -7,7 +7,6 @@
 // so a new template can be inserted wherever it reads best.
 import { template as weather } from "./weather.js";
 import { template as radar } from "./radar.js";
-import { template as energy } from "./energy.js";
 import { template as czSpotPrices } from "./cz_spot_prices.js";
 import { template as home } from "./home.js";
 import { template as waste } from "./waste.js";
@@ -28,12 +27,10 @@ import { template as birthdays } from "./birthdays.js";
 import { template as server } from "./server.js";
 import { template as garden } from "./garden.js";
 import { template as price } from "./price.js";
-import { template as priceshelf } from "./priceshelf.js";
 
 export const DISPLAY_TEMPLATES = [
   weather,
   radar,
-  energy,
   czSpotPrices,
   home,
   waste,
@@ -54,7 +51,6 @@ export const DISPLAY_TEMPLATES = [
   server,
   garden,
   price,
-  priceshelf,
 ];
 
 export const DISPLAY_TEMPLATE_CATALOG = DISPLAY_TEMPLATES.map((entry) => entry.catalog);

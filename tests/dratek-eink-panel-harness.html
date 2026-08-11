@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DRATEK eInk panel test</title>
+  <style>
+    :root {
+      --primary-text-color:#172127;
+      --secondary-text-color:#64727b;
+      --primary-background-color:#edf2f2;
+      --secondary-background-color:#f3f6f6;
+      --card-background-color:#fff;
+      --divider-color:#d8dfdf;
+      --ha-card-border-radius:14px;
+    }
+    body { margin:0; padding:0; background:var(--primary-background-color); font-family:Arial,sans-serif; }
+    ha-icon { display:inline-flex; align-items:center; justify-content:center; width:1em; height:1em; }
+    #bootStatus { margin:24px; padding:14px 16px; border:1px solid #d8dfdf; border-radius:10px; background:#fff; color:#64727b; }
+    #bootStatus.error { color:#9d1c0f; border-color:#e7aaa3; background:#fff4f2; white-space:pre-wrap; }
+  </style>
+</head>
+<body>
+  <div id="bootStatus">Načítám lokální náhled…</div>
+  <dratek-eink-panel id="panel"></dratek-eink-panel>
+  <script>
+    const showBootError = (value) => {
+      const status = document.querySelector("#bootStatus");
+      if (!status) return;
+      status.className = "error";
+      status.textContent = `Lokální náhled se nepodařilo spustit:\n${String(value || "Neznámá chyba")}`;
+    };
+    window.addEventListener("error", (event) => {
+      const file = event.filename || "";
+      const line = event.lineno || 0;
+      const col = event.colno || 0;
+      const stack = event.error?.stack || event.message || "Uncaught Error";
+      showBootError(`${stack}\nSoubor: ${file}:${line}:${col}`);
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      const reason = event.reason?.stack || event.reason || "Unhandled Rejection";
+      showBootError(reason);
+    });
+  </script>
+  <script type="module">
+    import { mdiPaths } from "./vendor/mdi/paths.js";
+
+    // Home Assistant renders MDI icons as SVG paths. Use the same shape data
+    // locally so serialized previews never depend on a webfont and therefore
+    // cannot turn into fallback squares.
+    //
+    // The nesting below is not decoration. Home Assistant's ha-icon renders an
+    // <ha-svg-icon>, which renders <svg><g>…</g></svg> through Lit: the <svg> and
+    // its <g> exist from the first frame and the <path> only arrives once the mdi
+    // chunk has loaded. A stand-in that wrote the finished <svg> in one step could
+    // not reproduce that window, which is exactly where the panel used to capture
+    // an empty group and cache it as a resolved icon.
+    if (!customElements.get("ha-svg-icon")) {
+      customElements.define("ha-svg-icon", class extends HTMLElement {
+        static get observedAttributes() { return ["path"]; }
+        connectedCallback() {
+          this._shadow ||= this.attachShadow({ mode: "open" });
+          this._render();
+        }
+        attributeChangedCallback() { this._render(); }
+        _render() {
+          if (!this._shadow) return;
+          const path = this.getAttribute("path") || "";
+          // Home Assistant sizes the icon from its host, not from attributes on the
+          // svg: --mdc-icon-size is what the panel's stylesheet sets. Without this
+          // the svg has no intrinsic size and every icon outside the templates
+          // collapses, which is not a faithful stand-in either.
+          this._shadow.innerHTML = `<style>
+            :host{display:inline-flex;align-items:center;justify-content:center;position:relative;
+                  vertical-align:middle;width:var(--mdc-icon-size,24px);height:var(--mdc-icon-size,24px);
+                  fill:currentColor}
+            svg{display:block;width:100%;height:100%;pointer-events:none}
+          </style><svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" focusable="false" role="img" aria-hidden="true"><g>${
+            path ? `<path d="${path}" fill="currentColor"></path>` : ""
+          }</g></svg>`;
+        }
+      });
+    }
+    if (!customElements.get("ha-icon")) {
+      customElements.define("ha-icon", class extends HTMLElement {
+        static get observedAttributes() { return ["icon"]; }
+        connectedCallback() {
+          this.innerHTML = "";
+          this._shadow ||= this.attachShadow({ mode: "open" });
+          this._render();
+        }
+        attributeChangedCallback() { this._render(); }
+        _render() {
+          if (!this._shadow) return;
+          const icon = String(this.getAttribute("icon") || "").replace(/^mdi:/, "");
+          if (!icon) { this._shadow.innerHTML = ""; return; }
+          // The child appears at once; its path lands a tick later, as it does
+          // when Home Assistant has to fetch the icon chunk first.
+          this._shadow.innerHTML = `<style>
+            :host{display:inline-flex;align-items:center;justify-content:center;fill:currentColor}
+          </style><ha-svg-icon></ha-svg-icon>`;
+          const target = this._shadow.querySelector("ha-svg-icon");
+          setTimeout(() => {
+            if (String(this.getAttribute("icon") || "").replace(/^mdi:/, "") !== icon) return;
+            target.setAttribute("path", mdiPaths[icon] || mdiPaths["help-circle-outline"]);
+          }, 0);
+        }
+      });
+    }
+    // Standalone test fallback only. Inside Home Assistant its already
+    // registered native ha-selector is used and this block is skipped.
+    if (!customElements.get("ha-selector")) {
+      customElements.define("ha-selector", class extends HTMLElement {
+        constructor() {
+          super();
+          this._open = false;
+          this._query = "";
+        }
+        connectedCallback() { this._render(); }
+        set hass(value) { this._hass = value; this._render(); }
+        set selector(value) { this._selector = value; this._render(); }
+        get selector() { return this._selector || { entity:{} }; }
+        set value(value) { this._value = value || ""; this._render(); }
+        get value() { return this._value || ""; }
+        _pickerKey() {
+          return this.getAttribute("data-variable-entity-picker")
+            || this.getAttribute("data-entity-picker")
+            || this.getAttribute("data-layer-object-entity")
+            || this.id
+            || "entity-picker";
+        }
+        _pickerStore() {
+          window.__dratekHarnessEntityPicker ||= { openKey:"", queries:{} };
+          return window.__dratekHarnessEntityPicker;
+        }
+        _escape(value) {
+          return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[char]);
+        }
+        _render(focusSearch = false) {
+          if (!this.isConnected) return;
+          const states = this._hass?.states || {};
+          const entities = Object.keys(states).sort().map((entityId) => ({
+            id: entityId,
+            name: states[entityId]?.attributes?.friendly_name || entityId,
+            state: states[entityId]?.state ?? "—",
+          }));
+          const store = this._pickerStore();
+          const key = this._pickerKey();
+          this._query = store.queries[key] || this._query || "";
+          const query = this._query.trim().toLowerCase();
+          const filtered = query
+            ? entities.filter((entity) => `${entity.name} ${entity.id} ${entity.state}`.toLowerCase().includes(query))
+            : entities;
+          const selected = entities.find((entity) => entity.id === this.value);
+          this.innerHTML = `<style>
+            ha-selector{display:block;width:100%;font:inherit;color:var(--primary-text-color,#172127)}
+            button,input{font:inherit}
+            details{width:100%}summary{list-style:none}summary::-webkit-details-marker{display:none}.trigger{box-sizing:border-box;width:100%;min-height:42px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 11px;border:1px solid var(--divider-color,#d8dfdf);border-radius:8px;background:var(--card-background-color,#fff);color:inherit;text-align:left;cursor:pointer}
+            .trigger:hover{border-color:#009b9b}.trigger-copy{display:grid;min-width:0}.trigger-copy strong,.trigger-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.trigger-copy strong{font-size:12px}.trigger-copy small{margin-top:2px;color:var(--secondary-text-color,#64727b);font-size:9px}.chevron{color:#009b9b;font-size:17px}
+            details[open] .chevron{transform:rotate(180deg)}
+            .backdrop{position:fixed;inset:0;z-index:900;background:rgba(15,23,42,.42)}
+            .dialog{position:fixed;z-index:901;left:50%;top:50%;width:min(620px,calc(100vw - 32px));max-height:min(680px,calc(100vh - 32px));transform:translate(-50%,-50%);display:grid;grid-template-rows:auto auto minmax(0,1fr);overflow:hidden;border:1px solid var(--divider-color,#d8dfdf);border-radius:14px;background:var(--card-background-color,#fff);box-shadow:0 24px 70px rgba(0,0,0,.34)}
+            .head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 16px;border-bottom:1px solid var(--divider-color,#d8dfdf)}.head strong{font-size:15px}.close{border:0;background:none;color:inherit;font-size:22px;cursor:pointer}
+            .search{margin:12px 14px;padding:10px 12px;border:1px solid var(--divider-color,#d8dfdf);border-radius:9px;background:var(--secondary-background-color,#f3f6f6);color:inherit}
+            .results{min-height:160px;overflow:auto;padding:0 10px 12px}.entity{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:10px;border:0;border-bottom:1px solid var(--divider-color,#d8dfdf);background:none;color:inherit;text-align:left;cursor:pointer}.entity[hidden]{display:none}.entity:hover,.entity.selected{border-radius:8px;background:rgba(0,155,155,.09)}.entity strong,.entity small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.entity strong{font-size:12px}.entity small{margin-top:2px;color:var(--secondary-text-color,#64727b);font-size:9px}.entity-state{align-self:center;color:#008b8b;font-size:11px;font-weight:800}.empty{padding:24px;text-align:center;color:var(--secondary-text-color,#64727b)}
+          </style>
+          <details class="picker" ${store.openKey === key ? "open" : ""}>
+          <summary class="trigger" aria-haspopup="dialog">
+            <span class="trigger-copy"><strong>${this._escape(selected?.name || "Vybrat entitu Home Assistantu")}</strong><small>${this._escape(selected?.id || "Senzor, pomocník nebo jiná entita")}</small></span><span class="chevron">⌄</span>
+          </summary>
+          <div class="backdrop"></div><section class="dialog" role="dialog" aria-modal="true" aria-label="Výběr entity Home Assistantu">
+            <div class="head"><strong>Vyberte entitu Home Assistantu</strong><button class="close" type="button" aria-label="Zavřít">×</button></div>
+            <input class="search" type="search" value="${this._escape(this._query)}" placeholder="Hledat podle názvu, Entity ID nebo hodnoty…" aria-label="Hledat entity">
+            <div class="results"><button class="entity ${this.value ? "" : "selected"}" type="button" data-value=""><span><strong>Bez entity</strong><small>Použít ruční hodnotu</small></span></button>${filtered.map((entity) => `<button class="entity ${entity.id === this.value ? "selected" : ""}" type="button" data-value="${this._escape(entity.id)}"><span><strong>${this._escape(entity.name)}</strong><small>${this._escape(entity.id)}</small></span><span class="entity-state">${this._escape(entity.state)}</span></button>`).join("")}${filtered.length ? "" : `<div class="empty">Žádná entita neodpovídá hledání.</div>`}</div>
+          </section></details>`;
+          const details = this.querySelector("details");
+          const close = () => { details.open = false; this._open = false; this._query = ""; store.openKey = ""; store.queries[key] = ""; };
+          this.querySelector(".backdrop")?.addEventListener("click", close);
+          this.querySelector(".close")?.addEventListener("click", close);
+          this.querySelector(".trigger")?.addEventListener("click", () => {
+            store.openKey = details.open ? "" : key;
+          });
+          details?.addEventListener("toggle", () => {
+            this._open = details.open;
+            store.openKey = details.open ? key : "";
+            if (details.open) requestAnimationFrame(() => this.querySelector(".search")?.focus());
+          });
+          this.querySelector(".search")?.addEventListener("input", (event) => {
+            this._query = event.target.value;
+            store.queries[key] = this._query;
+            const value = this._query.trim().toLowerCase();
+            this.querySelectorAll(".entity[data-value]").forEach((button) => {
+              button.hidden = value && !button.textContent.toLowerCase().includes(value);
+            });
+          });
+          this.querySelectorAll("[data-value]").forEach((button) => button.addEventListener("click", () => {
+            this._value = button.dataset.value || "";
+            this._open = false;
+            this._query = "";
+            store.openKey = "";
+            store.queries[key] = "";
+            this._render();
+            this.dispatchEvent(new CustomEvent("value-changed", { detail:{ value:this._value }, bubbles:true, composed:true }));
+          }));
+        }
+      });
+    }
+    await import(`../custom_components/dratek_eink/frontend/dratek-eink-panel.js?t=${Date.now()}`);
+
+    const gateways = [
+      { id:"gateway-workshop", name:"Gateway dílna", host:"192.168.1.41", status:{ok:true,hostname:"dratek-dilna.local",ip:"192.168.1.41",firmware:"0.1.125",chip:"ESP32-S3",wifi_rssi:-49,uptime_ms:184320000,ble_initialized:true,ota_supported:true,free_heap:182440} },
+      { id:"gateway-office", name:"Gateway kancelář", host:"192.168.1.42", status:{ok:true,hostname:"dratek-kancelar.local",ip:"192.168.1.42",firmware:"0.1.124",chip:"ESP32",wifi_rssi:-61,uptime_ms:45120000,ble_initialized:true,ota_supported:true,free_heap:146220} },
+      { id:"gateway-empty", name:"Gateway bez displeje", host:"192.168.1.43", status:{ok:false,hostname:"dratek-sklad.local",firmware:"0.1.122",chip:"ESP32-S3"} },
+    ];
+    const devices = [
+      { address:"FF:FF:92:81:46:32", physical_code:"92.81.46.32", display_name:"Ceník dílna", model:"EPA LCD 296x128 1 BWR", sdk_type:46, battery_percent:82, battery_voltage:3.05, rssi:-48, gateway_selection:"auto", selected_gateway_id:"", preferred_path:{type:"gateway",id:"gateway-workshop",name:"Gateway dílna",rssi:-48}, paths:[{type:"gateway",id:"gateway-workshop",name:"Gateway dílna",rssi:-48},{type:"gateway",id:"gateway-office",name:"Gateway kancelář",rssi:-61}] },
+      { address:"FF:FF:94:20:10:78", physical_code:"94.20.10.78", display_name:"Teplota kancelář", model:"EPA LCD 400x300 BWR", sdk_type:75, battery_percent:54, battery_voltage:2.9, rssi:-63, preferred_path:{type:"local",name:"Home Assistant Bluetooth"}, paths:[{type:"local",name:"Home Assistant Bluetooth"}] },
+      { address:"FF:FF:91:31:18:11", physical_code:"91.31.18.11", model:"EPA LCD 250x128 1 BWR", sdk_type:264, battery_percent:28, battery_voltage:2.75, rssi:-72, gateway_selection:"manual", selected_gateway_id:"gateway-office", preferred_path:{type:"gateway",id:"gateway-office",name:"Gateway kancelář",rssi:-72}, paths:[{type:"gateway",id:"gateway-office",name:"Gateway kancelář",rssi:-72}] },
+      { address:"FF:FF:96:41:12:54", physical_code:"96.41.12.54", model:"EPA LCD 296x128 1 BWR", sdk_type:46, battery_percent:9, battery_voltage:2.5, rssi:-83, temporarily_unseen:true, preferred_path:{type:"gateway",name:"Gateway sklad"}, paths:[{type:"gateway",name:"Gateway sklad"}] },
+      { address:"FF:FF:93:10:22:41", physical_code:"93.10.22.41", display_name:"Vstup", model:"EPA LCD 296x128 1 BWR", sdk_type:46, battery_percent:64, battery_voltage:2.95, rssi:-55, preferred_path:{type:"local",name:"Home Assistant Bluetooth"}, paths:[{type:"local",name:"Home Assistant Bluetooth"}] },
+    ];
+    const writingAddress = new URLSearchParams(window.location.search).get("writing") || "";
+    const uploadedAddress = new URLSearchParams(window.location.search).get("uploaded") || "";
+    const settingsAddress = new URLSearchParams(window.location.search).get("settings") || "";
+    const settingsView = new URLSearchParams(window.location.search).get("settingsView") || "templates";
+    const drafts = {
+      "FF:FF:92:81:46:32": {
+        width:296, height:128, background_color:"white", invert_colors:false,
+        preview_image:`data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="296" height="128"><rect width="296" height="128" fill="white"/><rect y="88" width="296" height="40" fill="#d41414"/><text x="18" y="43" font-family="Arial" font-size="27" font-weight="700">Vrtačka</text><text x="18" y="77" font-family="Arial" font-size="19">1 490 Kč</text><text x="148" y="114" text-anchor="middle" font-family="Arial" font-size="14" fill="white">SKLADEM</text></svg>')}`,
+        preview_updated_at:Date.now(), preview_width:296, preview_height:128, preview_orientation:"landscape", sent_template_ids:["price"],
+        template_config:{ assignments:["price"], selected_primary:"price", orientation:"landscape", layout:"single", bindings:{}, editor_elements:[], element_adjustments:{}, formats:{primary:"wide"}, sizes:{primary:"large"}, placements:{} },
+        objects:[
+          { id:"o1", type:"text", x:20, y:20, w:256, h:40, text:"Vrtačka", color:"black", bold:true, fontSize:26 },
+          { id:"o2", type:"rect", x:20, y:80, w:256, h:2, fill:"black" },
+        ],
+      },
+      "FF:FF:93:10:22:41": {
+        width:296, height:128, background_color:"white", invert_colors:false,
+        objects:[
+          { id:"o1", type:"text", x:16, y:16, w:264, h:40, text:"Vstup", color:"black", bold:true, fontSize:24 },
+          { id:"o2", type:"text", x:16, y:70, w:264, h:30, text:"Otevřeno 8-16", color:"red", fontSize:16 },
+        ],
+      },
+    };
+    const userTemplates = [];
+
+    const panel = document.querySelector("#panel");
+    const renderCanonicalHarness = async (automation) => {
+      const image = new Image();
+      image.src = automation.base_image;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const ctx = canvas.getContext("2d", { willReadFrequently:true });
+      ctx.drawImage(image, 0, 0);
+      for (const binding of automation.bindings || []) {
+        if (binding.type && binding.type !== "text") continue;
+        const state = binding.entity_id ? panel._hass?.states?.[binding.entity_id] : null;
+        const raw = state
+          ? (binding.entity_attribute ? state.attributes?.[binding.entity_attribute] : state.state)
+          : binding.fallback || "";
+        const value = `${binding.value_prefix || ""}${raw ?? binding.fallback ?? ""}${binding.value_suffix || ""}`;
+        const lines = String(value).split("\n");
+        const padding = Math.max(0, Number(binding.padding || 0));
+        const width = Math.max(1, Number(binding.w || 1));
+        const height = Math.max(1, Number(binding.h || 1));
+        const availableWidth = Math.max(1, width - padding * 2);
+        const availableHeight = Math.max(1, height - padding * 2);
+        const minimum = Math.max(10, Number(binding.minFontSize || 10));
+        let fontSize = Math.max(minimum, Number(binding.fontSize || 16));
+        const weight = binding.bold ? 700 : 600;
+        if (binding.autoFit !== false) {
+          ctx.font = `${weight} 100px "DRATEK eInk Sans"`;
+          const measuredWidth = Math.max(...lines.map((line) => ctx.measureText(line || " ").width), 1);
+          fontSize = Math.max(minimum, Math.floor(Math.min(
+            availableWidth * 100 / measuredWidth,
+            availableHeight / Math.max(1, lines.length * 1.08),
+          )));
+        }
+        ctx.save();
+        ctx.translate(Number(binding.x || 0) + width / 2, Number(binding.y || 0) + height / 2);
+        ctx.rotate(Number(binding.rotation || 0) * Math.PI / 180);
+        ctx.translate(-width / 2, -height / 2);
+        ctx.beginPath();
+        ctx.rect(0, 0, width, height);
+        ctx.clip();
+        ctx.fillStyle = binding.color === "red" ? "#dc140c" : binding.color === "white" ? "#fff" : "#000";
+        ctx.font = `${weight} ${fontSize}px "DRATEK eInk Sans"`;
+        ctx.textAlign = binding.textAlign || "left";
+        ctx.textBaseline = "top";
+        const lineHeight = fontSize * 1.08;
+        const totalHeight = lineHeight * lines.length;
+        const startY = padding + (
+          binding.verticalAlign === "bottom" ? Math.max(0, availableHeight - totalHeight)
+            : binding.verticalAlign === "middle" ? Math.max(0, (availableHeight - totalHeight) / 2)
+              : 0
+        );
+        const x = ctx.textAlign === "center" ? width / 2 : ctx.textAlign === "right" ? width - padding : padding;
+        lines.forEach((line, index) => ctx.fillText(line, x, startY + index * lineHeight));
+        ctx.restore();
+      }
+      const previewPixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      for (let index = 0; index < previewPixels.data.length; index += 4) {
+        const red = previewPixels.data[index];
+        const green = previewPixels.data[index + 1];
+        const blue = previewPixels.data[index + 2];
+        // Same rule as _quantizeEinkPixel in panel-template-svg.mixin.js and
+        // bwr_masks in render.py. The harness stands in for the backend renderer,
+        // so it has to classify pixels the same way or the local preview lies.
+        const redDominance = red - Math.max(green, blue);
+        const color = (red >= 105 && redDominance >= 52 && green <= 145 && blue <= 145)
+          ? [220, 20, 12]
+          : ((red * 299 + green * 587 + blue * 114) / 1000) < 168
+            ? [0, 0, 0]
+            : [255, 255, 255];
+        previewPixels.data[index] = color[0];
+        previewPixels.data[index + 1] = color[1];
+        previewPixels.data[index + 2] = color[2];
+      }
+      ctx.putImageData(previewPixels, 0, 0);
+      return { ok:true, image:canvas.toDataURL("image/png"), width:canvas.width, height:canvas.height };
+    };
+    panel.hass = {
+      states: {
+        "sensor.spot_prices": { state:"2.18", attributes:{ friendly_name:"Spotové ceny", prices:[1.92,2.04,2.18,2.31,2.11] } },
+        "sensor.time": { state:"14:30", attributes:{ friendly_name:"Aktuální čas" } },
+        "binary_sensor.dvere_dilna": { state:"on", attributes:{ friendly_name:"Dveře dílna" } },
+        "input_number.cilova_teplota": { state:"22.5", attributes:{ friendly_name:"Cílová teplota", unit_of_measurement:"°C" } },
+      },
+      callWS: async (msg) => {
+        window.__dratekHarnessLastWs = structuredClone(msg);
+        if (["dratek_eink/commit_design_upload", "dratek_eink/gateways/send_design"].includes(msg.type)) {
+          panel.setAttribute("data-last-automation", JSON.stringify({
+            type:msg.type,
+            bindingCount:msg.automation?.bindings?.length || 0,
+            entities:(msg.automation?.bindings || []).map((binding) => binding.entity_id),
+          }));
+        }
+        const { type } = msg;
+        if (type === "dratek_eink/scan") return { ok:true, devices };
+        if (type === "dratek_eink/device_drafts/list") return { drafts };
+        if (type === "dratek_eink/device_drafts/load") return { draft:drafts[String(msg.address || "").toUpperCase()] || null };
+        if (type === "dratek_eink/device_drafts/save") {
+          drafts[String(msg.address || "").toUpperCase()] = msg.draft;
+          return { draft:msg.draft };
+        }
+        if (type === "dratek_eink/user_templates/list") return { templates:userTemplates };
+        if (type === "dratek_eink/user_templates/save") {
+          const template = { ...msg.template, user_created:true };
+          const index = userTemplates.findIndex((item) => item.id === template.id);
+          if (index >= 0) userTemplates[index] = template;
+          else userTemplates.push(template);
+          return { template };
+        }
+        if (type === "dratek_eink/render_preview") return renderCanonicalHarness(msg.automation);
+        if (type === "dratek_eink/gateways/list" || type === "dratek_eink/gateways/refresh") return { gateways };
+        if (type === "dratek_eink/gateways/serial_ports") return { ports: [] };
+        if (type === "dratek_eink/queue/list") {
+          const jobs = [
+            ...(writingAddress ? [{ id:"local-writing-job", address:writingAddress, status:"writing", operation:"design", transport_type:"gateway", transport_name:"Gateway dílna", created_at:Math.floor(Date.now() / 1000) - 4, started_at:Math.floor(Date.now() / 1000) - 4 }] : []),
+            ...(uploadedAddress ? [{ id:"local-uploaded-job", address:uploadedAddress, status:"succeeded", operation:"entity_update", transport_type:"local", transport_name:"Home Assistant Bluetooth", created_at:Math.floor(Date.now() / 1000) - 30, started_at:Math.floor(Date.now() / 1000) - 30, finished_at:Math.floor(Date.now() / 1000) }] : []),
+          ];
+          return { jobs, queued:0, writing:writingAddress ? 1 : 0, succeeded:uploadedAddress ? 1 : 0, failed:0 };
+        }
+        if (type === "dratek_eink/devices/set_name") {
+          const device = devices.find((item) => item.address === msg.address);
+          if (device) device.display_name = msg.name;
+          return { name:msg.name };
+        }
+        if (type === "dratek_eink/devices/set_gateway") {
+          // Zrcadlí websocket_set_device_gateway: "local" je platná ruční volba,
+          // ne neznámá gateway.
+          const device = devices.find((item) => item.address === msg.address);
+          const localRoute = msg.gateway_id === "local";
+          const gateway = gateways.find((item) => item.id === msg.gateway_id);
+          const manual = localRoute || Boolean(gateway);
+          const routeId = localRoute ? "local" : gateway?.id || "";
+          if (device) {
+            device.gateway_selection = manual ? "manual" : "auto";
+            device.selected_gateway_id = routeId;
+          }
+          return {
+            address:msg.address,
+            gateway_selection:manual ? "manual" : "auto",
+            gateway_id:routeId,
+            transport_name:localRoute ? "Home Assistant Bluetooth" : gateway?.name || "",
+          };
+        }
+        if (type === "dratek_eink/set_rgb_led") return { ok:true, address: msg.address, log: [] };
+        if (type === "dratek_eink/flash_identify") return { ok:true, address: msg.address, log: [] };
+        if (type === "dratek_eink/render_meteoradar") {
+          // The harness has no backend to fetch a real RainViewer frame from, so
+          // it stands in with a small drawn placeholder - just enough to prove
+          // the panel's fetch/cache/<image> wiring actually paints something,
+          // not a stand-in for the real black-outline-and-red-precipitation map
+          // meteoradar.py renders in production.
+          const width = Math.max(1, Math.round(msg.width || 250));
+          const height = Math.max(1, Math.round(msg.height || 128));
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">`
+            + `<rect width="${width}" height="${height}" fill="#ffffff" stroke="#000000" stroke-width="2"/>`
+            + `<circle cx="${width * 0.4}" cy="${height * 0.5}" r="${Math.min(width, height) * 0.18}" fill="#d71912"/>`
+            + `<text x="${width / 2}" y="${height - 8}" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#000000">harness mock</text>`
+            + `</svg>`;
+          return { ok:true, image:`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`, width, height };
+        }
+        return {};
+      },
+    };
+    // The panel only scans when the user presses Obnovit; on boot it restores the
+    // last result from localStorage. A fresh harness has no such cache, so without
+    // this the page renders the "no displays nearby" empty state and none of the
+    // sample devices below are ever visible.
+    await panel._scan();
+
+    if (settingsAddress && devices.some((device) => device.address === settingsAddress)) {
+      panel._selectedDeviceAddress = settingsAddress;
+      panel._restoreDisplayTemplateConfig(drafts[String(settingsAddress).toUpperCase()]?.template_config);
+      panel._displaySettingsView = settingsView === "designer" ? "designer" : "templates";
+      panel._activeTab = "display-settings";
+      panel._render();
+      panel._paint();
+    }
+    document.querySelector("#bootStatus")?.remove();
+  </script>
+</body>
+</html>

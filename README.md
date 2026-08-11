@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.254
+
+- možnost mazání uživatelských šablon přímo z knihovny v panelu, oprava partial update u dělených rozvržení, zvýšení čitelnosti fontů u malých bloků a oprava `bleak-retry-connector` pro MAC adresy v logu
+
 ## Novinky ve verzi 0.1.253
 
 - vyřešeno hromadění starých úloh na pozadí při opakovaném reloadu integrace ve vývoji: automatické rušení smyček v `async_unload_entry`

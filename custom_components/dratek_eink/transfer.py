@@ -128,7 +128,7 @@ class DratekTransfer:
             if wait_seconds > 0:
                 await asyncio.sleep(wait_seconds)
         client = None
-        if establish_connection is not None and not isinstance(connection_target, str):
+        if establish_connection is not None:
             try:
                 client = await establish_connection(
                     BleakClient,

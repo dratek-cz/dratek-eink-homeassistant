@@ -339,6 +339,23 @@ export const inspectorMixin = {
       // purpose (e.g. dragging the already-assigned template to "full").
       if (previousAssigned.includes(templateId) && !isPlacementMove) {
         this._pendingDisplayTemplateConflict = null;
+        this._prepareDisplayTemplateBindings(template);
+        // Ensure the assignment is persisted (first-click may have only set
+        // _selectedDisplayTemplateId via the fallback but never written it to
+        // _displayTemplateAssignments). Without this spot-prices and similar
+        // templates appeared already assigned but never rendered on the left.
+        this._assignDisplayTemplate(device, templateId);
+        this._selectedDisplayTemplateId = templateId;
+        if (template?.user_created) {
+          this._applyUserDisplayTemplate(template);
+          this._render();
+          this._paint();
+        } else {
+          // Re-render first so the dithered canvas in DOM has the correct key
+          // before _applyTemplate paints into it (same guard as main path).
+          this._render();
+          this._applyTemplate(templateId, true);
+        }
         return;
       }
       this._rememberActiveTemplateEditorState?.();
@@ -400,6 +417,12 @@ export const inspectorMixin = {
         this._render();
         this._paint();
       } else {
+        // When staying in the catalog (drag onto device, or click on thumbnail)
+        // the dithered-preview canvas key in the DOM still reflects the
+        // previous template ID at the point _applyTemplate would paint into it.
+        // Re-render the DOM first so the canvas carries the correct key for the
+        // newly assigned template, then let _applyTemplate do its own paint.
+        if (stayInCatalog) this._render();
         this._applyTemplate(templateId, true);
       }
       // Assigning a template while staying in the catalog - by clicking its
@@ -787,6 +810,32 @@ export const inspectorMixin = {
       this._render();
       this._paint();
     }));
+    this.shadowRoot.querySelectorAll("[data-delete-user-template]").forEach((button) => button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const templateId = button.dataset.deleteUserTemplate;
+      if (!templateId) return;
+      this._deleteUserDisplayTemplate?.(templateId);
+    }));
+    this.shadowRoot.querySelectorAll("[data-display-template-export]").forEach((button) => button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const templateId = button.dataset.displayTemplateExport;
+      this._exportDisplayTemplate?.(templateId);
+    }));
+    const importTrigger = this.shadowRoot.querySelector("[data-display-template-import-trigger]");
+    const fileInput = this.shadowRoot.querySelector("#displayTemplateFileInput");
+    if (importTrigger && fileInput) {
+      importTrigger.addEventListener("click", (event) => {
+        event.stopPropagation();
+        fileInput.click();
+      });
+      fileInput.addEventListener("change", (event) => {
+        const file = event.target.files?.[0];
+        if (file) {
+          this._importDisplayTemplateFile?.(file);
+          fileInput.value = "";
+        }
+      });
+    }
     this.shadowRoot.querySelectorAll("[data-template-setup-close]").forEach((element) => element.addEventListener("click", (event) => {
       // The backdrop carries the same attribute as the buttons do, so a click that
       // bubbled up from inside the dialog must not close it. On a button any target

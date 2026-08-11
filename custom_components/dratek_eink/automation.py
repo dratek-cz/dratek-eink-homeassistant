@@ -752,7 +752,12 @@ class EntityAutoUpdateManager:
             if words:
                 return f"{prefix}{words}{suffix}"
         unit = state.attributes.get("unit_of_measurement") if binding.get("include_unit") and not attribute else ""
-        return f"{prefix}{_format_czech_number(value)}{f' {unit}' if unit else ''}{suffix}"
+        raw_result = f"{prefix}{_format_czech_number(value)}{f' {unit}' if unit else ''}{suffix}"
+        for u in ("°C", "%", "kW", "kWh", "hPa", "bar", "V", "A", "W", "l/min", "ppm", "°", "dBm", "EUR", "Kč"):
+            dupe = f"{u} {u}"
+            while dupe in raw_result:
+                raw_result = raw_result.replace(dupe, u)
+        return raw_result
 
     def _chart_value(self, address: str, state: Any, binding: dict[str, Any]) -> str:
         if state is None:
@@ -1007,6 +1012,29 @@ class EntityAutoUpdateManager:
         return "data:image/png;base64," + base64.b64encode(output.getvalue()).decode("ascii")
 
     @staticmethod
+    def _is_split_or_multi_template_config(config: dict[str, Any]) -> bool:
+        """Return True if config represents a split-template or multi-template layout."""
+        layout = str(config.get("layout") or "single")
+        if layout in ("side-by-side", "stacked"):
+            return True
+        template_ids = config.get("template_ids")
+        if isinstance(template_ids, list) and len(template_ids) > 1:
+            return True
+        bindings = config.get("bindings")
+        if isinstance(bindings, list):
+            prefixes = set()
+            for b in bindings:
+                if isinstance(b, dict):
+                    b_id = str(b.get("id") or "")
+                    if b_id.startswith("template-"):
+                        parts = b_id.split("-")
+                        if len(parts) >= 2:
+                            prefixes.add(parts[1])
+            if len(prefixes) > 1:
+                return True
+        return False
+
+    @staticmethod
     def _changed_region(previous: Image.Image, current: Image.Image) -> tuple[int, int, int, int] | None:
         if previous.size != current.size:
             return (0, 0, current.width, current.height)
@@ -1088,8 +1116,9 @@ class EntityAutoUpdateManager:
         region = current_hardware.crop((x0, y0, x1, y1))
         use_partial = (
             sdk_type in PARTIAL_UPDATE_CONFIRMED_SDK_TYPES
-            and
-            partial[1] % 8 == 0
+            and not self._is_split_or_multi_template_config(config)
+            and not config.get("disable_partial")
+            and partial[1] % 8 == 0
             and partial[3] % 8 == 0
             and partial[2] * partial[3]
             < current_hardware.width * current_hardware.height * 0.85

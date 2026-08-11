@@ -59,6 +59,92 @@ export const projectsMixin = {
     return queued;
   },
 
+  async _deleteUserDisplayTemplate(templateId) {
+    if (!templateId || !String(templateId).startsWith("user-template-")) return;
+    this._userDisplayTemplates = (this._userDisplayTemplates || []).filter((t) => t.id !== templateId);
+    if (this._selectedDisplayTemplateId === templateId) this._selectedDisplayTemplateId = "";
+    if (this._selectedDisplayTemplateSecondaryId === templateId) this._selectedDisplayTemplateSecondaryId = "";
+    this._render();
+    this._paint();
+    if (this._hass) {
+      try {
+        await this._hass.callWS({
+          type: "dratek_eink/user_templates/delete",
+          template_id: templateId,
+        });
+      } catch (_err) {
+        // ignore fallback errors for offline/old backends
+      }
+    }
+  },
+
+  _exportDisplayTemplate(templateId) {
+    if (!templateId) return;
+    const cards = typeof this._displayTemplateCards === "function" ? this._displayTemplateCards() : [];
+    const template = cards.find((t) => t.id === templateId);
+    if (!template) return;
+
+    const payload = {
+      type: "dratek_eink_template",
+      version: 1,
+      exported_at: new Date().toISOString(),
+      template: {
+        id: template.id,
+        title: template.title || "Šablona eInk",
+        category: template.category || "custom",
+        number: template.number || "0",
+        variables: template.variables || [],
+        elements: template.elements || [],
+        user_created: true,
+      },
+    };
+
+    const jsonString = JSON.stringify(payload, null, 2);
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const safeTitle = String(template.title || "sablona").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    a.href = url;
+    a.download = `${safeTitle || "sablona"}.dratek-template.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
+  async _importDisplayTemplateFile(file) {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const rawTemplate = data.template || data;
+      if (!rawTemplate || (!rawTemplate.title && !rawTemplate.id)) {
+        alert("Neplatný soubor šablony JSON.");
+        return;
+      }
+
+      const newId = `user-template-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const importedTemplate = {
+        id: newId,
+        title: String(rawTemplate.title || "Importovaná šablona"),
+        category: String(rawTemplate.category || "custom"),
+        variables: Array.isArray(rawTemplate.variables) ? rawTemplate.variables : [],
+        elements: Array.isArray(rawTemplate.elements) ? rawTemplate.elements : [],
+        user_created: true,
+        created_at: Math.floor(Date.now() / 1000),
+        updated_at: Math.floor(Date.now() / 1000),
+      };
+
+      await this._saveUserDisplayTemplate(importedTemplate);
+      this._displayTemplateSearchQuery = "";
+      this._render();
+      this._paint();
+      alert(`Šablona "${importedTemplate.title}" byla úspěšně importována do vaší knihovny!`);
+    } catch (err) {
+      alert(`Chyba při importu šablony: ${err.message || err}`);
+    }
+  },
+
 
   async _loadProjects() {
     if (!this._hass) return;

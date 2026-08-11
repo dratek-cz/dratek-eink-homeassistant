@@ -451,7 +451,7 @@ export const devicesMixin = {
           </div>
         </div>
         <div class="display-tile-actions">
-          ${assignedTemplates.includes("price") || assignedTemplates.includes("priceshelf") ? `
+          ${assignedTemplates.includes("price") ? `
             <button type="button" class="display-sale-action-btn ${this._displayTemplateOptions?.["price:sale"] ? "is-active" : ""}" data-device-price-sale="${this._escape(device.address)}" title="Nastavit akční slevu">
               <ha-icon icon="mdi:sale"></ha-icon>
               <span>AKCE / SLEVA</span>
@@ -802,13 +802,13 @@ export const devicesMixin = {
     template.variables.forEach((variable, index) => {
       const meta = this._templateVariableMeta(variable, index);
       const key = `${template.id}:${meta.key}`;
-      if (Object.prototype.hasOwnProperty.call(this._displayTemplateBindings, key)) return;
+      if (Object.prototype.hasOwnProperty.call(this._displayTemplateBindings, key) && this._displayTemplateBindings[key] && template.id !== "cz_spot_prices") return;
       if (meta.automatic) {
         this._displayTemplateBindings[key] = `internal:${meta.key}`;
         return;
       }
       const suggested = weatherEntity || czSpotBindings[index] || (template.id === "cz_spot_prices" ? "" : this._suggestTemplateEntity(meta));
-      if (suggested) this._displayTemplateBindings[key] = suggested;
+      if (suggested || !this._displayTemplateBindings[key]) this._displayTemplateBindings[key] = suggested;
     });
   },
 
@@ -837,28 +837,49 @@ export const devicesMixin = {
   },
 
   _czSpotTemplateBindings() {
-    const states = this._hass?.states || {};
+    const states = this._hass?.states;
+    if (!states) return {};
+    if (this._czSpotCacheStates === states && this._czSpotCacheResult) {
+      return this._czSpotCacheResult;
+    }
     const entityIds = Object.keys(states);
-    const normalize = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     const usable = (entityId) => entityId && states[entityId] && !["unavailable", "unknown"].includes(String(states[entityId].state).toLowerCase());
-    const sensorEntries = entityIds.filter((entityId) => entityId.startsWith("sensor.") && usable(entityId)).map((entityId) => {
-      const friendlyName = normalize(states[entityId]?.attributes?.friendly_name);
-      return { entityId, friendlyName, searchable: normalize(`${entityId} ${friendlyName}`) };
-    });
-    const findNamedEntity = (aliases, excluded = []) => {
-      const wanted = aliases.map(normalize);
-      const rejected = excluded.map(normalize);
-      const allowed = (entry) => !rejected.some((term) => entry.searchable.includes(term));
-      return sensorEntries.find((entry) => allowed(entry) && wanted.includes(entry.friendlyName))?.entityId
-        || sensorEntries.find((entry) => allowed(entry) && wanted.some((term) => entry.searchable.includes(term)))?.entityId
-        || "";
-    };
+
     const findEntity = (base, duplicate = "") => {
       const preferred = duplicate ? `${base}${duplicate}` : base;
       if (usable(preferred)) return preferred;
       if (usable(base)) return base;
       return entityIds.find((entityId) => entityId === preferred || entityId.startsWith(`${base}_`)) || "";
     };
+
+    let sensorEntries = null;
+    const getSensorEntries = () => {
+      if (sensorEntries) return sensorEntries;
+      const normalize = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      sensorEntries = entityIds
+        .filter((entityId) => entityId.startsWith("sensor.") && usable(entityId))
+        .filter((entityId) => {
+          const fn = states[entityId]?.attributes?.friendly_name || "";
+          return /spot|electr|elektr|cena|price/i.test(entityId) || /spot|electr|elektr|cena|price/i.test(fn);
+        })
+        .map((entityId) => {
+          const friendlyName = normalize(states[entityId]?.attributes?.friendly_name);
+          return { entityId, friendlyName, searchable: normalize(`${entityId} ${friendlyName}`) };
+        });
+      return sensorEntries;
+    };
+
+    const findNamedEntity = (aliases, excluded = []) => {
+      const entries = getSensorEntries();
+      const normalize = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const wanted = aliases.map(normalize);
+      const rejected = excluded.map(normalize);
+      const allowed = (entry) => !rejected.some((term) => entry.searchable.includes(term));
+      return entries.find((entry) => allowed(entry) && wanted.includes(entry.friendlyName))?.entityId
+        || entries.find((entry) => allowed(entry) && wanted.some((term) => entry.searchable.includes(term)))?.entityId
+        || "";
+    };
+
     const currentCandidates = [
       "sensor.current_buy_electricity_price_15min",
       "sensor.current_buy_electricity_price",
@@ -869,33 +890,56 @@ export const devicesMixin = {
     if (!current) current = findNamedEntity(["Aktuální spotová cena elektřiny", "Current spot electricity price"], ["je nejlevnější", "is cheapest"]);
     if (!current) {
       current = entityIds.find((entityId) => {
+        if (!entityId.startsWith("sensor.")) return false;
         const state = states[entityId];
         const attributes = state?.attributes || {};
-        const timestampCount = Object.keys(attributes).filter((key) => !Number.isNaN(Date.parse(key))).length;
+        const timestampCount = Object.keys(attributes).filter((key) => (key.startsWith("20") || key.includes("T")) && !Number.isNaN(Date.parse(key))).length;
         const name = `${entityId} ${attributes.friendly_name || ""}`.toLowerCase();
-        return entityId.startsWith("sensor.") && timestampCount >= 20 && name.includes("electric") && name.includes("price");
+        return timestampCount >= 20 && name.includes("electric") && name.includes("price");
       }) || "";
     }
-    const named = {
-      todayMin: findNamedEntity(["Dnešní nejlevnější spotová cena elektřiny", "Spot cheapest electricity today"]),
-      todayMax: findNamedEntity(["Dnešní nejdražší spotová cena elektřiny", "Spot most expensive electricity today"]),
-      tomorrowMin: findNamedEntity(["Zítřejší nejlevnější spotová cena elektřiny", "Spot cheapest electricity tomorrow"]),
-      todayOrder: findNamedEntity(["Dnešní pořadí hodin spotových cen elektřiny", "Current spot electricity hour order", "Current spot electricity 15min order"]),
-    };
-    const match = current.match(/^sensor\.current_(buy|spot)_electricity_price(_15min)?(_\d+)?$/);
-    if (!match) return { 0: current, 1: current, 2: named.todayMin, 3: named.todayMax, 4: named.tomorrowMin, 5: named.todayOrder };
-    const trade = match[1];
-    const interval = match[2] || "";
-    const duplicate = match[3] || "";
-    const orderInterval = interval ? "15min" : "hour";
-    return {
-      0: current,
-      1: current,
-      2: findEntity(`sensor.${trade}_cheapest_electricity_today${interval}`, duplicate) || named.todayMin,
-      3: findEntity(`sensor.${trade}_most_expensive_electricity_today${interval}`, duplicate) || named.todayMax,
-      4: findEntity(`sensor.${trade}_cheapest_electricity_tomorrow${interval}`, duplicate) || named.tomorrowMin,
-      5: findEntity(`sensor.current_${trade}_electricity_${orderInterval}_order`, duplicate) || named.todayOrder,
-    };
+    const match = current ? current.match(/^sensor\.current_(buy|spot)_electricity_price(_15min)?(_\d+)?$/) : null;
+    let result;
+    if (match) {
+      const trade = match[1];
+      const interval = match[2] || "";
+      const duplicate = match[3] || "";
+      const orderInterval = interval ? "15min" : "hour";
+      const tMin = findEntity(`sensor.${trade}_cheapest_electricity_today${interval}`, duplicate);
+      const tMax = findEntity(`sensor.${trade}_most_expensive_electricity_today${interval}`, duplicate);
+      const tmMin = findEntity(`sensor.${trade}_cheapest_electricity_tomorrow${interval}`, duplicate);
+      const tOrder = findEntity(`sensor.current_${trade}_electricity_${orderInterval}_order`, duplicate);
+      if (tMin && tMax && tmMin && tOrder) {
+        result = { 0: current, 1: current, 2: tMin, 3: tMax, 4: tmMin, 5: tOrder };
+      }
+    }
+    if (!result) {
+      const named = {
+        todayMin: findNamedEntity(["Dnešní nejlevnější spotová cena elektřiny", "Spot cheapest electricity today"]),
+        todayMax: findNamedEntity(["Dnešní nejdražší spotová cena elektřiny", "Spot most expensive electricity today"]),
+        tomorrowMin: findNamedEntity(["Zítřejší nejlevnější spotová cena elektřiny", "Spot cheapest electricity tomorrow"]),
+        todayOrder: findNamedEntity(["Dnešní pořadí hodin spotových cen elektřiny", "Current spot electricity hour order", "Current spot electricity 15min order"]),
+      };
+      if (!match) {
+        result = { 0: current, 1: current, 2: named.todayMin, 3: named.todayMax, 4: named.tomorrowMin, 5: named.todayOrder };
+      } else {
+        const trade = match[1];
+        const interval = match[2] || "";
+        const duplicate = match[3] || "";
+        const orderInterval = interval ? "15min" : "hour";
+        result = {
+          0: current,
+          1: current,
+          2: findEntity(`sensor.${trade}_cheapest_electricity_today${interval}`, duplicate) || named.todayMin,
+          3: findEntity(`sensor.${trade}_most_expensive_electricity_today${interval}`, duplicate) || named.todayMax,
+          4: findEntity(`sensor.${trade}_cheapest_electricity_tomorrow${interval}`, duplicate) || named.tomorrowMin,
+          5: findEntity(`sensor.current_${trade}_electricity_${orderInterval}_order`, duplicate) || named.todayOrder,
+        };
+      }
+    }
+    this._czSpotCacheStates = states;
+    this._czSpotCacheResult = result;
+    return result;
   },
 
   _templateLiveDataChanged(previousHass, nextHass) {
@@ -1041,6 +1085,10 @@ export const devicesMixin = {
                 <ha-icon icon="mdi:magnify"></ha-icon>
                 <input type="search" id="displayTemplateSearch" data-display-template-search value="${this._escape(this._displayTemplateSearchQuery || "")}" placeholder="Hledat šablonu nebo údaj…" aria-label="Hledat šablony">
               </div>
+              <button type="button" class="display-template-import-btn" data-display-template-import-trigger title="Vložit šablonu ze souboru (.json)">
+                <ha-icon icon="mdi:file-import-outline"></ha-icon> Importovat šablonu
+              </button>
+              <input type="file" id="displayTemplateFileInput" accept=".json,.dratek-template.json" style="display:none">
               <span class="pill muted display-template-result-count">${visibleCards.length} šablon</span>
             </div>
           </div>
@@ -1064,11 +1112,11 @@ export const devicesMixin = {
                 </div>
               </article>`;
             }
-            return `<article class="display-template-card display-template-drag-card is-config-${configStatus.state} ${userCreated ? "is-user-created" : ""} ${used ? "is-used" : ""} ${onDisplay ? "is-on-display" : ""}" draggable="true" data-display-template-drag="${template.id}" aria-label="${this._escape(template.title)}. Přetáhněte na displej.">
+            return `<article class="display-template-card display-template-drag-card is-config-${configStatus.state} ${userCreated ? "is-user-created" : ""} ${used ? "is-used" : ""} ${onDisplay ? "is-on-display" : ""} ${this._templateEditMenuId === template.id ? "has-edit-overlay" : ""}" draggable="true" data-display-template-drag="${template.id}" aria-label="${this._escape(template.title)}. Přetáhněte na displej.">
               <header class="display-template-tile-header">
                 <span class="display-template-kind-icon"><ha-icon icon="mdi:${userCreated ? "palette-outline" : template.kind === "prepared" ? "auto-fix" : "tune-variant"}"></ha-icon></span>
                 <span class="display-template-tile-identity"><strong>${this._escape(template.title)}</strong><small>${userCreated ? "Vytvořeno uživatelem" : template.kind === "prepared" ? "Automatické nastavení" : "Vlastní zdroje dat"}</small></span>
-                ${userCreated ? `<span class="user-template-owner-mark" title="Uživatelská šablona"><ha-icon icon="mdi:check-circle"></ha-icon></span>` : `<button type="button" class="display-template-help" data-display-template-setup="${this._escape(template.id)}" title="Jak zprovoznit šablonu ${this._escape(template.title)}" aria-label="Jak zprovoznit šablonu ${this._escape(template.title)}"><ha-icon icon="mdi:help-circle-outline"></ha-icon></button>`}
+                ${userCreated ? `<button type="button" class="display-template-delete-btn" data-delete-user-template="${this._escape(template.id)}" title="Smazat uživatelskou šablonu ${this._escape(template.title)}" aria-label="Smazat uživatelskou šablonu ${this._escape(template.title)}"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>` : `<button type="button" class="display-template-help" data-display-template-setup="${this._escape(template.id)}" title="Jak zprovoznit šablonu ${this._escape(template.title)}" aria-label="Jak zprovoznit šablonu ${this._escape(template.title)}"><ha-icon icon="mdi:help-circle-outline"></ha-icon></button>`}
               </header>
               <div class="display-template-tile-preview is-${orientation}" data-display-template-select="${template.id}" role="button" tabindex="0" aria-label="Vybrat šablonu ${this._escape(template.title)} pro displej">
                 <span class="display-template-preview ${userCreated ? "has-user-template" : ""}" style="aspect-ratio:${previewAspect};min-height:0">${this._renderDisplayTemplateCatalogPreview(template, orientation, size)}</span>
@@ -1087,23 +1135,74 @@ export const devicesMixin = {
               </div>
               <div class="display-template-tile-actions">
                 <button type="button" class="display-template-card-action" data-display-template-edit-menu="${template.id}" aria-expanded="${this._templateEditMenuId === template.id}"><ha-icon icon="mdi:${onDisplay ? "check-circle" : "tune-variant"}"></ha-icon>Upravit šablonu<ha-icon icon="mdi:chevron-down"></ha-icon></button>
-                ${this._templateEditMenuId === template.id ? `<div class="display-template-edit-menu" role="menu" aria-label="Možnosti úpravy šablony ${this._escape(template.title)}">
-                  <div class="display-template-edit-menu-head"><span><ha-icon icon="mdi:tune-variant"></ha-icon></span><div><strong>Co chcete upravit?</strong><small>${this._escape(template.title)}</small></div></div>
-                  <button type="button" role="menuitem" data-display-template-edit-choice="variables" data-display-template-id="${this._escape(template.id)}"><ha-icon icon="mdi:database-edit-outline"></ha-icon><span><strong>Upravit zdroje dat</strong><small>Napojení hodnot na entity Home Assistantu</small></span></button>
-                  <button type="button" role="menuitem" data-display-template-edit-choice="designer" data-display-template-id="${this._escape(template.id)}"><ha-icon icon="mdi:palette-outline"></ha-icon><span><strong>Designer displeje</strong><small>Rozložení, prvky a vzhled displeje</small></span></button>
-                </div>` : ""}
               </div>
+              ${this._templateEditMenuId === template.id ? `<div class="display-template-card-edit-view" role="menu" aria-label="Možnosti úpravy šablony ${this._escape(template.title)}">
+                <header class="card-edit-header">
+                  <span class="card-edit-kind-icon"><ha-icon icon="mdi:tune-variant"></ha-icon></span>
+                  <div class="card-edit-identity">
+                    <strong>Možnosti úpravy</strong>
+                    <small>${this._escape(template.title)}</small>
+                  </div>
+                  <button type="button" class="card-edit-close-btn" data-display-template-edit-menu="${template.id}" title="Zavřít nastavení">
+                    <ha-icon icon="mdi:close"></ha-icon>
+                  </button>
+                </header>
+
+                <div class="card-edit-options">
+                  <button type="button" class="card-edit-option-btn" data-display-template-edit-choice="variables" data-display-template-id="${this._escape(template.id)}">
+                    <span class="option-icon"><ha-icon icon="mdi:database-edit-outline"></ha-icon></span>
+                    <div class="option-text">
+                      <strong>Upravit zdroje dat</strong>
+                      <small>Napojení hodnot na entity Home Assistantu</small>
+                    </div>
+                    <ha-icon icon="mdi:chevron-right" class="option-arrow"></ha-icon>
+                  </button>
+
+                  <button type="button" class="card-edit-option-btn" data-display-template-edit-choice="designer" data-display-template-id="${this._escape(template.id)}">
+                    <span class="option-icon"><ha-icon icon="mdi:palette-outline"></ha-icon></span>
+                    <div class="option-text">
+                      <strong>Designer displeje</strong>
+                      <small>Rozložení, prvky a vzhled v eInk Studiu</small>
+                    </div>
+                    <ha-icon icon="mdi:chevron-right" class="option-arrow"></ha-icon>
+                  </button>
+
+                  <button type="button" class="card-edit-option-btn" data-display-template-export="${this._escape(template.id)}">
+                    <span class="option-icon"><ha-icon icon="mdi:file-download-outline"></ha-icon></span>
+                    <div class="option-text">
+                      <strong>Exportovat šablonu</strong>
+                      <small>Stáhnout šablonu jako .json soubor</small>
+                    </div>
+                    <ha-icon icon="mdi:download" class="option-arrow"></ha-icon>
+                  </button>
+
+                  ${userCreated ? `<button type="button" class="card-edit-option-btn is-delete" data-delete-user-template="${this._escape(template.id)}">
+                    <span class="option-icon is-delete-icon"><ha-icon icon="mdi:trash-can-outline"></ha-icon></span>
+                    <div class="option-text">
+                      <strong>Smazat šablonu</strong>
+                      <small>Trvale odstranit z knihovny</small>
+                    </div>
+                    <ha-icon icon="mdi:trash-can-outline" class="option-arrow"></ha-icon>
+                  </button>` : ""}
+                </div>
+
+                <div class="card-edit-footer">
+                  <button type="button" class="card-edit-back-btn" data-display-template-edit-menu="${template.id}">
+                    <ha-icon icon="mdi:arrow-left"></ha-icon> Zpět na náhled šablony
+                  </button>
+                </div>
+              </div>` : ""}
             </article>`;
           }).join("")}</div>` : `<div class="display-template-empty"><ha-icon icon="mdi:magnify-close"></ha-icon><strong>Žádná šablona neodpovídá filtru</strong><span>Zkuste jiný název nebo druh šablony.</span></div>`}
         </section>
       </div>
-    </section>${settingsTemplate && this._templateSettingsDialogMode === "variables" ? this._renderTemplateSettingsDialog(settingsTemplate, largeDisplay ? "large" : "small", largeDisplay) : ""}`;
+    </section>${settingsTemplate && this._templateSettingsDialogMode === "variables" ? this._renderTemplateSettingsDialog(settingsTemplate, largeDisplay ? "large" : "small", largeDisplay) : ""}${this._renderDisplayTemplateSetupDialog()}`;
   },
 
   _assignedDisplayTemplates(device = this._device()) {
     const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
     const assigned = this._displayTemplateAssignments?.[address];
-    if (Array.isArray(assigned)) return assigned.filter(Boolean).slice(0, 2);
+    if (Array.isArray(assigned) && assigned.length) return assigned.filter(Boolean).slice(0, 2);
     return [];
   },
 
@@ -1552,6 +1651,41 @@ export const devicesMixin = {
     return { width, height, markup: this._layoutTemplateSvg(rows, width, height), boxes: this._templateVariableCropBoxes(template, width, height) };
   },
 
+  _countryFlagSvg(countryId, width = 24, height = 16) {
+    const id = String(countryId || "").toLowerCase();
+    const w = width;
+    const h = height;
+    const r = Math.min(3, w * 0.15);
+    let inner = "";
+    if (id === "cz") {
+      inner = `<rect width="${w}" height="${h/2}" fill="#ffffff"/>`
+        + `<rect y="${h/2}" width="${w}" height="${h/2}" fill="#d41414"/>`
+        + `<polygon points="0,0 ${w*0.48},${h/2} 0,${h}" fill="#11457e"/>`;
+    } else if (id === "sk") {
+      inner = `<rect width="${w}" height="${h/3}" fill="#ffffff"/>`
+        + `<rect y="${h/3}" width="${w}" height="${h/3}" fill="#0b4ea2"/>`
+        + `<rect y="${(h*2)/3}" width="${w}" height="${h/3}" fill="#ee1c25"/>`
+        + `<path d="M ${w*0.22} ${h*0.28} v ${h*0.46} m -${w*0.08} -${h*0.28} h ${w*0.16} m -${w*0.12} -${h*0.1} h ${w*0.24}" stroke="#ffffff" stroke-width="1.2" fill="none"/>`;
+    } else if (id === "de") {
+      inner = `<rect width="${w}" height="${h/3}" fill="#000000"/>`
+        + `<rect y="${h/3}" width="${w}" height="${h/3}" fill="#dd0000"/>`
+        + `<rect y="${(h*2)/3}" width="${w}" height="${h/3}" fill="#ffce00"/>`;
+    } else if (id === "pl") {
+      inner = `<rect width="${w}" height="${h/2}" fill="#ffffff"/>`
+        + `<rect y="${h/2}" width="${w}" height="${h/2}" fill="#dc143c"/>`;
+    } else if (id === "at") {
+      inner = `<rect width="${w}" height="${h/3}" fill="#ed2939"/>`
+        + `<rect y="${h/3}" width="${w}" height="${h/3}" fill="#ffffff"/>`
+        + `<rect y="${(h*2)/3}" width="${w}" height="${h/3}" fill="#ed2939"/>`;
+    } else if (id === "eu") {
+      inner = `<rect width="${w}" height="${h}" fill="#003399"/>`
+        + `<circle cx="${w/2}" cy="${h/2}" r="${h*0.28}" fill="none" stroke="#ffcc00" stroke-width="1.2" stroke-dasharray="1 2.2"/>`;
+    } else {
+      inner = `<rect width="${w}" height="${h}" fill="#718096"/>`;
+    }
+    return `<svg class="flag-svg-icon" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="border-radius:${r}px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.3);vertical-align:middle;display:inline-block;">${inner}<rect width="${w}" height="${h}" fill="none" stroke="rgba(0,0,0,0.25)" stroke-width="1" rx="${r}"/></svg>`;
+  },
+
   // The setup guide's own content, reused both inside the merged dialog and
   // (unchanged) nowhere else now that the two dialogs are one.
   _renderInteractiveCountryMap(selectedCountry = "cz", address = "") {
@@ -1562,12 +1696,12 @@ export const devicesMixin = {
     // choice looked like the picker had forgotten about it entirely.
     const isCountryActive = (id) => active === id || active === "eu";
     const countries = [
-      { id: "cz", name: "Česká republika", flag: "🇨🇿" },
-      { id: "sk", name: "Slovensko", flag: "🇸🇰" },
-      { id: "de", name: "Německo", flag: "🇩🇪" },
-      { id: "at", name: "Rakousko", flag: "🇦🇹" },
-      { id: "pl", name: "Polsko", flag: "🇵🇱" },
-      { id: "eu", name: "Střední Evropa", flag: "🇪🇺" },
+      { id: "cz", name: "Česká republika" },
+      { id: "sk", name: "Slovensko" },
+      { id: "de", name: "Německo" },
+      { id: "at", name: "Rakousko" },
+      { id: "pl", name: "Polsko" },
+      { id: "eu", name: "Střední Evropa" },
     ];
     const activeCountryObj = countries.find((c) => c.id === active) || countries[0];
 
@@ -1575,7 +1709,7 @@ export const devicesMixin = {
       <div class="country-map-header">
         <ha-icon icon="mdi:map-legend"></ha-icon>
         <strong>Výběr státu srážkové radarové mapy</strong>
-        <span class="active-country-pill">${activeCountryObj.flag} ${this._escape(activeCountryObj.name)}</span>
+        <span class="active-country-pill">${this._countryFlagSvg(activeCountryObj.id, 20, 13)} ${this._escape(activeCountryObj.name)}</span>
       </div>
       <div class="country-map-svg-wrap">
         <svg class="country-map-svg" viewBox="0 0 600 450" preserveAspectRatio="xMidYMid meet" aria-label="Interaktivní mapa Střední Evropy pro výběr státu">
@@ -1589,43 +1723,43 @@ export const devicesMixin = {
           <!-- NĚMECKO (DE) - reálná hranice (geoBoundaries, zjednodušeno Douglas-Peucker) -->
           <g class="map-country-group ${isCountryActive("de") ? "is-active" : ""}" data-meteoradar-country="de" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Německo">
             <path d="M 160.5 382.9 L 185.6 390.0 L 215.7 374.3 L 240.0 385.8 L 231.1 356.8 L 264.2 327.0 L 228.0 296.0 L 211.0 253.9 L 218.1 261.0 L 281.0 225.9 L 278.4 218.3 L 293.5 229.7 L 301.1 207.6 L 287.2 180.6 L 288.7 143.0 L 272.9 129.6 L 283.0 108.0 L 277.9 81.7 L 242.9 56.6 L 260.7 55.6 L 258.8 39.6 L 246.2 35.1 L 255.6 46.9 L 242.9 41.2 L 242.5 53.1 L 221.0 54.5 L 236.3 47.4 L 223.6 44.5 L 191.1 75.3 L 169.7 68.3 L 180.9 49.2 L 151.9 51.8 L 142.1 45.9 L 143.8 27.8 L 98.3 23.6 L 97.8 14.0 L 93.8 30.3 L 104.0 23.4 L 116.5 45.0 L 103.7 53.4 L 124.4 77.3 L 104.1 76.0 L 92.9 101.0 L 85.5 84.8 L 55.7 93.4 L 61.3 121.0 L 44.8 144.0 L 56.6 159.7 L 46.4 176.8 L 22.3 180.5 L 30.9 203.4 L 19.9 218.7 L 36.5 253.1 L 27.4 266.3 L 46.6 308.7 L 92.4 317.9 L 72.3 357.1 L 75.1 383.8 L 103.1 381.0 L 102.7 371.4 L 122.6 377.9 L 117.1 371.0 L 153.7 395.8 L 160.5 382.9 Z" class="map-country-shape" />
-            <text x="162" y="164" class="map-country-flag">🇩🇪</text>
-            <text x="162" y="190" class="map-country-label">DE</text>
+            <g transform="translate(149, 140)">${this._countryFlagSvg("de", 26, 17)}</g>
+            <text x="162" y="172" class="map-country-label">DE</text>
           </g>
 
           <!-- POLSKO (PL) - reálná hranice (geoBoundaries, zjednodušeno Douglas-Peucker) -->
           <g class="map-country-group ${isCountryActive("pl") ? "is-active" : ""}" data-meteoradar-country="pl" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Polsko">
             <path d="M 414.5 284.5 L 409.3 272.9 L 401.5 273.2 L 392.8 266.0 L 384.9 268.2 L 379.3 261.5 L 384.3 259.3 L 383.0 253.7 L 371.9 256.6 L 358.0 247.7 L 362.0 258.2 L 351.6 264.5 L 336.5 248.5 L 344.1 241.4 L 341.0 237.4 L 331.2 240.4 L 324.8 232.9 L 311.3 231.8 L 305.1 220.0 L 299.4 220.4 L 299.9 227.4 L 294.3 227.2 L 301.1 207.6 L 287.3 180.7 L 292.4 168.5 L 285.5 152.0 L 288.7 143.0 L 272.9 129.7 L 283.0 108.0 L 271.6 46.7 L 277.7 63.3 L 328.7 46.1 L 340.6 32.7 L 364.9 21.4 L 401.5 15.2 L 420.6 25.6 L 442.2 46.1 L 497.4 53.2 L 541.4 48.4 L 559.9 61.9 L 573.1 113.4 L 573.8 136.0 L 559.3 144.2 L 550.5 157.6 L 565.0 168.1 L 561.1 185.2 L 564.8 206.7 L 580.1 227.5 L 574.3 231.0 L 578.6 238.6 L 575.6 249.4 L 567.3 250.6 L 553.6 264.4 L 534.0 291.5 L 541.7 316.0 L 521.3 309.2 L 503.0 295.4 L 487.5 295.9 L 481.4 302.5 L 475.7 296.8 L 466.3 296.7 L 457.5 301.4 L 455.7 307.9 L 446.4 307.0 L 446.6 297.1 L 441.8 297.2 L 436.7 287.5 L 421.8 297.8 L 414.5 284.5 Z" class="map-country-shape" />
-            <text x="423" y="198" class="map-country-flag">🇵🇱</text>
-            <text x="423" y="224" class="map-country-label">PL</text>
+            <g transform="translate(410, 174)">${this._countryFlagSvg("pl", 26, 17)}</g>
+            <text x="423" y="206" class="map-country-label">PL</text>
           </g>
 
           <!-- ČESKÁ REPUBLIKA (CZ) - reálná hranice (ČÚZK via geoBoundaries, zjednodušeno Douglas-Peucker) -->
           <g class="map-country-group ${isCountryActive("cz") ? "is-active" : ""}" data-meteoradar-country="cz" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Českou republiku">
             <path d="M 356.9 259.7 L 349.9 263.8 L 336.9 249.5 L 344.1 241.4 L 341.0 237.4 L 331.2 240.4 L 324.8 232.9 L 311.3 231.8 L 305.1 220.0 L 299.4 220.4 L 299.9 227.4 L 291.3 229.6 L 284.7 218.9 L 278.8 218.3 L 277.1 221.6 L 281.1 225.9 L 264.7 234.2 L 255.4 234.9 L 252.8 240.3 L 249.9 237.9 L 236.9 249.8 L 233.0 247.1 L 223.6 250.1 L 218.1 261.0 L 213.5 253.7 L 210.6 257.1 L 224.6 272.9 L 220.1 280.9 L 228.0 296.0 L 239.4 302.1 L 251.6 317.6 L 261.1 321.7 L 271.2 335.2 L 279.4 337.2 L 283.6 332.7 L 290.8 335.7 L 293.9 326.7 L 299.2 327.0 L 300.4 315.4 L 304.7 319.1 L 308.4 316.6 L 325.6 322.1 L 333.6 328.2 L 342.0 329.0 L 347.0 325.0 L 358.1 329.5 L 359.3 334.2 L 367.2 322.1 L 377.3 325.1 L 388.2 319.7 L 394.7 313.6 L 397.4 302.9 L 403.4 300.9 L 408.7 292.7 L 417.8 292.1 L 409.3 272.9 L 401.5 273.2 L 392.8 266.0 L 389.3 270.2 L 384.9 268.2 L 379.3 261.5 L 384.3 259.3 L 383.0 253.7 L 371.8 256.5 L 371.8 253.4 L 358.3 247.6 L 362.0 258.2 L 356.9 259.7 Z" class="map-country-shape" />
-            <text x="317" y="260" class="map-country-flag">🇨🇿</text>
-            <text x="317" y="286" class="map-country-label">CZ</text>
+            <g transform="translate(304, 236)">${this._countryFlagSvg("cz", 26, 17)}</g>
+            <text x="317" y="268" class="map-country-label">CZ</text>
           </g>
 
           <!-- SLOVENSKO (SK) - reálná hranice (geoBoundaries, zjednodušeno Douglas-Peucker) -->
           <g class="map-country-group ${isCountryActive("sk") ? "is-active" : ""}" data-meteoradar-country="sk" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Slovensko">
             <path d="M 514.4 345.1 L 519.1 344.3 L 519.6 335.5 L 524.7 331.1 L 526.1 322.7 L 531.7 312.2 L 516.2 306.4 L 513.2 300.0 L 509.4 298.0 L 507.5 299.7 L 503.0 295.4 L 497.0 297.0 L 492.2 294.7 L 489.6 297.5 L 487.5 295.9 L 485.1 296.7 L 486.6 299.2 L 481.4 302.5 L 475.7 296.8 L 470.7 298.7 L 466.3 296.7 L 457.5 301.4 L 455.7 308.0 L 451.0 305.3 L 446.4 307.0 L 446.6 297.1 L 441.8 297.2 L 436.1 287.5 L 433.5 291.2 L 430.4 291.4 L 427.1 297.4 L 421.8 297.8 L 420.6 292.0 L 408.7 292.7 L 403.4 300.9 L 397.4 302.9 L 393.5 315.0 L 389.4 315.4 L 388.2 319.7 L 385.0 319.8 L 382.7 322.9 L 372.2 325.1 L 367.0 322.2 L 360.1 331.8 L 356.0 345.1 L 363.9 358.0 L 363.9 361.7 L 371.4 362.9 L 382.9 373.8 L 400.7 374.9 L 417.8 371.0 L 414.9 367.3 L 417.0 360.6 L 436.7 358.8 L 438.5 353.3 L 441.7 351.1 L 446.9 353.7 L 446.8 355.6 L 449.9 355.0 L 450.0 356.9 L 454.6 354.9 L 457.1 350.9 L 463.0 350.1 L 469.8 337.5 L 479.1 335.8 L 487.3 340.0 L 497.2 335.7 L 502.5 339.2 L 505.9 346.5 L 514.4 345.1 Z" class="map-country-shape" />
-            <text x="448" y="308" class="map-country-flag">🇸🇰</text>
-            <text x="448" y="334" class="map-country-label">SK</text>
+            <g transform="translate(435, 284)">${this._countryFlagSvg("sk", 26, 17)}</g>
+            <text x="448" y="316" class="map-country-label">SK</text>
           </g>
 
           <!-- RAKOUSKO (AT) - reálná hranice (geoBoundaries, zjednodušeno Douglas-Peucker) -->
           <g class="map-country-group ${isCountryActive("at") ? "is-active" : ""}" data-meteoradar-country="at" data-device-address="${this._escape(address)}" role="button" tabindex="0" aria-label="Vybrat Rakousko">
             <path d="M 160.5 382.8 L 160.0 390.8 L 153.7 395.8 L 145.7 383.3 L 133.1 385.2 L 134.5 405.2 L 149.8 415.1 L 158.5 407.9 L 161.0 414.5 L 173.6 418.6 L 182.3 409.5 L 213.6 403.8 L 212.3 411.8 L 225.1 423.5 L 286.5 436.0 L 301.1 423.6 L 331.7 423.4 L 330.2 415.5 L 339.4 407.3 L 346.2 407.9 L 344.1 389.6 L 352.4 383.6 L 343.4 377.9 L 349.2 373.5 L 364.0 375.9 L 361.4 369.1 L 366.1 362.3 L 356.3 346.4 L 358.1 329.5 L 347.1 325.0 L 333.4 328.1 L 300.5 315.4 L 299.2 326.9 L 294.0 326.6 L 290.7 335.7 L 271.2 335.2 L 264.4 326.9 L 260.9 338.9 L 254.1 335.4 L 248.6 347.7 L 231.1 356.8 L 238.6 369.5 L 235.6 375.2 L 241.0 376.9 L 238.6 387.0 L 231.8 377.5 L 223.2 379.7 L 215.8 374.3 L 214.1 380.5 L 196.7 381.1 L 185.5 390.0 L 160.5 382.8 Z" class="map-country-shape" />
-            <text x="257" y="362" class="map-country-flag">🇦🇹</text>
-            <text x="257" y="388" class="map-country-label">AT</text>
+            <g transform="translate(244, 338)">${this._countryFlagSvg("at", 26, 17)}</g>
+            <text x="257" y="370" class="map-country-label">AT</text>
           </g>
         </svg>
       </div>
 
       <div class="country-buttons-row">
         ${countries.map((c) => `<button type="button" class="country-pick-btn ${active === c.id ? "is-active" : ""}" data-meteoradar-country="${c.id}" data-device-address="${this._escape(address)}">
-          <span class="country-flag">${c.flag}</span>
+          <span class="country-flag">${this._countryFlagSvg(c.id, 22, 14)}</span>
           <span class="country-name">${this._escape(c.name)}</span>
         </button>`).join("")}
       </div>
@@ -2384,7 +2518,7 @@ export const devicesMixin = {
       fallback: currentText,
       include_unit: !weatherTemperature,
       value_prefix: valuePrefix,
-      value_suffix: (weatherTemperature ? ` ${state?.attributes?.temperature_unit || "°C"}` : "") + valueSuffix,
+      value_suffix: valueSuffix,
       backgroundColor,
       color,
       fontSize: Math.round(fontSize),
@@ -2791,6 +2925,8 @@ export const devicesMixin = {
       // same on every Home Assistant platform.
       clean_background: prepared.cleanBackground || "",
       bindings,
+      layout: request?.layout || "single",
+      template_ids: (request?.templates || []).map((t) => t.id),
       sdk_type: Number(device.sdk_type),
       software_version: Number(device.sw || 0),
       orientation: landscape ? "landscape" : "portrait",
@@ -4163,12 +4299,18 @@ export const devicesMixin = {
     const text = Number.isFinite(numeric)
       ? new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 2 }).format(numeric)
       : String(raw);
-    return unit && !String(text).toLowerCase().endsWith(unit.toLowerCase()) ? `${text} ${unit}` : text;
+    let result = unit && !String(text).toLowerCase().endsWith(unit.toLowerCase()) ? `${text} ${unit}` : text;
+    for (const u of ["°C", "%", "kW", "kWh", "hPa", "bar", "V", "A", "W", "l/min", "ppm", "°", "dBm", "EUR", "Kč"]) {
+      const dupe = `${u} ${u}`;
+      while (result.includes(dupe)) result = result.replaceAll(dupe, u);
+    }
+    return result;
   },
 
   _czSpotIntervalCount(binding, state) {
     if (/15min/i.test(String(binding || ""))) return 96;
     const timestamps = Object.keys(state?.attributes || {})
+      .filter((key) => key.startsWith("20") || key.includes("T"))
       .map((key) => Date.parse(key))
       .filter(Number.isFinite)
       .sort((left, right) => left - right);
@@ -4188,9 +4330,12 @@ export const devicesMixin = {
     if (!binding || binding.startsWith("internal:")) return fallback;
     const state = this._hass?.states?.[binding];
     if (!state) return fallback;
-    const timestampPrices = Object.fromEntries(Object.entries(state.attributes || {}).filter(([key, value]) => !Number.isNaN(Date.parse(key)) && Number.isFinite(Number(value))));
+    const isTimestampOrHourKey = (key) => key.startsWith("20") || key.includes("T") || /^\d{1,2}:\d{2}$/.test(key) || !Number.isNaN(Date.parse(key));
+    const timestampPrices = Object.fromEntries(
+      Object.entries(state.attributes || {}).filter(([key, value]) => isTimestampOrHourKey(key) && Number.isFinite(Number(value)))
+    );
     if (template?.id === "cz_spot_prices") {
-      const entries = Object.entries(timestampPrices).sort(([left], [right]) => Date.parse(left) - Date.parse(right));
+      const entries = Object.entries(timestampPrices).sort(([left], [right]) => (left > right ? 1 : left < right ? -1 : 0));
       const intervalCount = this._czSpotIntervalCount(binding, state);
       const today = new Date();
       const sameLocalDay = (value) => {
@@ -4200,12 +4345,20 @@ export const devicesMixin = {
       const todayPrices = entries.filter(([timestamp]) => sameLocalDay(timestamp)).map(([, value]) => Number(value)).filter(Number.isFinite);
       if (todayPrices.length > 1) return todayPrices.slice(0, intervalCount);
       const allPrices = entries.map(([, value]) => Number(value)).filter(Number.isFinite);
-      // The integration exposes today and, after noon, tomorrow in the same
-      // attribute dictionary. If the browser timezone prevents matching the
-      // local day, the first complete interval set is still today's data.
       if (allPrices.length > 1) return allPrices.slice(0, intervalCount);
     }
-    const candidates = [timestampPrices, state.attributes?.values, state.attributes?.prices, state.attributes?.data, state.attributes?.history, state.state];
+    const candidates = [
+      timestampPrices,
+      state.attributes?.today_prices,
+      state.attributes?.today,
+      state.attributes?.raw_today,
+      state.attributes?.current_day,
+      state.attributes?.values,
+      state.attributes?.prices,
+      state.attributes?.data,
+      state.attributes?.history,
+      state.state,
+    ];
     for (const candidate of candidates) {
       let value = candidate;
       if (typeof value === "string") {
@@ -4213,7 +4366,7 @@ export const devicesMixin = {
       }
       if (value && !Array.isArray(value) && typeof value === "object") value = Object.values(value);
       if (!Array.isArray(value)) continue;
-      const numbers = value.map((item) => Number(typeof item === "object" ? item.value ?? item.price ?? item.state : item)).filter(Number.isFinite);
+      const numbers = value.map((item) => Number(typeof item === "object" ? item?.value ?? item?.price ?? item?.state ?? item?.cost ?? item?.czk ?? item?.eur : item)).filter(Number.isFinite);
       if (numbers.length > 1) return numbers.slice(-96);
     }
     return fallback;
@@ -4440,9 +4593,13 @@ export const devicesMixin = {
     const key = `${template?.id}:${meta.key}`;
     if (Object.prototype.hasOwnProperty.call(this._displayTemplateBindings || {}, key)) {
       const stored = this._displayTemplateBindings[key];
-      if (template?.id !== "cz_spot_prices" || !stored || this._hass?.states?.[stored]) return stored;
       // Entity ids can change when the integration is recreated or translated.
       // A stale saved id must not permanently suppress fresh auto-discovery.
+      if (template?.id === "cz_spot_prices") {
+        if (stored && this._hass?.states?.[stored]) return stored;
+      } else if (stored !== undefined && stored !== "") {
+        return stored;
+      }
     }
     if (template?.id === "cz_spot_prices") {
       const index = Number(String(meta.key || "").split("-", 1)[0]);

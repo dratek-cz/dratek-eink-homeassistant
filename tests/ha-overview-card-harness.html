@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DRATEK eInk overview card test</title>
+  <style>
+    :root {
+      --primary-text-color:#172127;
+      --secondary-text-color:#64727b;
+      --primary-background-color:#edf2f2;
+      --secondary-background-color:#f3f6f6;
+      --card-background-color:#fff;
+      --divider-color:#d8dfdf;
+      --ha-card-border-radius:14px;
+    }
+    body { margin:0; padding:24px; background:var(--primary-background-color); font-family:Arial,sans-serif; }
+    main { width:min(900px,100%); margin:auto; }
+  </style>
+</head>
+<body>
+  <main id="card"></main>
+  <script type="module">
+    window.open = (url) => {
+      document.documentElement.dataset.openedUrl = String(url || "");
+      return null;
+    };
+    await import("../custom_components/dratek_eink/frontend/dratek-eink-overview-card.js");
+
+    const devices = [
+      { address:"FF:FF:92:81:46:32", physical_code:"92.81.46.32", display_name:"Ceník dílna", model:"EPA LCD 296x128 1 BWR", battery_percent:82, rssi:-48, preferred_path:{type:"gateway",name:"Gateway dílna"} },
+      { address:"FF:FF:94:20:10:78", physical_code:"94.20.10.78", display_name:"Teplota kancelář", model:"EPA LCD 400x300 BWR", battery_percent:54, rssi:-63, preferred_path:{type:"local",name:"Home Assistant Bluetooth"} },
+      { address:"FF:FF:91:31:18:11", physical_code:"91.31.18.11", display_name:"Stav skladu", model:"EPA LCD 250x122 BWR", battery_percent:28, rssi:-72, preferred_path:{type:"gateway",name:"Gateway sklad"} },
+      { address:"FF:FF:96:41:12:54", physical_code:"96.41.12.54", display_name:"Objednávky", model:"EPA LCD 800x480 BWR", battery_percent:9, rssi:-83, temporarily_unseen:true, preferred_path:{type:"gateway",name:"Gateway sklad"} },
+    ];
+    const gateways = [
+      { id:"gateway-1", name:"Gateway dílna", host:"gateway-dilna.local", status:{ok:true,ip:"192.168.1.50",chip:"esp32s3",wifi_rssi:-49} },
+      { id:"gateway-2", name:"Gateway sklad", host:"192.168.1.51", status:{ok:false,ip:"192.168.1.51",chip:"esp32",wifi_rssi:-79} },
+    ];
+    const config = { title:"DRATEK eInk", max_displays:6, show_gateways:true, refresh_interval:60 };
+    if (new URLSearchParams(location.search).get("view") === "editor") {
+      const editor = document.createElement("dratek-eink-overview-card-editor");
+      editor.setConfig(config);
+      document.querySelector("#card").append(editor);
+    } else {
+      const card = document.createElement("dratek-eink-overview-card");
+      card.setConfig(config);
+      card.hass = {
+        callWS: async ({ type }) => {
+          if (type === "dratek_eink/scan") return { ok:true, devices };
+          if (type === "dratek_eink/gateways/list") return { gateways };
+          return {};
+        },
+      };
+      document.querySelector("#card").append(card);
+    }
+  </script>
+</body>
+</html>

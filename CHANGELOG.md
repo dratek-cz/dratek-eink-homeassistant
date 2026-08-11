@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.254] - 2026-08-11
+
+### Přidáno & Opraveno – Mazání uživatelských šablon, parciality dělených rozvržení a čitelnost SVG textů
+- **`ws_projects.py` / `websocket.py` / `panel-projects.mixin.js`**: Přidán nový WebSocket příkaz `dratek_eink/user_templates/delete` a UI podpora pro mazání vlastních šablon přímo z knihovny v panelu.
+- **`automation.py`**: Přidána kontrola `_is_split_or_multi_template_config()`, která deaktivuje částečnou obnovu (partial update) pro dělená nebo vícešablonová rozvržení, čímž předchází ořezům obrazu. Ošetřeno také zdvojení jednotek u zobrazení stavu.
+- **`svg_blocks.py` / `panel-template-svg.mixin.js`**: Zvýšena minimální velikost písma u bloků `spark`, `strip`, `datebox` a `footer`, aby mikro-text zůstal plně čitelný i na menších e-Paper displejích.
+- **Panel UI**: Pročištěny katalogové definice a odstraněny neaktivní šablony.
+
 ## [0.1.253] - 2026-08-10
 
 ### Opraveno – Rušení starých uvolněných úloh (task leak) při opakováných reloadech v HA

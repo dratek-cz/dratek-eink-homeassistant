@@ -64,6 +64,29 @@ async def websocket_save_user_template(
     await _project_store(hass).async_save(data)
     connection.send_result(msg["id"], {"template": template})
 
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/user_templates/delete",
+        "template_id": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_delete_user_template(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Delete a user template from the integration-wide library."""
+    template_id = str(msg["template_id"])
+    data = await _load_project_data(hass)
+    data["user_templates"] = [
+        item for item in data["user_templates"] if item.get("id") != template_id
+    ]
+    await _project_store(hass).async_save(data)
+    connection.send_result(msg["id"], {"ok": True, "template_id": template_id})
+
+
 @websocket_api.websocket_command({"type": "dratek_eink/projects/list"})
 @websocket_api.async_response
 async def websocket_list_projects(
