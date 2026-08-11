@@ -63,6 +63,7 @@ export const inspectorMixin = {
       resetQueueFilters();
       await this._loadQueue(true);
     });
+    this.shadowRoot.querySelector("#exportQueueLog")?.addEventListener("click", () => this._exportQueueLog());
     this.shadowRoot.querySelector("#clearQueueHistory")?.addEventListener("click", async () => {
       await this._hass.callWS({ type: "dratek_eink/queue/clear" });
       await this._loadQueue(true);

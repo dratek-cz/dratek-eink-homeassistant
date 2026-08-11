@@ -137,6 +137,9 @@ class DratekTransfer:
                     max_attempts=2,
                 )
             except Exception as exc:
+                err_msg = str(exc).lower()
+                if "never seen by any scanner" in err_msg or "unknown (" in err_msg:
+                    raise
                 self.log(
                     f"bleak_retry_connector establish_connection fallback ({exc}); attempting direct connect."
                 )
@@ -731,6 +734,8 @@ class DratekTransfer:
     @staticmethod
     def _is_transient_connection_error(exc: Exception) -> bool:
         message = str(exc).lower()
+        if "never seen by any scanner" in message or "unknown (" in message:
+            return False
         return any(
             marker in message
             for marker in (

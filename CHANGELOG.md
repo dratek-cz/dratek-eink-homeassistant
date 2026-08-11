@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.263] - 2026-08-11
+
+### Přidáno & Opraveno – Export protokolu z fronty a bleskové selhání u neexistujících BLE zařízení
+- **`panel-queue.mixin.js` & `panel-inspector.mixin.js`**: Přidáno nové tlačítko **"Stáhnout protokol"** na kartě *Fronta a historie zápisů*. Jedním kliknutím stáhnete kompletní historii přenosů a detailní logy všech pokusů ve formátu `.txt` pro snadné zaslání diagnostiky.
+- **`transfer.py`**: Pokud se pokusíte odeslat návrh na zařízení, které skener Home Assistantu vůbec nevidí (`never seen by any scanner`), přenos nyní okamžitě selže bez zbytečných opakovaných pokusů (zamezeno 282s blokaci fronty).
+
 ## [0.1.262] - 2026-08-11
 
 ### Opraveno – Vynucení rychlého režimu streaming (3.4 s) i při neúplných vysílacích datech BLE

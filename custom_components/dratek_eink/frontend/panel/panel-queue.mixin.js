@@ -264,6 +264,7 @@ export const queueMixin = {
             ])}
           </div>
           <div class="devices-toolbar-spacer"></div>
+          <button id="exportQueueLog" class="secondary" style="margin-right: 8px;"><ha-icon icon="mdi:download-outline"></ha-icon>Stáhnout protokol</button>
           <button id="clearQueueHistory" class="danger"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vyčistit historii</button>
         </div>
       </div>
@@ -286,6 +287,49 @@ export const queueMixin = {
           </div>`}
       </div>
     </div>`;
+  },
+
+  _exportQueueLog() {
+    const jobs = this._queue?.jobs || [];
+    if (!jobs.length) {
+      alert("Fronta je prázdná.");
+      return;
+    }
+    const lines = [
+      "=== DRATEK eInk Transfer Queue Log Dump ===",
+      `Exported: ${new Date().toLocaleString()}`,
+      `Backend Version: v${this._queue?.backend_version || "unknown"}`,
+      `Total Jobs: ${jobs.length}`,
+      "===========================================\n",
+    ];
+    for (const job of jobs) {
+      const created = job.created_at ? new Date(job.created_at * 1000).toLocaleString() : "Unknown";
+      const finished = job.finished_at ? new Date(job.finished_at * 1000).toLocaleString() : (job.started_at ? "Running" : "Queued");
+      lines.push(`--- JOB ${job.id} ---`);
+      lines.push(`Address: ${job.address}`);
+      lines.push(`Operation: ${job.operation}`);
+      lines.push(`Transport: ${job.transport_name || job.transport_type}`);
+      lines.push(`Status: ${job.status}`);
+      lines.push(`Created: ${created}`);
+      lines.push(`Finished: ${finished}`);
+      if (job.error) lines.push(`Error: ${job.error}`);
+      const logLines = Array.isArray(job.log) ? job.log : [];
+      if (logLines.length) {
+        lines.push(`Log trace (${logLines.length} lines):`);
+        for (const line of logLines) {
+          lines.push(`  ${line}`);
+        }
+      }
+      lines.push("");
+    }
+    const content = lines.join("\n");
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `dratek_eink_queue_log_${Date.now()}.txt`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   },
 
   _queueDeviceLabel(address) {

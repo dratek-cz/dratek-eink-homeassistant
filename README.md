@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.263
+
+- přidáno tlačítko **"Stáhnout protokol"** pro stažení kompletní historie fronty a detailních logů do `.txt` souboru
+- opravena 282s blokace u neexistujících BLE zařízení (`never seen by any scanner` okamžitě selže)
+
 ## Novinky ve verzi 0.1.262
 
 - vyřešen rozdíl rychlostí mezi displeji (3.4 s vs 455 s): opravena detekce verze firmware tak, aby všechny přenosy automaticky běžely v rychlém režimu streaming
