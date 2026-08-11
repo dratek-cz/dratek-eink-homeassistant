@@ -1705,6 +1705,11 @@ export const devicesMixin = {
     ];
     const activeCountryObj = countries.find((c) => c.id === active) || countries[0];
 
+    const config = this._displayTemplateConfig || {};
+    const showPrecipitation = config.meteoradar_show_precipitation !== false;
+    const dottedLight = config.meteoradar_dotted_light !== false;
+    const showWind = config.meteoradar_show_wind === true;
+
     return `<div class="interactive-country-map-widget">
       <div class="country-map-header">
         <ha-icon icon="mdi:map-legend"></ha-icon>
@@ -1762,6 +1767,27 @@ export const devicesMixin = {
           <span class="country-flag">${this._countryFlagSvg(c.id, 22, 14)}</span>
           <span class="country-name">${this._escape(c.name)}</span>
         </button>`).join("")}
+      </div>
+
+      <div class="meteoradar-options-card" style="margin-top: 14px; padding: 12px 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+          <ha-icon icon="mdi:checkbox-multiple-marked-outline" style="color: var(--primary-color, #03a9f4);"></ha-icon>
+          <strong style="font-size: 13px;">Prvky zobrazované na radarové mapě:</strong>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px;">
+          <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="checkbox" id="mrOptPrecipitation" ${showPrecipitation ? "checked" : ""} data-device-address="${this._escape(address)}" />
+            <span>🌧️ Zobrazovat srážky</span>
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="checkbox" id="mrOptDotted" ${dottedLight ? "checked" : ""} data-device-address="${this._escape(address)}" />
+            <span>░ Slabé srážky tečkovaně</span>
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="checkbox" id="mrOptWind" ${showWind ? "checked" : ""} data-device-address="${this._escape(address)}" />
+            <span>💨 Směr větru (šipky)</span>
+          </label>
+        </div>
       </div>
     </div>`;
   },

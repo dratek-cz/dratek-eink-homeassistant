@@ -1575,17 +1575,16 @@ def _replace_svg_image_href_by_id(document: str, element_id: str, data_url: str)
 
 
 async def async_render_camera_binding_data_url(
-    hass: Any, entity_id: str, width: int, height: int, country: str = "cz"
+    hass: Any,
+    entity_id: str,
+    width: int,
+    height: int,
+    country: str = "cz",
+    show_precipitation: bool = True,
+    dotted_light: bool = True,
+    show_wind: bool = False,
 ) -> str | None:
-    """Fetch a camera entity's current snapshot, fit and quantise it for the panel.
-
-    Shared by the Meteoradar preview command (ws_meteoradar.py) and automatic
-    refreshes (automation.py): both need the exact same "current camera frame,
-    ready for the three-colour panel" image.
-
-    If the camera entity does not exist (or fails to fetch), it falls back to
-    rendering the live RainViewer precipitation map directly (async_render_meteoradar).
-    """
+    """Fetch a camera entity's current snapshot, fit and quantise it for the panel."""
     from homeassistant.components.camera import async_get_image
     from .meteoradar import async_render_meteoradar
 
@@ -1613,7 +1612,13 @@ async def async_render_camera_binding_data_url(
 
     # Fallback: render directly via RainViewer for camera.meteoradar or missing camera entity
     try:
-        radar_img = await async_render_meteoradar(hass, country=country)
+        radar_img = await async_render_meteoradar(
+            hass,
+            country=country,
+            show_precipitation=show_precipitation,
+            dotted_light=dotted_light,
+            show_wind=show_wind,
+        )
         if radar_img is not None:
             def _prepare_radar() -> bytes:
                 fitted = fit_to_size(radar_img, width, height)

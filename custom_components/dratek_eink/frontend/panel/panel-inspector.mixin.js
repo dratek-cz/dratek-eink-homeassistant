@@ -1457,6 +1457,32 @@ export const inspectorMixin = {
         this._paint();
       });
     });
+    [
+      { id: "mrOptPrecipitation", key: "meteoradar_show_precipitation" },
+      { id: "mrOptDotted", key: "meteoradar_dotted_light" },
+      { id: "mrOptWind", key: "meteoradar_show_wind" },
+    ].forEach(({ id, key }) => {
+      const input = this.shadowRoot.querySelector(`#${id}`);
+      if (input) {
+        input.addEventListener("change", () => {
+          const checked = input.checked;
+          if (!this._displayTemplateConfig) this._displayTemplateConfig = {};
+          this._displayTemplateConfig[key] = checked;
+          const address = input.dataset.deviceAddress || this._selectedDeviceAddress;
+          const upperAddr = String(address || "").toUpperCase();
+          if (upperAddr) {
+            if (!this._deviceDrafts) this._deviceDrafts = {};
+            const draft = this._deviceDrafts[upperAddr] || {};
+            if (!draft.template_config) draft.template_config = {};
+            draft.template_config[key] = checked;
+            this._deviceDrafts[upperAddr] = draft;
+          }
+          this._scheduleDraftSave();
+          this._render();
+          this._paint();
+        });
+      }
+    });
     this.shadowRoot.querySelectorAll("#applyRgbLed").forEach((button) => button.addEventListener("click", () => this._applyRgbLed()));
     this.shadowRoot.querySelectorAll("[data-led-mode]").forEach((button) => button.addEventListener("click", () => {
       this._rgbLed.mode = button.dataset.ledMode;

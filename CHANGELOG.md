@@ -2,6 +2,15 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.265] - 2026-08-11
+
+### Nová funkce – Nastavení prvků Meteoradaru (zaškrtávací políčka)
+- **`panel-devices.mixin.js` & `panel-inspector.mixin.js`**: V ovládacím widgetu Meteoradaru přidán nový blok zaškrtávacích políček (checkboxů) s volbami:
+  - 🌧️ **Zobrazovat srážky**: zapne/vypne srážkovou vrstvu
+  - ░ **Slabé srážky tečkovaně**: zapne/vypne tečkovaný raster u mírného deště
+  - 💨 **Směr větru (šipky)**: zapne/vypne vykreslování větrných šipek na mapě
+- **`meteoradar.py` & `render.py`**: Propojeno s generováním obrázku. Výběr se okamžitě ukládá do konfigurace displeje i náhledu.
+
 ## [0.1.264] - 2026-08-11
 
 ### Nová funkce – Tečkovaný vzor pro slabší srážky v Meteoradaru

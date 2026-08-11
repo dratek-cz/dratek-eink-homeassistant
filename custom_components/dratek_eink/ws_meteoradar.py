@@ -31,6 +31,9 @@ METEORADAR_CAMERA_ENTITY_ID = "camera.meteoradar"
         "width": int,
         "height": int,
         vol.Optional("country"): str,
+        vol.Optional("show_precipitation"): bool,
+        vol.Optional("dotted_light"): bool,
+        vol.Optional("show_wind"): bool,
     }
 )
 @websocket_api.async_response
@@ -41,8 +44,19 @@ async def websocket_render_meteoradar(
 ) -> None:
     """Return the current precipitation map for the requested country, fit to size."""
     country = str(msg.get("country") or "cz").lower()
+    show_precipitation = bool(msg.get("show_precipitation", True))
+    dotted_light = bool(msg.get("dotted_light", True))
+    show_wind = bool(msg.get("show_wind", False))
+
     data_url = await async_render_camera_binding_data_url(
-        hass, METEORADAR_CAMERA_ENTITY_ID, msg["width"], msg["height"], country=country
+        hass,
+        METEORADAR_CAMERA_ENTITY_ID,
+        msg["width"],
+        msg["height"],
+        country=country,
+        show_precipitation=show_precipitation,
+        dotted_light=dotted_light,
+        show_wind=show_wind,
     )
     if data_url is None:
         connection.send_error(msg["id"], "meteoradar_unavailable", "Radarová mapa není momentálně dostupná.")

@@ -193,7 +193,11 @@ export const templateSvgMixin = {
   // after the underlying cause (usually that restart) is resolved.
   async _ensureTemplateRadarImage(width, height) {
     const country = this._meteoradarCountry || this._displayTemplateConfig?.meteoradar_country || "cz";
-    const key = `${Math.round(width)}x${Math.round(height)}_${country}`;
+    const showPrecipitation = this._displayTemplateConfig?.meteoradar_show_precipitation !== false;
+    const dottedLight = this._displayTemplateConfig?.meteoradar_dotted_light !== false;
+    const showWind = this._displayTemplateConfig?.meteoradar_show_wind === true;
+
+    const key = `${Math.round(width)}x${Math.round(height)}_${country}_p${showPrecipitation}_d${dottedLight}_w${showWind}`;
     const cached = this._meteoradarImageCache;
     const age = cached ? Date.now() - cached.fetchedAt : Infinity;
     const ttl = cached?.dataUrl ? METEORADAR_CACHE_MS : METEORADAR_RETRY_MS;
@@ -205,6 +209,9 @@ export const templateSvgMixin = {
         width: Math.round(width),
         height: Math.round(height),
         country: country,
+        show_precipitation: showPrecipitation,
+        dotted_light: dottedLight,
+        show_wind: showWind,
       });
       if (!result?.ok || !result?.image) {
         this._meteoradarImageCache = { key, dataUrl: "", fetchedAt: Date.now(), error: "Server nevrátil obrázek." };

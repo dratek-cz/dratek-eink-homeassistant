@@ -627,6 +627,35 @@ def _generate_dotted_pattern_image(
     return pattern
 
 
+def _draw_wind_vectors(draw: ImageDraw.ImageDraw, polygon: list[tuple[float, float]], extent: float) -> None:
+    """Draw a grid of wind direction arrows over the country shape."""
+    xs = [p[0] for p in polygon]
+    ys = [p[1] for p in polygon]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+
+    spacing = max(40, int(extent / 6))
+    arrow_length = max(10, int(spacing * 0.4))
+
+    angle_rad = math.radians(65)
+    dx = math.cos(angle_rad) * arrow_length
+    dy = -math.sin(angle_rad) * arrow_length
+
+    for y in range(int(min_y) + spacing // 2, int(max_y), spacing):
+        for x in range(int(min_x) + spacing // 2, int(max_x), spacing):
+            if min_x + 10 <= x <= max_x - 10 and min_y + 10 <= y <= max_y - 10:
+                x1, y1 = x - dx / 2, y - dy / 2
+                x2, y2 = x + dx / 2, y + dy / 2
+                draw.line([(x1, y1), (x2, y2)], fill=BORDER_COLOR, width=2)
+                head_angle = math.radians(145)
+                hx1 = x2 + math.cos(angle_rad + head_angle) * (arrow_length * 0.4)
+                hy1 = y2 - math.sin(angle_rad + head_angle) * (arrow_length * 0.4)
+                hx2 = x2 + math.cos(angle_rad - head_angle) * (arrow_length * 0.4)
+                hy2 = y2 - math.sin(angle_rad - head_angle) * (arrow_length * 0.4)
+                draw.line([(x2, y2), (hx1, hy1)], fill=BORDER_COLOR, width=2)
+                draw.line([(x2, y2), (hx2, hy2)], fill=BORDER_COLOR, width=2)
+
+
 def compose_country_radar_image(
     tiles: dict[tuple[int, int], Image.Image],
     *,
@@ -640,6 +669,9 @@ def compose_country_radar_image(
     alpha_threshold: int = PRECIPITATION_ALPHA_THRESHOLD,
     border_width: int = 3,
     margin: int = 12,
+    show_precipitation: bool = True,
+    dotted_light: bool = True,
+    show_wind: bool = False,
 ) -> Image.Image:
     """Stitch fetched tiles and draw the black-outlined, red/white precipitation map.
 
@@ -660,11 +692,6 @@ def compose_country_radar_image(
         for px, py in (mercator_pixel(lat, lon, zoom, tile_size) for lon, lat in border)
     ]
 
-    alpha = composite.getchannel("A")
-    light_threshold = max(50, alpha_threshold // 2)
-    light_mask = alpha.point(lambda value: 255 if light_threshold <= value < alpha_threshold else 0).convert("1")
-    heavy_mask = alpha.point(lambda value: 255 if value >= alpha_threshold else 0).convert("1")
-
     country_mask = Image.new("L", composite.size, 0)
     ImageDraw.Draw(country_mask).polygon(polygon, fill=255)
     country_mask = country_mask.convert("1")
@@ -675,20 +702,34 @@ def compose_country_radar_image(
 
     output = Image.new("RGB", composite.size, "white")
 
-    # Light/moderate precipitation: dotted red pattern
-    dotted_pattern = _generate_dotted_pattern_image(composite.size, PRECIPITATION_COLOR, (255, 255, 255))
-    output.paste(
-        dotted_pattern,
-        mask=ImageChops.logical_and(country_mask, light_mask),
-    )
+    if show_precipitation:
+        alpha = composite.getchannel("A")
+        if dotted_light:
+            light_threshold = max(50, alpha_threshold // 2)
+            light_mask = alpha.point(lambda value: 255 if light_threshold <= value < alpha_threshold else 0).convert("1")
+            heavy_mask = alpha.point(lambda value: 255 if value >= alpha_threshold else 0).convert("1")
 
-    # Heavy precipitation: solid red
-    output.paste(
-        Image.new("RGB", composite.size, PRECIPITATION_COLOR),
-        mask=ImageChops.logical_and(country_mask, heavy_mask),
-    )
+            dotted_pattern = _generate_dotted_pattern_image(composite.size, PRECIPITATION_COLOR, (255, 255, 255))
+            output.paste(
+                dotted_pattern,
+                mask=ImageChops.logical_and(country_mask, light_mask),
+            )
+            output.paste(
+                Image.new("RGB", composite.size, PRECIPITATION_COLOR),
+                mask=ImageChops.logical_and(country_mask, heavy_mask),
+            )
+        else:
+            precipitation_mask = alpha.point(lambda value: 255 if value >= 50 else 0).convert("1")
+            output.paste(
+                Image.new("RGB", composite.size, PRECIPITATION_COLOR),
+                mask=ImageChops.logical_and(country_mask, precipitation_mask),
+            )
 
-    ImageDraw.Draw(output).polygon(polygon, outline=BORDER_COLOR, width=_scaled_border_width(extent, border_width))
+    draw = ImageDraw.Draw(output)
+    if show_wind:
+        _draw_wind_vectors(draw, polygon, extent)
+
+    draw.polygon(polygon, outline=BORDER_COLOR, width=_scaled_border_width(extent, border_width))
 
     crop_box = (
         max(0, int(min(xs)) - margin),
@@ -712,15 +753,11 @@ def compose_multi_country_radar_image(
     alpha_threshold: int = PRECIPITATION_ALPHA_THRESHOLD,
     border_width: int = 3,
     margin: int = 12,
+    show_precipitation: bool = True,
+    dotted_light: bool = True,
+    show_wind: bool = False,
 ) -> Image.Image:
-    """The Europe-overview counterpart to `compose_country_radar_image`.
-
-    A single-country render clips precipitation to one polygon. This clips it
-    to the union of every country's polygon instead, and draws every country's
-    own outline rather than a bounding rectangle - the whole point of the
-    overview is to still show recognisable countries, not a blank crop with a
-    black frame around it.
-    """
+    """The Europe-overview counterpart to `compose_country_radar_image`."""
     grid_width = (x_max - x_min + 1) * tile_size
     grid_height = (y_max - y_min + 1) * tile_size
     composite = Image.new("RGBA", (grid_width, grid_height), (0, 0, 0, 0))
@@ -737,11 +774,6 @@ def compose_multi_country_radar_image(
         for _name, border in borders
     ]
 
-    alpha = composite.getchannel("A")
-    light_threshold = max(50, alpha_threshold // 2)
-    light_mask = alpha.point(lambda value: 255 if light_threshold <= value < alpha_threshold else 0).convert("1")
-    heavy_mask = alpha.point(lambda value: 255 if value >= alpha_threshold else 0).convert("1")
-
     countries_mask = Image.new("L", composite.size, 0)
     mask_draw = ImageDraw.Draw(countries_mask)
     for polygon in polygons:
@@ -755,17 +787,33 @@ def compose_multi_country_radar_image(
 
     output = Image.new("RGB", composite.size, "white")
 
-    dotted_pattern = _generate_dotted_pattern_image(composite.size, PRECIPITATION_COLOR, (255, 255, 255))
-    output.paste(
-        dotted_pattern,
-        mask=ImageChops.logical_and(countries_mask, light_mask),
-    )
-    output.paste(
-        Image.new("RGB", composite.size, PRECIPITATION_COLOR),
-        mask=ImageChops.logical_and(countries_mask, heavy_mask),
-    )
+    if show_precipitation:
+        alpha = composite.getchannel("A")
+        if dotted_light:
+            light_threshold = max(50, alpha_threshold // 2)
+            light_mask = alpha.point(lambda value: 255 if light_threshold <= value < alpha_threshold else 0).convert("1")
+            heavy_mask = alpha.point(lambda value: 255 if value >= alpha_threshold else 0).convert("1")
+
+            dotted_pattern = _generate_dotted_pattern_image(composite.size, PRECIPITATION_COLOR, (255, 255, 255))
+            output.paste(
+                dotted_pattern,
+                mask=ImageChops.logical_and(countries_mask, light_mask),
+            )
+            output.paste(
+                Image.new("RGB", composite.size, PRECIPITATION_COLOR),
+                mask=ImageChops.logical_and(countries_mask, heavy_mask),
+            )
+        else:
+            precipitation_mask = alpha.point(lambda value: 255 if value >= 50 else 0).convert("1")
+            output.paste(
+                Image.new("RGB", composite.size, PRECIPITATION_COLOR),
+                mask=ImageChops.logical_and(countries_mask, precipitation_mask),
+            )
+
     output_draw = ImageDraw.Draw(output)
     for polygon in polygons:
+        if show_wind:
+            _draw_wind_vectors(output_draw, polygon, extent)
         output_draw.polygon(polygon, outline=BORDER_COLOR, width=scaled_width)
 
     crop_box = (
@@ -828,16 +876,20 @@ async def _async_fetch_tile(hass: "HomeAssistant", url: str) -> Image.Image | No
 async def _async_composed_base_image(
     hass: "HomeAssistant",
     country: str = "cz",
+    show_precipitation: bool = True,
+    dotted_light: bool = True,
+    show_wind: bool = False,
 ) -> Image.Image | None:
     """Return the current country (or "eu" overview) map at native resolution,
     refetching only when RainViewer's own frame timestamp has actually moved on.
     """
-    key = str(country or "cz").lower()
-    is_europe = key == "eu"
+    key = f"{str(country or 'cz').lower()}_p{int(show_precipitation)}_d{int(dotted_light)}_w{int(show_wind)}"
+    country_key = str(country or "cz").lower()
+    is_europe = country_key == "eu"
     all_points = (
         [point for _name, border in EUROPE_OVERVIEW_BORDERS for point in border]
         if is_europe
-        else COUNTRY_BORDERS.get(key, CZECH_BORDER)
+        else COUNTRY_BORDERS.get(country_key, CZECH_BORDER)
     )
     now = time.monotonic()
     cached = _cache.get(key)
@@ -876,15 +928,12 @@ async def _async_composed_base_image(
     if not tiles:
         return cached.get("composed") if cached else None  # type: ignore[return-value]
 
-    # The badge shows when RainViewer's own frame is *from*, not when this
-    # render happened - the two can differ by up to INDEX_RECHECK_INTERVAL_SECONDS
-    # thanks to the cache above, and the data's own age is the more useful fact.
     time_label = ""
     if isinstance(frame_epoch, (int, float)):
         from homeassistant.util import dt as dt_util
 
         time_label = dt_util.as_local(dt_util.utc_from_timestamp(frame_epoch)).strftime("%H:%M")
-    country_label = COUNTRY_SHORT_LABELS.get(key, key.upper())
+    country_label = COUNTRY_SHORT_LABELS.get(country_key, country_key.upper())
     badge_text = f"{country_label} · {time_label}" if time_label else country_label
 
     if is_europe:
@@ -901,6 +950,9 @@ async def _async_composed_base_image(
                 x_max=x_max,
                 y_max=y_max,
                 borders=EUROPE_OVERVIEW_BORDERS,
+                show_precipitation=show_precipitation,
+                dotted_light=dotted_light,
+                show_wind=show_wind,
             )
         )
     else:
@@ -917,6 +969,9 @@ async def _async_composed_base_image(
                 x_max=x_max,
                 y_max=y_max,
                 border=all_points,
+                show_precipitation=show_precipitation,
+                dotted_light=dotted_light,
+                show_wind=show_wind,
             )
         )
     _cache[key] = {
@@ -927,11 +982,23 @@ async def _async_composed_base_image(
     return composed
 
 
-async def async_render_meteoradar(hass: "HomeAssistant", country: str = "cz") -> Image.Image | None:
+async def async_render_meteoradar(
+    hass: "HomeAssistant",
+    country: str = "cz",
+    show_precipitation: bool = True,
+    dotted_light: bool = True,
+    show_wind: bool = False,
+) -> Image.Image | None:
     """Return the live precipitation map for the requested country - or, for
     country="eu", the multi-country Europe overview - at its own cropped aspect.
     """
-    base = await _async_composed_base_image(hass, country=country)
+    base = await _async_composed_base_image(
+        hass,
+        country=country,
+        show_precipitation=show_precipitation,
+        dotted_light=dotted_light,
+        show_wind=show_wind,
+    )
     if base is None:
         return None
     if base.width <= MAX_NATIVE_DIMENSION and base.height <= MAX_NATIVE_DIMENSION:

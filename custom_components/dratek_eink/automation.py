@@ -880,6 +880,9 @@ class EntityAutoUpdateManager:
                 int(binding.get("width") or 0) or 400,
                 int(binding.get("height") or 0) or 300,
                 country=str(binding.get("country") or "cz"),
+                show_precipitation=bool(binding.get("show_precipitation", True)),
+                dotted_light=bool(binding.get("dotted_light", True)),
+                show_wind=bool(binding.get("show_wind", False)),
             )
             if data_url:
                 values[str(binding.get("id"))] = data_url

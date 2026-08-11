@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.265
+
+- přidána nastavitelná zaškrtávací políčka u Meteoradaru pro volbu zobrazení srážek, tečkovaného rasteru a větrných šipek přímo v administraci displeje
+
 ## Novinky ve verzi 0.1.264
 
 - přidáno rozlišení intenzity srážek na Meteoradaru: slabší srážky se vykreslují jako **tečkovaný červený vzor**, silné srážky jako **plná červená barva**
