@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.274] - 2026-08-11
+
+### Úprava – Odstraněn duplicitní nadpis a kompaktní výška sekce Gatewaye
+- **`panel-render-ui.mixin.js`**: Odstraněn redundantní nadpis sekce Gatewaye (`<header class="page-heading"> Gatewaye - Paralelní odesílání...`).
+- **`panel-render-ui.mixin.js`**: Přizpůsobena výška a rozvržení obsahu tak, aby se pole vytváření a správy gatewayí elegantně vešlo vedle levého panelu.
+
 ## [0.1.273] - 2026-08-11
 
 ### Vylepšeno – Nová oficiální loga a ikony v HACS a Home Assistantu

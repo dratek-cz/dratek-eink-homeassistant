@@ -46,7 +46,7 @@ export const renderUiMixin = {
         /* Levý rail. Dřív se jako grid item roztáhl na výšku obsahu (238 x 1562 px);
            align-self:start ho srazí na vlastní výšku a sticky ho drží u kraje. */
         .gateway-workspace{display:grid;grid-template-columns:238px minmax(0,1fr);align-items:start;gap:12px;min-width:0}
-        @media(min-width:1051px){.tab-panel.gateways-panel{display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:12px;height:calc(100vh - var(--dratek-sticky-top,12px) - 34px);min-height:460px;overflow:hidden}.gateways-panel>.gateway-workspace{align-items:stretch;min-height:0;height:100%}.gateways-panel .gateway-workspace-tabs{position:static;height:100%;overflow:hidden}.gateways-panel .gateway-workspace-content{min-height:0;height:100%;overflow-y:auto;overscroll-behavior:contain}}
+        @media(min-width:1051px){.tab-panel.gateways-panel{display:grid;grid-template-rows:auto minmax(0,1fr);gap:12px;height:calc(100vh - var(--dratek-sticky-top,12px) - 34px);min-height:460px;overflow:hidden}.gateways-panel>.gateway-workspace{align-items:stretch;min-height:0;height:100%}.gateways-panel .gateway-workspace-tabs{position:static;height:100%;overflow:hidden}.gateways-panel .gateway-workspace-content{min-height:0;height:100%;overflow-y:auto;overscroll-behavior:contain}}
         .gateway-workspace-tabs{position:sticky;top:var(--dratek-sticky-top,12px);align-self:start;display:grid;align-content:start;gap:5px;padding:8px;border:1px solid var(--divider-color);border-radius:14px;background:var(--card-background-color);box-shadow:0 1px 3px rgba(15,23,42,.05);overflow:auto}
         .gateway-workspace-tabs button{position:relative;display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 10px;border:0;border-radius:10px;background:transparent;color:var(--primary-text-color);box-shadow:none;text-align:left;cursor:pointer;transition:background-color .16s ease}
         .gateway-workspace-tabs button:hover:not(:disabled){transform:none;background:var(--secondary-background-color)}
@@ -1097,7 +1097,6 @@ export const renderUiMixin = {
           ${this._renderQueue()}
         </div>` : ""}
         ${this._activeTab === "gateways" ? `<div class="tab-panel gateways-panel">
-          <header class="page-heading"><span><ha-icon icon="mdi:router-network"></ha-icon></span><div><h1>Gatewaye</h1><p>Paralelní odesílání přes nejlepší dostupný signál, jedna aktivní úloha na každé gatewayi</p></div></header>
           <div class="stat-tiles">
             ${(() => {
               // Stejný zápis jako u fronty: barva patří stavu, nula se ztlumí.

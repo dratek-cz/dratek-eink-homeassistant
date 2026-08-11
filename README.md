@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.274
+
+- odstraněn duplicitní nadpis sekce Gatewaye z rozvržení
+- přizpůsobena výška a layout sekce flashování ESP32 tak, aby se vešla elegantně vedle levého panelu
+
 ## Novinky ve verzi 0.1.273
 
 - vyřešeno zobrazování nového loga a ikony v HACS při vyhledání aktualizace i před stažením

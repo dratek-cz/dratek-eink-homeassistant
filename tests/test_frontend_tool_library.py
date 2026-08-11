@@ -132,7 +132,6 @@ class FrontendToolLibraryTests(unittest.TestCase):
 
     def test_gateway_workspace_uses_compact_management_layout(self):
         for marker in (
-            'class="page-heading"',
             'class="gateway-workspace-tabs"',
             'class="gateway-card-grid"',
             'class="gateway-compact-card',
@@ -155,7 +154,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         # Stránka je pevný shell: pruh s čísly i rail stojí, roluje jen plocha
         # s kartami. Bez toho rail vynucoval scroll celé stránky.
         self.assertIn(
-            ".tab-panel.gateways-panel{display:grid;grid-template-rows:auto auto minmax(0,1fr)",
+            ".tab-panel.gateways-panel{display:grid;grid-template-rows:auto minmax(0,1fr)",
             self.source,
         )
         self.assertIn("height:calc(100vh - var(--dratek-sticky-top,12px) - 34px)", self.source)
@@ -220,7 +219,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         # Gradientní hlavičky nahradil plochý nadpis a stejné dlaždice.
         self.assertNotIn('class="gateway-page-hero"', self.source)
         self.assertNotIn('class="gateway-page-metrics"', self.source)
-        self.assertIn('<header class="page-heading">', self.source)
+        self.assertNotIn('<header class="page-heading">', self.source)
         self.assertNotIn("background:linear-gradient(115deg,rgba(0,162,165,.12),rgba(255,122,0,.08))", self.source)
         # Metriky fronty zůstávají klikacím filtrem stavu.
         self.assertIn('data-queue-status="${status}"', self.source)
