@@ -84,7 +84,7 @@ async def async_save_display_preview(
         else:
             preview["sent_template_ids"] = [
                 str(template_id).strip()
-                for template_id in template_ids[:2]
+                for template_id in template_ids[:6]
                 if str(template_id).strip()
             ]
         previews[normalized_address] = preview

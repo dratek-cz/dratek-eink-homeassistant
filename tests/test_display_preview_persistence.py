@@ -17,6 +17,7 @@ class DisplayPreviewPersistenceTests(unittest.TestCase):
         self.assertIn("async with lock:", source)
         self.assertIn('preview["sent_template_ids"]', source)
         self.assertIn('previous.get("sent_template_ids")', source)
+        self.assertIn("template_ids[:6]", source)
 
     def test_draft_reads_include_the_persistent_snapshot(self):
         source = (COMPONENT / "ws_projects.py").read_text(encoding="utf-8")

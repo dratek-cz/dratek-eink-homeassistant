@@ -546,15 +546,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn('data-template-layout="side-by-side"', self.source)
         self.assertIn('class="template-responsive-preview"', self.source)
 
-        self.assertIn('data-template-placement="${value}"', self.source)
-        self.assertIn('["full", "Přes celý displej"', self.source)
-        self.assertIn('["left", "Vlevo"', self.source)
-        self.assertIn('["right", "Vpravo"', self.source)
-        self.assertIn('["top", "Nahoře"', self.source)
-        self.assertIn('["bottom", "Dole"', self.source)
-        self.assertIn("_renderTemplatePlacementPreview(value, remainingFor(value), nextTemplate, previewWidth, previewHeight)", self.source)
-        self.assertIn('class="template-placement-slot is-incoming"', self.source)
-        self.assertIn("Přes celý displej", self.source)
+        self.assertIn('data-template-placement="slot-${index}"', self.source)
+        self.assertIn("_renderTemplatePlacementPreview(index, assigned, templates, nextTemplate, previewWidth, previewHeight, layoutDefinition.id)", self.source)
+        self.assertIn('index === slotIndex ? "is-incoming" : "is-existing"', self.source)
+        self.assertIn("Aktivní rozložení", self.source)
         self.assertIn('this._displayTemplateFormats.primary = format;', self.source)
         self.assertIn('this._displayTemplateFormats.secondary = format;', self.source)
         self.assertIn('data-template-entity-picker=', self.source)
@@ -1115,6 +1110,32 @@ class FrontendToolLibraryTests(unittest.TestCase):
             self.source,
         )
 
+    def test_large_display_supports_multi_template_grids(self):
+        for layout in ('id: "columns-3"', 'id: "columns-4"', 'id: "grid-4"', 'id: "grid-6"', 'id: "mixed-5"'):
+            self.assertIn(layout, self.source)
+        self.assertIn("data-display-grid-layout-menu", self.source)
+        self.assertIn('data-display-grid-layout-choice="${item.id}"', self.source)
+        self.assertIn("data-display-grid-layout-popup", self.source)
+        self.assertNotIn("data-display-grid-layout-select", self.source)
+        self.assertNotIn('data-display-grid-slot="${index}"', self.source)
+        self.assertIn('data-display-template-drop-zone="slot-${index}"', self.source)
+        self.assertIn("assigned.filter(Boolean).slice(0, 6)", self.source)
+        self.assertIn("const slots = this._displayTemplateLayoutSlots(request.layout, width, height);", self.source)
+        self.assertIn("this._displayTemplateLayoutSlots?.(layout, width, height)", self.source)
+        self.assertIn("grid-template-columns:repeat(var(--layout-columns,1),minmax(0,1fr))", self.source)
+        self.assertIn('.template-device-layout.layout-mixed-5', self.source)
+        self.assertIn('const transposed = Number(height) > Number(width);', self.source)
+        self.assertIn('const columns = transposed ? definition.rows : definition.columns;', self.source)
+        self.assertIn('layoutTransposed ? layoutDefinition.rows : layoutDefinition.columns', self.source)
+        self.assertIn('.display-grid-layout-popup{grid-template-columns:repeat(2,minmax(0,1fr))', self.source)
+        self.assertIn('.display-template-drop-panel{box-sizing:border-box;height:calc(100dvh - var(--dratek-sticky-top,12px) - 28px)', self.source)
+        self.assertIn('.template-device-layout.layout-mixed-5.is-layout-transposed', self.source)
+
+    def test_harness_includes_an_800x480_grid_display(self):
+        self.assertIn('display_name:"Velký testovací displej"', self.harness)
+        self.assertIn('model:"EPA LCD 800x480 BWR", sdk_type:299', self.harness)
+        self.assertIn('orientation:"landscape", layout:"grid-6"', self.harness)
+
     def test_automatic_refresh_captures_the_whole_template_svg(self):
         # An automatic refresh used to patch a coloured rectangle over just the
         # bound <text> run, guessing at whatever colour sat behind it - correct
@@ -1275,13 +1296,21 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('@media(max-width:800px){.studio-pro-top-row{position:relative;top:auto', self.source)
 
     def test_template_image_import_uses_the_original_colour_classifier(self):
-        """Warm neutral colours must not be mistaken for the panel's red pigment."""
+        """Imports retain yellow while warm neutrals stay outside the red pigment."""
         self.assertIn("_quantizeImportedTemplatePixel(red, green, blue, alpha = 255)", self.source)
+        self.assertIn("if (yellow) return [244, 196, 0, 255];", self.source)
+        self.assertIn("the final device quantizer maps it to red on a three-colour panel", self.source)
         self.assertIn("const redScore = red - Math.max(green, blue);", self.source)
         self.assertIn("const luminance = (38 * red + 75 * green + 15 * blue) >> 7;", self.source)
         self.assertIn("green < red * 0.68 && blue < red * 0.72", self.source)
         self.assertIn("context.imageSmoothingEnabled = false;", self.source)
         self.assertNotIn("const palette = [[255, 255, 255], [10, 10, 10], [227, 27, 27]]", self.source)
+
+    def test_template_placement_uses_the_page_teal_accent(self):
+        self.assertIn(".template-space-dialog-icon{background:rgba(0,155,155,.11);color:var(--dratek-teal-dark,#007c7c)}", self.source)
+        self.assertIn(".template-placement-slot.is-incoming{outline-color:var(--dratek-teal,#009b9b)}", self.source)
+        self.assertIn(".display-template-drop-zone.is-target{background:rgba(0,155,155,.2);border-color:var(--dratek-teal,#009b9b)", self.source)
+        self.assertIn(".display-template-surface.is-element-drag-over{outline-color:var(--dratek-teal,#009b9b)!important}", self.source)
 
     def test_template_studio_has_undo_redo_and_keyboard_editing(self):
         self.assertIn('data-template-history="undo"', self.source)

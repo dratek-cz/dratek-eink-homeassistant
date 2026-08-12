@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.288
+
+- **Rozložení velkých displejů** – osm variant se vybírá v kompaktním popupu s grafickými ikonami; kliknutí i drag & drop používají stejné pozice.
+- **Správné otočení mřížky** – otočení zachová šablony i typ rozložení a pouze prohodí řádky se sloupci, například 3×2 na 2×3.
+- **Větší náhled bez přetékání** – levý panel končí ve výšce okna, hlavičky jsou menší a fyzický náhled dostal více prostoru.
+- **Čtyřbarevný import obrázků** – import zachová žlutou pro BWRY; při použití na tříbarevném BWR displeji se žlutá automaticky odešle jako červená.
+- **Spolehlivější přenos** – lokální Bluetooth potvrzuje bloky vendorového QuickLZ streamu a gateway opakuje také GATT discovery. Součástí je firmware gatewaye 0.1.55.
+
 ## Novinky ve verzi 0.1.287
 
 - **Všechny šablony jsou čtyřbarevné** – vestavěné návrhy používají bílou, černou, červenou i žlutou včetně nové legendy Meteoradaru.

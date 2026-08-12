@@ -346,6 +346,40 @@ export const inspectorMixin = {
       this._displayTemplateSearchQuery = event.target.value;
       this._renderKeepingSearchFocus();
     });
+    this.shadowRoot.querySelector("[data-display-grid-layout-menu]")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this._displayTemplateLayoutMenuOpen = !this._displayTemplateLayoutMenuOpen;
+      this._render();
+      this._paint();
+    });
+    this.shadowRoot.querySelector("[data-display-grid-layout-menu-close]")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this._displayTemplateLayoutMenuOpen = false;
+      this._render();
+      this._paint();
+    });
+    this.shadowRoot.querySelectorAll("[data-display-grid-layout-choice]").forEach((button) => button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const device = this._device();
+      const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
+      if (!address) return;
+      const definition = this._displayTemplateLayoutDefinition(button.dataset.displayGridLayoutChoice);
+      const current = this._assignedDisplayTemplates(device);
+      const assignments = current.length
+        ? Array.from({ length: definition.capacity }, (_unused, index) => current[index] || "blank")
+        : [];
+      this._displayTemplateAssignments ||= {};
+      this._displayTemplateAssignments[address] = assignments;
+      this._displayTemplateLargeLayout = definition.id;
+      this._selectedDisplayTemplateId = assignments[0] || "";
+      this._selectedDisplayTemplateSecondaryId = assignments[1] || "";
+      this._selectedTemplateCanvasSlot = "primary";
+      this._templateSendResult = null;
+      this._displayTemplateLayoutMenuOpen = false;
+      this._render();
+      this._paint();
+      this._saveDisplayTemplateDraft?.().catch(() => {});
+    }));
     // `placement` is the explicit choice from either the drop-zone cross or the
     // placement dialog: "full" replaces everything with just this template;
     // "left"/"right"/"top"/"bottom" put it in one half and keep whatever
@@ -356,7 +390,8 @@ export const inspectorMixin = {
       const device = this._device();
       const template = this._displayTemplateCards().find((item) => item.id === templateId);
       const previousAssigned = this._assignedDisplayTemplates(device);
-      const isPlacementMove = ["left", "right", "top", "bottom", "full"].includes(placement);
+      const layoutSlotMatch = String(placement || "").match(/^slot-(\d+)$/);
+      const isPlacementMove = Boolean(layoutSlotMatch) || ["left", "right", "top", "bottom", "full"].includes(placement);
       // A template can be assigned to a display only once. Re-dropping the
       // same card used to run the complete apply flow again even though the
       // assignment itself stayed unchanged. That reset the active template
@@ -391,7 +426,9 @@ export const inspectorMixin = {
       const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
       let assigned;
       let forcedLayout = null;
-      if (placement === "full") {
+      if (layoutSlotMatch) {
+        assigned = this._placeDisplayTemplateInLayoutSlot(device, templateId, Number(layoutSlotMatch[1]));
+      } else if (placement === "full") {
         assigned = this._assignDisplayTemplateFull(device, templateId);
         forcedLayout = "single";
       } else if (placement === "left" || placement === "top") {
@@ -411,9 +448,10 @@ export const inspectorMixin = {
         this._displayTemplateSizes.primary = "small";
         this._displayTemplateSizes.secondary = "small";
       }
-      this._selectedDisplayTemplateId = assigned[0] || templateId;
+      this._selectedDisplayTemplateId = templateId;
       this._selectedDisplayTemplateSecondaryId = assigned[1] || "";
-      this._displayTemplateLargeLayout = forcedLayout || (largeDisplay && assigned.length > 1 ? "side-by-side" : "single");
+      if (forcedLayout) this._displayTemplateLargeLayout = forcedLayout;
+      else if (!largeDisplay) this._displayTemplateLargeLayout = "single";
       this._templateOrientationMenuOpen = false;
       this._selectedTemplateCanvasSlot = assigned.indexOf(templateId) === 1 ? "secondary" : "primary";
       if (!largeDisplay) {
@@ -496,11 +534,7 @@ export const inspectorMixin = {
       const device = this._device();
       const size = this._devicePreviewSize(device);
       const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
-      const assigned = this._assignedDisplayTemplates(device);
-      if (!largeDisplay || assigned.includes(templateId)) return false;
-      if (assigned.length >= 2) return true;
-      const primaryIsLarge = this._displayTemplateSizes?.primary !== "small";
-      return assigned.length === 1 && primaryIsLarge;
+      return Boolean(templateId) && largeDisplay;
     };
     this.shadowRoot.querySelectorAll("[data-display-template-edit-menu]").forEach((button) => {
       button.addEventListener("click", (event) => {
@@ -587,15 +621,13 @@ export const inspectorMixin = {
     const templateDropzone = this.shadowRoot.querySelector("[data-display-template-dropzone]");
     const dropZonesEl = templateDropzone?.querySelector("[data-display-template-drop-zones]");
     const dropZoneElements = dropZonesEl ? Array.from(dropZonesEl.querySelectorAll("[data-display-template-drop-zone]")) : [];
-    const dropScreenEl = templateDropzone?.querySelector(".designer-device-screen");
+    const dropScreenEl = templateDropzone?.querySelector(".designer-device-screen, .device-preview-screen");
     const clearDropZoneHighlight = () => {
       dropZoneElements.forEach((zone) => zone.classList.remove("is-target"));
       this._pendingTemplateDropZone = null;
     };
-    // Five zones over the physical preview: the outer 30% strip on each edge
-    // targets that half, the middle targets the whole display. This mirrors
-    // the placement dialog's five choices as a single drag gesture instead of
-    // a confirmation step.
+    // The drag targets use the exact same geometry as the selected layout and
+    // the click-placement dialog, including the asymmetric 2+3 arrangement.
     templateDropzone?.addEventListener("dragover", (event) => {
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
@@ -609,7 +641,9 @@ export const inspectorMixin = {
       dropZonesEl.style.height = `${screenRect.height}px`;
       const fx = (event.clientX - screenRect.left) / (screenRect.width || 1);
       const fy = (event.clientY - screenRect.top) / (screenRect.height || 1);
-      const zone = fx < 0.3 ? "left" : fx > 0.7 ? "right" : fy < 0.3 ? "top" : fy > 0.7 ? "bottom" : "full";
+      const slots = this._displayTemplateLayoutSlots(this._displayTemplateLargeLayout, 1, 1);
+      const matchedSlot = slots.find((slot) => fx >= slot.x && fx <= slot.x + slot.w && fy >= slot.y && fy <= slot.y + slot.h) || slots[0];
+      const zone = `slot-${matchedSlot.index}`;
       this._pendingTemplateDropZone = zone;
       dropZoneElements.forEach((element) => element.classList.toggle("is-target", element.dataset.displayTemplateDropZone === zone));
     });
@@ -630,10 +664,7 @@ export const inspectorMixin = {
       const device = this._device();
       const size = this._devicePreviewSize(device);
       const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
-      const assigned = this._assignedDisplayTemplates(device);
-      // No existing template to split against yet, or the display is too
-      // small for a split at all: the drop always means "the whole screen".
-      const placement = largeDisplay && assigned.length ? (pendingZone || "full") : "full";
+      const placement = largeDisplay ? (pendingZone || "slot-0") : "full";
       openDisplayTemplate(templateId, null, true, placement);
     });
     this.shadowRoot.querySelectorAll("[data-display-template-replace]").forEach((button) => button.addEventListener("click", () => {

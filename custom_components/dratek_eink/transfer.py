@@ -183,7 +183,9 @@ class DratekTransfer:
             pack_bwr_image, sdk_type, image, transform, orientation
         )
 
-    def _frame_for_display(self, address: str, sdk_type: int, payload: bytes) -> bytes:
+    def _frame_for_display(
+        self, address: str, sdk_type: int, payload: bytes
+    ) -> tuple[bytes, bool]:
         """Put the packed planes into the framing the display asked for.
 
         Displays advertising bit 0x4000 take the planes as they are, which is why
@@ -197,15 +199,15 @@ class DratekTransfer:
                 "Display has not been seen advertising, so its payload framing is "
                 "unknown; sending the packed planes unframed."
             )
-            return payload
+            return payload, False
         if not quicklz.needs_vendor_framing(raw_type):
-            return payload
+            return payload, False
         framed = quicklz.frame_payload(payload, sdk_type)
         self.log(
             f"Advertised type {raw_type} does not set the 0x4000 raw-data flag; "
             f"framing {len(payload)} bytes as the vendor stream ({len(framed)} bytes)."
         )
-        return framed
+        return framed, True
 
     async def _async_pack_region(self, image: Image.Image) -> bytes:
         if self._hass is not None:
@@ -461,7 +463,7 @@ class DratekTransfer:
             if partial is not None
             else await self._async_pack(sdk_type, image, transform, orientation)
         )
-        payload = self._frame_for_display(address, sdk_type, payload)
+        payload, vendor_framed = self._frame_for_display(address, sdk_type, payload)
         software_version = self._resolve_software_version(address, software_version)
         responses: asyncio.Queue[bytes] = asyncio.Queue()
         loop = asyncio.get_running_loop()
@@ -553,10 +555,22 @@ class DratekTransfer:
                 # 2.5 seconds per block (17 minutes for a 96 kB 800x480 image).
                 # Other models use their write-without-response characteristic,
                 # paced below and kept connected during the drain interval.
+                # A framed payload changes what a dropped block costs. Raw planes
+                # survive one: the display draws a corrupt strip and refreshes
+                # anyway. The vendor stream does not - every block after the lost
+                # one decodes against the wrong state, so the display quietly
+                # declines to refresh at all and the transfer looks like a
+                # 60-second timeout waiting for 05 08. Unconfirmed writes offer no
+                # back-pressure whatsoever, so framed payloads take the ATT
+                # response as their flow control, the same way the gateway does.
                 require_gatt_response = (
-                    "write" in write_char.properties
-                    and int(sdk_type) in WRITE_ACK_SDK_TYPES
-                ) or ("write-without-response" not in write_char.properties)
+                    (
+                        "write" in write_char.properties
+                        and int(sdk_type) in WRITE_ACK_SDK_TYPES
+                    )
+                    or ("write-without-response" not in write_char.properties)
+                    or (vendor_framed and "write" in write_char.properties)
+                )
 
 
                 write_mode = (

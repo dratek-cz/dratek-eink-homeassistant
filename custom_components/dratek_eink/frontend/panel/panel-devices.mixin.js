@@ -688,21 +688,19 @@ export const devicesMixin = {
   // label like "Nahoře" does not say whether the weather template's footer
   // survives being squeezed into a quarter of the display, but the thumbnail
   // does.
-  _renderTemplatePlacementPreview(value, currentTemplate, nextTemplate, width, height) {
+  _renderTemplatePlacementPreview(slotIndex, assigned, templates, nextTemplate, width, height, layout) {
     const preview = (template, slotWidth, slotHeight) => this._renderDisplayTemplateCatalogPreview(
       template, slotWidth >= slotHeight ? "landscape" : "portrait", { width: slotWidth, height: slotHeight },
     );
-    if (value === "full") {
-      return `<span class="template-placement-preview layout-full" style="aspect-ratio:${width}/${height}">`
-        + `<span class="template-placement-slot is-incoming">${preview(nextTemplate, width, height)}</span></span>`;
-    }
-    const stacked = value === "top" || value === "bottom";
-    const slotWidth = stacked ? width : width / 2;
-    const slotHeight = stacked ? height / 2 : height;
-    const incoming = `<span class="template-placement-slot is-incoming">${preview(nextTemplate, slotWidth, slotHeight)}</span>`;
-    const existing = `<span class="template-placement-slot is-existing">${preview(currentTemplate || nextTemplate, slotWidth, slotHeight)}</span>`;
-    const first = value === "left" || value === "top";
-    return `<span class="template-placement-preview layout-${value}" style="aspect-ratio:${width}/${height}">${first ? incoming + existing : existing + incoming}</span>`;
+    const slots = this._displayTemplateLayoutSlots(layout, width, height);
+    const blank = templates.find((item) => item.id === "blank");
+    const bodies = slots.map((slot, index) => {
+      const current = templates.find((item) => item.id === assigned[index]) || blank;
+      const template = index === slotIndex ? nextTemplate : current;
+      const style = `left:${slot.x / width * 100}%;top:${slot.y / height * 100}%;width:${slot.w / width * 100}%;height:${slot.h / height * 100}%`;
+      return `<span class="template-placement-slot ${index === slotIndex ? "is-incoming" : "is-existing"}" style="${style}">${preview(template, slot.w, slot.h)}<b>${index + 1}</b></span>`;
+    }).join("");
+    return `<span class="template-placement-preview layout-${layout}" style="aspect-ratio:${width}/${height}">${bodies}</span>`;
   },
 
   // Where a second (or third, replacing one of two) template goes when the
@@ -718,51 +716,34 @@ export const devicesMixin = {
     const nextTemplate = templates.find((item) => item.id === pending.templateId);
     if (!nextTemplate) return "";
     const assigned = this._assignedDisplayTemplates(device);
-    const primaryTemplate = templates.find((item) => item.id === assigned[0]);
-    const secondaryTemplate = templates.find((item) => item.id === assigned[1]);
-    const bothSlotsFull = assigned.length > 1;
     const size = this._devicePreviewSize(device);
     const orientation = this._displayTemplateOrientation === "landscape" ? "landscape" : "portrait";
     const long = Math.max(size.width, size.height);
     const short = Math.min(size.width, size.height);
     const previewWidth = orientation === "landscape" ? long : short;
     const previewHeight = orientation === "landscape" ? short : long;
-    // Left/top always mean "index 0", right/bottom always mean "index 1" -
-    // that is what the new template takes. Whichever template currently sits
-    // there is displaced by it; the other slot's template (if any) is left
-    // untouched and is what the preview's other half shows.
-    const displacedFor = (value) => (value === "left" || value === "top") ? primaryTemplate : secondaryTemplate;
-    const remainingFor = (value) => (value === "left" || value === "top")
-      ? (secondaryTemplate || primaryTemplate)
-      : (primaryTemplate || secondaryTemplate);
-    const hintFor = (value, moveVerb) => {
-      const displaced = displacedFor(value);
-      if (!displaced) return "Šablona bude přidána do prázdné poloviny.";
-      return bothSlotsFull
-        ? `Nahradí šablonu „${this._escape(displaced.title)}“.`
-        : `Šablona „${this._escape(displaced.title)}“ se přesune ${moveVerb}.`;
-    };
-    const options = [
-      ["full", "Přes celý displej", bothSlotsFull ? "Nahradí obě šablony." : "Nahradí stávající šablonu."],
-      ["left", "Vlevo", hintFor("left", "doprava")],
-      ["right", "Vpravo", hintFor("right", "doleva")],
-      ["top", "Nahoře", hintFor("top", "dolů")],
-      ["bottom", "Dole", hintFor("bottom", "nahoru")],
-    ];
-    const description = bothSlotsFull
-      ? `Displej už zobrazuje šablony <strong>${this._escape(primaryTemplate?.title || "?")}</strong> a <strong>${this._escape(secondaryTemplate?.title || "?")}</strong>. Vyberte, kterou nahradit, nebo šablonu roztáhněte přes celý displej.`
-      : `Šablona <strong>${this._escape(primaryTemplate?.title || "První šablona")}</strong> zabírá celý displej. Vyberte, jak si obě šablony mají displej rozdělit.`;
+    const layoutDefinition = this._displayTemplateLayoutDefinition(this._displayTemplateLargeLayout);
+    const slots = this._displayTemplateLayoutSlots(layoutDefinition.id, previewWidth, previewHeight);
+    const options = slots.map((slot, index) => {
+      const current = templates.find((item) => item.id === assigned[index]);
+      const orientationLabel = slot.w >= slot.h ? "na šířku" : "na výšku";
+      const hint = current && current.id !== "blank"
+        ? `Nahradí šablonu „${this._escape(current.title)}“.`
+        : `Volné místo · ${orientationLabel}.`;
+      return { index, label: layoutDefinition.id === "single" ? "Celý displej" : `${index + 1}. pozice`, hint };
+    });
+    const description = `Aktivní rozložení <strong>${this._escape(layoutDefinition.label)}</strong>. Vyberte přímo místo, do kterého se šablona vloží.`;
     return `<div class="modal-backdrop template-space-dialog-backdrop">
       <section class="template-space-dialog" role="dialog" aria-modal="true" aria-labelledby="templateSpaceDialogTitle">
         <span class="template-space-dialog-icon"><ha-icon icon="mdi:view-dashboard-edit-outline"></ha-icon></span>
         <div>
-          <small>Displej je již obsazený</small>
+          <small>Umístění do rozložení</small>
           <h2 id="templateSpaceDialogTitle">Kam umístit šablonu „${this._escape(nextTemplate.title)}“?</h2>
           <p>${description}</p>
         </div>
         <div class="template-placement-options">
-          ${options.map(([value, label, hint]) => `<button type="button" class="template-placement-option is-${value}" data-template-placement="${value}">
-            ${this._renderTemplatePlacementPreview(value, remainingFor(value), nextTemplate, previewWidth, previewHeight)}
+          ${options.map(({ index, label, hint }) => `<button type="button" class="template-placement-option is-slot" data-template-placement="slot-${index}">
+            ${this._renderTemplatePlacementPreview(index, assigned, templates, nextTemplate, previewWidth, previewHeight, layoutDefinition.id)}
             <span class="template-placement-option-text"><strong>${label}</strong><small>${hint}</small></span>
           </button>`).join("")}
         </div>
@@ -1036,9 +1017,10 @@ export const devicesMixin = {
     });
     const primaryTemplate = cards.find((item) => item.id === assignedTemplates[0]);
     const secondaryTemplate = cards.find((item) => item.id === assignedTemplates[1]) || primaryTemplate;
+    const assignedTemplateCards = assignedTemplates.map((id) => cards.find((item) => item.id === id)).filter(Boolean);
     const orientation = this._displayTemplateOrientation === "landscape" ? "landscape" : "portrait";
-    const layout = largeDisplay && assignedTemplates.length > 1
-      ? (["side-by-side", "stacked"].includes(this._displayTemplateLargeLayout) ? this._displayTemplateLargeLayout : "side-by-side")
+    const layout = largeDisplay
+      ? this._displayTemplateLayoutDefinition(this._displayTemplateLargeLayout).id
       : "single";
     const previewZoom = Math.max(0.5, Math.min(1.8, Number(this._displayTemplatePreviewZoom || 1)));
     return `<section class="display-templates-inline">
@@ -1071,17 +1053,12 @@ export const devicesMixin = {
               </div>
             </div>
           </div>
+          ${largeDisplay ? this._renderDisplayTemplateLayoutControls(layout, orientation) : ""}
           <div class="display-template-dropzone ${assignedTemplates.length ? "has-template" : ""}" data-display-template-dropzone tabindex="0" aria-label="Přetáhněte sem šablonu">
             ${primaryTemplate
-              ? this._renderTemplatePhysicalDevicePreview(device, primaryTemplate, secondaryTemplate, orientation, layout, true)
+              ? this._renderTemplatePhysicalDevicePreview(device, assignedTemplateCards, orientation, layout, true)
               : this._renderDevicePreview(device, "template")}
-            ${largeDisplay && assignedTemplates.length ? `<div class="display-template-drop-zones" data-display-template-drop-zones aria-hidden="true">
-              <span class="display-template-drop-zone is-top" data-display-template-drop-zone="top" title="Umístit nahoru"><ha-icon icon="mdi:arrow-collapse-up"></ha-icon></span>
-              <span class="display-template-drop-zone is-left" data-display-template-drop-zone="left" title="Umístit vlevo"><ha-icon icon="mdi:arrow-collapse-left"></ha-icon></span>
-              <span class="display-template-drop-zone is-full" data-display-template-drop-zone="full" title="Přes celý displej"><ha-icon icon="mdi:arrow-expand-all"></ha-icon></span>
-              <span class="display-template-drop-zone is-right" data-display-template-drop-zone="right" title="Umístit vpravo"><ha-icon icon="mdi:arrow-collapse-right"></ha-icon></span>
-              <span class="display-template-drop-zone is-bottom" data-display-template-drop-zone="bottom" title="Umístit dolů"><ha-icon icon="mdi:arrow-collapse-down"></ha-icon></span>
-            </div>` : ""}
+            ${largeDisplay ? this._renderDisplayTemplateDropZones(layout, orientation) : ""}
           </div>
           <div class="display-template-drop-controls">
             <div class="template-preview-zoom" role="group" aria-label="Přiblížení náhledu">
@@ -1223,15 +1200,85 @@ export const devicesMixin = {
   _assignedDisplayTemplates(device = this._device()) {
     const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
     const assigned = this._displayTemplateAssignments?.[address];
-    if (Array.isArray(assigned) && assigned.length) return assigned.filter(Boolean).slice(0, 2);
+    if (Array.isArray(assigned) && assigned.length) return assigned.filter(Boolean).slice(0, 6);
     return [];
   },
 
   _sentDisplayTemplates(device = this._device()) {
     const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
     const sent = this._deviceDrafts?.[address]?.sent_template_ids;
-    if (Array.isArray(sent)) return sent.filter(Boolean).slice(0, 2);
+    if (Array.isArray(sent)) return sent.filter(Boolean).slice(0, 6);
     return [];
+  },
+
+  _displayTemplateLayoutDefinitions() {
+    return [
+      { id: "single", label: "1 šablona", detail: "Celý displej", columns: 1, rows: 1, capacity: 1, icon: "rectangle-outline" },
+      { id: "side-by-side", label: "2 vedle sebe", detail: "2 sloupce × 1 řádek", columns: 2, rows: 1, capacity: 2, icon: "view-column-outline" },
+      { id: "stacked", label: "2 pod sebou", detail: "1 sloupec × 2 řádky", columns: 1, rows: 2, capacity: 2, icon: "view-agenda-outline" },
+      { id: "columns-3", label: "3 vedle sebe", detail: "3 sloupce × 1 řádek", columns: 3, rows: 1, capacity: 3, icon: "view-column-outline" },
+      { id: "columns-4", label: "4 vedle sebe", detail: "4 sloupce × 1 řádek", columns: 4, rows: 1, capacity: 4, icon: "view-column-outline" },
+      { id: "grid-4", label: "2 × 2 na ležato", detail: "2 sloupce × 2 řádky", columns: 2, rows: 2, capacity: 4, icon: "view-grid-outline" },
+      { id: "grid-6", label: "2 × 3 na ležato", detail: "3 sloupce × 2 řádky", columns: 3, rows: 2, capacity: 6, icon: "view-grid-plus-outline" },
+      { id: "mixed-5", label: "2 nahoře + 3 dole", detail: "2 široké a 3 vysoké", columns: 6, rows: 3, capacity: 5, mixed: true, icon: "view-dashboard-outline" },
+    ];
+  },
+
+  _displayTemplateLayoutDefinition(layout = this._displayTemplateLargeLayout) {
+    const aliases = { "columns-2": "side-by-side", "rows-2": "stacked", "rows-3": "columns-3" };
+    const requested = String(layout || "single");
+    const normalized = aliases[requested] || requested;
+    return this._displayTemplateLayoutDefinitions().find((item) => item.id === normalized)
+      || this._displayTemplateLayoutDefinitions()[0];
+  },
+
+  _displayTemplateLayoutSlots(layout, width, height) {
+    const definition = this._displayTemplateLayoutDefinition(layout);
+    const transposed = Number(height) > Number(width);
+    if (definition.id === "mixed-5") {
+      const normalized = [
+        { x: 0, y: 0, w: 1 / 2, h: 1 / 3, index: 0 },
+        { x: 1 / 2, y: 0, w: 1 / 2, h: 1 / 3, index: 1 },
+        { x: 0, y: 1 / 3, w: 1 / 3, h: 2 / 3, index: 2 },
+        { x: 1 / 3, y: 1 / 3, w: 1 / 3, h: 2 / 3, index: 3 },
+        { x: 2 / 3, y: 1 / 3, w: 1 / 3, h: 2 / 3, index: 4 },
+      ];
+      return normalized.map((slot) => transposed
+        ? { x: slot.y * width, y: slot.x * height, w: slot.h * width, h: slot.w * height, index: slot.index }
+        : { x: slot.x * width, y: slot.y * height, w: slot.w * width, h: slot.h * height, index: slot.index });
+    }
+    const columns = transposed ? definition.rows : definition.columns;
+    const rows = transposed ? definition.columns : definition.rows;
+    const cellWidth = width / columns;
+    const cellHeight = height / rows;
+    return Array.from({ length: definition.capacity }, (_unused, index) => ({
+      x: (index % columns) * cellWidth,
+      y: Math.floor(index / columns) * cellHeight,
+      w: cellWidth,
+      h: cellHeight,
+      index,
+    }));
+  },
+
+  _renderDisplayTemplateLayoutControls(activeLayout, orientation = this._displayTemplateOrientation) {
+    const definition = this._displayTemplateLayoutDefinition(activeLayout);
+    const transposed = orientation === "portrait";
+    const miniature = `<span class="display-grid-layout-mini layout-${definition.id} ${transposed ? "is-transposed" : ""}" style="--layout-columns:${transposed ? definition.rows : definition.columns};--layout-rows:${transposed ? definition.columns : definition.rows}">${Array.from({ length: definition.capacity }, () => "<i></i>").join("")}</span>`;
+    const menu = this._displayTemplateLayoutMenuOpen
+      ? `<button type="button" class="display-grid-layout-menu-scrim" data-display-grid-layout-menu-close tabindex="-1" aria-label="Zavřít nabídku rozložení"></button><div class="display-grid-layout-popup" data-display-grid-layout-popup role="menu" aria-label="Seznam rozložení velkého displeje">${this._displayTemplateLayoutDefinitions().map((item) => {
+        const selected = item.id === definition.id;
+        const itemMiniature = `<span class="display-grid-layout-mini layout-${item.id} ${transposed ? "is-transposed" : ""}" style="--layout-columns:${transposed ? item.rows : item.columns};--layout-rows:${transposed ? item.columns : item.rows}">${Array.from({ length: item.capacity }, () => "<i></i>").join("")}</span>`;
+        return `<button type="button" class="display-grid-layout-popup-option ${selected ? "is-active" : ""}" data-display-grid-layout-choice="${item.id}" role="menuitemradio" aria-checked="${selected}">${itemMiniature}<span><strong>${this._escape(item.label)}</strong><small>${this._escape(item.detail)}</small></span><ha-icon icon="mdi:check-circle"></ha-icon></button>`;
+      }).join("")}</div>`
+      : "";
+    return `<section class="display-grid-layout-controls"><header><span><ha-icon icon="mdi:view-dashboard-edit-outline"></ha-icon></span><div><strong>Rozložení velkého displeje</strong><small>Pozice pro kliknutí i přetažení šablony.</small></div></header><div class="display-grid-layout-picker ${this._displayTemplateLayoutMenuOpen ? "is-open" : ""}"><button type="button" class="display-grid-layout-trigger" data-display-grid-layout-menu aria-haspopup="menu" aria-expanded="${Boolean(this._displayTemplateLayoutMenuOpen)}">${miniature}<span><small>Aktivní rozložení</small><strong>${this._escape(definition.label)}</strong><em>${this._escape(definition.detail)}</em></span><ha-icon icon="mdi:chevron-${this._displayTemplateLayoutMenuOpen ? "up" : "down"}"></ha-icon></button>${menu}</div></section>`;
+  },
+
+  _renderDisplayTemplateDropZones(layout, orientation = this._displayTemplateOrientation) {
+    const slots = this._displayTemplateLayoutSlots(layout, orientation === "portrait" ? 60 : 100, orientation === "portrait" ? 100 : 60);
+    const width = orientation === "portrait" ? 60 : 100;
+    const height = orientation === "portrait" ? 100 : 60;
+    return `<div class="display-template-drop-zones layout-${layout}" data-display-template-drop-zones aria-hidden="true">${slots.map((slot, index) => `<span class="display-template-drop-zone" data-display-template-drop-zone="slot-${index}" title="Umístit do pozice ${index + 1}" style="left:${slot.x / width * 100}%;top:${slot.y / height * 100}%;width:${slot.w / width * 100}%;height:${slot.h / height * 100}%"><b>${index + 1}</b></span>`).join("")}</div>`;
   },
 
   _assignDisplayTemplate(device, templateId, replaceIndex = null) {
@@ -1248,7 +1295,7 @@ export const devicesMixin = {
     } else if (Number.isInteger(replaceIndex) && replaceIndex >= 0 && replaceIndex < current.length) {
       next = [...current];
       next[replaceIndex] = templateId;
-    } else if (current.length < 2) {
+    } else if (current.length < Math.max(2, this._displayTemplateLayoutDefinition().capacity)) {
       next = [...current, templateId];
     } else {
       next = current;
@@ -1297,6 +1344,18 @@ export const devicesMixin = {
     this._displayTemplateAssignments ||= {};
     this._displayTemplateAssignments[address] = deduped;
     return deduped;
+  },
+
+  _placeDisplayTemplateInLayoutSlot(device, templateId, index) {
+    const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
+    const definition = this._displayTemplateLayoutDefinition();
+    if (!address || !templateId || !Number.isInteger(index) || index < 0 || index >= definition.capacity) return [];
+    const current = this._assignedDisplayTemplates(device);
+    const next = Array.from({ length: definition.capacity }, (_unused, position) => current[position] || "blank");
+    next[index] = templateId;
+    this._displayTemplateAssignments ||= {};
+    this._displayTemplateAssignments[address] = next;
+    return next;
   },
 
   _activeTemplateEditorStateId() {
@@ -1382,16 +1441,17 @@ export const devicesMixin = {
       this._templateElementAdjustments = {};
       this._templateImageLibrary = [];
       this._templateDesignerViewport = "wide";
+      this._displayTemplateLargeLayout = "single";
       this._selectedTemplatePart = "";
       return;
     }
     const assignments = Array.isArray(config.assignments) ? config.assignments.filter((item) => typeof item === "string") : [];
     this._displayTemplateAssignments ||= {};
-    if (address) this._displayTemplateAssignments[address] = assignments.slice(0, 2);
+    if (address) this._displayTemplateAssignments[address] = assignments.slice(0, 6);
     this._selectedDisplayTemplateId = String(config.selected_primary || assignments[0] || "");
     this._selectedDisplayTemplateSecondaryId = String(config.selected_secondary || assignments[1] || "");
     this._displayTemplateOrientation = config.orientation === "landscape" ? "landscape" : "portrait";
-    this._displayTemplateLargeLayout = ["single", "side-by-side", "stacked"].includes(config.layout) ? config.layout : "single";
+    this._displayTemplateLargeLayout = this._displayTemplateLayoutDefinition(config.layout).id;
     this._templateDesignerViewport = ["narrow", "wide", "large", "large-portrait"].includes(config.designer_viewport)
       ? config.designer_viewport
       : "wide";
@@ -2160,9 +2220,10 @@ export const devicesMixin = {
     const size = this._devicePreviewSize(device);
     const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
     const layout = largeDisplay && templates.length > 1
-      ? (["side-by-side", "stacked"].includes(this._displayTemplateLargeLayout) ? this._displayTemplateLargeLayout : "side-by-side")
+      ? this._displayTemplateLayoutDefinition(this._displayTemplateLargeLayout).id
       : "single";
-    return { templates, width, height, layout };
+    const visibleTemplates = templates.slice(0, this._displayTemplateLayoutDefinition(layout).capacity);
+    return { templates: visibleTemplates, width, height, layout };
   },
 
   // The image the panel receives comes from the same builder that draws the
@@ -2770,11 +2831,7 @@ export const devicesMixin = {
     // design() (see air.js and weather.js), wrapped by _stackTemplateBlocks
     // in <g data-template-block="...">, and resolved here into its own
     // binding the same way camera/text bindings are.
-    const slots = request.templates.length > 1 && request.layout !== "single"
-      ? (request.layout === "stacked"
-        ? [{ x: 0, y: 0, w: width, h: height / 2 }, { x: 0, y: height / 2, w: width, h: height / 2 }]
-        : [{ x: 0, y: 0, w: width / 2, h: height }, { x: width / 2, y: 0, w: width / 2, h: height }])
-      : [{ x: 0, y: 0, w: width, h: height }];
+    const slots = this._displayTemplateLayoutSlots(request.layout, width, height);
     const graphicOccurrences = {};
     request.templates.forEach((template, slotIndex) => {
       const slot = slots[slotIndex] || slots[0];
@@ -3221,7 +3278,7 @@ export const devicesMixin = {
     }
   },
 
-  _renderTemplatePhysicalDevicePreview(device, template, secondaryTemplate, orientation, layout, autoFit = false) {
+  _renderTemplatePhysicalDevicePreview(device, templates, orientation, layout, autoFit = false) {
     const address = String(device.address || "").toUpperCase();
     const prevAddr = this._renderingDeviceAddress;
     this._renderingDeviceAddress = address;
@@ -3241,12 +3298,15 @@ export const devicesMixin = {
       const frameRadius = Math.max(4, Math.min(28, Math.round(Math.min(frameWidth, frameHeight) * 0.06)));
       const physicalCode = device.physical_code || "00.00.00.00";
       const previewZoom = Math.max(0.5, Math.min(1.8, Number(this._displayTemplatePreviewZoom || 1)));
-      const autoSlotWidth = layout === "side-by-side" ? sourceWidth / 2 : sourceWidth;
-      const autoSlotHeight = layout === "stacked" ? sourceHeight / 2 : sourceHeight;
-      const autoFormat = autoSlotWidth >= autoSlotHeight ? "wide" : "narrow";
+      const layoutDefinition = this._displayTemplateLayoutDefinition(layout);
+      const layoutTransposed = sourceHeight > sourceWidth;
+      const layoutColumns = layoutTransposed ? layoutDefinition.rows : layoutDefinition.columns;
+      const layoutRows = layoutTransposed ? layoutDefinition.columns : layoutDefinition.rows;
+      const visibleTemplates = (Array.isArray(templates) ? templates : [templates]).filter(Boolean).slice(0, layoutDefinition.capacity);
+      const layoutSlots = this._displayTemplateLayoutSlots(layout, sourceWidth, sourceHeight);
       const primaryFillsDisplay = autoFit || !large400Layout;
       const ditherKey = autoFit ? this._escape(JSON.stringify({
-        t: [template?.id || null, large400Layout && layout !== "single" ? (secondaryTemplate?.id || null) : null],
+        t: visibleTemplates.map((template) => template.id),
         o: orientation,
         l: layout,
         z: Math.round(previewZoom * 100),
@@ -3262,9 +3322,12 @@ export const devicesMixin = {
               <div xmlns="http://www.w3.org/1999/xhtml" class="designer-device-stage device-preview-designer-copy designer-stage-${orientation}" style="--designer-stage-width:${outerWidth}px;--designer-stage-height:${outerHeight}px;--designer-frame-ratio:${frameRatio.toFixed(4)};--designer-frame-width:${frameWidth}px;--designer-frame-rotation:${orientation === "portrait" ? "90deg" : "0deg"};--designer-screen-width:${sourceWidth}px;--designer-screen-height:${sourceHeight}px;--designer-body-width:${baseWidth}px;--device-frame-radius:${frameRadius}px">
                 <div class="designer-device-bezel ${pe29Layout ? "designer-device-pe29" : ""} ${large400Layout ? "designer-device-large400" : ""} designer-device-landscape">${large400Layout ? `<span class="device-large400-top-band"></span><span class="device-large400-bottom-band"><span class="device-large400-label">${this._renderDeviceBarcode(address, true)}<span class="device-large400-mac">${this._escape(address)}</span></span></span>` : pe29Layout ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, false)}</span>` : `<span class="designer-device-code">${this._escape(physicalCode)}</span>`}</div>
                 <div class="designer-device-screen template-designer-screen">
-                  <div class="template-device-layout layout-${layout} ${large400Layout ? "is-large-display" : "is-small-display"}">
-                    ${this._renderDisplayTemplateSurface(template, large400Layout ? (autoFit ? autoFormat : template?.user_created ? (orientation === "landscape" ? "wide" : "narrow") : (this._displayTemplateFormats?.primary || "narrow")) : (orientation === "landscape" ? "wide" : "narrow"), true, "primary", autoFit || !large400Layout, large400Layout ? (this._displayTemplateSizes?.primary || "large") : "large", autoFit, primaryFillsDisplay ? autoSlotWidth : 0, primaryFillsDisplay ? autoSlotHeight : 0)}
-                    ${large400Layout && layout !== "single" ? this._renderDisplayTemplateSurface(secondaryTemplate, autoFit ? autoFormat : secondaryTemplate?.user_created ? (orientation === "landscape" ? "wide" : "narrow") : (this._displayTemplateFormats?.secondary || "narrow"), false, "secondary", autoFit, "small", autoFit, autoFit ? autoSlotWidth : 0, autoFit ? autoSlotHeight : 0) : ""}
+                  <div class="template-device-layout layout-${layout} ${layoutTransposed ? "is-layout-transposed" : ""} ${large400Layout ? "is-large-display" : "is-small-display"}" style="--layout-columns:${layoutColumns};--layout-rows:${layoutRows}">
+                    ${visibleTemplates.map((template, index) => {
+                      const slotGeometry = layoutSlots[index] || layoutSlots[0];
+                      const slotFormat = slotGeometry.w >= slotGeometry.h ? "wide" : "narrow";
+                      return this._renderDisplayTemplateSurface(template, large400Layout ? (autoFit ? slotFormat : template?.user_created ? (orientation === "landscape" ? "wide" : "narrow") : (index ? "narrow" : (this._displayTemplateFormats?.primary || "narrow"))) : (orientation === "landscape" ? "wide" : "narrow"), index === 0, index === 0 ? "primary" : index === 1 ? "secondary" : `slot-${index + 1}`, autoFit || !large400Layout, large400Layout ? (index ? "small" : (this._displayTemplateSizes?.primary || "large")) : "large", autoFit, primaryFillsDisplay ? slotGeometry.w : 0, primaryFillsDisplay ? slotGeometry.h : 0);
+                    }).join("")}
                   </div>
                   ${autoFit ? `<canvas class="template-dithered-preview" data-dithered-preview="${ditherKey}" data-dithered-address="${this._escape(address)}" width="${sourceWidth}" height="${sourceHeight}"></canvas>` : ""}
                 </div>
@@ -3729,6 +3792,12 @@ export const devicesMixin = {
 
   _quantizeImportedTemplatePixel(red, green, blue, alpha = 255) {
     if (alpha < 40) return [255, 255, 255, 255];
+    // Imported assets are stored in the complete four-colour palette.  The
+    // target display is deliberately not consulted here: keeping yellow in
+    // the reusable source lets a four-colour panel render it as yellow, while
+    // the final device quantizer maps it to red on a three-colour panel.
+    const yellow = red >= 161 && green >= 128 && blue < 96;
+    if (yellow) return [244, 196, 0, 255];
     // Restore the colour classifier used by the original canvas designer.
     // A nearest-palette calculation turns beige, brown and warm greys red even
     // though the source is not red.  The physical panel has a separate red
@@ -3813,6 +3882,7 @@ export const devicesMixin = {
         canvas.width = Math.max(1, Math.round(image.width * scale));
         canvas.height = Math.max(1, Math.round(image.height * scale));
         const context = canvas.getContext("2d", { willReadFrequently: true });
+        context.imageSmoothingEnabled = false;
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
         const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
         for (let index = 0; index < pixels.data.length; index += 4) {

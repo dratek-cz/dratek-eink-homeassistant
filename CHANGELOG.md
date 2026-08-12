@@ -2,6 +2,25 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.288] - 2026-08-12
+
+### Přidáno – vícenásobná rozložení velkých displejů
+- Velké displeje nabízejí osm rozložení od jedné šablony přes dvojice, řady a mřížky až po kombinaci dvou širokých a tří vysokých oblastí.
+- Výběr rozložení je kompaktní popup se dvěma kartami vedle sebe, grafickými ikonami a zvýrazněním aktivní varianty.
+- Kliknutí na šablonu i drag & drop používají stejné pozice rozložení; původní samostatné selektory pozic byly odstraněny.
+- Otočení displeje nemění vybrané šablony ani typ rozložení. Pouze transponuje geometrii a prohodí řádky se sloupci, shodně v náhledu, drop zónách i odeslaném obrazu.
+
+### Vylepšeno – kompaktní konfigurace a čtyřbarevný import
+- Levý panel nastavení displeje je omezený výškou okna, má menší hlavičku a větší prostor pro fyzický náhled displeje.
+- Dialog umístění a drag & drop zóny používají modro-tyrkysovou barvu rozhraní namísto oranžové.
+- Import obrázků zachovává čtyřbarevnou paletu včetně žluté. Na tříbarevném BWR displeji se žlutá až při finálním vykreslení automaticky změní na červenou.
+- Lokální vývojový náhled obsahuje testovací displej 800×480 se šesti šablonami.
+
+### Opraveno – spolehlivější fyzický přenos
+- Bloky vendorového QuickLZ streamu se přes lokální Bluetooth zapisují s potvrzením ATT, takže ztracený blok nerozbije zbytek komprimovaného obrazu.
+- Gateway opakuje nejen připojení, ale také hledání GATT přenosové služby; displej dokončující vlastní refresh tak není chybně odmítnut po prvním discovery.
+- Firmware gatewaye byl zvýšen na `0.1.55-gateway`.
+
 ## [0.1.287] - 2026-08-12
 
 ### Vylepšeno – všechny šablony ve čtyřbarevném designu

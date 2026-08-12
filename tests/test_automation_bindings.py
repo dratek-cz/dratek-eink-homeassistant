@@ -1518,6 +1518,11 @@ class SplitLayoutAutomationTests(unittest.TestCase):
         config = {"layout": "stacked", "template_ids": ["weather"], "bindings": [{"id": "template-weather-temp-0"}]}
         self.assertTrue(automation.EntityAutoUpdateManager._is_split_or_multi_template_config(config))
 
+    def test_large_grid_layouts_return_true(self):
+        for layout in ("columns-3", "columns-4", "grid-4", "grid-6", "mixed-5"):
+            config = {"layout": layout, "template_ids": ["weather"], "bindings": [{"id": "template-weather-temp-0"}]}
+            self.assertTrue(automation.EntityAutoUpdateManager._is_split_or_multi_template_config(config))
+
     def test_multiple_template_ids_returns_true(self):
         config = {"layout": "single", "template_ids": ["weather", "air"], "bindings": []}
         self.assertTrue(automation.EntityAutoUpdateManager._is_split_or_multi_template_config(config))

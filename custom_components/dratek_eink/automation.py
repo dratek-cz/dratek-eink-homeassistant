@@ -1063,7 +1063,7 @@ class EntityAutoUpdateManager:
     def _is_split_or_multi_template_config(config: dict[str, Any]) -> bool:
         """Return True if config represents a split-template or multi-template layout."""
         layout = str(config.get("layout") or "single")
-        if layout in ("side-by-side", "stacked"):
+        if layout in ("side-by-side", "stacked", "rows-3", "columns-3", "columns-4", "grid-4", "grid-6", "mixed-5"):
             return True
         template_ids = config.get("template_ids")
         if isinstance(template_ids, list) and len(template_ids) > 1:

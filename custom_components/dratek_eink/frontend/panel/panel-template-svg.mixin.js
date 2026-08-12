@@ -1356,33 +1356,58 @@ export const templateSvgMixin = {
   // ---------------------------------------------------------------- export ---
 
   // Builds the complete SVG document for one or two templates at the display's
-  // native resolution. Two templates split the panel down the middle (or across
-  // it when stacked), matching how they are arranged in the editor.
+  // native resolution. Large displays use the shared layout grid, from one
+  // full-screen template up to a 2 × 3 dashboard of six templates.
   async _buildDisplayTemplateSvg(templates, width, height, layout = "single") {
     const list = templates.filter(Boolean);
     if (!list.length) throw new Error("Není vybrána žádná šablona.");
 
-    const slots = list.length > 1 && layout !== "single"
-      ? (layout === "stacked"
-        ? [{ x: 0, y: 0, w: width, h: height / 2 }, { x: 0, y: height / 2, w: width, h: height / 2 }]
-        : [{ x: 0, y: 0, w: width / 2, h: height }, { x: width / 2, y: 0, w: width / 2, h: height }])
-      : [{ x: 0, y: 0, w: width, h: height }];
+    const slots = this._displayTemplateLayoutSlots?.(layout, width, height)
+      || [{ x: 0, y: 0, w: width, h: height, index: 0 }];
 
     const bodies = [];
-    for (let index = 0; index < slots.length; index++) {
+    for (let index = 0; index < Math.min(slots.length, list.length); index++) {
       const slot = slots[index];
-      const template = list[index] || list[0];
+      const template = list[index];
       const rows = this._templateSvgRows(template);
       await this._preloadTemplateIcons(rows);
       await this._preloadTemplateRadarImage(rows, slot.w, slot.h);
-      const markup = this._applyTemplateAdjustmentsToSvgMarkup(this._layoutTemplateSvg(rows, slot.w, slot.h), template, index ? "secondary" : "primary");
+      const slotName = index === 0 ? "primary" : index === 1 ? "secondary" : `slot-${index + 1}`;
+      const markup = this._applyTemplateAdjustmentsToSvgMarkup(this._layoutTemplateSvg(rows, slot.w, slot.h), template, slotName);
       bodies.push(`<g transform="translate(${slot.x.toFixed(2)},${slot.y.toFixed(2)})">`
         + `<rect x="0" y="0" width="${slot.w.toFixed(2)}" height="${slot.h.toFixed(2)}" fill="#ffffff"></rect>`
         + markup + `</g>`);
-      if (index > 0) {
-        bodies.push(layout === "stacked"
-          ? `<rect x="0" y="${slot.y.toFixed(2)}" width="${width}" height="1" fill="${BLACK}"></rect>`
-          : `<rect x="${slot.x.toFixed(2)}" y="0" width="1" height="${height}" fill="${BLACK}"></rect>`);
+    }
+    const definition = this._displayTemplateLayoutDefinition?.(layout) || { columns: 1, rows: 1 };
+    const transposed = height > width;
+    if (definition.id === "mixed-5") {
+      if (transposed) {
+        const splitX = width / 3;
+        bodies.push(`<rect x="${splitX.toFixed(2)}" y="0" width="1" height="${height}" fill="${BLACK}"></rect>`);
+        bodies.push(`<rect x="0" y="${(height / 2).toFixed(2)}" width="${splitX.toFixed(2)}" height="1" fill="${BLACK}"></rect>`);
+        for (let row = 1; row < 3; row++) {
+          const y = height * row / 3;
+          bodies.push(`<rect x="${splitX.toFixed(2)}" y="${y.toFixed(2)}" width="${(width - splitX).toFixed(2)}" height="1" fill="${BLACK}"></rect>`);
+        }
+      } else {
+        const splitY = height / 3;
+        bodies.push(`<rect x="0" y="${splitY.toFixed(2)}" width="${width}" height="1" fill="${BLACK}"></rect>`);
+        bodies.push(`<rect x="${(width / 2).toFixed(2)}" y="0" width="1" height="${splitY.toFixed(2)}" fill="${BLACK}"></rect>`);
+        for (let column = 1; column < 3; column++) {
+          const x = width * column / 3;
+          bodies.push(`<rect x="${x.toFixed(2)}" y="${splitY.toFixed(2)}" width="1" height="${(height - splitY).toFixed(2)}" fill="${BLACK}"></rect>`);
+        }
+      }
+    } else {
+      const columns = transposed ? definition.rows : definition.columns;
+      const rows = transposed ? definition.columns : definition.rows;
+      for (let column = 1; column < columns; column++) {
+        const x = width * column / columns;
+        bodies.push(`<rect x="${x.toFixed(2)}" y="0" width="1" height="${height}" fill="${BLACK}"></rect>`);
+      }
+      for (let row = 1; row < rows; row++) {
+        const y = height * row / rows;
+        bodies.push(`<rect x="0" y="${y.toFixed(2)}" width="${width}" height="1" fill="${BLACK}"></rect>`);
       }
     }
 

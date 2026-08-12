@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.54-gateway";
+static const char* FIRMWARE_VERSION = "0.1.55-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -364,44 +364,66 @@ bool findTransferChars(
 static const uint32_t DIRECT_CONNECT_TIMEOUT_SECONDS = 6;
 static const uint32_t SCANNED_CONNECT_TIMEOUT_SECONDS = 18;
 
-bool connectToDisplay(NimBLEClient*& client, const String& address, TransferLogSink& log) {
+// Connecting and finding the transfer service are one operation, not two. A
+// display that has just refreshed - or that is still finishing the refresh from
+// the previous job - accepts the connection while its GATT server is not yet
+// answering discovery, so `getService` comes back empty on a link that is
+// otherwise healthy. While that check lived outside this loop the whole
+// transfer was abandoned on the first attempt, and a job that a single
+// reconnect would have completed was reported as a hard failure.
+bool connectToDisplay(
+  NimBLEClient*& client,
+  const String& address,
+  TransferLogSink& log,
+  NimBLERemoteCharacteristic*& controlChar,
+  NimBLERemoteCharacteristic*& writeChar,
+  String& usedService
+) {
   String target = address;
   target.toLowerCase();
   for (int attempt = 1; attempt <= 3; attempt++) {
     addLog(log, "BLE connect attempt " + String(attempt) + "/3.");
     addLog(log, "Trying direct address connect.");
     client->setConnectTimeout(DIRECT_CONNECT_TIMEOUT_SECONDS);
-    if (client->connect(NimBLEAddress(address.c_str()))) return true;
+    bool connected = client->connect(NimBLEAddress(address.c_str()));
 
-    addLog(log, "Direct connect failed; falling back to a scan-assisted connect.");
-    client->setConnectTimeout(SCANNED_CONNECT_TIMEOUT_SECONDS);
-    NimBLEScan* scan = NimBLEDevice::getScan();
-    scan->setActiveScan(true);
-    // 25% duty cycle instead of 75%. A display advertising at a normal
-    // interval is still found well inside the six-second window, at a third of
-    // the airtime cost to everything else sharing the band.
-    scan->setInterval(160);
-    scan->setWindow(40);
-    NimBLEScanResults results = scan->start(6, false);
-    bool connected = false;
-    for (int i = 0; i < results.getCount(); i++) {
-      NimBLEAdvertisedDevice device = results.getDevice(i);
-      String found = device.getAddress().toString().c_str();
-      found.toLowerCase();
-      if (found != target) continue;
-      addLog(log, "Target display seen in scan, RSSI " + String(device.getRSSI()) + ".");
-      connected = client->connect(&device);
-      if (!connected) addLog(log, "Connect via advertised device failed.");
-      break;
+    if (!connected) {
+      addLog(log, "Direct connect failed; falling back to a scan-assisted connect.");
+      client->setConnectTimeout(SCANNED_CONNECT_TIMEOUT_SECONDS);
+      NimBLEScan* scan = NimBLEDevice::getScan();
+      scan->setActiveScan(true);
+      // 25% duty cycle instead of 75%. A display advertising at a normal
+      // interval is still found well inside the six-second window, at a third of
+      // the airtime cost to everything else sharing the band.
+      scan->setInterval(160);
+      scan->setWindow(40);
+      NimBLEScanResults results = scan->start(6, false);
+      for (int i = 0; i < results.getCount(); i++) {
+        NimBLEAdvertisedDevice device = results.getDevice(i);
+        String found = device.getAddress().toString().c_str();
+        found.toLowerCase();
+        if (found != target) continue;
+        addLog(log, "Target display seen in scan, RSSI " + String(device.getRSSI()) + ".");
+        connected = client->connect(&device);
+        if (!connected) addLog(log, "Connect via advertised device failed.");
+        break;
+      }
+      scan->clearResults();
     }
-    scan->clearResults();
-    if (connected) return true;
+
+    if (connected) {
+      if (findTransferChars(client, controlChar, writeChar, usedService)) return true;
+      addLog(log, "Connected, but the transfer service did not answer discovery.");
+      client->disconnect();
+    }
 
     NimBLEDevice::deleteClient(client);
     delay(250);
     client = NimBLEDevice::createClient();
     client->setConnectTimeout(SCANNED_CONNECT_TIMEOUT_SECONDS);
-    delay(700);
+    // A panel busy with its own refresh needs longer than a radio glitch does,
+    // and this backoff is what the next attempt is waiting out.
+    delay(700 * attempt);
   }
   return false;
 }
@@ -410,20 +432,12 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
   NimBLEClient* client = NimBLEDevice::createClient();
   client->setConnectTimeout(SCANNED_CONNECT_TIMEOUT_SECONDS);
   addLog(log, "Connecting to display " + address + ".");
-  bool connected = connectToDisplay(client, address, log);
-  if (!connected) {
-    NimBLEDevice::deleteClient(client);
-    addLog(log, "BLE connection failed after retries.");
-    return false;
-  }
-
   NimBLERemoteCharacteristic* controlChar = nullptr;
   NimBLERemoteCharacteristic* writeChar = nullptr;
   String serviceUuid = "";
-  if (!findTransferChars(client, controlChar, writeChar, serviceUuid)) {
-    client->disconnect();
+  if (!connectToDisplay(client, address, log, controlChar, writeChar, serviceUuid)) {
     NimBLEDevice::deleteClient(client);
-    addLog(log, "DRATEK transfer characteristics were not found.");
+    addLog(log, "BLE connection failed after retries.");
     return false;
   }
   addLog(log, "Using service " + serviceUuid + ".");
