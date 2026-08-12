@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.52-gateway";
+static const char* FIRMWARE_VERSION = "0.1.53-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -50,6 +50,7 @@ struct TransferJob {
 TransferJob transferJob;
 std::vector<uint8_t> queuedPayload;
 std::vector<uint8_t> uploadPayload;
+size_t uploadExpectedSize = 0;
 String uploadAddress;
 String uploadJobId;
 uint8_t uploadSoftwareVersion = 0;
@@ -727,6 +728,7 @@ void handleTransferUploadChunk() {
   if (upload.status == UPLOAD_FILE_START) {
     uploadPayload.clear();
     uploadPayload.shrink_to_fit();
+    uploadExpectedSize = (size_t)server.arg("size").toInt();
     uploadAddress = server.arg("address");
     uploadJobId = server.arg("id");
     uploadSoftwareVersion = (uint8_t)server.arg("software_version").toInt();
@@ -737,6 +739,11 @@ void handleTransferUploadChunk() {
     uploadPartialHeight = (uint32_t)server.arg("height").toInt();
     uploadError = "";
     uploadDuplicate = false;
+
+    if (uploadExpectedSize == 0 || uploadExpectedSize > MAX_UPLOAD_PAYLOAD_BYTES) {
+      uploadError = "invalid_payload_size";
+      return;
+    }
 
     if (uploadAddress.length() == 0) {
       uploadError = "missing_address";
@@ -758,13 +765,23 @@ void handleTransferUploadChunk() {
     if (!uploadDuplicate && gatewayOperationBusy()) {
       uploadError = "gateway_busy";
     }
+    if (!uploadError.length() && !uploadDuplicate) {
+      // Reserve the final size once. Growing 96 kB geometrically made std::vector
+      // briefly require both its old 64 kB and new 128 kB blocks and could panic
+      // an otherwise healthy ESP32 halfway through the HTTP upload.
+      if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < uploadExpectedSize) {
+        uploadError = "insufficient_contiguous_memory";
+        return;
+      }
+      uploadPayload.reserve(uploadExpectedSize);
+    }
     return;
   }
 
   if (upload.status == UPLOAD_FILE_WRITE) {
     if (uploadError.length() || uploadDuplicate) return;
     size_t nextSize = uploadPayload.size() + upload.currentSize;
-    if (nextSize > MAX_UPLOAD_PAYLOAD_BYTES) {
+    if (nextSize > uploadExpectedSize || nextSize > MAX_UPLOAD_PAYLOAD_BYTES) {
       uploadError = "payload_too_large";
       uploadPayload.clear();
       uploadPayload.shrink_to_fit();
@@ -804,6 +821,14 @@ void handleTransferUploadComplete() {
   if (uploadPayload.empty()) {
     doc["ok"] = false;
     doc["error"] = "empty_payload";
+    sendJson(doc, 400);
+    return;
+  }
+  if (uploadPayload.size() != uploadExpectedSize) {
+    doc["ok"] = false;
+    doc["error"] = "payload_size_mismatch";
+    doc["received_size"] = uploadPayload.size();
+    doc["expected_size"] = uploadExpectedSize;
     sendJson(doc, 400);
     return;
   }

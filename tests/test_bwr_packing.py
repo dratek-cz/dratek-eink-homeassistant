@@ -121,6 +121,44 @@ KINDS = ("random", "boundary", "gradient")
 
 
 class BwrClassificationTests(unittest.TestCase):
+    def test_sdk_type_46_uses_vendor_two_bit_bwry_encoding(self):
+        pixels = Image.new("RGB", (4, 1))
+        pixels.putdata(
+            [
+                (0, 0, 0),
+                (255, 255, 255),
+                (255, 255, 0),
+                (255, 0, 0),
+            ]
+        )
+        # Vendor colour codes 0, 1, 2 and 3 occupy the byte from MSB to LSB.
+        self.assertEqual(b"\x1b", render._pack_bwry_image(pixels))
+
+        image = Image.new("RGB", (296, 128), "yellow")
+        payload = render.pack_bwr_image(46, image)
+        self.assertEqual(296 * 128 // 4, len(payload))
+        self.assertEqual({0xAA}, set(payload))
+
+    def test_sdk_type_46_uses_the_vendor_clockwise_bitmap_mapping(self):
+        image = Image.new("RGB", (296, 128), "white")
+        image.putpixel((0, 0), (0, 0, 0))
+        prepared = render.prepare_image_for_display(46, image)
+        self.assertEqual((128, 296), prepared.size)
+        # Pillow's -90 degrees maps the source top-left to output top-right.
+        self.assertEqual((0, 0, 0), prepared.getpixel((127, 0)))
+
+    def test_sdk_type_299_uses_inverted_first_plane_and_vertical_flip(self):
+        image = Image.new("RGB", (800, 480), "white")
+        ImageDraw.Draw(image).rectangle((0, 0, 799, 0), fill="black")
+        payload = render.pack_bwr_image(299, image)
+        plane_size = 800 * 480 // 8
+        self.assertEqual(plane_size * 2, len(payload))
+        # After the vendor's vertical flip the first row is white (active-low
+        # first plane), while the original black top row is transmitted last.
+        self.assertEqual(b"\x00" * 100, payload[:100])
+        self.assertEqual(b"\xff" * 100, payload[plane_size - 100 : plane_size])
+        self.assertEqual({0}, set(payload[plane_size:]))
+
     def test_preview_matches_the_reference_pixel_loop(self):
         for width, height in SIZES:
             for kind in KINDS:

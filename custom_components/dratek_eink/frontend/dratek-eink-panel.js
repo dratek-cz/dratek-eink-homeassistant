@@ -1,5 +1,6 @@
 import { storageMixin } from "./panel/panel-storage.mixin.js";
 import { queueMixin } from "./panel/panel-queue.mixin.js";
+import { automationsMixin } from "./panel/panel-automations.mixin.js";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js";
 import { devicesMixin } from "./panel/panel-devices.mixin.js?v=template-files-1";
 import { projectsMixin } from "./panel/panel-projects.mixin.js?v=template-save-queue-1";
@@ -124,6 +125,11 @@ class DratekEinkPanel extends HTMLElement {
     this._topologyViewMode = this._loadUiPreference("topology-view-mode", "auto");
     this._queue = { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0 };
     this._queuePollTimer = null;
+    this._automations = [];
+    this._automationsLoading = false;
+    this._automationsError = "";
+    this._automationsResult = "";
+    this._automationBusyAddress = "";
     this._deviceStatusPollTimer = null;
     this._gateways = [];
     this._gatewayResult = null;
@@ -244,6 +250,7 @@ Object.assign(
   DratekEinkPanel.prototype,
   storageMixin,
   queueMixin,
+  automationsMixin,
   gatewayMixin,
   devicesMixin,
   projectsMixin,

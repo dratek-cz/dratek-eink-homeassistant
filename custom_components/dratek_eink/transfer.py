@@ -10,11 +10,6 @@ from typing import TYPE_CHECKING, Any
 from bleak import BleakClient
 from PIL import Image
 
-try:
-    from bleak_retry_connector import establish_connection
-except ImportError:
-    establish_connection = None
-
 from .const import (
     CONTROL_CHARS,
     DRATEK_COMPANY_ID,
@@ -127,32 +122,19 @@ class DratekTransfer:
             wait_seconds = MIN_RECONNECT_INTERVAL_SECONDS - (loop.time() - last_disconnect)
             if wait_seconds > 0:
                 await asyncio.sleep(wait_seconds)
-        client = None
-        if establish_connection is not None:
-            try:
-                client = await establish_connection(
-                    BleakClient,
-                    connection_target,
-                    address,
-                    max_attempts=2,
-                )
-            except Exception as exc:
-                err_msg = str(exc).lower()
-                if "never seen by any scanner" in err_msg or "unknown (" in err_msg:
-                    raise
-                self.log(
-                    f"bleak_retry_connector establish_connection fallback ({exc}); attempting direct connect."
-                )
-                client = BleakClient(connection_target, timeout=20.0)
-                await client.connect()
-        else:
-            if isinstance(connection_target, str):
-                self.log(
-                    f"Display {address} has not been detected by Home Assistant Bluetooth scanner yet. "
-                    "Ensure the display is powered on, within range of the Bluetooth adapter, or routed via an ESP32 Gateway."
-                )
-            client = BleakClient(connection_target, timeout=20.0)
-            await client.connect()
+        # Do not use bleak_retry_connector.establish_connection here. On BlueZ
+        # that wrapper can acquire the characteristic's write file descriptor;
+        # our subsequent WriteValue calls then fail with
+        # org.bluez.Error.NotPermitted: Write acquired. Image transfers need a
+        # normal BleakClient connection because they perform a sequence of
+        # explicit GATT writes themselves.
+        if isinstance(connection_target, str):
+            self.log(
+                f"Display {address} has not been detected by Home Assistant Bluetooth scanner yet. "
+                "Ensure the display is powered on, within range of the Bluetooth adapter, or routed via an ESP32 Gateway."
+            )
+        client = BleakClient(connection_target, timeout=20.0)
+        await client.connect()
         try:
             yield client
         finally:

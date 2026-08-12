@@ -240,6 +240,12 @@ class ConnectionSiteWiringTests(unittest.TestCase):
         self.assertEqual(source.count("async with BleakClient("), 0)
         self.assertEqual(source.count("self._connected_client(connection_target, address)"), 3)
 
+    def test_local_transfer_does_not_use_retry_connector_write_acquisition(self) -> None:
+        source = (COMPONENT / "transfer.py").read_text(encoding="utf-8")
+        self.assertNotIn("from bleak_retry_connector import establish_connection", source)
+        self.assertNotIn("await establish_connection(", source)
+        self.assertIn("client = BleakClient(connection_target, timeout=20.0)", source)
+
 
 if __name__ == "__main__":
     unittest.main()

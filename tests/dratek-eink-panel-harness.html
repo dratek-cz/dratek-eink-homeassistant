@@ -245,6 +245,10 @@
       },
     };
     const userTemplates = [];
+    const automations = [
+      { address:"FF:FF:92:81:46:32", refresh_interval_seconds:300, refresh_trigger_mode:"both", binding_count:2, entity_ids:["sensor.time","sensor.spot_prices"], route_type:"gateway", gateway_id:"gateway-workshop", transport_name:"Gateway dílna" },
+      { address:"FF:FF:93:10:22:41", refresh_interval_seconds:1800, refresh_trigger_mode:"interval_only", binding_count:1, entity_ids:["binary_sensor.dvere_dilna"], route_type:"local", gateway_id:"", transport_name:"Home Assistant Bluetooth" },
+    ];
 
     const panel = document.querySelector("#panel");
     const renderCanonicalHarness = async (automation) => {
@@ -356,6 +360,17 @@
           return { template };
         }
         if (type === "dratek_eink/render_preview") return renderCanonicalHarness(msg.automation);
+        if (type === "dratek_eink/automations/list") return { automations };
+        if (type === "dratek_eink/automations/update_interval") {
+          const automation = automations.find((item) => item.address === msg.address);
+          if (automation) automation.refresh_interval_seconds = msg.refresh_interval_seconds;
+          return { ok:!!automation };
+        }
+        if (type === "dratek_eink/automations/delete") {
+          const index = automations.findIndex((item) => item.address === msg.address);
+          if (index >= 0) automations.splice(index, 1);
+          return { ok:index >= 0 };
+        }
         if (type === "dratek_eink/gateways/list" || type === "dratek_eink/gateways/refresh") return { gateways };
         if (type === "dratek_eink/gateways/serial_ports") return { ports: [] };
         if (type === "dratek_eink/queue/list") {
@@ -446,9 +461,10 @@
 
     // ?tab=topology otevře náhled rovnou na dané záložce. Mapa připojení potřebuje
     // navíc seznam gatewayí, který si jinak natáhne až obsluha kliknutí na záložku.
-    if (initialTab && ["devices", "topology", "queue", "gateways"].includes(initialTab)) {
+    if (initialTab && ["devices", "topology", "queue", "automations", "gateways"].includes(initialTab)) {
       if (initialTab === "topology") await panel._loadGateways(false);
       if (initialTab === "queue") await panel._loadQueue(false);
+      if (initialTab === "automations") await panel._loadAutomations(false);
       if (initialTab === "gateways") await Promise.all([panel._loadGateways(false), panel._loadQueue(false)]);
       panel._activeTab = initialTab;
       panel._render();

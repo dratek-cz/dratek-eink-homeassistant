@@ -134,6 +134,40 @@ class AutomationBindingTests(unittest.TestCase):
         self.assertEqual(30, refresh_interval({"refresh_interval_seconds": 1}))
         self.assertEqual(45, refresh_interval({"refresh_interval_seconds": 45}))
 
+    def test_automation_overview_excludes_large_render_payloads(self):
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager._initialized = True
+        manager._configs = {
+            address: {
+                "enabled": True,
+                "base_image": "data:image/png;base64," + ("A" * 10000),
+                "svg_template": "<svg>large document</svg>",
+                "bindings": [
+                    {"type": "text", "entity_id": "sensor.temperature"},
+                    {"type": "text", "entity_id": "sensor.humidity"},
+                ],
+                "refresh_interval_seconds": 300,
+                "refresh_trigger_mode": "interval_only",
+                "route_type": "local",
+                "transport_name": "Home Assistant Bluetooth",
+            }
+        }
+
+        summaries = asyncio.run(manager.async_list_configs())
+
+        self.assertEqual(1, len(summaries))
+        self.assertEqual(address, summaries[0]["address"])
+        self.assertEqual(300, summaries[0]["refresh_interval_seconds"])
+        self.assertEqual(
+            ["sensor.humidity", "sensor.temperature"],
+            summaries[0]["entity_ids"],
+        )
+        self.assertNotIn("base_image", summaries[0])
+        self.assertNotIn("svg_template", summaries[0])
+
     def test_skipped_refresh_does_not_requeue_itself(self):
         address = "FF:FF:92:81:46:32"
         manager = automation.EntityAutoUpdateManager.__new__(

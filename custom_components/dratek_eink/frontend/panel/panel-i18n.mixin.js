@@ -646,6 +646,10 @@ export const i18nMixin = {
         cs: ["Fronta zápisu", "Zobrazuje čekající, probíhající a dokončené zápisy do displejů. Filtry pomáhají dohledat konkrétní zařízení, trasu, operaci nebo chybu."],
         en: ["Write queue", "Shows queued, active and completed display writes. Filters help locate a specific device, route, operation or error."],
       },
+      automations: {
+        cs: ["Automatické zápisy", "Přehled aktivních automatických obnov jednotlivých displejů. U každého zápisu můžete změnit interval nebo jej úplně odstranit."],
+        en: ["Automatic writes", "Overview of active automatic display refreshes. Change the interval for any display or remove its automatic write entirely."],
+      },
       gateways: {
         cs: ["Gatewaye", "Centrální správa síťových gatewayí. Můžete je vyhledat, přidat, přejmenovat, zkontrolovat jejich stav a aktualizovat firmware."],
         en: ["Gateways", "Central management for network gateways. Discover, add or rename them, check their status and update firmware."],

@@ -4,6 +4,17 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.280
+
+- opravené barvy a orientace BWRY 296×128 (SDK 46) podle čtyřbarevného formátu výrobce
+- opravené obrazové roviny BWR 800×480 (SDK 299/315) a pád gatewaye během 96kB uploadu
+- přibalený gateway firmware `0.1.53-gateway` pro ESP32 i ESP32-S3
+
+## Novinky ve verzi 0.1.279
+
+- přidána hlavní karta **Automatické zápisy** pro přehled, změnu intervalu a mazání plánovaných obnov displejů
+- opraveno selhávání lokálního Bluetooth přenosu s chybou BlueZ `Write acquired` a navazující série přeskočených aktualizací
+
 ## Novinky ve verzi 0.1.278
 
 - přegenerovány všechny PNG ikony v plné 512x512 / 1024x1024 velikosti dle specifikace HACS UI tabulky custom repozitářů

@@ -15,6 +15,11 @@ from .ws_custom_elements import (
     websocket_list_custom_elements,
     websocket_save_custom_element,
 )
+from .ws_automations import (
+    websocket_delete_automation,
+    websocket_list_automations,
+    websocket_update_automation_interval,
+)
 from .ws_devices import (
     websocket_flash_identify,
     websocket_render_preview,
@@ -72,6 +77,9 @@ from .ws_sending import (
 INTENTIONALLY_UNREGISTERED = frozenset()
 
 COMMANDS = (
+    websocket_list_automations,
+    websocket_update_automation_interval,
+    websocket_delete_automation,
     websocket_scan,
     websocket_render_preview,
     websocket_set_rgb_led,

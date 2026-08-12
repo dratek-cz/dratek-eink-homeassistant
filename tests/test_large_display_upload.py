@@ -15,9 +15,33 @@ from websocket_sources import find_top_level_function, websocket_source
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENT = ROOT / "custom_components" / "dratek_eink"
 FRONTEND = COMPONENT / "frontend" / "panel" / "panel-devices.mixin.js"
+GATEWAY_BACKEND = COMPONENT / "gateway.py"
+GATEWAY_FIRMWARE = ROOT / "firmware" / "dratek-eink-gateway" / "src" / "main.cpp"
 
 
 class LargeDisplayUploadTests(unittest.TestCase):
+    def test_gateway_receives_exact_payload_size_before_multipart_body(self) -> None:
+        backend = GATEWAY_BACKEND.read_text(encoding="utf-8")
+        firmware = GATEWAY_FIRMWARE.read_text(encoding="utf-8")
+
+        self.assertIn('f"&size={len(payload)}"', backend)
+        self.assertIn('uploadExpectedSize = (size_t)server.arg("size").toInt();', firmware)
+        self.assertIn("uploadPayload.reserve(uploadExpectedSize);", firmware)
+        self.assertIn("nextSize > uploadExpectedSize", firmware)
+        self.assertIn("uploadPayload.size() != uploadExpectedSize", firmware)
+
+    def test_gateway_firmware_avoids_geometric_growth_for_96k_payload(self) -> None:
+        firmware = GATEWAY_FIRMWARE.read_text(encoding="utf-8")
+        start = firmware.index("void handleTransferUploadChunk()")
+        end = firmware.index("void handleTransferUploadComplete()", start)
+        upload_handler = firmware[start:end]
+
+        self.assertLess(
+            upload_handler.index("uploadPayload.reserve(uploadExpectedSize);"),
+            upload_handler.index("uploadPayload.insert("),
+        )
+        self.assertIn("heap_caps_get_largest_free_block", upload_handler)
+
     def test_sdk_type_296_uses_its_real_800x480_buffer(self) -> None:
         tree = ast.parse((COMPONENT / "const.py").read_text(encoding="utf-8"))
         device_sizes = next(

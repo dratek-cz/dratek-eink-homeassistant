@@ -2,6 +2,22 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.280] - 2026-08-12
+
+### Opraveno – BWRY 296×128 a BWR 800×480
+- BWRY 296×128 (SDK 46) se nyní balí podle protokolu výrobce jako čtyřbarevné 2bitové pixely v pořadí černá, bílá, žlutá a červená, včetně správné rotace.
+- BWR 800×480 (SDK 299/315) používá správné svislé převrácení a invertovanou první obrazovou rovinu.
+- Gateway firmware `0.1.53-gateway` si pro 96kB obraz předem rezervuje přesnou velikost bufferu, takže při multipart uploadu již nepadá kvůli geometrickému růstu `std::vector`.
+
+## [0.1.279] - 2026-08-12
+
+### Přidáno – Centrální správa automatických zápisů
+- Do hlavní nabídky byla jako čtvrtá položka přidána karta **Automatické zápisy** se seznamem cílových displejů, datových vazeb, tras a režimů spouštění.
+- Interval každého automatického zápisu lze změnit přímo v přehledu a zápis lze s potvrzením kompletně odstranit.
+
+### Opraveno – BlueZ `Write acquired` a následné série přeskočených aktualizací
+- Lokální přenosy znovu používají přímý `BleakClient`; `bleak_retry_connector.establish_connection` už nemůže exkluzivně obsadit zapisovací charakteristiku a vyvolat patnáctiminutový backoff fronty.
+
 ## [0.1.278] - 2026-08-11
 
 ### Vylepšeno – Oficiální 512x512 PNG kvalita brand ikon pro HACS tabulky a obchody

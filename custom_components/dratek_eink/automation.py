@@ -591,6 +591,45 @@ class EntityAutoUpdateManager:
         self._configs[normalized] = updated
         await self._store.async_save({"configs": self._configs})
 
+    async def async_list_configs(self) -> list[dict[str, Any]]:
+        """Return lightweight metadata for the automation management UI.
+
+        Stored configurations also contain base64 images and full SVG documents.
+        Those can be several hundred kilobytes per display and must not be sent
+        merely to render the overview page.
+        """
+        await self.async_initialize()
+        result: list[dict[str, Any]] = []
+        for address, config in sorted(self._configs.items()):
+            entity_ids: set[str] = set()
+            bindings = config.get("bindings")
+            if isinstance(bindings, list):
+                for binding in bindings:
+                    if isinstance(binding, dict):
+                        entity_ids.update(
+                            entity_id
+                            for entity_id, _attribute in _binding_sources(binding)
+                            if entity_id
+                        )
+            result.append(
+                {
+                    "address": address,
+                    "refresh_interval_seconds": self._refresh_interval(config),
+                    "refresh_trigger_mode": self._refresh_trigger_mode(config),
+                    "binding_count": len(bindings) if isinstance(bindings, list) else 0,
+                    "entity_ids": sorted(entity_ids),
+                    "template_ids": [
+                        str(template_id)
+                        for template_id in config.get("template_ids", [])
+                        if template_id
+                    ] if isinstance(config.get("template_ids"), list) else [],
+                    "route_type": str(config.get("route_type") or "local"),
+                    "gateway_id": str(config.get("gateway_id") or ""),
+                    "transport_name": str(config.get("transport_name") or ""),
+                }
+            )
+        return result
+
     async def async_set_refresh_trigger_mode(self, address: str, mode: Any) -> None:
         """Update what triggers a refresh (change, interval, or both) in place."""
         await self.async_initialize()

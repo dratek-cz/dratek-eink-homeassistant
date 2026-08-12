@@ -386,6 +386,7 @@ async def async_send_gateway_payload(
             f"{base_url}/api/transfer/upload?address={quote(address, safe='')}"
             f"&id={request_id}"
             f"&software_version={int(software_version or 0)}"
+            f"&size={len(payload)}"
         )
         if partial:
             x, y, width, height = partial

@@ -2,6 +2,7 @@ export const inspectorMixin = {
 
 
   _bind() {
+    this._bindAutomationEvents?.();
     this.shadowRoot.querySelector("#scan")?.addEventListener("click", () => this._scan());
     this.shadowRoot.querySelector("#resetDevicesView")?.addEventListener("click", () => {
       this._deviceSearchQuery = "";
@@ -207,6 +208,9 @@ export const inspectorMixin = {
       }
       if (this._activeTab === "queue") {
         await this._loadQueue(true);
+      }
+      if (this._activeTab === "automations") {
+        await this._loadAutomations(true);
       }
       if (this._activeTab === "topology") {
         await Promise.all([

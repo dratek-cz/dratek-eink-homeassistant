@@ -1867,6 +1867,8 @@ def render_text_image(
 
 
 PE29_CODES = {40, 43, 46, 48, 51}
+BWRY_296X128_CODE = 46
+BWR_800X480_CODES = {299, 315}
 
 
 def expected_buffer_size(sdk_type: int) -> tuple[int, int]:
@@ -1915,18 +1917,21 @@ def prepare_image_for_display(
                 image = image.rotate(180, expand=True)
         else:
             # Design is 296x128 landscape layout -> rotate 90 deg into 128x296 buffer
+            # Picksmart's four-colour 296x128 encoder uses -90 degrees.  The
+            # other PE29 variants use the older +90-degree byte layout.
+            default_angle = -90 if code == BWRY_296X128_CODE else 90
             if transform in ("none", "rotate_cw"):
-                image = image.rotate(90, expand=True)
+                image = image.rotate(default_angle, expand=True)
             elif transform == "rotate_ccw":
-                image = image.rotate(-90, expand=True)
+                image = image.rotate(-default_angle, expand=True)
             elif transform == "rotate_180":
-                image = image.rotate(-90, expand=True)
+                image = image.rotate(-default_angle, expand=True)
             elif transform == "flip_lr":
-                image = image.rotate(90, expand=True).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+                image = image.rotate(default_angle, expand=True).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
             elif transform == "flip_tb":
-                image = image.rotate(90, expand=True).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+                image = image.rotate(default_angle, expand=True).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
             else:
-                image = image.rotate(90, expand=True)
+                image = image.rotate(default_angle, expand=True)
     elif code in (264, 267, 270):
         if is_portrait:
             if transform == "rotate_180":
@@ -1992,6 +1997,18 @@ def pack_bwr_image(
     orientation: str | None = None,
 ) -> bytes:
     image = prepare_image_for_display(sdk_type, image, transform, orientation)
+    code = int(sdk_type)
+
+    if code == BWRY_296X128_CODE:
+        return _pack_bwry_image(image)
+
+    # Picksmart's 800x480 BWR implementation mirrors the bitmap vertically
+    # before extracting its planes.  Its first plane is active-high for dark
+    # pixels, unlike the white-plane representation used by the other labels.
+    invert_first_plane = code in BWR_800X480_CODES
+    if invert_first_plane:
+        image = image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+
     width, height = image.size
     pixel_count = width * height
     if pixel_count % 8 != 0:
@@ -2002,11 +2019,53 @@ def pack_bwr_image(
         # Mode "1" already stores 8 pixels per byte, most significant bit first,
         # padding every row up to a byte boundary. A byte-aligned width leaves no
         # padding, so the raw buffer is exactly the continuous bit plane wanted.
-        return white.tobytes() + red.tobytes()
+        first_plane = white.tobytes()
+        if invert_first_plane:
+            first_plane = bytes(value ^ 0xFF for value in first_plane)
+        return first_plane + red.tobytes()
 
     # Widths like 212, 250, 196 and 210 are not byte aligned, so the row padding
     # above would shift the stream. Pack those from the flat masks instead.
     return _pack_planes_unaligned(white, red, pixel_count)
+
+
+def _pack_bwry_image(image: Image.Image) -> bytes:
+    """Pack Picksmart BWRY pixels as four two-bit values per byte.
+
+    The vendor protocol does not use two independent bit planes for BWRY:
+    black=0, white=1, yellow=2 and red=3, ordered most-significant pixel first.
+    """
+    source = image.convert("RGB").tobytes()
+    pixel_count = image.width * image.height
+    if pixel_count % 4 != 0:
+        raise ValueError(
+            f"BWRY display pixel count is not four-pixel aligned: {image.width}x{image.height}"
+        )
+
+    packed = bytearray(pixel_count // 4)
+    output_index = 0
+    packed_byte = 0
+    pixel_in_byte = 0
+    for offset in range(0, len(source), 3):
+        red, green, blue = source[offset : offset + 3]
+        luminance = (38 * red + 75 * green + 15 * blue) >> 7
+        is_white = luminance > 128
+        is_red = red > 128
+        is_yellow = green > 128
+        if is_red and is_yellow and blue > 128:
+            is_yellow = False
+        if is_red and is_white:
+            is_red = False
+
+        colour = 2 if is_yellow else 3 if is_red else 1 if is_white else 0
+        packed_byte |= colour << (6 - pixel_in_byte * 2)
+        pixel_in_byte += 1
+        if pixel_in_byte == 4:
+            packed[output_index] = packed_byte
+            output_index += 1
+            packed_byte = 0
+            pixel_in_byte = 0
+    return bytes(packed)
 
 
 def pack_bwr_region(image: Image.Image) -> bytes:
