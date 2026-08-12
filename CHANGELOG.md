@@ -2,6 +2,20 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.283] - 2026-08-12
+
+### Vylepšeno – Přehledná instalace nové gatewaye
+- Formulář nové gatewaye je rozdělený do dvou samostatných sloupců: úsporné USB a síť vlevo, výrazně větší volba desky a instalace vpravo.
+- Výběr nabízí dvě velké karty ESP32 a ESP32-S3 bez technického označení N16R8; síťové údaje jsou přehledně pod sebou.
+- Instalační karta ukazuje připravenost USB, Wi-Fi a desky a srozumitelně odděluje úplnou instalaci, samotnou Wi-Fi a diagnostiku.
+- USB port, volba ESP32 desky, Wi-Fi nastavení, instalace a diagnostika se na desktopu zobrazí bez vnitřního rolování a bez úzkých namačkaných sloupců.
+- Upozornění na chybějící USB port je stručnější a rozložení se na menších obrazovkách přirozeně skládá pod sebe.
+- Horní souhrny Gatewayí a Automatických zápisů používají stejné stavové dlaždice jako Fronta zápisu.
+
+### Opraveno – Výhradní ruční zápis a BWR 800×480
+- Ruční zápis odstraní všechny čekající automatické úlohy stejného displeje, během přenosu nepovolí vytvořit další a novou automatickou konfiguraci aktivuje až po úspěšném dokončení.
+- Streaming SDK 299/315 už nevkládá potvrzovaný GATT zápis na 16. bloku, který software 129 nepodporuje. Velký 96kB obraz se odesílá plynule bez odpovědi, s bezpečným tempem a delší dobou pro vyprázdnění Bluetooth fronty.
+
 ## [0.1.282] - 2026-08-12
 
 ### Vylepšeno – Nové centrum automatických zápisů

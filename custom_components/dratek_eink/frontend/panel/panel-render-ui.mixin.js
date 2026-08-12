@@ -244,6 +244,55 @@ export const renderUiMixin = {
         .board-target-tag ha-icon{--mdc-icon-size:13px}
         .placeholder-info small{color:var(--secondary-text-color);font-size:9px}
 
+        /* USB a síť jsou v užším levém sloupci. Výběr desky a finální instalace
+           dostávají větší pravou část panelu. */
+        .gateway-create-block{display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:10px;min-height:0;height:100%}
+        .gateway-create-block .gateway-hero-head{padding:10px 13px;border-radius:12px;background:var(--card-background-color)}
+        .gateway-create-block .hero-icon-badge{width:38px;height:38px;border-radius:10px}.gateway-create-block .hero-icon-badge ha-icon{--mdc-icon-size:21px}
+        .gateway-create-block .gateway-hero-title h2{font-size:14px}.gateway-create-block .gateway-hero-title p{font-size:10px}
+        .gateway-create-block .refresh-ports-btn{min-height:36px;padding:7px 12px;font-size:10px}
+        .gateway-alert-compact{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px;margin:0;padding:8px 11px;border-left-width:4px;border-radius:10px}
+        .gateway-alert-compact .alert-icon-wrap{width:31px;height:31px;border-radius:8px}.gateway-alert-compact .alert-icon-wrap ha-icon{--mdc-icon-size:18px}
+        .gateway-alert-compact strong,.gateway-alert-compact small{display:block}.gateway-alert-compact strong{font-size:10.5px}.gateway-alert-compact small{margin-top:2px;color:var(--secondary-text-color);font-size:9px;line-height:1.35}
+        .gateway-create-block .gateway-setup-grid{display:grid;grid-template-columns:minmax(285px,.72fr) minmax(500px,1.38fr);gap:10px;min-height:0}
+        .gateway-create-block .gateway-setup-column{display:grid;gap:10px;min-width:0;min-height:0}
+        .gateway-create-block .gateway-setup-left{grid-template-rows:145px minmax(220px,1fr)}
+        .gateway-create-block .gateway-setup-right{grid-template-rows:minmax(222px,1fr) minmax(220px,1fr)}
+        .gateway-create-block .gateway-setup-section,.gateway-create-block .gateway-install-panel{min-width:0;padding:8px 10px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color);box-shadow:0 3px 12px rgba(15,23,42,.04);overflow:hidden}
+        .gateway-create-block .gateway-setup-section{display:grid;grid-template-rows:auto minmax(0,1fr)}
+        .gateway-create-block .gateway-usb-section{box-sizing:border-box}
+        .gateway-create-block .gateway-usb-section .port-picker-card{align-self:center}
+        .gateway-create-block .gateway-board-section .board-picker-grid,.gateway-create-block .gateway-network-section .gateway-form-fields{align-self:stretch}
+        .gateway-create-block .gateway-step-header{gap:8px;margin:0 0 2px;padding:0;border:0}
+        .gateway-create-block .step-num{width:24px;height:24px;border-radius:7px;font-size:10.5px;box-shadow:none}
+        .gateway-create-block .gateway-step-header strong{font-size:11.5px}.gateway-create-block .gateway-step-header small{font-size:9px}
+        .gateway-create-block .port-picker-card{grid-template-columns:70px minmax(0,1fr);gap:9px;padding:7px 8px;border-radius:9px;box-shadow:none}
+        .gateway-create-block .port-picker-visual{height:47px;padding:5px;border-radius:8px}.gateway-create-block .usb-preview{max-height:40px}
+        .gateway-create-block .port-status-badge{bottom:4px;padding:2px 6px;font-size:8px}
+        .gateway-create-block .port-picker-label-row{margin-bottom:5px}.gateway-create-block .port-picker-label-row label{font-size:9.5px}
+        .gateway-create-block .field-with-icon select{padding-top:7px;padding-bottom:7px;font-size:10.5px}.gateway-create-block .port-picker-hint{margin-top:4px;font-size:8.5px;line-height:1.25}
+        .gateway-create-block .board-picker-grid{height:100%;gap:10px}.gateway-create-block .board-card{grid-template-columns:1fr;grid-template-rows:minmax(68px,1fr) auto auto;gap:5px;padding:8px 9px;border-radius:10px}
+        .gateway-create-block .board-card-visual{grid-column:1;grid-row:1;width:100%;height:auto;min-height:68px;padding:5px;border-radius:8px}.gateway-create-block .board-preview{max-height:76px}
+        .gateway-create-block .board-tag{top:7px;right:7px;padding:3px 7px;font-size:8px}.gateway-create-block .board-card-info{grid-column:1;grid-row:2;align-self:end;padding:0 60px 0 1px}
+        .gateway-create-block .board-card-info strong{font-size:12px}.gateway-create-block .board-subtitle{display:block;margin-top:1px;font-size:8.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gateway-create-block .board-specs-pill{display:none}
+        .gateway-create-block .board-card-actions{grid-column:1;grid-row:3;align-self:end}.gateway-create-block .board-option-pick{min-height:34px;padding:6px 9px;border-radius:8px;font-size:10px}.gateway-create-block .board-option-pick ha-icon{--mdc-icon-size:16px}
+        .gateway-create-block .gateway-form-fields{grid-template-columns:1fr;grid-template-rows:repeat(3,minmax(0,1fr));gap:8px}.gateway-create-block .gateway-form-fields .field{display:grid;grid-template-rows:auto minmax(34px,1fr);gap:4px;margin:0}
+        .gateway-create-block .gateway-form-fields .field label{font-size:9.5px}.gateway-create-block .gateway-form-fields input{width:100%;min-height:35px;padding:8px 9px;font-size:10.5px;box-sizing:border-box}
+        .gateway-create-block .gateway-install-panel{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);grid-template-rows:auto minmax(0,1fr);align-content:stretch;gap:8px 12px;background:linear-gradient(145deg,var(--card-background-color),color-mix(in srgb,var(--dratek-teal,#009999) 4%,var(--card-background-color)))}
+        .gateway-create-block .gateway-install-panel>.gateway-step-header{grid-column:1/-1}
+        .gateway-create-block .gateway-install-overview{grid-column:1;display:grid;grid-template-rows:auto minmax(0,1fr);gap:8px;min-width:0}
+        .gateway-create-block .gateway-install-placeholder{gap:11px;margin:0;padding:11px 12px;border-radius:10px;background:var(--card-background-color)}.gateway-create-block .placeholder-icon-wrap{width:42px;height:42px}.gateway-create-block .placeholder-icon-wrap ha-icon{--mdc-icon-size:23px}
+        .gateway-create-block .placeholder-info>small{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}.gateway-create-block .placeholder-info strong{font-size:13px}.gateway-create-block .board-target-tag{font-size:9px}.gateway-create-block .placeholder-info .board-target-tag ha-icon{--mdc-icon-size:13px}
+        .gateway-install-checks{display:grid;align-content:center;gap:5px;padding:8px 10px;border:1px solid var(--divider-color);border-radius:9px;background:var(--secondary-background-color)}
+        .gateway-install-checks span{display:flex;align-items:center;gap:7px;min-width:0;color:var(--secondary-text-color);font-size:9px;font-weight:750}.gateway-install-checks span ha-icon{--mdc-icon-size:15px;flex:0 0 auto}.gateway-install-checks span.is-ready{color:var(--dratek-status-ok-fg,#16803c)}.gateway-install-checks span.is-missing{color:var(--dratek-status-warn-fg,#b45309)}
+        .gateway-create-block .gateway-install-actions{grid-column:2;display:grid;grid-template-rows:minmax(64px,1fr) auto;gap:8px}.gateway-create-block .gateway-cta-primary{min-height:64px;justify-content:flex-start;gap:11px;padding:10px 13px;border-radius:11px}.gateway-create-block .gateway-cta-primary>ha-icon{--mdc-icon-size:25px}.gateway-create-block .gateway-cta-primary strong{font-size:12px}.gateway-create-block .gateway-cta-primary small{font-size:8.5px}.gateway-create-block .gateway-cta-arrow{margin-left:auto;--mdc-icon-size:19px!important}
+        .gateway-create-block .gateway-install-sub-actions{gap:8px}.gateway-create-block .gateway-install-sub-actions button{min-height:47px;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px;padding:7px 9px;text-align:left}.gateway-create-block .gateway-install-sub-actions button>ha-icon{--mdc-icon-size:18px}.gateway-create-block .gateway-install-sub-actions button span{display:grid;gap:1px}.gateway-create-block .gateway-install-sub-actions button strong{font-size:9.5px}.gateway-create-block .gateway-install-sub-actions button small{font-size:7.5px;color:var(--secondary-text-color)}
+        .gateway-create-block .gateway-terminal-window{grid-column:1/-1;margin-top:0;max-height:150px;border-radius:8px}.gateway-create-block .gateway-log{max-height:92px;min-height:44px;font-size:8px;padding:8px}.gateway-create-block .terminal-header,.gateway-create-block .terminal-status-msg{padding:6px 8px}
+        @media(min-width:1051px){.gateways-panel .gateway-workspace-content:has(.gateway-create-block){grid-template-rows:minmax(0,1fr);align-content:stretch;overflow:hidden}.gateways-panel .gateway-workspace-content:has(.gateway-create-block)>.gateway-create-block{height:100%;min-height:0}}
+        @media(max-width:1050px){.gateway-create-block{height:auto}.gateway-create-block .gateway-setup-grid{grid-template-columns:minmax(260px,.78fr) minmax(430px,1.22fr)}.gateway-create-block .gateway-setup-left{grid-template-rows:145px minmax(220px,auto)}.gateway-create-block .gateway-setup-right{grid-template-rows:minmax(222px,auto) minmax(220px,auto)}.gateway-create-block .gateway-setup-section,.gateway-create-block .gateway-install-panel{overflow:visible}}
+        @media(max-width:820px){.gateway-create-block .gateway-setup-grid{display:flex;flex-direction:column}.gateway-create-block .gateway-setup-column{display:contents}.gateway-create-block .gateway-usb-section{order:1}.gateway-create-block .gateway-board-section{order:2}.gateway-create-block .gateway-network-section{order:3}.gateway-create-block .gateway-install-panel{order:4;grid-template-columns:1fr}.gateway-create-block .gateway-form-fields{grid-template-rows:auto}.gateway-create-block .gateway-install-panel>.gateway-step-header,.gateway-create-block .gateway-install-overview,.gateway-create-block .gateway-install-actions{grid-column:auto}}
+        @media(max-height:760px) and (min-width:1051px){.tab-panel.gateways-panel{height:auto;overflow:visible}.gateways-panel>.gateway-workspace,.gateways-panel .gateway-workspace-tabs,.gateways-panel .gateway-workspace-content{height:auto}.gateways-panel .gateway-workspace-content:has(.gateway-create-block){overflow:visible}.gateway-create-block{height:auto}.gateway-create-block .gateway-setup-left{grid-template-rows:145px 220px}.gateway-create-block .gateway-setup-right{grid-template-rows:222px 220px}}
+
         .gateway-terminal-window{margin-top:14px;border:1px solid #2d3748;border-radius:12px;background:#0d1117;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.3)}
         .terminal-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 14px;background:#161b22;border-bottom:1px solid #21262d}
         .terminal-dots{display:flex;align-items:center;gap:6px}
@@ -271,7 +320,7 @@ export const renderUiMixin = {
         .ribbon-tab.menu-tab,.ribbon-tab.menu-tab.active{background:#16803c;color:#fff;border-color:#16803c}.ribbon-tab.menu-tab:hover{background:#126c33}.ribbon-tab.menu-tab.active{background:#0d5f2a;box-shadow:inset 0 -3px 0 rgba(255,255,255,.75)}.ribbon-send{background:#1565c0;color:#fff;border-color:#1565c0;margin-left:6px;box-shadow:none}.ribbon-send:hover:not(:disabled){background:#0d4f9b}.file-menu{padding:0;overflow:hidden;width:min(760px,calc(100vw - 52px))}.file-backstage{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:390px}.file-rail{display:flex;flex-direction:column;gap:3px;padding:16px 10px;background:#16803c;color:#fff}.file-rail-title{display:flex;align-items:center;gap:10px;padding:5px 10px 18px;font-size:20px;font-weight:850}.file-rail button{justify-content:flex-start;background:transparent;color:#fff;box-shadow:none;border:0;padding:11px 12px}.file-rail button:hover{background:rgba(255,255,255,.16)}.file-content{padding:20px;min-width:0}.file-content-actions{display:flex;gap:8px;margin-top:15px}.ribbon-menu{position:absolute;z-index:12;top:50px;padding:9px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);box-shadow:0 18px 46px rgba(0,0,0,.22)}.view-menu{left:205px;min-width:310px}.tools-menu{left:310px;min-width:270px}.layout-menu{left:410px;min-width:340px}.view-option{display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:center;gap:10px;padding:10px;border-radius:6px;font-weight:750}.view-option:hover{background:var(--secondary-background-color)}.menu-command-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding-bottom:8px;margin-bottom:4px;border-bottom:1px solid var(--divider-color)}.menu-command-row button{display:grid;place-items:center;gap:4px;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.menu-command-row span{font-size:11px}.menu-command{width:100%;display:flex;align-items:center;justify-content:flex-start;text-align:left;background:transparent;color:var(--primary-text-color);box-shadow:none}.menu-command ha-icon{color:#16803c;--mdc-icon-size:28px}.menu-command span{display:grid}.menu-command small{color:var(--secondary-text-color);font-weight:500}.menu-command.selected{background:rgba(22,128,60,.1);border-color:#16803c}.layout-menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.layout-menu-button{min-height:76px;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);box-shadow:none}.layout-menu-button.active{background:#16803c;color:#fff}.editor-dialog{width:min(760px,100%);max-height:min(760px,92vh);overflow:auto;background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:18px}.template-dialog{width:min(980px,100%)}.template-dialog .template-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));max-height:none;overflow:visible}.new-project-dialog{width:min(620px,100%)}.project-choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.project-choice{min-height:180px;display:grid;grid-template-rows:54px auto auto;place-items:center;text-align:center;padding:20px;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);box-shadow:none}.project-choice ha-icon{--mdc-icon-size:48px;color:#16803c}.project-choice strong{font-size:17px}.project-choice span{color:var(--secondary-text-color);font-size:12px}.project-choice:hover{border-color:#16803c;background:rgba(22,128,60,.07)}
         .signal-value{font-weight:850}.signal-value.good-signal{color:#16803c}.signal-value.warn-signal{color:#b06000}.signal-value.bad-signal{color:#c62828}
         @media(max-width:1450px){.editor-shell{grid-template-columns:230px minmax(0,1fr) 300px}.layers-panel{grid-column:3}.properties-panel{grid-column:3}.layers-panel,.properties-panel{position:static}}
-        @media(max-width:1180px){.editor-shell,.status-grid{grid-template-columns:1fr}.left,.right,.layers-panel,.properties-panel{position:static;grid-column:auto}.tabbar,.subtabs{width:100%}.tab,.subtab{flex:1}.workspace{min-height:420px}.gateway-setup-grid{grid-template-columns:1fr}}
+        @media(max-width:1180px){.editor-shell,.status-grid{grid-template-columns:1fr}.left,.right,.layers-panel,.properties-panel{position:static;grid-column:auto}.tabbar,.subtabs{width:100%}.tab,.subtab{flex:1}.workspace{min-height:420px}}@media(max-width:1050px){.gateway-setup-grid{grid-template-columns:1fr}}
         @media(max-width:700px){.gateway-empty{align-items:flex-start;flex-wrap:wrap}.gateway-empty button{width:100%;margin-left:0}.gateway-install-actions{grid-template-columns:1fr}.gateway-install-actions button:first-child{grid-column:auto}}
         @media(max-width:720px){.file-menu-grid,.file-actions,.file-backstage,.project-choice-grid{grid-template-columns:1fr}.file-rail{display:grid;grid-template-columns:1fr 1fr}.file-rail-title{grid-column:1/-1}.ribbon{flex-wrap:wrap}.ribbon-project{width:100%;order:3}.ribbon-menu{left:8px;right:8px;top:94px;min-width:0}.designer-context{align-items:flex-start}.topology-link{width:2px;height:26px;justify-self:center}.topology-link:after{right:-4px;top:auto;bottom:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #0f766e}.topology-link span{white-space:normal}.route{grid-template-columns:auto minmax(0,1fr) auto}.route-rssi{grid-column:2}.gateway-health{grid-template-columns:1fr}.topbar{align-items:flex-start}.brand{align-items:flex-start;flex-direction:column;gap:7px}.header-brand-logo{width:min(72vw,290px);max-height:none}.brand-description{padding-left:0;border-left:0}.brand-description strong,.brand-description span{white-space:normal}}
         .view-menu{left:420px}.tools-menu{left:315px}.layout-menu{left:205px}
@@ -1106,23 +1155,18 @@ export const renderUiMixin = {
           ${this._renderAutomations()}
         </div>` : ""}
         ${this._activeTab === "gateways" ? `<div class="tab-panel gateways-panel">
-          <div class="stat-tiles">
-            ${(() => {
-              // Stejný zápis jako u fronty: barva patří stavu, nula se ztlumí.
-              // "Celkem" není stav, proto zůstává neutrální.
-              const online = this._gateways.filter((gateway) => gateway.status && gateway.status.ok).length;
-              const free = this._gateways.filter((gateway) => gateway.status?.ok && !this._gatewayActiveJob(gateway)).length;
-              const busy = this._gateways.filter((gateway) => this._gatewayActiveJob(gateway)).length;
-              const tile = (icon, value, label, cls) =>
-                `<div class="stat-tile ${cls} ${value ? "" : "is-zero"}"><span class="stat-tile-icon"><ha-icon icon="${icon}"></ha-icon></span><span class="stat-tile-copy"><strong>${value}</strong><small>${label}</small></span></div>`;
-              return [
-                tile("mdi:router-wireless", this._gateways.length, "Celkem", "is-plain"),
-                tile("mdi:check-circle-outline", online, "Online", "is-good"),
-                tile("mdi:router-wireless-check", free, "Volné", ""),
-                tile("mdi:progress-upload", busy, "Zapisují", "is-warn"),
-              ].join("");
-            })()}
-          </div>
+          ${(() => {
+            const online = this._gateways.filter((gateway) => gateway.status && gateway.status.ok).length;
+            const free = this._gateways.filter((gateway) => gateway.status?.ok && !this._gatewayActiveJob(gateway)).length;
+            const busy = this._gateways.filter((gateway) => Boolean(this._gatewayActiveJob(gateway))).length;
+            const stat = (icon, value, label, cls = "") => `<div class="stat-tile ${cls} ${Number(value || 0) ? "" : "is-zero"}"><span class="stat-tile-icon"><ha-icon icon="${icon}"></ha-icon></span><span class="stat-tile-copy"><strong>${value || 0}</strong><small>${label}</small></span></div>`;
+            return `<div class="stat-tiles" aria-label="Souhrn gatewayí">
+              ${stat("mdi:router-wireless", this._gateways.length, "Celkem", "is-plain")}
+              ${stat("mdi:check-circle-outline", online, "Online", "is-good")}
+              ${stat("mdi:router-wireless-check", free, "Volné")}
+              ${stat("mdi:progress-upload", busy, "Zapisují", "is-warn")}
+            </div>`;
+          })()}
           ${this._renderGatewayWorkspace()}
         </div>` : ""}
       </div>

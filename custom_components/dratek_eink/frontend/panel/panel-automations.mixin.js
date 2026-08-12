@@ -60,6 +60,7 @@ export const automationsMixin = {
       0,
     );
     const gatewayCount = automations.filter((item) => item.route_type === "gateway").length;
+    const stat = (icon, value, label, cls = "") => `<div class="stat-tile ${cls} ${Number(value || 0) ? "" : "is-zero"}"><span class="stat-tile-icon"><ha-icon icon="${icon}"></ha-icon></span><span class="stat-tile-copy"><strong>${value || 0}</strong><small>${label}</small></span></div>`;
     const status = this._automationsError
       ? `<div class="automation-notice bad"><ha-icon icon="mdi:alert-circle-outline"></ha-icon>${this._escape(this._automationsError)}</div>`
       : this._automationsResult
@@ -104,22 +105,17 @@ export const automationsMixin = {
       </article>`;
     }).join("");
     return `<div class="automations-page">
-      <section class="card automations-toolbar-card">
-        <div class="automations-toolbar-title"><span class="automations-toolbar-icon"><ha-icon icon="mdi:calendar-sync"></ha-icon></span><div><h2>Automatické zápisy</h2><p>Správa intervalů, datových vazeb a přenosových tras displejů.</p></div></div>
-        <div class="automations-toolbar-meta" aria-label="Souhrn automatických zápisů">
-          <span><strong>${automations.length}</strong> ${automations.length === 1 ? "zápis" : "zápisy"}</span><i></i>
-          <span><strong>${entityCount}</strong> ${entityCount === 1 ? "vazba" : "vazby"}</span><i></i>
-          <span><strong>${gatewayCount}</strong> gateway</span>
-        </div>
-        <button id="refreshAutomations" class="secondary automations-refresh" title="Obnovit seznam" ${this._automationsLoading ? "disabled" : ""}><ha-icon class="${this._automationsLoading ? "spin" : ""}" icon="mdi:refresh"></ha-icon><span>Obnovit</span></button>
-      </section>
+      <div class="stat-tiles" aria-label="Souhrn automatických zápisů">
+        ${stat("mdi:calendar-sync", automations.length, automations.length === 1 ? "Aktivní zápis" : "Aktivní zápisy", "is-good")}
+        ${stat("mdi:database-sync-outline", entityCount, entityCount === 1 ? "Datová vazba" : "Datové vazby")}
+        ${stat("mdi:router-wireless", gatewayCount, "Přes gateway", "is-warn")}
+      </div>
       ${status}
       ${cards ? `<section class="automation-grid">${cards}</section>` : `<section class="card automation-empty"><span class="automation-empty-icon"><ha-icon icon="mdi:calendar-blank-outline"></ha-icon></span><h2>Zatím žádné automatické zápisy</h2><p>Odešlete do displeje návrh s napojenými entitami. Jeho pravidelná obnova se potom objeví právě tady.</p></section>`}
     </div>`;
   },
 
   _bindAutomationEvents() {
-    this.shadowRoot.querySelector("#refreshAutomations")?.addEventListener("click", () => this._loadAutomations(true));
     this.shadowRoot.querySelectorAll("[data-automation-interval]").forEach((select) => {
       select.addEventListener("change", async () => {
         const address = select.dataset.automationInterval;

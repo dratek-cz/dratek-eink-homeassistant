@@ -9,7 +9,7 @@ export const LOCAL_ROUTE_ID = "local";
 export const GATEWAY_BOARDS = [
   {
     chip: "esp32",
-    name: "ESP-32S / ESP32",
+    name: "ESP32",
     subtitle: "Vývojová deska 2,4GHz Wi-Fi + Bluetooth s anténou",
     badge: "Standard",
     badgeClass: "muted",
@@ -19,13 +19,13 @@ export const GATEWAY_BOARDS = [
   },
   {
     chip: "esp32s3",
-    name: "ESP32-S3 N16R8",
+    name: "ESP32-S3",
     subtitle: "Vývojový modul Wi-Fi a BLE 5.0, s pinovou lištou v balení",
     badge: "Doporučeno",
     badgeClass: "featured",
     specs: "16MB Flash • Dual-Core 240MHz • BLE 5.0",
     icon: "mdi:memory",
-    firmware: "Firmware pro ESP32-S3 N16R8",
+    firmware: "Firmware pro ESP32-S3",
   },
 ];
 
@@ -436,6 +436,35 @@ export const gatewayMixin = {
     return `<div class="card send-result"><span class="pill ${cls}">${this._escape(message)}</span>${devices.length ? `<div class="panel-divider"></div>${this._renderGatewayDevices(devices)}` : ""}</div>`;
   },
 
+  _renderGatewayInstallPanel(selectedBoard) {
+    const portReady = Boolean(this._flashForm.port);
+    const wifiReady = Boolean(this._flashForm.ssid);
+    const ready = portReady && wifiReady;
+    const check = (ok, icon, label) => `<span class="${ok ? "is-ready" : "is-missing"}"><ha-icon icon="mdi:${ok ? "check-circle" : icon}"></ha-icon>${label}</span>`;
+    return `<section class="gateway-panel gateway-install-panel">
+      <div class="gateway-step-header"><span class="step-num">4</span><div><strong>Instalace a diagnostika</strong><small>Poslední kontrola a bezpečné nahrání gatewaye</small></div></div>
+      <div class="gateway-install-overview">
+        <div class="gateway-install-placeholder ${this._gatewayBusy ? "is-busy" : ""}">
+          <div class="placeholder-icon-wrap"><ha-icon icon="${this._gatewayBusy ? "mdi:sync" : ready ? "mdi:check-decagram-outline" : "mdi:progress-alert"}" class="${this._gatewayBusy ? "spin" : ""}"></ha-icon></div>
+          <div class="placeholder-info"><small>Vybraná deska</small><strong>${this._escape(selectedBoard.name)}</strong><span class="board-target-tag"><ha-icon icon="mdi:memory"></ha-icon>${this._escape(selectedBoard.firmware)}</span></div>
+        </div>
+        <div class="gateway-install-checks" aria-label="Připravenost instalace">
+          ${check(portReady, "usb-port", portReady ? "USB port připraven" : "Vyberte USB port")}
+          ${check(wifiReady, "wifi-alert", wifiReady ? "Wi-Fi údaje vyplněny" : "Doplňte Wi-Fi síť")}
+          ${check(true, "memory", `${selectedBoard.name} vybrána`)}
+        </div>
+      </div>
+      <div class="gateway-install-actions">
+        <button id="flashGateway" class="gateway-cta-primary" ${this._gatewayBusy || !ready ? "disabled" : ""}><ha-icon icon="mdi:chip"></ha-icon><span><strong>Nahrát firmware</strong><small>Nainstaluje firmware i nastavení Wi-Fi</small></span><ha-icon class="gateway-cta-arrow" icon="mdi:arrow-right"></ha-icon></button>
+        <div class="gateway-install-sub-actions">
+          <button id="serialWifi" class="secondary" ${this._gatewayBusy || !ready ? "disabled" : ""}><ha-icon icon="mdi:wifi-cog"></ha-icon><span><strong>Jen Wi-Fi</strong><small>Bez změny firmwaru</small></span></button>
+          <button id="serialStatus" class="secondary" ${this._gatewayBusy || !portReady ? "disabled" : ""}><ha-icon icon="mdi:console-line"></ha-icon><span><strong>Ověřit USB</strong><small>Diagnostika připojení</small></span></button>
+        </div>
+      </div>
+      ${this._renderFlashResult()}${this._renderSerialResult()}
+    </section>`;
+  },
+
   _renderGatewayWorkspace() {
     // Svislý rail v levém sloupci. Nelepí se na výšku obsahu jako dřív - drží se
     // nahoře (align-self:start + sticky), takže při rolování jde s sebou.
@@ -457,7 +486,17 @@ export const gatewayMixin = {
     }
     if (this._gatewaySubtab === "create") {
       const selectedBoard = this._selectedGatewayBoard();
-      return `${shellStart}<div class="gateway-hero-head"><div class="gateway-hero-title"><span class="hero-icon-badge"><ha-icon icon="mdi:usb-flash-drive"></ha-icon></span><div><h2>Flashování & Konfigurace Gatewaye přes USB</h2><p>Připojte ESP32 přímo k Home Assistantu, vyberte port, zadejte Wi-Fi a nahrajte firmware.</p></div></div><div class="gateway-view-actions"><button id="refreshSerialPorts" class="secondary refresh-ports-btn" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:usb-port" class="${this._gatewayBusy ? "spin" : ""}"></ha-icon>Načíst porty</button></div></div>${this._renderNoSerialPortsWarning()}<div class="gateway-setup-grid"><div class="gateway-panel gateway-form-panel"><div class="gateway-step-header"><span class="step-num">1</span><div><strong>Připojení přes USB</strong><small>Vyberte sériový port zapojené desky</small></div></div>${this._renderGatewayPortPicker()}<div class="gateway-step-header"><span class="step-num">2</span><div><strong>Typ desky ESP32</strong><small>Firmware se automaticky přizpůsobí vybranému čipu</small></div></div>${this._renderGatewayBoardPicker()}<div class="gateway-step-header"><span class="step-num">3</span><div><strong>Síťové nastavení gatewaye</strong><small>Konfigurace Wi-Fi se bezpečně nahraje přes sériový port</small></div></div><div class="gateway-form-fields"><div class="field"><label for="flashHostname"><ha-icon icon="mdi:dns-outline"></ha-icon>Název gatewaye</label><input id="flashHostname" value="${this._escape(this._flashForm.hostname)}" placeholder="dratek-eink-gateway-dilna"></div><div class="field"><label for="flashSsid"><ha-icon icon="mdi:wifi"></ha-icon>Wi-Fi SSID (Název sítě)</label><input id="flashSsid" value="${this._escape(this._flashForm.ssid)}" placeholder="Název Wi-Fi sítě"></div><div class="field"><label for="flashPassword"><ha-icon icon="mdi:lock-outline"></ha-icon>Wi-Fi Heslo</label><input id="flashPassword" type="password" value="${this._escape(this._flashForm.password)}" placeholder="Heslo k Wi-Fi síti"></div></div></div><div class="gateway-panel gateway-install-panel"><div class="gateway-step-header"><span class="step-num">4</span><div><strong>Instalace a Diagnostika</strong><small>Průběh flashingu a komunikace v živém terminálu</small></div></div><div class="gateway-install-actions"><button id="flashGateway" class="gateway-cta-primary" ${this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid ? "disabled" : ""}><ha-icon icon="mdi:chip"></ha-icon><span><strong>Nahrát firmware</strong><small>${this._escape(selectedBoard.firmware)}</small></span></button><div class="gateway-install-sub-actions"><button id="serialWifi" class="secondary" ${this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid ? "disabled" : ""}><ha-icon icon="mdi:wifi-cog"></ha-icon>Poslat jen Wi-Fi</button><button id="serialStatus" class="secondary" ${this._gatewayBusy || !this._flashForm.port ? "disabled" : ""}><ha-icon icon="mdi:console"></ha-icon>Ověřit USB</button></div></div><div class="gateway-install-placeholder ${this._gatewayBusy ? "is-busy" : ""}"><div class="placeholder-icon-wrap"><ha-icon icon="${this._gatewayBusy ? "mdi:sync" : "mdi:check-decagram-outline"}" class="${this._gatewayBusy ? "spin" : ""}"></ha-icon></div><div class="placeholder-info"><strong>${this._gatewayBusy ? "Probíhá operace zápisu…" : "Připraveno k instalaci"}</strong><span class="board-target-tag"><ha-icon icon="mdi:memory"></ha-icon>${this._escape(selectedBoard.name)}</span><small>${this._escape(selectedBoard.firmware)}</small></div></div>${this._renderFlashResult()}${this._renderSerialResult()}</div></div>${shellEnd}`;
+      return `${shellStart}<div class="gateway-create-block">
+        <div class="gateway-hero-head"><div class="gateway-hero-title"><span class="hero-icon-badge"><ha-icon icon="mdi:usb-flash-drive"></ha-icon></span><div><h2>Nová gateway přes USB</h2><p>Vyberte připojení, desku a Wi-Fi. Potom nahrajte připravený firmware.</p></div></div><div class="gateway-view-actions"><button id="refreshSerialPorts" class="secondary refresh-ports-btn" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:usb-port" class="${this._gatewayBusy ? "spin" : ""}"></ha-icon>Načíst porty</button></div></div>
+        ${this._renderNoSerialPortsWarning()}
+        <div class="gateway-setup-grid"><div class="gateway-setup-column gateway-setup-left">
+          <section class="gateway-setup-section gateway-usb-section"><div class="gateway-step-header"><span class="step-num">1</span><div><strong>Připojení přes USB</strong><small>Port desky připojené k Home Assistantu</small></div></div>${this._renderGatewayPortPicker()}</section>
+          <section class="gateway-setup-section gateway-network-section"><div class="gateway-step-header"><span class="step-num">3</span><div><strong>Síťové nastavení</strong><small>Údaje se nahrají bezpečně přes USB</small></div></div><div class="gateway-form-fields"><div class="field"><label for="flashHostname"><ha-icon icon="mdi:dns-outline"></ha-icon>Název gatewaye</label><input id="flashHostname" value="${this._escape(this._flashForm.hostname)}" placeholder="dratek-eink-gateway-dilna"></div><div class="field"><label for="flashSsid"><ha-icon icon="mdi:wifi"></ha-icon>Wi-Fi SSID</label><input id="flashSsid" value="${this._escape(this._flashForm.ssid)}" placeholder="Název Wi-Fi sítě"></div><div class="field"><label for="flashPassword"><ha-icon icon="mdi:lock-outline"></ha-icon>Wi-Fi heslo</label><input id="flashPassword" type="password" value="${this._escape(this._flashForm.password)}" placeholder="Heslo k Wi-Fi síti"></div></div></section>
+        </div><div class="gateway-setup-column gateway-setup-right">
+          <section class="gateway-setup-section gateway-board-section"><div class="gateway-step-header"><span class="step-num">2</span><div><strong>Vyberte typ desky</strong><small>Dvě podporované varianty gateway firmwaru</small></div></div>${this._renderGatewayBoardPicker()}</section>
+          ${this._renderGatewayInstallPanel(selectedBoard)}
+        </div></div>
+      </div>${shellEnd}`;
     }
     // Návod ke směrování je dokumentace, ne stav - drží se sbalený, aby nad
     // kartami netrůnil natrvalo.
@@ -723,22 +762,9 @@ export const gatewayMixin = {
 
   _renderNoSerialPortsWarning() {
     if (!this._serialPortsLoaded || this._serialPorts.length) return "";
-    return `<div class="gateway-alert-card is-warning">
-      <div class="alert-card-header">
-        <span class="alert-icon-wrap"><ha-icon icon="mdi:usb-port-down"></ha-icon></span>
-        <div>
-          <h3>Nebyl nalezen žádný USB / sériový port</h3>
-          <p>ESP32 musí být připojené přímo do hardwaru, na kterém běží Home Assistant.</p>
-        </div>
-      </div>
-      <div class="alert-card-body">
-        <p class="alert-notice"><strong>Důležité:</strong> Nestačí zapojit ESP32 do počítače, ze kterého Home Assistant pouze spravujete v prohlížeči. Pro flash firmware musí být deska fyzicky zapojená v USB portu HA stroje.</p>
-        <ul class="alert-checklist">
-          <li><ha-icon icon="mdi:cable-data"></ha-icon>Ujistěte se, že používáte <strong>datový USB kabel</strong> (některé kabely jsou pouze nabíjecí).</li>
-          <li><ha-icon icon="mdi:power-plug-outline"></ha-icon>Zkontrolujte, zda je deska napájena (svítí stavová LED dioda na ESP32).</li>
-          <li><ha-icon icon="mdi:refresh"></ha-icon>Po fyzickém zapojení klikněte na tlačítko <strong>Načíst porty</strong> nahoře.</li>
-        </ul>
-      </div>
+    return `<div class="gateway-alert-card gateway-alert-compact is-warning">
+      <span class="alert-icon-wrap"><ha-icon icon="mdi:usb-port-down"></ha-icon></span>
+      <div><strong>USB port nebyl nalezen</strong><small>Připojte ESP32 datovým kabelem přímo ke stroji s Home Assistantem a zvolte Načíst porty.</small></div>
     </div>`;
   },
 

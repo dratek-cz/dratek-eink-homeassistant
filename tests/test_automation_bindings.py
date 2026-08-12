@@ -223,21 +223,26 @@ class AutomationBindingTests(unittest.TestCase):
 
         namespace = {
             "HomeAssistant": object,
+            "DOMAIN": "dratek_eink",
+            "PENDING_AUTOMATIONS_KEY": "pending_entity_automations",
             "get_entity_auto_update_manager": lambda _hass: Manager(),
         }
         exec(compile(isolated_module, "websocket.py", "exec"), namespace)
 
+        class Hass:
+            data = {}
+
         asyncio.run(
             namespace["_clear_previous_entity_automation"](
-                object(), "FF:FF:92:81:46:32"
+                Hass(), "FF:FF:92:81:46:32"
             )
         )
 
         self.assertEqual([("FF:FF:92:81:46:32", None)], calls)
 
-    def test_queued_upload_installs_automation_before_transfer_starts(self):
-        # E-ink writes are slow. The listener must already exist before the job
-        # enters the queue or an entity change during that wait is lost forever.
+    def test_queued_upload_activates_automation_only_after_transfer_succeeds(self):
+        # A running manual upload owns the display exclusively. Its bindings
+        # remain pending and become active only from the successful runner.
         for name in (
             "websocket_send_design",
             "websocket_commit_design_upload",
@@ -256,18 +261,23 @@ class AutomationBindingTests(unittest.TestCase):
                     for runner in runners
                     for descendant in ast.walk(runner)
                 }
-                installed = [
+                prepared = [
                     call
                     for call in ast.walk(handler)
                     if isinstance(call, ast.Call)
                     and getattr(call.func, "id", "") == "_install_entity_automation"
                     and call not in runner_nodes
                 ]
-                self.assertTrue(
-                    installed,
-                    f"{name} does not listen for entity changes until its slow "
-                    "display write has already finished.",
+                self.assertTrue(prepared, f"{name} does not prepare its automation")
+                activated = all(
+                    any(
+                        isinstance(call, ast.Call)
+                        and getattr(call.func, "id", "") == "_activate_entity_automation"
+                        for call in ast.walk(runner)
+                    )
+                    for runner in runners
                 )
+                self.assertTrue(activated, f"{name} activates automation before confirmed success")
                 rolled_back = all(
                     any(
                         isinstance(call, ast.Call)
@@ -291,6 +301,21 @@ class AutomationBindingTests(unittest.TestCase):
                     reconciled,
                     f"{name} loses HA changes made while the image was uploading",
                 )
+
+        prepare = find_top_level_function("_install_entity_automation")
+        prepare_calls = {
+            node.func.attr
+            for node in ast.walk(prepare)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        }
+        self.assertNotIn("async_set_config", prepare_calls)
+        activate = find_top_level_function("_activate_entity_automation")
+        activate_calls = {
+            node.func.attr
+            for node in ast.walk(activate)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        }
+        self.assertIn("async_set_config", activate_calls)
 
     def test_failed_old_upload_does_not_clear_newer_automation(self):
         address = "FF:FF:92:81:46:32"

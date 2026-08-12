@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.283
+
+  - **Přehledné menu nové gatewaye** – menší USB a síťový sloupec doplňuje velká volba ESP32/ESP32-S3 a přepracovaná instalace s kontrolou připravenosti, bez vnitřního posuvníku.
+- **Stejná výška obou panelů** – instalační blok nové gatewaye odpovídá výšce levého navigačního panelu a na menších obrazovkách se bezpečně přeskupí pod sebe.
+  - **Jednotné horní souhrny** – Gatewaye i Automatické zápisy používají stejné stavové dlaždice jako Fronta zápisu.
+- **Bez kolize ručního a automatického zápisu** – ruční přenos má pro daný displej přednost a jeho automatika se aktivuje teprve po úspěšném nahrání.
+- **BWR 800×480 se softwarem 129** – přenos už nekončí na 16. bloku nepodporovaným potvrzeným GATT zápisem; 96kB stream je místo toho bezpečně časovaný.
+
 ## Novinky ve verzi 0.1.282
 
 - kompletně přepracovaný grafický vzhled sekce **Automatické zápisy** se souhrnnými metrikami, harmonogramem a přehlednějšími kartami displejů

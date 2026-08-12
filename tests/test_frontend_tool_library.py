@@ -171,6 +171,17 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".gateway-workspace-tabs{position:sticky", self.source)
         self.assertIn('class="gateway-tab-copy"', self.source)
         self.assertNotIn('class="gateway-section-head"', self.source)
+        # Instalace nové gatewaye se na desktopu vejde do stejné výšky jako rail.
+        self.assertIn('class="gateway-create-block"', self.source)
+        self.assertIn(".gateway-workspace-content:has(.gateway-create-block){grid-template-rows:minmax(0,1fr);align-content:stretch;overflow:hidden}", self.source)
+        self.assertIn(".gateway-create-block .gateway-setup-grid{display:grid;grid-template-columns:minmax(285px,.72fr) minmax(500px,1.38fr)", self.source)
+        self.assertIn(".gateway-create-block .gateway-setup-left{grid-template-rows:145px minmax(220px,1fr)}", self.source)
+        self.assertIn(".gateway-create-block .gateway-setup-right{grid-template-rows:minmax(222px,1fr) minmax(220px,1fr)}", self.source)
+        self.assertIn(".gateway-create-block .gateway-form-fields{grid-template-columns:1fr", self.source)
+        self.assertIn('name: "ESP32-S3"', self.source)
+        self.assertNotIn("ESP32-S3 N16R8", self.source)
+        self.assertIn('class="gateway-install-checks"', self.source)
+        self.assertIn("Nainstaluje firmware i nastavení Wi-Fi", self.source)
         # Návod ke směrování je dokumentace, drží se sbalený v <details>.
         self.assertIn('<details class="gateway-routing-guide">', self.source)
         self.assertIn("Volná gateway se použije od −80 dBm", self.source)
@@ -193,18 +204,14 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn("board.shop", self.source)
         self.assertNotIn("mdi:cart-outline", self.source)
 
-    def test_stat_tiles_are_shared_by_queue_gateways_and_designer(self):
-        # Vzorem je pruh dlaždic z fronty zápisu; Gatewaye i Designer ho přebírají.
+    def test_stat_tiles_are_shared_by_queue_gateways_automations_and_designer(self):
+        # Fronta zápisu, Gatewaye, Automatické zápisy a Designer používají stejné dlaždice.
         self.assertIn(".stat-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))", self.source)
         self.assertIn(".stat-tile{display:grid;grid-template-columns:auto minmax(0,1fr)", self.source)
         self.assertIn(".stat-tile-copy strong{font-size:20px;font-weight:900", self.source)
         self.assertIn('<div class="stat-tiles">', self.source)
-        self.assertIn('<span class="stat-tile-copy"><strong>${value}</strong><small>${label}</small></span>', self.source)
-        for label in ("Celkem", "Online", "Volné", "Zapisují"):
-            self.assertIn(f'"{label}"', self.source)
         # Barvu nese stav, ne jeho počet. Ikona si červenou/zelenou drží i při
         # nule - ztlumí se jen číslo, jinak by prázdná fronta byla celá šedá.
-        self.assertIn('${value ? "" : "is-zero"}', self.source)
         self.assertIn('${Number(value || 0) ? "" : "is-zero"}', self.source)
         self.assertIn(".stat-tile.is-plain{--stat-accent:var(--secondary-text-color)}", self.source)
         self.assertNotIn(".stat-tile.is-zero{--stat-accent:", self.source)
@@ -216,6 +223,15 @@ class FrontendToolLibraryTests(unittest.TestCase):
             ("is-skipped", "var(--dratek-status-warn-fg,#b45309)"),
         ):
             self.assertIn(f".stat-tile.{modifier}{{--stat-accent:{accent}}}", self.source)
+
+    def test_gateway_and_automation_summaries_match_queue_stats(self):
+        self.assertGreaterEqual(self.source.count('class="stat-tiles"'), 3)
+        self.assertIn('aria-label="Souhrn gatewayí"', self.source)
+        self.assertIn('aria-label="Souhrn automatických zápisů"', self.source)
+        self.assertIn('"Celkem", "is-plain"', self.source)
+        self.assertIn('"Aktivní zápis" : "Aktivní zápisy"', self.source)
+        self.assertNotIn('id="refreshGatewaysSummary"', self.source)
+        self.assertNotIn('class="card automations-toolbar-card gateway-toolbar-card"', self.source)
         # Gradientní hlavičky nahradil plochý nadpis a stejné dlaždice.
         self.assertNotIn('class="gateway-page-hero"', self.source)
         self.assertNotIn('class="gateway-page-metrics"', self.source)

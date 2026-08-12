@@ -20,6 +20,7 @@ from .transfer import DratekTransfer
 from .automation import get_entity_auto_update_manager
 from .gateway import async_send_gateway_payload
 from .ws_shared import (
+    _activate_entity_automation,
     _clear_entity_automation_if_matches,
     _clear_previous_entity_automation,
     _install_entity_automation,
@@ -194,6 +195,7 @@ async def websocket_send_design(
                             )
                         except Exception as exc:
                             add_log(f"Display updated, but preview could not be saved: {exc}")
+                        await _activate_entity_automation(hass, address, automation)
                         await _request_entity_automation_refresh(hass, address, automation)
                         return res
                     return res or {"ok": False, "error": "Gateway transfer failed."}
@@ -224,6 +226,7 @@ async def websocket_send_design(
                     )
                 except Exception as exc:
                     add_log(f"Display updated, but its preview could not be saved: {exc}")
+                await _activate_entity_automation(hass, address, automation)
                 await _request_entity_automation_refresh(hass, address, automation)
                 return {"ok": True, "address": address, "log": []}
             except BaseException:
@@ -415,6 +418,7 @@ async def websocket_commit_design_upload(
                     )
                 except Exception as exc:
                     add_log(f"Display updated, but its preview could not be saved: {exc}")
+                await _activate_entity_automation(hass, address, automation)
                 await _request_entity_automation_refresh(hass, address, automation)
                 return {"ok": True, "address": address, "log": []}
             except BaseException:
@@ -450,6 +454,7 @@ async def websocket_commit_design_upload(
                             )
                         except Exception as exc:
                             add_log(f"Display updated, but its preview could not be saved: {exc}")
+                        await _activate_entity_automation(hass, address, automation)
                         await _request_entity_automation_refresh(hass, address, automation)
                     return result or {"ok": False, "error": "Gateway transfer failed."}
                 except BaseException:

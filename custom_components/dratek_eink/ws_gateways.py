@@ -35,6 +35,7 @@ from .gateway import (
 )
 from .queue import get_transfer_queue
 from .ws_shared import (
+    _activate_entity_automation,
     _clear_entity_automation_if_matches,
     _clear_previous_entity_automation,
     _install_entity_automation,
@@ -241,6 +242,9 @@ async def websocket_send_gateway_design(
                         )
                     except Exception as exc:
                         add_log(f"Displej byl aktualizovan, ale nahled se nepodarilo ulozit: {exc}")
+                    await _activate_entity_automation(
+                        hass, msg["address"], automation
+                    )
                     await _request_entity_automation_refresh(
                         hass, msg["address"], automation
                     )

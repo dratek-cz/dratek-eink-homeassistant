@@ -23,8 +23,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 WRITE_ACK_SDK_TYPES = {51}
-STREAM_CHECKPOINT_SDK_TYPES = {299, 315}
-STREAM_CHECKPOINT_BLOCKS = 16
+PACED_LARGE_STREAM_SDK_TYPES = {299, 315}
 FINAL_BLOCK_RESPONSE_TIMEOUT = 2
 MTU_NEGOTIATION_TIMEOUT = 4
 RGB_LED_COMMAND = 0x30
@@ -32,11 +31,12 @@ FLASH_IDENTIFY_COMMAND = 0x22
 FULL_REFRESH_MODE = 0x01
 BLOCK_REQUEST_TIMEOUT = 12
 OPTIONAL_COMPLETION_TIMEOUT = 2
-UNCONFIRMED_WRITE_DRAIN_TIMEOUT = 10
+UNCONFIRMED_WRITE_DRAIN_TIMEOUT = 20
 MAX_BLOCK_REQUEST_RETRIES = 5
 GATT_OPERATION_TIMEOUT = 8
 TEARDOWN_OPERATION_TIMEOUT = 5
 STREAM_WRITE_DELAY = 0.04
+LARGE_STREAM_WRITE_DELAY = 0.10
 MIN_RECONNECT_INTERVAL_SECONDS = 6.0
 
 
@@ -551,24 +551,12 @@ class DratekTransfer:
 
                     end_block = total_blocks if streaming_mode else next_block + 1
                     for block_number in range(next_block, end_block):
-                        # The 800x480 controller accepts write commands faster
-                        # than BlueZ can physically put them on its long-interval
-                        # BLE link.  A response every 16 blocks is a delivery
-                        # barrier: all preceding commands must leave the kernel
-                        # queue before this ATT request can be acknowledged.
-                        # Always checkpoint the final block as well, otherwise a
-                        # ten-second disconnect drain can still cut off the tail.
-                        checkpoint_response = (
-                            streaming_mode
-                            and not require_gatt_response
-                            and int(sdk_type) in STREAM_CHECKPOINT_SDK_TYPES
-                            and "write" in write_char.properties
-                            and (
-                                (block_number + 1) % STREAM_CHECKPOINT_BLOCKS == 0
-                                or block_number == total_blocks - 1
-                            )
-                        )
-                        block_requires_response = require_gatt_response or checkpoint_response
+                        # SDK 299/315 advertises acknowledged writes, but its
+                        # software-129 controller never answers them while an
+                        # image stream is active. Keep every block unconfirmed
+                        # and pace the 96 kB stream instead; otherwise block 16
+                        # always times out with response=yes.
+                        block_requires_response = require_gatt_response
                         final_response_missing = False
                         try:
                             block_data = _next_block(payload, block_size, block_number)
@@ -584,6 +572,12 @@ class DratekTransfer:
                                     and streaming_mode
                                     and block_number == total_blocks - 1
                                     else GATT_OPERATION_TIMEOUT
+                                ),
+                                write_delay=(
+                                    LARGE_STREAM_WRITE_DELAY
+                                    if streaming_mode
+                                    and int(sdk_type) in PACED_LARGE_STREAM_SDK_TYPES
+                                    else STREAM_WRITE_DELAY
                                 ),
                             )
                         except TimeoutError:
@@ -617,11 +611,7 @@ class DratekTransfer:
                             if final_response_missing:
                                 delivery = "Final block handed off"
                             elif block_requires_response:
-                                delivery = (
-                                    "Display acknowledged checkpoint"
-                                    if checkpoint_response
-                                    else "Display acknowledged"
-                                )
+                                delivery = "Display acknowledged"
                             else:
                                 delivery = "Bluetooth queued"
                             self.log(
@@ -864,6 +854,7 @@ class DratekTransfer:
         *,
         require_response: bool,
         operation_timeout: float = GATT_OPERATION_TIMEOUT,
+        write_delay: float = STREAM_WRITE_DELAY,
     ) -> None:
         try:
             await self._write_char(
@@ -875,7 +866,7 @@ class DratekTransfer:
                 operation_timeout=operation_timeout,
             )
             if not require_response:
-                await asyncio.sleep(STREAM_WRITE_DELAY)
+                await asyncio.sleep(write_delay)
             else:
                 await asyncio.sleep(0.005)
         except Exception as exc:

@@ -138,7 +138,7 @@ class TransferQueue:
         self._prune()
         if manual:
             self._manual_pending[normalized_address] = self._manual_pending.get(normalized_address, 0) + 1
-            self._preempt_automatic_update(normalized_address)
+            self._discard_automatic_updates(normalized_address)
         else:
             current_task = asyncio.current_task()
             if current_task is not None:
@@ -287,6 +287,29 @@ class TransferQueue:
             # finish cleanly so the BLE slot is freed.
             return
         task.cancel()
+
+    def _discard_automatic_updates(self, address: str) -> None:
+        """Remove every pending automatic job when a manual upload takes priority."""
+        for job in list(self._jobs):
+            if (
+                job.get("address") != address
+                or job.get("operation") != "entity_update"
+                or not self._is_active_job(job)
+            ):
+                continue
+            job_id = str(job.get("id") or "")
+            self._preempted_jobs.add(job_id)
+            # Never tear down a physical transfer in the middle of a block. It
+            # may finish, but the queued manual job owns the display next and
+            # _manual_pending prevents any replacement automatic job.
+            if job.get("status") == "writing":
+                continue
+            task = self._job_tasks.get(job_id)
+            if task is not None and not task.done():
+                task.cancel()
+        # Covers a wait-for-completion automatic task, which is not registered
+        # in _job_tasks.
+        self._preempt_automatic_update(address)
 
 
     async def _run(self, job: dict[str, Any], runner: TransferRunner) -> dict[str, Any]:

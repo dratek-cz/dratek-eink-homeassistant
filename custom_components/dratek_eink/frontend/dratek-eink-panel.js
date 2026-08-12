@@ -1,7 +1,7 @@
 import { storageMixin } from "./panel/panel-storage.mixin.js";
 import { queueMixin } from "./panel/panel-queue.mixin.js";
-import { automationsMixin } from "./panel/panel-automations.mixin.js";
-import { gatewayMixin } from "./panel/panel-gateway.mixin.js";
+import { automationsMixin } from "./panel/panel-automations.mixin.js?v=queue-stats-1";
+import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=create-layout-3";
 import { devicesMixin } from "./panel/panel-devices.mixin.js?v=template-files-1";
 import { projectsMixin } from "./panel/panel-projects.mixin.js?v=template-save-queue-1";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
@@ -9,9 +9,9 @@ import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-
 import { templatesMixin } from "./panel/panel-templates.mixin.js?v=readable-chart-type-2";
 import { variablesMixin } from "./panel/panel-variables.mixin.js?v=readable-chart-type-2";
 import { previewMixin } from "./panel/panel-preview.mixin.js";
-import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=studio-designer-37";
+import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=create-layout-9";
 import { i18nMixin } from "./panel/panel-i18n.mixin.js";
-import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=readable-chart-type-2";
+import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=queue-stats-2";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
 import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=template-files-1";

@@ -19,12 +19,16 @@ GATEWAY_PREFERENCES_STORE_VERSION = 1
 PROJECT_STORE_DATA_KEY = "project_store"
 GATEWAY_PREFERENCES_STORE_DATA_KEY = "gateway_preferences_store"
 PROJECT_DATA_CACHE_KEY = "project_data_cache"
+PENDING_AUTOMATIONS_KEY = "pending_entity_automations"
 
 
 async def _clear_previous_entity_automation(
     hass: HomeAssistant, address: str
 ) -> None:
     """Remove every scheduled update before accepting a replacement design."""
+    hass.data.setdefault(DOMAIN, {}).setdefault(PENDING_AUTOMATIONS_KEY, {}).pop(
+        address.upper(), None
+    )
     await get_entity_auto_update_manager(hass).async_set_config(address, None)
 
 
@@ -35,7 +39,7 @@ async def _install_entity_automation(
     image: Any | None = None,
     svg_template: str | None = None,
 ) -> dict[str, Any] | None:
-    """Activate the HA bindings that belong to a successfully written design if enabled."""
+    """Prepare bindings, but keep them inactive until the image is confirmed written."""
     config = dict(automation) if isinstance(automation, dict) else None
     if (
         config
@@ -51,10 +55,34 @@ async def _install_entity_automation(
             config["base_image"] = manager._encode_base_image(image)
         if svg_template is not None:
             config["svg_template"] = str(svg_template)
-        await manager.async_set_config(address, config)
+        hass.data.setdefault(DOMAIN, {}).setdefault(PENDING_AUTOMATIONS_KEY, {})[
+            address.upper()
+        ] = config
         return config
     await _clear_previous_entity_automation(hass, address)
     return None
+
+
+async def _activate_entity_automation(
+    hass: HomeAssistant,
+    address: str,
+    automation: dict[str, Any] | None,
+) -> bool:
+    """Activate only the newest manual upload's bindings after confirmed success."""
+    if not isinstance(automation, dict):
+        return False
+    normalized = address.upper()
+    pending = hass.data.setdefault(DOMAIN, {}).setdefault(
+        PENDING_AUTOMATIONS_KEY, {}
+    )
+    current = pending.get(normalized)
+    if not isinstance(current, dict) or current.get("installation_id") != automation.get(
+        "installation_id"
+    ):
+        return False
+    await get_entity_auto_update_manager(hass).async_set_config(normalized, automation)
+    pending.pop(normalized, None)
+    return True
 
 
 async def _clear_entity_automation_if_matches(
@@ -63,6 +91,17 @@ async def _clear_entity_automation_if_matches(
     automation: dict[str, Any] | None,
 ) -> None:
     """Rollback only the automation belonging to a failed queued upload."""
+    normalized = address.upper()
+    pending = hass.data.setdefault(DOMAIN, {}).setdefault(
+        PENDING_AUTOMATIONS_KEY, {}
+    )
+    current = pending.get(normalized)
+    if (
+        isinstance(current, dict)
+        and isinstance(automation, dict)
+        and current.get("installation_id") == automation.get("installation_id")
+    ):
+        pending.pop(normalized, None)
     await get_entity_auto_update_manager(hass).async_clear_config_if_matches(
         address, automation
     )

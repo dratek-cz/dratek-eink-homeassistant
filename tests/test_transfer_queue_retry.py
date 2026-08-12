@@ -717,6 +717,45 @@ class CancelledJobDoesNotWedgeAutomationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.get("queue_status"), "succeeded")
         self.assertEqual("", queue._automatic_skip_reason(self.ADDRESS))
 
+    async def test_manual_upload_discards_all_queued_automatic_jobs(self):
+        queue = self._queue()
+        sleepers = [asyncio.create_task(asyncio.sleep(3600)) for _ in range(2)]
+        queue._jobs = [
+            {
+                "id": f"auto-{index}", "resource": "local", "transport_type": "local",
+                "transport_name": "Bluetooth", "address": self.ADDRESS,
+                "operation": "entity_update", "status": "queued",
+                "created_at": int(time.time()), "started_at": None,
+                "finished_at": None, "error": "", "log": [],
+            }
+            for index in range(2)
+        ]
+        queue._job_tasks = {
+            job["id"]: task for job, task in zip(queue._jobs, sleepers)
+        }
+
+        queue._discard_automatic_updates(self.ADDRESS)
+        await asyncio.sleep(0)
+
+        self.assertTrue(all(task.cancelled() for task in sleepers))
+        self.assertEqual({"auto-0", "auto-1"}, queue._preempted_jobs)
+
+    async def test_automatic_job_is_rejected_during_manual_upload(self):
+        queue = self._queue()
+        queue._manual_pending[self.ADDRESS] = 1
+        ran = False
+
+        async def automatic_runner(_add_log):
+            nonlocal ran
+            ran = True
+            return {"ok": True}
+
+        result = await self._submit_automatic(queue, automatic_runner)
+
+        self.assertFalse(ran)
+        self.assertTrue(result.get("skipped"))
+        self.assertIn("manual upload is pending", result["log"][0])
+
 
 if __name__ == "__main__":
     unittest.main()
