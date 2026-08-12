@@ -139,6 +139,29 @@ class BwrClassificationTests(unittest.TestCase):
         self.assertEqual(296 * 128 // 4, len(payload))
         self.assertEqual({0xAA}, set(payload))
 
+    def test_all_bwry_models_use_the_vendor_two_bit_encoding(self):
+        for sdk_type in (78, 142, 270, 302, 310, 318, 558, 654, 686, 2670, 2702):
+            with self.subTest(sdk_type=sdk_type):
+                width, height = render.display_size(sdk_type)
+                image = Image.new("RGB", (width, height), "yellow")
+                payload = render.pack_bwr_image(sdk_type, image)
+                buffer_width, buffer_height = render.expected_buffer_size(sdk_type)
+                self.assertEqual(buffer_width * buffer_height // 4, len(payload))
+                expected_bytes = {0xAA, 0x55} if sdk_type in (2670, 2702) else {0xAA}
+                self.assertEqual(expected_bytes, set(payload))
+
+    def test_yellow_is_red_on_a_three_colour_display(self):
+        image = Image.new("RGB", (296, 128), "yellow")
+        payload = render.pack_bwr_image(43, image)
+        plane_size = 296 * 128 // 8
+        self.assertEqual(b"\x00" * plane_size, payload[:plane_size])
+        self.assertEqual(b"\xff" * plane_size, payload[plane_size:])
+
+    def test_automatic_bwry_refresh_can_preserve_yellow(self):
+        image = Image.new("RGB", (4, 1), "yellow")
+        self.assertEqual((255, 255, 255), render.quantize_bwr_preview(image).getpixel((0, 0)))
+        self.assertEqual((244, 196, 0), render.quantize_bwr_preview(image, True).getpixel((0, 0)))
+
     def test_sdk_type_46_uses_the_vendor_clockwise_bitmap_mapping(self):
         image = Image.new("RGB", (296, 128), "white")
         image.putpixel((0, 0), (0, 0, 0))

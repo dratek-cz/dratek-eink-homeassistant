@@ -335,7 +335,7 @@ export const templateSvgMixin = {
           const original = element.getAttribute("transform") || "";
           element.setAttribute("transform", `${original} translate(${x} ${y}) translate(${cx} ${cy}) rotate(${rotation}) scale(${scale}) translate(${-cx} ${-cy})`.trim());
         }
-        const color = { black: "#111111", red: "#d71912", white: "#ffffff" }[adjustment.color];
+        const color = { black: "#111111", red: "#d71912", yellow: this._displaySupportsYellow?.() ? "#f4c400" : "#d71912", white: "#ffffff" }[adjustment.color];
         if (color && element.isConnected) {
           [element, ...element.querySelectorAll("path,rect,circle,ellipse,line,polyline,polygon,text")].forEach((node) => {
             const fill = node.getAttribute("fill"), stroke = node.getAttribute("stroke");
@@ -622,7 +622,33 @@ export const templateSvgMixin = {
   },
 
   _templateInk(color) {
+    if (color === "yellow") return this._displaySupportsYellow?.() ? "#f4c400" : RED;
     return color === "red" ? RED : BLACK;
+  },
+
+  _renderTemplateQrVisual(item) {
+    try {
+      const code = qrcode(0, "M");
+      code.addData(String(item?.text || "https://dratek.cz"));
+      code.make();
+      const count = code.getModuleCount();
+      const quiet = 4;
+      const cells = [];
+      for (let row = 0; row < count; row++) for (let column = 0; column < count; column++) {
+        if (code.isDark(row, column)) cells.push(`<rect x="${column + quiet}" y="${row + quiet}" width="1" height="1"></rect>`);
+      }
+      const size = count + quiet * 2;
+      return `<svg class="template-generated-code" viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><rect width="${size}" height="${size}" fill="#fff"></rect><g fill="#111">${cells.join("")}</g></svg>`;
+    } catch (_error) {
+      return `<ha-icon icon="mdi:qrcode"></ha-icon>`;
+    }
+  },
+
+  _renderTemplateBarcodeVisual(item) {
+    const digits = this._normalizeEan13?.(item?.text || "859123456789") || "8591234567890";
+    const pattern = this._ean13Pattern?.(digits) || "1010101";
+    const bars = [...pattern].map((bit, index) => bit === "1" ? `<rect x="${index}" y="0" width="1" height="42"></rect>` : "").join("");
+    return `<svg class="template-generated-code" viewBox="0 0 ${pattern.length} 52" preserveAspectRatio="none" aria-hidden="true"><rect width="${pattern.length}" height="52" fill="#fff"></rect><g fill="#111">${bars}</g><text x="${pattern.length / 2}" y="51" text-anchor="middle" font-size="8" font-family="Arial">${digits}</text></svg>`;
   },
 
   _svgHairline(x, y, w, h, color = BLACK) {
@@ -1122,8 +1148,18 @@ export const templateSvgMixin = {
     const w = row.bleed ? box.fullW : box.w;
     const cached = this._meteoradarImageCache;
     if (cached?.dataUrl) {
+      const legendH = Math.max(12, Math.min(22, box.h * 0.09));
+      const legendW = Math.max(70, Math.min(128, w * 0.3));
+      const legendX = x + w - legendW - Math.max(3, w * 0.012);
+      const legendY = box.y + Math.max(3, box.h * 0.012);
+      const half = legendW / 2;
       return `<image x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}"`
-        + ` preserveAspectRatio="xMidYMid meet" href="${cached.dataUrl}"></image>`;
+        + ` preserveAspectRatio="xMidYMid meet" href="${cached.dataUrl}"></image>`
+        + `<g aria-label="Intenzita srážek"><rect x="${legendX.toFixed(2)}" y="${legendY.toFixed(2)}" width="${half.toFixed(2)}" height="${legendH.toFixed(2)}" fill="${this._templateInk("yellow")}"></rect>`
+        + `<rect x="${(legendX + half).toFixed(2)}" y="${legendY.toFixed(2)}" width="${half.toFixed(2)}" height="${legendH.toFixed(2)}" fill="${RED}"></rect>`
+        + this._svgText("SLABÉ", legendX + half / 2, legendY + legendH / 2, Math.max(6, legendH * 0.42), { color: BLACK, bold: true, maxWidth: half * 0.9 })
+        + this._svgText("SILNÉ", legendX + half * 1.5, legendY + legendH / 2, Math.max(6, legendH * 0.42), { color: "#ffffff", bold: true, maxWidth: half * 0.9 })
+        + `</g>`;
     }
     const label = cached?.error
       ? `Radarová mapa se nenačetla: ${cached.error}`
@@ -1194,15 +1230,47 @@ export const templateSvgMixin = {
     );
   },
 
+  // Built-in templates are authored against the full BWRY palette.  The first
+  // identifying block gets a yellow accent, the footer remains the red status
+  // band, and the uncoloured content stays black on white.  Keeping this as one
+  // shared theme means every current and future catalog template really uses all
+  // four pigments without duplicating palette rules in two dozen design files.
+  // _templateInk is the single hardware adaptation point: on a BWR display it
+  // maps every yellow accent to red before the SVG is rasterized.
+  _fourColorTemplateRows(rows) {
+    const themed = structuredClone(Array.isArray(rows) ? rows : []);
+    const paintYellow = (row) => {
+      if (!row) return false;
+      if (row.icon || row.text != null || row.rule) { row.color = "yellow"; return true; }
+      for (const key of ["stat", "band", "ring", "dial", "spark", "datebox", "pricetag"]) {
+        if (row[key] && typeof row[key] === "object") { row[key].color = "yellow"; return true; }
+      }
+      for (const key of ["list", "meters", "grid", "steps", "checklist", "strip", "split", "board"]) {
+        if (Array.isArray(row[key]) && row[key].length) {
+          row[key][0] = { ...row[key][0], color: "yellow" };
+          return true;
+        }
+      }
+      return false;
+    };
+    const identity = themed.find((row) => !row?.footer && !row?.flex && !row?.gap && !row?.radarMap && (row?.icon || row?.text != null))
+      || themed.find((row) => !row?.footer && !row?.flex && !row?.gap && !row?.radarMap && !row?.qr);
+    paintYellow(identity);
+    const footer = themed.find((row) => row?.footer);
+    if (footer) footer.color = "red";
+    return themed;
+  },
+
   _templateSvgRows(template) {
     const baseTemplate = this._templateBaseDefinition(template);
     if (baseTemplate?.id === "blank" || (baseTemplate?.user_created && !baseTemplate?.base_template_id)) return [];
     const build = this._templateSvgSpecs(baseTemplate)[baseTemplate?.id];
-    return build ? build() : [
+    const rows = build ? build() : [
       { icon: "shape-outline", h: 0.22 },
       { text: baseTemplate?.title || "Šablona", h: 0.1, size: 0.07, bold: true },
       { flex: true },
     ];
+    return this._fourColorTemplateRows(rows);
   },
 
   // Where each variable's value actually lands in the rendered template, as a
@@ -1325,7 +1393,7 @@ export const templateSvgMixin = {
   },
 
   // Rasterizes the SVG at exactly the panel's resolution and quantizes it to the
-  // three colors the hardware can actually show.
+  // exact palette the target hardware can actually show.
   _quantizeEinkPixel(red, green, blue) {
     // Bright pixels are white; among the dark ones, a bright red channel means
     // red. Antialiasing between a black glyph and a red area lands on dark warm
@@ -1335,6 +1403,8 @@ export const templateSvgMixin = {
     // Must stay identical to bwr_masks in render.py, thresholds included, or a
     // panel-rendered manual send and a backend-rendered automatic update put
     // different pixels on the same display.
+    const yellow = red >= 161 && green >= 128 && blue < 96;
+    if (yellow) return this._displaySupportsYellow?.() ? [244, 196, 0] : [220, 20, 12];
     const luminance = (red * 38 + green * 75 + blue * 15) >> 7;
     if (luminance >= 161) return [255, 255, 255];
     // BWR_RED in render.py.

@@ -197,12 +197,15 @@ export const devicesMixin = {
   },
 
   _displayPaletteColors(device) {
-    const bwrySdkTypes = new Set([46, 78, 142, 270, 302, 310, 318, 558, 654, 686, 2670, 2702]);
-    const descriptor = `${device?.model || ""} ${device?.display_type || ""}`.toUpperCase();
-    const supportsYellow = bwrySdkTypes.has(Number(device?.sdk_type)) || descriptor.includes("BWRY");
-    return supportsYellow
+    return this._displaySupportsYellow(device)
       ? [["black", "Černá"], ["white", "Bílá"], ["red", "Červená"], ["yellow", "Žlutá"]]
       : [["black", "Černá"], ["white", "Bílá"], ["red", "Červená"]];
+  },
+
+  _displaySupportsYellow(device = this._device()) {
+    const bwrySdkTypes = new Set([46, 78, 142, 270, 302, 310, 318, 558, 654, 686, 2670, 2702]);
+    const descriptor = `${device?.model || ""} ${device?.display_type || ""}`.toUpperCase();
+    return bwrySdkTypes.has(Number(device?.sdk_type)) || descriptor.includes("BWRY");
   },
 
   _renderDisplayPaletteBookmarks(device) {
@@ -981,6 +984,9 @@ export const devicesMixin = {
   },
 
   _renderUserDisplayTemplateCatalogPreview(template, orientation = template?.orientation, width = 250, height = 128) {
+    if (String(template?.preview_image || "").startsWith("data:image/")) {
+      return `<span class="user-template-catalog-canvas has-captured-preview"><img class="user-template-captured-preview" src="${this._escape(template.preview_image)}" alt="Náhled ${this._escape(template.title || "vlastní šablony")}"></span>`;
+    }
     const elements = Array.isArray(template?.editor_elements) ? template.editor_elements : [];
     const baseMarkup = template?.base_template_id ? this._templateSvgThumbnail(template, width, height) : "";
     const canvasRotation = this._userTemplateCanvasRotationStyle(template, orientation);
@@ -991,6 +997,8 @@ export const devicesMixin = {
       if (item.type === "image") content = `<img src="${this._escape(item.src || "")}" alt="">`;
       else if (["text", "button"].includes(item.type)) content = `<span>${this._escape(item.text || item.label)}</span>`;
       else if (item.type === "icon") content = `<ha-icon icon="mdi:${this._escape(item.icon || "star")}"></ha-icon>`;
+      else if (item.type === "qr") content = this._renderTemplateQrVisual(item);
+      else if (item.type === "barcode") content = this._renderTemplateBarcodeVisual(item);
       else if (item.type === "slider") content = this._renderTemplateProgressVisual(item);
       else if (item.type === "chart") content = this._renderTemplateChartVisual(item);
       else if (item.type === "gauge") content = this._renderTemplateGaugeVisual(item);
@@ -2130,6 +2138,7 @@ export const devicesMixin = {
       <div class="photoshop-options-colors">
         <button type="button" class="color-swatch is-black ${selectedColor === "black" ? "is-selected" : ""}" data-template-part-color="black" title="Černá"></button>
         <button type="button" class="color-swatch is-red ${selectedColor === "red" ? "is-selected" : ""}" data-template-part-color="red" title="Červená"></button>
+        ${this._displaySupportsYellow() ? `<button type="button" class="color-swatch is-yellow ${selectedColor === "yellow" ? "is-selected" : ""}" data-template-part-color="yellow" title="Žlutá"></button>` : ""}
         <button type="button" class="color-swatch is-white ${selectedColor === "white" ? "is-selected" : ""}" data-template-part-color="white" title="Bílá"></button>
       </div>
       <button type="button" class="photoshop-btn" data-template-part-reset="${this._escape(key)}"><ha-icon icon="mdi:restore"></ha-icon> Obnovit polohu</button>
@@ -2200,13 +2209,15 @@ export const devicesMixin = {
         w: Number(model.w || 2) / 100,
         h: Number(model.h || 2) / 100,
         text: model.text || element.textContent.trim(),
+        unit: String(model.unit || ""), chartTitle: String(model.chartTitle || ""),
+        chartMin: model.chartMin ?? "", chartMax: model.chartMax ?? "",
         src: image?.getAttribute("src") || "",
         icon: model.icon || "star", color: model.color || "#111111", fill: model.fill || "transparent",
         variant: model.variant || "default",
         stroke: model.stroke || "#111111", strokeWidth: Number(model.strokeWidth ?? 2), radius: Number(model.radius || 0),
         fontSize: Number(model.fontSize || 16), fontWeight: String(model.fontWeight || "700"), fontFamily: String(model.fontFamily || "DRATEK eInk Sans"), fontStyle: model.fontStyle === "italic" ? "italic" : "normal", textDecoration: model.textDecoration || "none", textAlign: model.textAlign || "center",
         textOutlineWidth: Number(model.textOutlineWidth || 0), textOutlineColor: model.textOutlineColor || "#ffffff", textBorderWidth: Number(model.textBorderWidth || 0), textBorderColor: model.textBorderColor || "#111111", overlayOpacity: Number(model.overlayOpacity ?? 100),
-        value: Math.max(0, Math.min(100, Number(model.value ?? 50))), rotation: Number(model.rotation || 0),
+        value: Number.isFinite(Number(model.value)) ? Number(model.value) : 50, rotation: Number(model.rotation || 0),
         showValue: model.showValue !== false, showPercent: model.showPercent !== false, showLabel: model.showLabel !== false,
         showGrid: model.showGrid !== false, showPoints: model.showPoints !== false, showFill: model.showFill !== false,
         showTrack: model.showTrack !== false, showScale: model.showScale !== false, showIcon: model.showIcon !== false, showState: model.showState !== false,
@@ -2267,6 +2278,12 @@ export const devicesMixin = {
           context.drawImage(bitmap, x, y, w, h);
           context.imageSmoothingEnabled = smoothing;
         }
+      } else if (item.kind === "qr") {
+        context.translate(x, y);
+        this._drawQr(context, { text: item.text, color: "black", backgroundColor: "white" }, { w, h });
+      } else if (item.kind === "barcode") {
+        context.translate(x, y);
+        this._drawBarcode(context, { text: item.text, color: "black", backgroundColor: "white" }, { w, h });
       } else if (item.kind === "text") {
         paintRichText(item, x, y, w, h);
       } else if (item.kind === "line") {
@@ -2286,55 +2303,61 @@ export const devicesMixin = {
         context.strokeRect(x, y, w, h);
       } else if (item.kind === "slider") {
         const trackH = Math.max(3, h * .18); const trackY = y + h * .5;
-        if (item.showTrack) { context.strokeStyle = "#111111"; context.lineWidth = Math.max(1, trackH * .28); context.strokeRect(x, trackY, w, trackH); }
-        context.fillStyle = "#d71912"; context.fillRect(x, trackY, w * item.value / 100, trackH);
-        if (item.showValue) { context.fillStyle = "#111111"; context.font = `900 ${Math.max(7, h * .3)}px Arial`; context.textAlign = "right"; context.textBaseline = "top"; context.fillText(`${Math.round(item.value)}${item.showPercent ? "%" : ""}`, x + w, y, w * .4); }
+        const progress = Math.max(0, Math.min(100, item.value));
+        if (item.showTrack) { context.strokeStyle = item.stroke || "#111111"; context.lineWidth = Math.max(1, trackH * .28); context.strokeRect(x, trackY, w, trackH); }
+        context.fillStyle = item.color || "#d71912"; context.fillRect(x, trackY, w * progress / 100, trackH);
+        if (item.showValue) { context.fillStyle = item.stroke || "#111111"; context.font = `900 ${Math.max(7, h * .3)}px Arial`; context.textAlign = "right"; context.textBaseline = "top"; context.fillText(`${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}${item.showPercent && item.unit ? item.unit : ""}`, x + w, y, w * .5); }
         if (item.showScale) { context.font = `700 ${Math.max(4, h * .16)}px Arial`; context.textBaseline = "bottom"; context.textAlign = "left"; context.fillText("0", x, y + h); context.textAlign = "center"; context.fillText("50", x + w / 2, y + h); context.textAlign = "right"; context.fillText("100", x + w, y + h); }
       } else if (item.kind === "chart") {
-        const labels = { line: "VÝVOJ", area: "PLOCHA", bar: "PŘEHLED", steps: "ZMĚNY", donut: "PODÍL", sparkline: "TREND" };
-        const gx = x + 2, gy = y + 2, gw = Math.max(1, w - 4), gh = Math.max(1, h - 4);
+        const labels = { line: "VÝVOJ", area: "PLOCHA", bar: "SLOUPCE", steps: "ZMĚNY", donut: "PODÍL", sparkline: "TREND" };
+        const headerH = item.variant === "donut" || (!item.showLabel && !item.showValue) ? 0 : Math.max(8, h * .22);
+        const gx = x + 2, gy = y + headerH, gw = Math.max(1, w - 4), gh = Math.max(1, h - headerH - 2);
         const points = this._templateChartNormalizedPoints(item).map((point) => [point.x / 100, point.y / 60]);
-        context.strokeStyle = "#111111"; context.lineWidth = Math.max(1, Math.min(width, height) / 140);
-        if (item.showGrid && item.variant !== "donut" && item.variant !== "sparkline") { context.save(); context.strokeStyle = "#111111"; context.lineWidth = 1; context.setLineDash([2, 3]); [.2,.5,.8].forEach((line) => { context.beginPath(); context.moveTo(gx, gy + gh * line); context.lineTo(gx + gw, gy + gh * line); context.stroke(); }); context.restore(); }
+        const dataColor = item.color || "#d71912";
+        const inkColor = item.stroke || "#111111";
+        context.strokeStyle = dataColor; context.lineWidth = Math.max(1, item.strokeWidth * Math.min(width, height) / 300);
+        if (item.showGrid && item.variant !== "donut" && item.variant !== "sparkline") { context.save(); context.strokeStyle = inkColor; context.lineWidth = 1; context.setLineDash([2, 3]); [.2,.5,.8].forEach((line) => { context.beginPath(); context.moveTo(gx, gy + gh * line); context.lineTo(gx + gw, gy + gh * line); context.stroke(); }); context.restore(); }
         if (item.variant === "bar") {
           const slot = .92 / Math.max(1, points.length);
           const barWidth = Math.min(.14, slot * .62);
           points.forEach(([px, py], index) => {
-            context.fillStyle = index % 3 === 0 ? "#d71912" : "#111111";
+            context.fillStyle = index % 3 === 0 ? dataColor : inkColor;
             context.fillRect(gx + gw * Math.max(.02, px - barWidth / 2), gy + gh * py, gw * barWidth, gh * (1 - py));
           });
         } else if (item.variant === "donut") {
           const radius = Math.min(gw, gh) * .34;
-          context.lineWidth = Math.max(3, radius * .28); if (item.showTrack) { context.strokeStyle = "#111111"; context.beginPath(); context.arc(gx + gw / 2, gy + gh / 2, radius, 0, Math.PI * 2); context.stroke(); }
-          context.strokeStyle = "#d71912"; context.lineCap = "butt"; context.beginPath(); context.arc(gx + gw / 2, gy + gh / 2, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * item.value / 100); context.stroke();
+          context.lineWidth = Math.max(3, radius * .28); if (item.showTrack) { context.strokeStyle = inkColor; context.beginPath(); context.arc(gx + gw / 2, gy + gh / 2, radius, 0, Math.PI * 2); context.stroke(); }
+          context.strokeStyle = dataColor; context.lineCap = "butt"; context.beginPath(); context.arc(gx + gw / 2, gy + gh / 2, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, Math.min(100, item.value)) / 100); context.stroke();
         } else if (item.variant === "steps") {
           const steps = points.flatMap((point, index) => index ? [[point[0], points[index - 1][1]], point] : [point]);
           context.beginPath(); steps.forEach(([px, py], index) => index ? context.lineTo(gx + gw * px, gy + gh * py) : context.moveTo(gx + gw * px, gy + gh * py)); context.stroke();
         } else {
           if (item.variant === "area" && item.showFill) {
-            context.fillStyle = "#d71912"; context.beginPath(); points.forEach(([px, py], index) => index ? context.lineTo(gx + gw * px, gy + gh * py) : context.moveTo(gx + gw * px, gy + gh * py)); context.lineTo(gx + gw * points.at(-1)[0], gy + gh); context.lineTo(gx + gw * points[0][0], gy + gh); context.closePath(); context.fill();
+            context.fillStyle = dataColor; context.beginPath(); points.forEach(([px, py], index) => index ? context.lineTo(gx + gw * px, gy + gh * py) : context.moveTo(gx + gw * px, gy + gh * py)); context.lineTo(gx + gw * points.at(-1)[0], gy + gh); context.lineTo(gx + gw * points[0][0], gy + gh); context.closePath(); context.fill();
           }
+          context.strokeStyle = dataColor;
           context.beginPath(); points.forEach(([px, py], index) => index ? context.lineTo(gx + gw * px, gy + gh * py) : context.moveTo(gx + gw * px, gy + gh * py)); context.stroke();
-          if (item.variant !== "sparkline" && item.showPoints) points.filter((_, index) => points.length <= 10 || index % 2 === 0).forEach(([px, py]) => { context.fillStyle = "#fff"; context.strokeStyle = "#d71912"; context.beginPath(); context.arc(gx + gw * px, gy + gh * py, Math.max(1.5, context.lineWidth * 1.25), 0, Math.PI * 2); context.fill(); context.stroke(); });
+          if (item.variant !== "sparkline" && item.showPoints) points.filter((_, index) => points.length <= 10 || index % 2 === 0).forEach(([px, py]) => { context.fillStyle = "#fff"; context.strokeStyle = dataColor; context.beginPath(); context.arc(gx + gw * px, gy + gh * py, Math.max(1.5, context.lineWidth * 1.25), 0, Math.PI * 2); context.fill(); context.stroke(); });
         }
-        if (item.showValue) { context.fillStyle = "#111111"; context.font = `900 ${Math.max(7, Math.min(w, h) * .22)}px Arial`; context.textAlign = item.variant === "donut" ? "center" : "right"; context.textBaseline = "middle"; context.fillText(`${Math.round(item.value)}${item.showPercent ? "%" : ""}`, item.variant === "donut" ? x + w / 2 : x + w, item.variant === "donut" ? y + h / 2 : y + h * .14, w * .42); }
-        if (item.showLabel) { context.font = `900 ${Math.max(4, h * .12)}px Arial`; context.textAlign = "left"; context.textBaseline = "bottom"; context.fillText(labels[item.variant] || "DATA", x, y + h, w * .45); }
+        if (item.showValue) { context.fillStyle = inkColor; context.font = `900 ${Math.max(7, Math.min(w, h) * .22)}px Arial`; context.textAlign = item.variant === "donut" ? "center" : "right"; context.textBaseline = "middle"; context.fillText(`${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}${item.unit || ""}`, item.variant === "donut" ? x + w / 2 : x + w - 1, item.variant === "donut" ? y + h / 2 : y + headerH / 2, w * .48); }
+        if (item.showLabel) { context.fillStyle = inkColor; context.font = `900 ${Math.max(4, h * .1)}px Arial`; context.textAlign = item.variant === "donut" ? "center" : "left"; context.textBaseline = item.variant === "donut" ? "bottom" : "middle"; context.fillText(item.chartTitle || labels[item.variant] || "DATA", item.variant === "donut" ? x + w / 2 : x + 1, item.variant === "donut" ? y + h : y + headerH / 2, w * .48); }
       } else if (item.kind === "gauge") {
-        const labels = { battery: "BATERIE", thermometer: "TEPLOTA", semicircle: "ROZSAH", ring: "HODNOTA" };
         const vx = x, vy = y, vw = w, vh = h;
+        const dataColor = item.color || "#d71912";
+        const inkColor = item.stroke || "#111111";
         if (item.variant === "battery") {
-          context.strokeStyle = "#111111"; context.lineWidth = Math.max(1, vh * .07); context.strokeRect(vx + vw * .05, vy + vh * .2, vw * .78, vh * .6); context.fillStyle = "#111111"; context.fillRect(vx + vw * .84, vy + vh * .38, vw * .08, vh * .24); context.fillStyle = "#d71912"; context.fillRect(vx + vw * .09, vy + vh * .27, vw * .68 * item.value / 100, vh * .46);
+          context.strokeStyle = inkColor; context.lineWidth = Math.max(1, vh * .07); context.strokeRect(vx + vw * .05, vy + vh * .2, vw * .78, vh * .6); context.fillStyle = inkColor; context.fillRect(vx + vw * .84, vy + vh * .38, vw * .08, vh * .24); context.fillStyle = dataColor; context.fillRect(vx + vw * .09, vy + vh * .27, vw * .68 * Math.max(0, Math.min(100, item.value)) / 100, vh * .46);
         } else if (item.variant === "thermometer") {
-          context.strokeStyle = "#111111"; context.lineWidth = Math.max(2, vw * .08); context.beginPath(); context.moveTo(vx + vw / 2, vy + vh * .76); context.lineTo(vx + vw / 2, vy + vh * .14); context.stroke(); context.strokeStyle = "#d71912"; context.beginPath(); context.moveTo(vx + vw / 2, vy + vh * .82); context.lineTo(vx + vw / 2, vy + vh * (.76 - .56 * item.value / 100)); context.stroke();
+          context.strokeStyle = inkColor; context.lineWidth = Math.max(2, vw * .08); context.beginPath(); context.moveTo(vx + vw / 2, vy + vh * .76); context.lineTo(vx + vw / 2, vy + vh * .14); context.stroke(); context.strokeStyle = dataColor; context.beginPath(); context.moveTo(vx + vw / 2, vy + vh * .82); context.lineTo(vx + vw / 2, vy + vh * (.76 - .56 * Math.max(0, Math.min(100, item.value)) / 100)); context.stroke();
         } else {
           const semicircle = item.variant === "semicircle";
           const start = semicircle ? Math.PI : -Math.PI / 2;
           const extent = semicircle ? Math.PI : Math.PI * 2;
-          const radius = Math.min(vw, vh) * .34; context.lineWidth = Math.max(2, radius * .24); if (item.showTrack) { context.strokeStyle = "#111111"; context.beginPath(); context.arc(vx + vw / 2, vy + vh / 2, radius, start, start + extent); context.stroke(); }
-          context.strokeStyle = "#d71912"; context.beginPath(); context.arc(vx + vw / 2, vy + vh / 2, radius, start, start + extent * item.value / 100); context.stroke();
+          const radius = Math.min(vw, vh) * .34; context.lineWidth = Math.max(2, radius * .24); if (item.showTrack) { context.strokeStyle = inkColor; context.beginPath(); context.arc(vx + vw / 2, vy + vh / 2, radius, start, start + extent); context.stroke(); }
+          context.strokeStyle = dataColor; context.beginPath(); context.arc(vx + vw / 2, vy + vh / 2, radius, start, start + extent * Math.max(0, Math.min(100, item.value)) / 100); context.stroke();
         }
-        if (item.showValue) { context.fillStyle = "#111111"; context.font = `900 ${Math.max(7, Math.min(w, h) * .2)}px Arial`; context.textAlign = "center"; context.textBaseline = "middle"; context.fillText(`${Math.round(item.value)}${item.showPercent ? (item.variant === "thermometer" ? "°" : "%") : ""}`, x + w / 2, y + h / 2, w * .7); }
-        if (item.showLabel) { context.font = `900 ${Math.max(4, h * .1)}px Arial`; context.textAlign = "center"; context.textBaseline = "bottom"; context.fillText(labels[item.variant] || "HODNOTA", x + w / 2, y + h, w); }
+        if (item.showValue) { context.fillStyle = inkColor; context.font = `900 ${Math.max(7, Math.min(w, h) * .2)}px Arial`; context.textAlign = "center"; context.textBaseline = "middle"; context.fillText(`${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}${item.showPercent ? item.unit || "" : ""}`, x + w / 2, y + h / 2, w * .72); }
+        if (item.showLabel) { context.fillStyle = inkColor; context.font = `900 ${Math.max(4, h * .1)}px Arial`; context.textAlign = "center"; context.textBaseline = "bottom"; context.fillText(item.text || "HODNOTA", x + w / 2, y + h, w); }
       } else if (item.kind === "signal") {
         const active = typeof item.resolvedActive === "boolean" ? item.resolvedActive : !["off", "inactive"].includes(item.variant);
         const inactive = !active;
@@ -3259,6 +3282,7 @@ export const devicesMixin = {
   _renderTemplateEditorTools() {
     const categories = [
       ["text", "format-text", "Text"], ["shapes", "shape-outline", "Tvary"], ["icons", "emoticon-outline", "Ikony"],
+      ["codes", "qrcode", "Kódy"],
       ["charts", "chart-box-outline", "Grafy"], ["gauges", "gauge", "Ukazatele"], ["controls", "toggle-switch-outline", "Signalizace"],
       ["images", "image-outline", "Obrázky"], ["layers", "layers-triple-outline", "Vrstvy"],
     ];
@@ -3271,11 +3295,12 @@ export const devicesMixin = {
     if (!category) return "";
     const meta = {
       text: ["Text", "Texty a popisky"], shapes: ["Tvary", "Základní geometrické prvky"], icons: ["Ikony", "Symboly Material Design"],
+      codes: ["QR a čárové kódy", "Generované kódy s upravitelným obsahem"],
       charts: ["Grafy", "Vizuální průběhy, sloupce a podíly"], gauges: ["Ukazatele", "Hodnoty, kapacita a průběh"], controls: ["Signalizace", "Stavy zapnuto, vypnuto a aktivita"],
       images: ["Obrázky", "Vlastní soubor z počítače"], layers: ["Vrstvy", "Pořadí objektů na displeji"],
     };
     const [title, description] = meta[category] || meta.shapes;
-    const anchorIndex = ["text", "shapes", "icons", "charts", "gauges", "controls", "images", "layers"].indexOf(category);
+    const anchorIndex = ["text", "shapes", "icons", "codes", "charts", "gauges", "controls", "images", "layers"].indexOf(category);
     const toolPreview = (type, settings) => {
       const item = this._normalizeTemplateEditorElement({ type, ...settings });
       const style = `--element-color:${item.color};--element-fill:${item.fill};--element-stroke:${item.stroke};--element-stroke-width:${item.strokeWidth}px;--element-radius:${item.radius}px;--element-font-size:${item.fontSize}px;--element-font-weight:${item.fontWeight};--element-value:${Math.max(0, Math.min(100, item.value))}%`;
@@ -3286,6 +3311,8 @@ export const devicesMixin = {
       else if (item.type === "circle") preview = `<i class="template-palette-shape-sample is-circle"></i>`;
       else if (item.type === "line") preview = `<i class="template-palette-line-sample"></i>`;
       else if (item.type === "icon") preview = `<ha-icon icon="mdi:${this._escape(item.icon || "star")}"></ha-icon>`;
+      else if (item.type === "qr") preview = this._renderTemplateQrVisual(item);
+      else if (item.type === "barcode") preview = this._renderTemplateBarcodeVisual(item);
       else if (item.type === "slider") preview = this._renderTemplateProgressVisual(item);
       else if (item.type === "chart") preview = this._renderTemplateChartVisual(item);
       else if (item.type === "gauge") preview = this._renderTemplateGaugeVisual(item);
@@ -3325,6 +3352,12 @@ export const devicesMixin = {
       tool("line", "vector-line", "Čára", { variant: "line" }),
     ].join("");
     else if (category === "icons") content = iconNames.map(([icon, label]) => tool("icon", icon, label, icon)).join("");
+    else if (category === "codes") content = [
+      tool("qr", "qrcode", "QR kód", { text: "https://dratek.cz", variant: "qr" }),
+      tool("qr", "wifi", "QR pro Wi-Fi", { text: "WIFI:T:WPA;S:MojeWiFi;P:heslo;;", variant: "wifi" }),
+      tool("qr", "link-variant", "QR odkaz", { text: "https://", variant: "url" }),
+      tool("barcode", "barcode", "EAN-13", { text: "859123456789", variant: "ean13" }),
+    ].join("");
     else if (category === "charts") content = [
       tool("chart", "chart-line", "Čárový", { variant: "line" }),
       tool("chart", "chart-areaspline", "Plošný", { variant: "area" }),
@@ -3371,7 +3404,10 @@ export const devicesMixin = {
     }
     const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
     const field = (title, prop, value, min = 0, max = 100, step = 1, suffix = "%") => `<label class="template-property-field"><span>${title}</span><div><input type="number" min="${min}" max="${max}" step="${step}" value="${number(value)}" data-template-element-prop="${prop}"><small>${suffix}</small></div></label>`;
-    const colors = (prop, value, allowTransparent = false) => `<div class="template-property-colors" data-template-color-group="${prop}">${allowTransparent ? `<button type="button" class="is-transparent ${value === "transparent" ? "is-selected" : ""}" data-template-element-color="${prop}:transparent" title="Bez barvy"><ha-icon icon="mdi:water-off-outline"></ha-icon></button>` : ""}${[["#111111", "Černá"], ["#d71912", "Červená"], ["#ffffff", "Bílá"]].map(([color, title]) => `<button type="button" style="--swatch:${color}" class="${value === color ? "is-selected" : ""}" data-template-element-color="${prop}:${color}" title="${title}"></button>`).join("")}</div>`;
+    const textField = (title, prop, value, placeholder = "") => `<label class="template-property-wide"><span>${title}</span><input type="text" value="${this._escape(value ?? "")}" data-template-element-prop="${prop}" placeholder="${this._escape(placeholder)}"></label>`;
+    const freeNumber = (title, prop, value, placeholder = "Automaticky") => `<label class="template-property-wide"><span>${title}</span><input type="number" step="any" value="${value === "" || value == null ? "" : this._escape(value)}" data-template-element-prop="${prop}" placeholder="${placeholder}"></label>`;
+    const editorColors = [["#111111", "Černá"], ["#d71912", "Červená"], ...(this._displaySupportsYellow() ? [["#f4c400", "Žlutá"]] : []), ["#ffffff", "Bílá"]];
+    const colors = (prop, value, allowTransparent = false) => `<div class="template-property-colors" data-template-color-group="${prop}">${allowTransparent ? `<button type="button" class="is-transparent ${value === "transparent" ? "is-selected" : ""}" data-template-element-color="${prop}:transparent" title="Bez barvy"><ha-icon icon="mdi:water-off-outline"></ha-icon></button>` : ""}${editorColors.map(([color, title]) => `<button type="button" style="--swatch:${color}" class="${value === color ? "is-selected" : ""}" data-template-element-color="${prop}:${color}" title="${title}"></button>`).join("")}</div>`;
     const toggles = (items) => `<div class="template-component-toggles">${items.map(([prop, label]) => `<label><input type="checkbox" data-template-element-toggle="${prop}" ${item[prop] !== false ? "checked" : ""}><span><i></i>${label}</span></label>`).join("")}</div>`;
     const intervalOptions = [["change", "Při každé změně"], ["minute", "Nejvýše 1× za minutu"], ["hour", "Nejvýše 1× za hodinu"], ["day", "Nejvýše 1× denně"], ["week", "Nejvýše 1× týdně"]];
     const resetOptions = [["never", "Nemazat automaticky"], ["hour", "Vymazat po hodině"], ["day", "Vymazat po dni"], ["week", "Vymazat po týdnu"]];
@@ -3385,6 +3421,8 @@ export const devicesMixin = {
     return `<div class="template-element-inspector">
       <div class="template-editor-panel-heading"><ha-icon icon="mdi:tune-vertical-variant"></ha-icon><span><strong>Vlastnosti prvku</strong><small>${this._escape(item.label)}</small></span></div>
       <div class="template-inspector-actions"><button type="button" data-template-element-duplicate><ha-icon icon="mdi:content-duplicate"></ha-icon>Duplikovat</button><button type="button" class="is-danger" data-template-element-delete><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat</button></div>
+      ${propertyTab("Poloha a velikost", `<div class="template-property-row">${field("X", "x", item.x, 0, 100, .1, "%")}${field("Y", "y", item.y, 0, 100, .1, "%")}</div><div class="template-property-row">${field("Šířka", "w", item.w, 2, 100, .1, "%")}${field("Výška", "h", item.h, 2, 100, .1, "%")}</div>${field("Natočení", "rotation", item.rotation, -180, 180, 1, "°")}`, true)}
+      ${["qr", "barcode"].includes(item.type) ? propertyTab(item.type === "qr" ? "Obsah QR kódu" : "Data EAN-13", `<label class="template-property-wide"><span>${item.type === "qr" ? "Text, URL nebo Wi-Fi konfigurace" : "12 nebo 13 číslic"}</span><input type="text" value="${this._escape(item.text || "")}" data-template-element-prop="text"></label><p class="template-entity-help">Kód se po změně automaticky znovu vygeneruje.</p>`, true) : ""}
       ${textTypes.includes(item.type) ? `${propertyTab("Text a typografie", `
         <label class="template-property-wide"><span>Obsah</span><input type="text" value="${this._escape(item.text || "")}" data-template-element-prop="text"></label>
         ${select("Font", "fontFamily", item.fontFamily, [["DRATEK eInk Sans", "DRATEK eInk Sans"], ["Arial", "Arial"], ["Georgia", "Georgia / patkové"], ["Courier New", "Courier / monospace"]])}
@@ -3405,10 +3443,11 @@ export const devicesMixin = {
       `)}` : ""}
       ${["icon", "signal"].includes(item.type) ? propertyTab("Ikona", `<label class="template-property-wide"><span>Název MDI ikony</span><input type="text" value="${this._escape(item.icon || "star")}" data-template-element-prop="icon"></label><label class="template-property-wide"><span>Barva</span>${colors("color", item.color)}</label>`, true) : ""}
       ${shapeTypes.includes(item.type) ? propertyTab("Vzhled", `<label class="template-property-wide"><span>Výplň</span>${colors("fill", item.fill, true)}</label><label class="template-property-wide"><span>Rámeček</span>${colors("stroke", item.stroke)}</label><div class="template-property-row">${field("Tloušťka", "strokeWidth", item.strokeWidth, 0, 12, 1, "px")}${field("Zaoblení", "radius", item.radius, 0, 50, 1, "px")}</div>`, true) : ""}
-      ${item.type === "slider" ? propertyTab("Hodnota slideru", `${field("Hodnota", "value", item.value, 0, 100, 1, "%")}<label class="template-property-wide"><span>Aktivní barva</span>${colors("color", item.color)}</label>`, true) : ""}
-      ${["chart", "gauge"].includes(item.type) ? propertyTab("Data", `${field("Hodnota", "value", item.value, 0, 100, 1, "%")}<label class="template-property-wide"><span>Barva</span>${colors("color", item.color)}</label>`, true) : ""}
+      ${item.type === "slider" ? propertyTab("Průběh a hodnota", `${field("Hodnota", "value", item.value, 0, 100, 1, "%")}${textField("Jednotka", "unit", item.unit || "%", "%") }<label class="template-property-wide"><span>Aktivní barva</span>${colors("color", item.color)}</label>`, true) : ""}
+      ${item.type === "chart" ? propertyTab("Vzhled grafu", `${select("Typ grafu", "variant", item.variant, [["line", "Čárový"], ["area", "Plošný"], ["bar", "Sloupcový"], ["steps", "Schodový"], ["donut", "Prstencový"], ["sparkline", "Mini trend"]])}${textField("Nadpis", "chartTitle", item.chartTitle || "", "Např. Teplota")}${textField("Jednotka", "unit", item.unit || "", "°C, %, kWh…")}<div class="template-property-row">${field("Hodnota", "value", item.value, -100000, 100000, .1, "")}${field("Tloušťka", "strokeWidth", item.strokeWidth, 1, 8, 1, "px")}</div><label class="template-property-wide"><span>Barva dat</span>${colors("color", item.color)}</label>`, true) : ""}
+      ${item.type === "gauge" ? propertyTab("Ukazatel", `${select("Typ ukazatele", "variant", item.variant, [["ring", "Kruh"], ["semicircle", "Půlkruh"], ["battery", "Baterie"], ["thermometer", "Teploměr"]])}${textField("Popisek", "text", item.text || "", "Hodnota")}${textField("Jednotka", "unit", item.unit || "%", "%")}${field("Hodnota", "value", item.value, 0, 100, 1, "%")}<label class="template-property-wide"><span>Aktivní barva</span>${colors("color", item.color)}</label>`, true) : ""}
       ${entityBinding}
-      ${item.type === "chart" ? propertyTab("Historie grafu", `${field("Počet posledních hodnot", "historyLimit", item.historyLimit, 1, 20, 1, "")} ${select("Interval ukládání hodnot", "sampleInterval", item.sampleInterval, intervalOptions)}${select("Automatické mazání historie", "resetInterval", item.resetInterval, resetOptions)}<button type="button" class="template-history-clear" data-template-element-history-clear><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vymazat uložené hodnoty</button><small class="template-history-count">Uloženo ${(item.historyValues || []).length} z ${item.historyLimit} hodnot</small>`) : ""}
+      ${item.type === "chart" ? propertyTab("Data a rozsah", `<label class="template-property-wide"><span>Vlastní hodnoty oddělené čárkou</span><textarea rows="3" data-template-chart-values placeholder="18, 24, 21, 32">${this._escape((item.historyValues || []).join(", "))}</textarea></label><div class="template-property-row">${freeNumber("Minimum osy", "chartMin", item.chartMin)}${freeNumber("Maximum osy", "chartMax", item.chartMax)}</div>${field("Počet posledních hodnot", "historyLimit", item.historyLimit, 2, 20, 1, "")} ${select("Interval ukládání hodnot", "sampleInterval", item.sampleInterval, intervalOptions)}${select("Automatické mazání historie", "resetInterval", item.resetInterval, resetOptions)}<button type="button" class="template-history-clear" data-template-element-history-clear><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vymazat uložené hodnoty</button><small class="template-history-count">Uloženo ${(item.historyValues || []).length} z ${item.historyLimit} hodnot</small>`, true) : ""}
       ${item.type === "chart" ? propertyTab("Části grafu", toggles([["showValue", "Hodnota"], ["showPercent", "Znak %"], ["showLabel", "Popisek"], ["showGrid", "Mřížka"], ["showPoints", "Body grafu"], ["showFill", "Barevná plocha"], ["showTrack", "Podklad kruhu"]])) : ""}
       ${item.type === "gauge" ? propertyTab("Části ukazatele", toggles([["showValue", "Hodnota"], ["showPercent", "Jednotka"], ["showLabel", "Popisek"], ["showTrack", "Podkladová stupnice"]])) : ""}
       ${item.type === "signal" ? propertyTab("Části signalizace", toggles([["showIcon", "Ikona"], ["showLabel", "Text"], ["showState", "Stav / přepínač"]])) : ""}
@@ -3450,7 +3489,7 @@ export const devicesMixin = {
         <button type="button" class="template-history-clear" data-template-part-reset="${this._escape(key)}"><ha-icon icon="mdi:restore"></ha-icon>Obnovit původní stav</button>
       </div></details>
       <details class="template-property-section" open><summary><span>Vzhled a viditelnost</span><ha-icon icon="mdi:chevron-down"></ha-icon></summary><div class="template-property-section-body">
-        <label class="template-property-wide"><span>Barva prvku</span><div class="template-property-colors"><button type="button" style="--swatch:#111111" class="${selectedColor === "black" ? "is-selected" : ""}" data-template-part-color="black" title="Černá"></button><button type="button" style="--swatch:#d71912" class="${selectedColor === "red" ? "is-selected" : ""}" data-template-part-color="red" title="Červená"></button><button type="button" style="--swatch:#ffffff" class="${selectedColor === "white" ? "is-selected" : ""}" data-template-part-color="white" title="Bílá"></button></div></label>
+        <label class="template-property-wide"><span>Barva prvku</span><div class="template-property-colors"><button type="button" style="--swatch:#111111" class="${selectedColor === "black" ? "is-selected" : ""}" data-template-part-color="black" title="Černá"></button><button type="button" style="--swatch:#d71912" class="${selectedColor === "red" ? "is-selected" : ""}" data-template-part-color="red" title="Červená"></button>${this._displaySupportsYellow() ? `<button type="button" style="--swatch:#f4c400" class="${selectedColor === "yellow" ? "is-selected" : ""}" data-template-part-color="yellow" title="Žlutá"></button>` : ""}<button type="button" style="--swatch:#ffffff" class="${selectedColor === "white" ? "is-selected" : ""}" data-template-part-color="white" title="Bílá"></button></div></label>
         <div class="template-component-toggles"><label><input type="checkbox" data-template-part-toggle="hidden" ${adjustment.hidden ? "" : "checked"}><span><i></i>Viditelný</span></label><label><input type="checkbox" data-template-part-toggle="locked" ${adjustment.locked ? "checked" : ""}><span><i></i>Zamknutý</span></label></div>
       </div></details>
       <details class="template-property-section"><summary><span>Pořadí vrstev</span><ha-icon icon="mdi:chevron-down"></ha-icon></summary><div class="template-property-section-body"><div class="template-layer-order"><button type="button" data-template-element-order="back"><ha-icon icon="mdi:arrange-send-backward"></ha-icon>Dozadu</button><button type="button" data-template-element-order="front"><ha-icon icon="mdi:arrange-bring-forward"></ha-icon>Dopředu</button></div></div></details>
@@ -3473,7 +3512,7 @@ export const devicesMixin = {
     element.style.position = "relative";
     element.style.zIndex = String(Number(adjustment.order || 0));
     element.classList.toggle("is-locked", !!adjustment.locked);
-    const color = { black: "#111111", red: "#d71912", white: "#ffffff" }[adjustment.color];
+    const color = { black: "#111111", red: "#d71912", yellow: this._displaySupportsYellow() ? "#f4c400" : "#d71912", white: "#ffffff" }[adjustment.color];
     if (color) {
       element.style.color = color;
       [element, ...element.querySelectorAll("path,rect,circle,ellipse,line,polyline,polygon,text")].forEach((node) => {
@@ -3573,10 +3612,12 @@ export const devicesMixin = {
       text: { w: 42, h: 10, text: "Vlastní text", fontSize: 18, fill: "transparent", fontFamily: "DRATEK eInk Sans", fontStyle: "normal", textDecoration: "none", textOutlineWidth: 0, textOutlineColor: "#ffffff", textBorderWidth: 0, textBorderColor: "#111111", overlayOpacity: 100 },
       rect: { w: 36, h: 22, fill: "transparent" }, circle: { w: 25, h: 25, fill: "transparent" },
       line: { w: 42, h: 4, fill: "#111111" }, icon: { w: 18, h: 18, icon: "star", fill: "transparent" },
+      qr: { w: 30, h: 30, text: "https://dratek.cz", fill: "#ffffff", color: "#111111", strokeWidth: 0 },
+      barcode: { w: 52, h: 24, text: "859123456789", fill: "#ffffff", color: "#111111", strokeWidth: 0 },
       image: { w: 34, h: 28, fill: "transparent" }, button: { w: 42, h: 14, text: "Popisek", fontSize: 15, fill: "#ffffff", radius: 6 },
-      slider: { w: 48, h: 15, value: 60, fill: "transparent", radius: 0, strokeWidth: 2, entityId: "", entityAttribute: "", showValue: true, showPercent: true, showScale: true, showTrack: true },
-      chart: { w: 52, h: 30, value: 68, fill: "transparent", radius: 0, strokeWidth: 2, entityId: "", entityAttribute: "", historyLimit: 10, sampleInterval: "change", resetInterval: "never", historyValues: [], historyUpdatedAt: 0, historyResetAt: 0, showValue: true, showPercent: true, showLabel: false, showGrid: true, showPoints: true, showFill: true, showTrack: true },
-      gauge: { w: 26, h: 34, value: 72, fill: "transparent", radius: 0, strokeWidth: 2, entityId: "", entityAttribute: "", variant: "ring", showValue: true, showPercent: true, showLabel: false, showTrack: true },
+      slider: { w: 48, h: 15, value: 60, unit: "%", fill: "#ffffff", radius: 0, strokeWidth: 2, entityId: "", entityAttribute: "", showValue: true, showPercent: true, showScale: true, showTrack: true },
+      chart: { w: 52, h: 32, value: 68, fill: "#ffffff", radius: 0, strokeWidth: 2, entityId: "", entityAttribute: "", chartTitle: "Vývoj hodnoty", unit: "%", chartMin: "", chartMax: "", barColor: "#d71912", historyLimit: 10, sampleInterval: "change", resetInterval: "never", historyValues: [], historyUpdatedAt: 0, historyResetAt: 0, showValue: true, showPercent: false, showLabel: true, showGrid: true, showPoints: true, showFill: true, showTrack: true },
+      gauge: { w: 26, h: 34, value: 72, text: "Hodnota", unit: "%", fill: "#ffffff", radius: 0, strokeWidth: 2, entityId: "", entityAttribute: "", variant: "ring", showValue: true, showPercent: true, showLabel: true, showTrack: true },
       signal: { w: 40, h: 14, value: 100, text: "Aktivní", icon: "check-circle", fontSize: 9, fill: "#ffffff", radius: 6, strokeWidth: 2, entityId: "", entityAttribute: "", variant: "active", showIcon: true, showLabel: true, showState: true },
     }[type] || { w: 30, h: 20, fill: "transparent" };
     const legacy = source.w === undefined || source.h === undefined;
@@ -3589,6 +3630,7 @@ export const devicesMixin = {
       if (transparent && normalized === "transparent") return "transparent";
       if (["#fff", "#ffffff", "white"].includes(normalized)) return "#ffffff";
       if (["#e31b1b", "#d71912", "#f00", "#ff0000", "red"].includes(normalized)) return "#d71912";
+      if (["#f4c400", "#ffd400", "#ffff00", "yellow"].includes(normalized)) return this._displaySupportsYellow() ? "#f4c400" : "#d71912";
       return "#111111";
     };
     return {
@@ -3663,7 +3705,7 @@ export const devicesMixin = {
 
   _addTemplateEditorElement(type, icon = "", position = null, preset = {}) {
     const settings = preset && typeof preset === "object" && !Array.isArray(preset) ? preset : {};
-    const labels = { text: "Vlastní text", rect: "Obdélník", circle: "Kruh", line: "Čára", icon: "Ikona", button: "Text v rámečku", slider: "Stupnice", chart: "Graf", gauge: "Ukazatel", signal: "Signalizace" };
+    const labels = { text: "Vlastní text", rect: "Obdélník", circle: "Kruh", line: "Čára", icon: "Ikona", qr: "QR kód", barcode: "EAN-13", button: "Text v rámečku", slider: "Stupnice", chart: "Graf", gauge: "Ukazatel", signal: "Signalizace" };
     this._templateEditorElements ||= [];
     this._pushTemplateHistory();
     const item = this._normalizeTemplateEditorElement({
@@ -3674,7 +3716,7 @@ export const devicesMixin = {
     });
     // Circular primitives start with an exact visual selection. Users can still
     // resize width and height independently afterwards.
-    if (["icon", "circle"].includes(type) || (type === "chart" && item.variant === "donut") || (type === "gauge" && ["ring", "semicircle"].includes(item.variant))) this._fitTemplateElementVisualAspect(item, 1);
+    if (["icon", "circle", "qr"].includes(type) || (type === "chart" && item.variant === "donut") || (type === "gauge" && ["ring", "semicircle"].includes(item.variant))) this._fitTemplateElementVisualAspect(item, 1);
     item.x = Math.max(0, Math.min(100 - item.w, Number(position?.x ?? 50) - item.w / 2));
     item.y = Math.max(0, Math.min(100 - item.h, Number(position?.y ?? 50) - item.h / 2));
     this._templateEditorElements.push(item);
@@ -3866,15 +3908,27 @@ export const devicesMixin = {
 
   _templateChartNormalizedPoints(item) {
     const values = this._templateElementSeries(item);
-    const min = Math.min(...values); const max = Math.max(...values); const span = Math.max(1, max - min);
-    return values.map((value, index) => ({ value, x: values.length === 1 ? 50 : 2 + (index / (values.length - 1)) * 96, y: 54 - ((value - min) / span) * 44 }));
+    const requestedMin = Number(item?.chartMin);
+    const requestedMax = Number(item?.chartMax);
+    const automaticMin = Math.min(...values);
+    const automaticMax = Math.max(...values);
+    let min = item?.chartMin !== "" && Number.isFinite(requestedMin) ? requestedMin : automaticMin;
+    let max = item?.chartMax !== "" && Number.isFinite(requestedMax) ? requestedMax : automaticMax;
+    if (max <= min) { min = automaticMin; max = automaticMax; }
+    const span = Math.max(1e-9, max - min);
+    return values.map((value, index) => {
+      const ratio = Math.max(0, Math.min(1, (value - min) / span));
+      return { value, x: values.length === 1 ? 50 : 2 + (index / (values.length - 1)) * 96, y: 54 - ratio * 44 };
+    });
   },
 
   _renderTemplateChartVisual(item) {
     const variant = String(item.variant || "line");
-    const names = { line: "Vývoj", area: "Plocha", bar: "Přehled", steps: "Změny", donut: "Podíl", sparkline: "Trend" };
-    const label = item.showLabel !== false ? `<small class="eink-component-label">${names[variant] || "Data"}</small>` : "";
-    const value = item.showValue !== false ? `<strong class="eink-component-value">${Math.round(item.value)}${item.showPercent !== false ? "<em>%</em>" : ""}</strong>` : "";
+    const names = { line: "Vývoj", area: "Plocha", bar: "Sloupce", steps: "Změny", donut: "Podíl", sparkline: "Trend" };
+    const labelText = String(item.chartTitle || names[variant] || "Data");
+    const unit = String(item.unit || (item.showPercent !== false ? "%" : ""));
+    const label = item.showLabel !== false ? `<small class="eink-component-label">${this._escape(labelText)}</small>` : "";
+    const value = item.showValue !== false ? `<strong class="eink-component-value">${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}${unit ? `<em>${this._escape(unit)}</em>` : ""}</strong>` : "";
     const grid = item.showGrid !== false && variant !== "sparkline" && variant !== "donut" ? `<g class="chart-grid"><path d="M4 12H96M4 30H96M4 48H96"></path></g>` : "";
     const points = this._templateChartNormalizedPoints(item);
     const pointText = points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(" ");
@@ -3887,11 +3941,12 @@ export const devicesMixin = {
       const dots = variant !== "sparkline" && item.showPoints !== false ? `<g class="chart-points">${points.map((point) => `<circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="2"></circle>`).join("")}</g>` : "";
       svg = `<svg viewBox="0 0 100 60" preserveAspectRatio="none">${grid}${area}<polyline points="${pointText}"></polyline>${dots}</svg>`;
     }
-    return `<span class="eink-chart-visual variant-${this._escape(variant)}">${label}${svg}${value}</span>`;
+    return `<span class="eink-chart-visual variant-${this._escape(variant)} ${item.showLabel !== false || item.showValue !== false ? "has-header" : ""}">${label}${value}${svg}</span>`;
   },
 
   _renderTemplateProgressVisual(item) {
-    const value = item.showValue !== false ? `<strong>${Math.round(item.value)}${item.showPercent !== false ? "<em>%</em>" : ""}</strong>` : "";
+    const unit = String(item.unit || "%");
+    const value = item.showValue !== false ? `<strong>${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}${item.showPercent !== false && unit ? `<em>${this._escape(unit)}</em>` : ""}</strong>` : "";
     const scale = item.showScale !== false ? `<span class="eink-progress-scale"><b>0</b><b>50</b><b>100</b></span>` : "";
     return `<span class="eink-progress-visual">${value}<span class="template-slider-track ${item.showTrack === false ? "without-track" : ""}"><i></i></span>${scale}</span>`;
   },
@@ -3899,9 +3954,9 @@ export const devicesMixin = {
   _renderTemplateGaugeVisual(item) {
     const variant = String(item.variant || "ring");
     const names = { battery: "Baterie", thermometer: "Teplota", semicircle: "Rozsah", ring: "Hodnota" };
-    const unit = variant === "thermometer" ? "°" : "%";
-    const value = item.showValue !== false ? `<span class="eink-gauge-value"><strong>${Math.round(item.value)}</strong>${item.showPercent !== false ? `<em>${unit}</em>` : ""}</span>` : "";
-    const label = item.showLabel !== false ? `<small class="eink-component-label">${names[variant] || "Hodnota"}</small>` : "";
+    const unit = String(item.unit || (variant === "thermometer" ? "°C" : "%"));
+    const value = item.showValue !== false ? `<span class="eink-gauge-value"><strong>${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}</strong>${item.showPercent !== false && unit ? `<em>${this._escape(unit)}</em>` : ""}</span>` : "";
+    const label = item.showLabel !== false ? `<small class="eink-component-label">${this._escape(item.text || names[variant] || "Hodnota")}</small>` : "";
     let visual = `<span class="template-gauge-ring ${item.showTrack === false ? "without-track" : ""}" style="--gauge-value:${Math.max(0, Math.min(100, item.value)) * 3.6}deg"></span>`;
     if (variant === "battery") visual = `<span class="template-battery-gauge"><i style="width:${Math.max(4, Math.min(100, item.value))}%"></i></span>`;
     else if (variant === "thermometer") visual = `<span class="template-thermometer-gauge"><i style="height:${Math.max(6, Math.min(100, item.value))}%"></i></span>`;
@@ -3933,6 +3988,8 @@ export const devicesMixin = {
       if (item.type === "image") content = `<img src="${item.src}" alt="${this._escape(item.label)}">`;
       else if (["text", "button"].includes(item.type)) content = `<span>${this._escape(item.text || item.label)}</span>`;
       else if (item.type === "icon") content = `<ha-icon icon="mdi:${this._escape(item.icon || "star")}"></ha-icon>`;
+      else if (item.type === "qr") content = this._renderTemplateQrVisual(item);
+      else if (item.type === "barcode") content = this._renderTemplateBarcodeVisual(item);
       else if (item.type === "slider") content = this._renderTemplateProgressVisual(item);
       else if (item.type === "chart") content = this._renderTemplateChartVisual(item);
       else if (item.type === "gauge") content = this._renderTemplateGaugeVisual(item);

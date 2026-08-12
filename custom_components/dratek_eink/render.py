@@ -35,6 +35,7 @@ BWR_WHITE_THRESHOLD = 161  # ">= 161" is the old "> 160"
 BWR_RED_MIN = 161  # ">= 161" is the old "> 160"
 BWR_WHITE = (255, 255, 255)
 BWR_RED = (220, 20, 12)
+BWR_YELLOW = (244, 196, 0)
 BWR_BLACK = (0, 0, 0)
 
 
@@ -160,12 +161,27 @@ def bwr_masks(image: Image.Image) -> tuple[Image.Image, Image.Image]:
     return bright, red
 
 
-def quantize_bwr_preview(image: Image.Image) -> Image.Image:
-    """Convert RGB pixels to the exact black/white/red classes used by packing."""
+def quantize_bwr_preview(image: Image.Image, preserve_yellow: bool = False) -> Image.Image:
+    """Convert RGB pixels to the target-safe master palette.
+
+    Automatic refreshes for BWRY panels opt into preserving yellow. Ordinary
+    BWR callers keep the long-standing three-colour result.
+    """
     white, red = bwr_masks(image)
     output = Image.new("RGB", image.size, BWR_BLACK)
     output.paste(BWR_WHITE, mask=white)
     output.paste(BWR_RED, mask=red)
+    if preserve_yellow:
+        rgb = image.convert("RGB")
+        red_band, green_band, blue_band = rgb.split()
+        yellow = ImageChops.logical_and(
+            ImageChops.logical_and(
+                red_band.point(lambda value: 255 if value >= 161 else 0, mode="1"),
+                green_band.point(lambda value: 255 if value >= 128 else 0, mode="1"),
+            ),
+            blue_band.point(lambda value: 255 if value < 96 else 0, mode="1"),
+        )
+        output.paste(BWR_YELLOW, mask=yellow)
     return output
 
 
@@ -1249,13 +1265,14 @@ def render_entity_bound_image(
     base_image: str,
     bindings: list[dict[str, Any]],
     values: dict[str, str],
+    preserve_yellow: bool = False,
 ) -> Image.Image:
     """Compose current Home Assistant entity values over a designer background."""
     image = _decode_data_image(base_image).convert("RGBA")
     for binding in bindings:
         value = values.get(str(binding.get("id")), str(binding.get("fallback", "")))
         _composite_binding(image, binding, _render_binding_layer(binding, value))
-    return quantize_bwr_preview(image)
+    return quantize_bwr_preview(image, preserve_yellow)
 
 
 def _svg_text_slot(
@@ -1503,6 +1520,7 @@ def render_entity_bound_svg_image(
     base_image: str,
     bindings: list[dict[str, Any]],
     values: dict[str, str],
+    preserve_yellow: bool = False,
 ) -> Image.Image:
     """Like render_entity_bound_image, but dynamic text is rasterised through resvg.
 
@@ -1534,7 +1552,7 @@ def render_entity_bound_svg_image(
         # the refresh is never left with missing values.
         _composite_text_bindings_with_pil(image, svg_text_bindings, values)
 
-    return quantize_bwr_preview(image)
+    return quantize_bwr_preview(image, preserve_yellow)
 
 
 _SVG_ROOT_SIZE = re.compile(r'<svg\b[^>]*\bwidth="(\d+)"[^>]*\bheight="(\d+)"')
@@ -1645,6 +1663,7 @@ def render_entity_bound_template_image(
     svg_template: str,
     bindings: list[dict[str, Any]],
     values: dict[str, str],
+    preserve_yellow: bool = False,
 ) -> Image.Image | None:
     """Rebuild the exact template the panel would draw, with live entity values.
 
@@ -1720,13 +1739,14 @@ def render_entity_bound_template_image(
     for binding in remaining:
         value = values.get(str(binding.get("id")), str(binding.get("fallback", "")))
         _composite_binding(image, binding, _render_binding_layer(binding, value))
-    return quantize_bwr_preview(image)
+    return quantize_bwr_preview(image, preserve_yellow)
 
 
 def render_entity_bound_clean_background_image(
     clean_background: str,
     bindings: list[dict[str, Any]],
     values: dict[str, str],
+    preserve_yellow: bool = False,
 ) -> Image.Image | None:
     """Composite fresh values over a true, value-free background capture.
 
@@ -1805,7 +1825,7 @@ def render_entity_bound_clean_background_image(
         _composite_binding(
             image, binding, _render_binding_layer(binding, value, force_transparent=True)
         )
-    return quantize_bwr_preview(image)
+    return quantize_bwr_preview(image, preserve_yellow)
 
 
 def render_automatic_refresh_image(
@@ -1829,18 +1849,18 @@ def render_automatic_refresh_image(
     complete image rather than erroring out.
     """
     if clean_background:
-        image = render_entity_bound_clean_background_image(clean_background, bindings, values)
+        image = render_entity_bound_clean_background_image(clean_background, bindings, values, True)
         if image is not None:
             return image
     if svg_template:
-        image = render_entity_bound_template_image(svg_template, bindings, values)
+        image = render_entity_bound_template_image(svg_template, bindings, values, True)
         if image is not None:
             return image
     if svg_render.render_available() and any(
         isinstance(binding, dict) and binding.get("svg") for binding in bindings
     ):
-        return render_entity_bound_svg_image(base_image, bindings, values)
-    return render_entity_bound_image(base_image, bindings, values)
+        return render_entity_bound_svg_image(base_image, bindings, values, True)
+    return render_entity_bound_image(base_image, bindings, values, True)
 
 
 def render_text_image(
@@ -1868,6 +1888,7 @@ def render_text_image(
 
 PE29_CODES = {40, 43, 46, 48, 51}
 BWRY_296X128_CODE = 46
+BWRY_CODES = {46, 78, 142, 270, 302, 310, 318, 558, 654, 686, 2670, 2702}
 BWR_800X480_CODES = {299, 315}
 
 
@@ -1875,6 +1896,10 @@ def expected_buffer_size(sdk_type: int) -> tuple[int, int]:
     """Get the physical hardware pixel buffer dimensions (width, height) expected by display IC."""
     code = int(sdk_type)
     native_w, native_h = display_size(sdk_type)
+    if code == 654:
+        return (768, 528)
+    if code in (2670, 2702):
+        return (800, 272)
     if code in PE29_CODES:
         return (128, 296)
     if code in (264, 267, 270):
@@ -1897,6 +1922,45 @@ def prepare_image_for_display(
 
     if image.mode != "RGB":
         image = image.convert("RGB")
+
+    if code in BWRY_CODES:
+        # BWRY controllers use one packed two-bit framebuffer and a handful of
+        # models expose a logical canvas that differs from that framebuffer.
+        # First normalise to the advertised canvas, then apply the vendor's
+        # physical orientation/padding. This keeps templates WYSIWYG while the
+        # byte stream has the exact dimensions expected by the controller.
+        if image.size == (native_h, native_w) and native_w != native_h:
+            image = image.rotate(-90, expand=True)
+        if image.size != (native_w, native_h):
+            image = image.resize((native_w, native_h), Image.Resampling.LANCZOS)
+
+        if transform == "rotate_180":
+            image = image.rotate(180, expand=True)
+        elif transform == "flip_lr":
+            image = image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+        elif transform == "flip_tb":
+            image = image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+
+        if code in (46, 270):
+            image = image.rotate(-90, expand=True)
+        elif code == 558:
+            image = image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+        elif code == 654:
+            image = image.rotate(90, expand=True)
+        elif code == 686:
+            image = image.rotate(-90, expand=True)
+        elif code == 2670:
+            padded = Image.new("RGB", (800, 272), BWR_WHITE)
+            padded.paste(image, (4, 0))
+            image = padded
+        elif code == 2702:
+            padded = Image.new("RGB", (272, 800), BWR_WHITE)
+            padded.paste(image, (0, 4))
+            image = padded.rotate(90, expand=True)
+
+        if image.size != (target_w, target_h):
+            image = image.resize((target_w, target_h), Image.Resampling.LANCZOS)
+        return image
 
     is_portrait = (
         orientation == "portrait"
@@ -1999,8 +2063,24 @@ def pack_bwr_image(
     image = prepare_image_for_display(sdk_type, image, transform, orientation)
     code = int(sdk_type)
 
-    if code == BWRY_296X128_CODE:
+    if code in BWRY_CODES:
         return _pack_bwry_image(image)
+
+    # A saved four-colour design may be reused on a three-colour display. The
+    # requested fallback is explicit: yellow pigment becomes red rather than
+    # disappearing into the white plane.
+    rgb = image.convert("RGB")
+    red_band, green_band, blue_band = rgb.split()
+    yellow = ImageChops.logical_and(
+        ImageChops.logical_and(
+            red_band.point(lambda value: 255 if value >= 161 else 0, mode="1"),
+            green_band.point(lambda value: 255 if value >= 128 else 0, mode="1"),
+        ),
+        blue_band.point(lambda value: 255 if value < 96 else 0, mode="1"),
+    )
+    if yellow.getbbox():
+        image = rgb.copy()
+        image.paste(BWR_RED, mask=yellow)
 
     # Picksmart's 800x480 BWR implementation mirrors the bitmap vertically
     # before extracting its planes.  Its first plane is active-high for dark

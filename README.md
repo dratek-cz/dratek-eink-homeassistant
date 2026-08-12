@@ -4,6 +4,22 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.287
+
+- **Všechny šablony jsou čtyřbarevné** – vestavěné návrhy používají bílou, černou, červenou i žlutou včetně nové legendy Meteoradaru.
+- **Automatická kompatibilita BWR** – na tříbarevném displeji se každá žlutá část šablony automaticky změní na červenou, a to i při automatickém zápisu.
+- **Přesné náhledy a lepší Designer** – uložené kopie odpovídají výslednému obrazu a grafy, měřidla i přesná geometrie prvků mají sjednocené ovládání.
+- **Opravené vykreslení BWR 800×480** – panelům, které nepožadují syrová obrazová data, se payload posílá v očekávaném vendorovém QuickLZ rámci.
+
+## Novinky ve verzi 0.1.286
+
+- **Displeje 800×480 se překreslí** – panely, které v inzerci nemají příznak „syrová data“, dostávají obraz ve vendorově QuickLZ formátu. Dosud přenos doběhl a displej zůstal beze změny.
+- **Čtyřbarevné šablony a Designer** – BWRY displeje mohou v šablonách i volném návrhu používat žlutou. Na tříbarevném displeji se žlutá automaticky odešle jako červená.
+- **QR a čárové kódy** – nový Designer generuje QR, Wi-Fi QR, QR odkazy a EAN-13 včetně skutečného vykreslení do displeje.
+- **Správný formát všech BWRY panelů** – celá rodina čtyřbarevných SDK typů používá vendorový dvoubitový framebuffer, nejen 296×128.
+- **Přesné náhledy vlastních šablon** – po uložení se karta šablony vyrenderuje stejnou cestou jako fyzický displej, včetně nových a přesunutých prvků.
+- **Přepracované grafy a ukazatele** – Designer nabízí čitelné grafy, měřidla a průběhy s vlastními daty, jednotkami, rozsahem os a přesnou geometrií.
+
 ## Novinky ve verzi 0.1.285
 
 - **Opravené fyzické překreslení** – přípravný příkaz obrazu má nyní všech osm bajtů vyžadovaných Picksmart protokolem. Displeje se softwarem 129 tak po přijetí dat skutečně spustí eInk refresh.

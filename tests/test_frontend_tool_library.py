@@ -1330,11 +1330,52 @@ class FrontendToolLibraryTests(unittest.TestCase):
     def test_template_visuals_are_restricted_to_the_eink_palette(self):
         self.assertIn('paletteColor(source.color, "#111111")', self.source)
         self.assertIn('paletteColor(source.fill, defaults.fill ?? "transparent", true)', self.source)
-        self.assertIn('fill:#d71912;stroke:none', self.source)
-        self.assertIn('conic-gradient(#d71912 var(--gauge-value),#111 0)', self.source)
+        self.assertIn('fill:var(--element-color);stroke:none', self.source)
+        self.assertIn('conic-gradient(var(--element-color) var(--gauge-value),var(--element-stroke) 0)', self.source)
         self.assertNotIn('fill:color-mix(in srgb,var(--element-color) 18%,transparent)', self.source)
         self.assertNotIn('background:rgba(255,255,255,.82)', self.source)
         self.assertNotIn('context.globalAlpha = .18', self.source)
+
+    def test_user_template_catalog_uses_exact_saved_raster_preview(self):
+        inspector = (PANEL_MODULES / "panel-inspector.mixin.js").read_text(encoding="utf-8")
+        self.assertIn('savedUserTemplate.preview_image = preview;', inspector)
+        self.assertIn('String(template?.preview_image || "").startsWith("data:image/")', self.source)
+        self.assertIn('class="user-template-captured-preview"', self.source)
+        self.assertIn('else if (item.type === "qr") content = this._renderTemplateQrVisual(item);', self.source)
+        self.assertIn('else if (item.type === "barcode") content = this._renderTemplateBarcodeVisual(item);', self.source)
+
+    def test_chart_editor_exposes_data_range_and_exact_geometry(self):
+        inspector = (PANEL_MODULES / "panel-inspector.mixin.js").read_text(encoding="utf-8")
+        for marker in (
+            'propertyTab("Poloha a velikost"',
+            'data-template-chart-values',
+            '"chartMin"',
+            '"chartMax"',
+            '"chartTitle"',
+            'const ratio = Math.max(0, Math.min(1, (value - min) / span));',
+        ):
+            self.assertIn(marker, self.source if marker != 'data-template-chart-values' else inspector + self.source)
+
+    def test_template_studio_supports_bwry_and_generated_codes(self):
+        self.assertIn('["codes", "qrcode", "Kódy"]', self.source)
+        self.assertIn('tool("qr", "qrcode", "QR kód"', self.source)
+        self.assertIn('tool("qr", "wifi", "QR pro Wi-Fi"', self.source)
+        self.assertIn('tool("barcode", "barcode", "EAN-13"', self.source)
+        self.assertIn('_renderTemplateQrVisual(item)', self.source)
+        self.assertIn('_renderTemplateBarcodeVisual(item)', self.source)
+        self.assertIn('this._drawQr(context, { text: item.text', self.source)
+        self.assertIn('this._drawBarcode(context, { text: item.text', self.source)
+        self.assertIn('this._displaySupportsYellow() ? "#f4c400" : "#d71912"', self.source)
+        self.assertIn('const yellow = red >= 161 && green >= 128 && blue < 96;', self.source)
+        self.assertIn('if (yellow) return this._displaySupportsYellow?.() ? [244, 196, 0] : [220, 20, 12];', self.source)
+
+    def test_all_builtin_templates_use_the_shared_four_colour_theme(self):
+        self.assertIn('_fourColorTemplateRows(rows)', self.source)
+        self.assertIn('row.color = "yellow"', self.source)
+        self.assertIn('footer.color = "red"', self.source)
+        self.assertIn('return this._fourColorTemplateRows(rows);', self.source)
+        self.assertIn('this._templateInk("yellow")', self.source)
+        self.assertIn('aria-label="Intenzita srážek"', self.source)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,8 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from PIL import Image
 
+from . import quicklz
+from .discovery import raw_type_for
 from .render import pack_bwr_image, pack_bwr_region
 
 GATEWAY_STORE_KEY = "dratek_eink.gateways"
@@ -378,6 +380,22 @@ async def async_send_gateway_payload(
             pack_bwr_region if partial else pack_bwr_image,
             *([image] if partial else [sdk_type, image, transform, orientation]),
         )
+        raw_type = raw_type_for(address)
+        if raw_type is None:
+            add_log(
+                "Display has not been seen advertising, so its payload framing is "
+                "unknown; sending the packed planes unframed."
+            )
+        elif quicklz.needs_vendor_framing(raw_type):
+            # Without the 0x4000 raw-data flag the display expects the vendor's
+            # QuickLZ stream. Fed the planes raw it acknowledges every block and
+            # then refreshes nothing.
+            framed = quicklz.frame_payload(payload, sdk_type)
+            add_log(
+                f"Advertised type {raw_type} does not set the 0x4000 raw-data flag; "
+                f"framing {len(payload)} bytes as the vendor stream ({len(framed)} bytes)."
+            )
+            payload = framed
         add_log(f"Payload size: {len(payload)} bytes.")
         session = async_get_clientsession(hass)
         base_url = _gateway_send_base_url(gateway)

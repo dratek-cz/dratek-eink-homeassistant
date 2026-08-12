@@ -16,6 +16,8 @@ from .const import (
     PARTIAL_UPDATE_CONFIRMED_SDK_TYPES,
     WRITE_CHARS,
 )
+from . import quicklz
+from .discovery import raw_type_for
 from .render import pack_bwr_image, pack_bwr_region
 
 if TYPE_CHECKING:
@@ -180,6 +182,30 @@ class DratekTransfer:
         return await asyncio.to_thread(
             pack_bwr_image, sdk_type, image, transform, orientation
         )
+
+    def _frame_for_display(self, address: str, sdk_type: int, payload: bytes) -> bytes:
+        """Put the packed planes into the framing the display asked for.
+
+        Displays advertising bit 0x4000 take the planes as they are, which is why
+        the raw stream has always worked on them. The rest expect the vendor's
+        QuickLZ stream: they accept every block of a raw payload and acknowledge
+        the transfer, then refresh nothing at all.
+        """
+        raw_type = raw_type_for(address)
+        if raw_type is None:
+            self.log(
+                "Display has not been seen advertising, so its payload framing is "
+                "unknown; sending the packed planes unframed."
+            )
+            return payload
+        if not quicklz.needs_vendor_framing(raw_type):
+            return payload
+        framed = quicklz.frame_payload(payload, sdk_type)
+        self.log(
+            f"Advertised type {raw_type} does not set the 0x4000 raw-data flag; "
+            f"framing {len(payload)} bytes as the vendor stream ({len(framed)} bytes)."
+        )
+        return framed
 
     async def _async_pack_region(self, image: Image.Image) -> bytes:
         if self._hass is not None:
@@ -435,6 +461,7 @@ class DratekTransfer:
             if partial is not None
             else await self._async_pack(sdk_type, image, transform, orientation)
         )
+        payload = self._frame_for_display(address, sdk_type, payload)
         software_version = self._resolve_software_version(address, software_version)
         responses: asyncio.Queue[bytes] = asyncio.Queue()
         loop = asyncio.get_running_loop()

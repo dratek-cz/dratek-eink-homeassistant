@@ -96,6 +96,24 @@ SDK_TYPE_BY_NAME = {
 MODEL_BY_SDK_TYPE = SDK_MODELS
 
 
+# Bit 0x4000 of the advertised type is the display's own statement that it takes
+# the packed planes verbatim; without it the vendor SDK frames them as a QuickLZ
+# stream. The bit lives only in the advertisement - every send carries the masked
+# SDK type - so remember what each address last advertised. Populated from both
+# the Home Assistant scan and the gateway scan, since they share the parser below.
+_ADVERTISED_RAW_TYPES: dict[str, int] = {}
+
+
+def remember_raw_type(address: str, raw_type: int) -> None:
+    if address:
+        _ADVERTISED_RAW_TYPES[address.upper()] = int(raw_type)
+
+
+def raw_type_for(address: str) -> int | None:
+    """The last advertised type for an address, or None if never seen."""
+    return _ADVERTISED_RAW_TYPES.get((address or "").upper())
+
+
 def sdk_type_from_raw(raw_type: int) -> int:
     if raw_type in MODEL_BY_SDK_TYPE:
         return raw_type
@@ -141,6 +159,7 @@ def parse_dratek_manufacturer_data(
     if not isinstance(name, str) or not name:
         name = physical_code_from_address(address)
     raw_type = (data[4] << 8) | data[0]
+    remember_raw_type(address, raw_type)
     sdk_type = sdk_type_from_raw(raw_type)
     upper_name = name.upper()
     for pattern, named_sdk_type in SDK_TYPE_BY_NAME.items():

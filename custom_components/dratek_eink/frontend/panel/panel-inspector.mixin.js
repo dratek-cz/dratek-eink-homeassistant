@@ -991,6 +991,22 @@ export const inspectorMixin = {
         updateTemplateElement(input.dataset.templateElementProp, input.value);
       });
     });
+    this.shadowRoot.querySelector("[data-template-chart-values]")?.addEventListener("change", (event) => {
+      const item = this._templateEditorElement?.();
+      if (!item || item.type !== "chart") return;
+      const values = String(event.currentTarget.value || "")
+        .split(/[;,\n]+/)
+        .map((value) => Number(String(value).trim().replace(",", ".")))
+        .filter(Number.isFinite)
+        .slice(-Math.max(2, Math.min(20, Number(item.historyLimit || 10))));
+      this._pushTemplateHistory?.();
+      item.historyValues = values;
+      if (values.length) item.value = values.at(-1);
+      item.historyUpdatedAt = Date.now();
+      this._templateSaveResult = null;
+      this._render(); this._paint();
+      this._saveDisplayTemplateDraft?.().catch(() => {});
+    });
     this.shadowRoot.querySelectorAll("[data-template-element-toggle]").forEach((input) => input.addEventListener("change", () => {
       this._pushTemplateHistory?.();
       updateTemplateElement(input.dataset.templateElementToggle, input.checked);
@@ -1198,6 +1214,22 @@ export const inspectorMixin = {
     this.shadowRoot.querySelector("[data-template-save]")?.addEventListener("click", async () => {
       try {
         const savedUserTemplate = this._storeCurrentUserDisplayTemplate();
+        if (savedUserTemplate) {
+          try {
+            const preview = await this._renderCurrentDisplayTemplateImage(this._device());
+            const previewSize = this._devicePreviewSize(this._device());
+            const landscape = this._displayTemplateOrientation === "landscape";
+            savedUserTemplate.preview_image = preview;
+            savedUserTemplate.preview_width = landscape ? Math.max(previewSize.width, previewSize.height) : Math.min(previewSize.width, previewSize.height);
+            savedUserTemplate.preview_height = landscape ? Math.min(previewSize.width, previewSize.height) : Math.max(previewSize.width, previewSize.height);
+            savedUserTemplate.preview_orientation = this._displayTemplateOrientation;
+            savedUserTemplate.updated_at = new Date().toISOString();
+            this._userDisplayTemplates = (this._userDisplayTemplates || []).map((template) => template.id === savedUserTemplate.id ? savedUserTemplate : template);
+          } catch (_previewError) {
+            // The editable template data is still authoritative; older browsers
+            // can fall back to the live catalog compositor below.
+          }
+        }
         if (savedUserTemplate) await this._saveUserDisplayTemplate(savedUserTemplate);
         await this._saveDisplayTemplateDraft();
         this._templateSaveResult = savedUserTemplate
@@ -2101,7 +2133,12 @@ export const inspectorMixin = {
   },
 
   _inspectorColor(prop, value, label, colors = ["black", "red", "white"]) {
-    const names = { none: "Žádná", original: "Původní", black: "Černá", red: "Červená", white: "Bílá" };
+    if (this._displaySupportsYellow?.() && colors.includes("red") && !colors.includes("yellow")) {
+      const whiteIndex = colors.indexOf("white");
+      colors = [...colors];
+      colors.splice(whiteIndex >= 0 ? whiteIndex : colors.length, 0, "yellow");
+    }
+    const names = { none: "Žádná", original: "Původní", black: "Černá", red: "Červená", yellow: "Žlutá", white: "Bílá" };
     const selected = value || (colors.includes("none") ? "none" : "black");
     return `<div class="field"><label><ha-icon icon="mdi:palette"></ha-icon>${label}</label><div class="color-options">${colors.map((color) => `<button type="button" class="color-option ${selected === color ? "selected" : ""}" data-inspector-prop="${prop}" data-inspector-value="${color}" title="${names[color]}"><span class="color-dot ${color}"></span><span>${names[color]}</span></button>`).join("")}</div></div>`;
   },

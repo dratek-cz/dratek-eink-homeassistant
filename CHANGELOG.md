@@ -2,6 +2,31 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.287] - 2026-08-12
+
+### Vylepšeno – všechny šablony ve čtyřbarevném designu
+- Všechny vestavěné šablony používají plnou paletu BWRY: bílou, černou, červenou a žlutou. Žlutá zvýrazňuje identitu šablony, červená zůstává stavovou a varovnou barvou.
+- Meteoradar dostal čtyřbarevnou legendu intenzity s oddělením slabých a silných srážek.
+- Na tříbarevných BWR displejích se veškerá žlutá automaticky převádí na červenou v náhledu, ručním zápisu i automatických aktualizacích.
+- Součástí verze jsou také přesné náhledy zkopírovaných šablon a přepracované grafy, měřidla a nastavení Designeru.
+- Displeje bez reklamovaného příznaku raw dat, zejména BWR 800×480, nyní dostávají obraz ve vendorovém QuickLZ streamu; tím se opravuje stav, kdy panel přijal celý přenos, ale nic nevykreslil.
+
+## [0.1.286] - 2026-08-12
+
+### Opraveno – displeje 800×480 se konečně překreslí
+- Displej v inzerci sám říká bitem `0x4000`, jestli chce obrazová data syrová. Panely 800×480 (typ 299) ho nemají, takže očekávají vendorový QuickLZ stream; dosud jim integrace posílala syrové roviny, ony přijaly všech 400 bloků, potvrdily `05 08` a fyzicky se nepřekreslily.
+- Nový modul `quicklz.py` skládá data přesně jako `compress`/`compress2` z `libble_jni.so`: `LE32(velikost roviny)` a za tím bloky po 64 bajtech s hlavičkou QuickLZ 1.5.0. Tříbarevné a čtyřbarevné panely se podle mirror bitu balí jako dvě samostatné roviny.
+- Rámec se použije jen u displejů bez bitu `0x4000`. Štítky, které ho inzerují (typy 16435, 16459 a spol.), dostávají data přesně jako dosud.
+- Platí pro lokální Bluetooth i pro přenos přes gateway; do logu přenosu přibyl řádek s inzerovaným typem a velikostí rámce.
+
+### Přidáno – čtyřbarevné šablony a generované kódy
+- BWRY displeje nyní nabízejí žlutou ve vlastnostech prvků vestavěných šablon, nového Template Studia i původního Designeru.
+- Výchozí šablony zůstávají tříbarevné; žlutá použitá v návrhu se při odeslání na BWR panel automaticky mapuje na červenou.
+- Template Studio obsahuje generátory QR kódu, Wi-Fi QR, QR odkazu a EAN-13. Kódy jsou upravitelné, mění velikost jako ostatní prvky a rasterizují se do finálního obrazu.
+- Všechny známé BWRY SDK typy používají správné dvoubitové balení a fyzickou orientaci/padding konkrétního panelu.
+- Karta zkopírované uživatelské šablony ukládá přesný finální náhled, takže nové, posunuté i zvětšené prvky odpovídají Designeru a výsledku odeslanému na displej.
+- Grafy, průběhy a ukazatele mají sjednocený eInk vzhled, vlastní data, jednotky, rozsah os a přesné nastavení polohy i velikosti.
+
 ## [0.1.285] - 2026-08-12
 
 ### Opraveno – fyzické překreslení displejů se softwarem 129

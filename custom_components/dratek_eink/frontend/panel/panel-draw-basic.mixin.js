@@ -391,7 +391,7 @@ export const drawBasicMixin = {
   },
 
   _drawTintedCanvasImage(ctx, image, x, y, width, height, tint = "original") {
-    if (!["black", "red", "white"].includes(tint)) {
+    if (!["black", "red", "yellow", "white"].includes(tint)) {
       ctx.drawImage(image, x, y, width, height);
       return;
     }
@@ -412,9 +412,13 @@ export const drawBasicMixin = {
     const data = image.data;
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i], g = data[i + 1], b = data[i + 2];
+      const yellow = r >= 161 && g >= 128 && b < 96;
       const redScore = r - Math.max(g, b);
       const luma = (38 * r + 75 * g + 15 * b) >> 7;
-      if (redScore > 45 && r > 120) {
+      if (yellow) {
+        if (this._displaySupportsYellow?.()) { data[i] = 244; data[i + 1] = 196; data[i + 2] = 0; }
+        else { data[i] = 220; data[i + 1] = 20; data[i + 2] = 12; }
+      } else if (redScore > 45 && r > 120) {
         data[i] = 220; data[i + 1] = 20; data[i + 2] = 12;
       } else if (luma < 160) {
         data[i] = 0; data[i + 1] = 0; data[i + 2] = 0;
