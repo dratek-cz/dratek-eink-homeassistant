@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.285
+
+- **Opravené fyzické překreslení** – přípravný příkaz obrazu má nyní všech osm bajtů vyžadovaných Picksmart protokolem. Displeje se softwarem 129 tak po přijetí dat skutečně spustí eInk refresh.
+- **Nový firmware gatewaye 0.1.54** – stejná oprava platí pro lokální Bluetooth i přenosy přes ESP32/ESP32-S3 gateway.
+
 ## Novinky ve verzi 0.1.284
 
 - **Jednodušší USB připojení** – port se vybírá ve stejném formulářovém stylu jako síťové údaje, bez samostatného obrázkového panelu.

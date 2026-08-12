@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.53-gateway";
+static const char* FIRMWARE_VERSION = "0.1.54-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -477,7 +477,10 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
     addLog(log, "Partial update area x=" + String(partialX) + ", y=" + String(partialY) + ", width=" + String(partialWidth) + ", height=" + String(partialHeight) + ".");
   }
 
-  uint8_t prepare[6];
+  // Picksmart's prepare-update command is eight bytes. The final two reserved
+  // bytes must be present: software-129 displays may accept a six-byte packet,
+  // receive all blocks and report 05 08, but never refresh the physical panel.
+  uint8_t prepare[8] = {0};
   prepare[0] = 0x02;
   uint32_t payloadSize = payload.size();
   prepare[1] = payloadSize & 0xFF;
@@ -485,6 +488,8 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
   prepare[3] = (payloadSize >> 16) & 0xFF;
   prepare[4] = (payloadSize >> 24) & 0xFF;
   prepare[5] = 0x01;
+  prepare[6] = 0x00;
+  prepare[7] = 0x00;
   clearNotifications();
   controlChar->writeValue(prepare, sizeof(prepare), true);
   if (!waitForPacket(0x02, packet, 8000) || packet.size() < 2 || packet[1] != 0) {

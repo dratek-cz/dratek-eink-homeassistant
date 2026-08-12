@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.285] - 2026-08-12
+
+### Opraveno – fyzické překreslení displejů se softwarem 129
+- Příkaz přípravy obrazu nyní přesně odpovídá osmibajtovému formátu Picksmart: `02 + délka + režim + 00 00`.
+- Lokální Bluetooth i firmware gatewaye už neposílají zkrácený šestibajtový příkaz, který mohl přijmout celý obraz a vrátit `05 08`, ale fyzický eInk panel nepřekreslit.
+- Firmware gatewaye byl zvýšen na `0.1.54-gateway`, aby Home Assistant nabídl opravenou OTA aktualizaci.
+
 ## [0.1.284] - 2026-08-12
 
 ### Vylepšeno – USB připojení a volba desky

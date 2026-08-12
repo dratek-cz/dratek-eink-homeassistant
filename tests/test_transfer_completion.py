@@ -81,7 +81,7 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertIn("require_refresh_confirmation = (", source)
         self.assertIn("confirm the physical refresh with 05 08", source)
         self.assertIn("will not be marked successful", source)
-        self.assertIn("+ bytes([FULL_REFRESH_MODE])", source)
+        self.assertIn("+ bytes([FULL_REFRESH_MODE, 0x00, 0x00])", source)
         self.assertIn("if len(sent_blocks) != total_blocks:", source)
 
     def test_block_size_is_decoded_as_little_endian_uint16(self):
@@ -108,7 +108,9 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertIn("nextBlock++", section)
         self.assertIn("no optional 05 08 confirmation", section)
         self.assertIn("uniqueSent != totalBlocks", section)
-        self.assertIn("uint8_t prepare[6];", source)
+        self.assertIn("uint8_t prepare[8] = {0};", source)
+        self.assertIn("prepare[6] = 0x00;", source)
+        self.assertIn("prepare[7] = 0x00;", source)
 
     def test_gateway_decodes_uint16_block_size(self):
         source = (

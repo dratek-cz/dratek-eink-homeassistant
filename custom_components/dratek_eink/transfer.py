@@ -477,13 +477,19 @@ class DratekTransfer:
                 if partial is not None:
                     await self._write_partial_position(client, control_char, responses, partial)
 
-                # Refresh mode 0 in the vendor API maps to command byte 1 and causes
-                # a full-screen refresh. Partial refreshes use a separate 0x60 area
-                # command before this packet.
-                # Keep the six-byte packet used by the known-good integration.
-                # These displays acknowledge it directly and SDK type 51 then
-                # requires every image block to use an ATT write response.
-                command = bytes([2]) + len(payload).to_bytes(4, "little") + bytes([FULL_REFRESH_MODE])
+                # Refresh type 0 maps to command byte 1 on software-129
+                # controllers and causes a full-screen refresh. Partial refreshes
+                # use a separate 0x60 area command before this packet.
+                # The vendor packet is always eight bytes.  The two reserved
+                # trailing bytes are not optional: software-129 controllers can
+                # accept a shortened six-byte command and receive every image
+                # block (including the final 05 08 notification) without ever
+                # starting the physical e-paper refresh.
+                command = (
+                    bytes([2])
+                    + len(payload).to_bytes(4, "little")
+                    + bytes([FULL_REFRESH_MODE, 0x00, 0x00])
+                )
                 await self._write_char(client, control_char, command, "prepare update")
                 await self._wait_for_response(responses, 2, ok_values={0}, label="screen update prepare")
 
