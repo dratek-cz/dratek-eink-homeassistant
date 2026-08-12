@@ -174,6 +174,7 @@ async def websocket_scan(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
+    now = int(time.time())
     local_scan_error = ""
     try:
         scanner_count = bluetooth.async_scanner_count(hass, connectable=True)
@@ -233,6 +234,7 @@ async def websocket_scan(
                     "id": "local",
                     "name": "Home Assistant Bluetooth",
                     "rssi": device.rssi,
+                    "last_seen_at": now,
                 }],
             }
 
@@ -293,6 +295,7 @@ async def websocket_scan(
                 "name": gateway_name,
                 "host": gateway.get("host"),
                 "rssi": remote.get("rssi"),
+                "last_seen_at": now,
             }
             existing = devices_by_address.get(address)
             if existing:
@@ -317,9 +320,38 @@ async def websocket_scan(
                 "paths": [path],
             }
 
-    now = int(time.time())
     discovery_cache = hass.data.setdefault(DISCOVERY_CACHE_KEY, {})
     for address, device in devices_by_address.items():
+        # Cache paths independently. A display may be observed locally or by
+        # gateway A while a short scan on gateway B misses one advertisement.
+        # Replacing the whole device here used to erase the still-valid B path
+        # immediately, making cards jump between gateways or disappear from the
+        # connection map despite a strong previous RSSI.
+        cached_device = discovery_cache.get(address)
+        cached_paths = cached_device.get("paths", []) if isinstance(cached_device, dict) else []
+        current_path_keys = {
+            (str(path.get("type") or ""), str(path.get("id") or ""))
+            for path in device.get("paths", [])
+        }
+        for cached_path in cached_paths if isinstance(cached_paths, list) else []:
+            if not isinstance(cached_path, dict):
+                continue
+            path_key = (
+                str(cached_path.get("type") or ""),
+                str(cached_path.get("id") or ""),
+            )
+            if path_key in current_path_keys:
+                continue
+            path_seen_at = int(
+                cached_path.get("last_seen_at")
+                or cached_device.get("last_seen_at")
+                or 0
+            )
+            if path_seen_at and now - path_seen_at <= DISCOVERY_GRACE_SECONDS:
+                retained_path = dict(cached_path)
+                retained_path["temporarily_unseen"] = True
+                device.setdefault("paths", []).append(retained_path)
+                current_path_keys.add(path_key)
         device["last_seen_at"] = now
         device["temporarily_unseen"] = False
         discovery_cache[address] = dict(device)
@@ -330,6 +362,11 @@ async def websocket_scan(
         if last_seen_at and now - last_seen_at <= DISCOVERY_GRACE_SECONDS:
             retained = dict(cached_device)
             retained["temporarily_unseen"] = True
+            retained["paths"] = [
+                {**path, "temporarily_unseen": True}
+                for path in retained.get("paths", [])
+                if isinstance(path, dict)
+            ]
             devices_by_address[address] = retained
         else:
             discovery_cache.pop(address, None)
@@ -340,7 +377,10 @@ async def websocket_scan(
     gateway_preferences = project_data.get("device_gateway_preferences", {})
     for device in devices:
         device["paths"].sort(
-            key=lambda path: path.get("rssi") if isinstance(path.get("rssi"), (int, float)) else -999,
+            key=lambda path: (
+                not bool(path.get("temporarily_unseen")),
+                path.get("rssi") if isinstance(path.get("rssi"), (int, float)) else -999,
+            ),
             reverse=True,
         )
         gateway_paths = [path for path in device["paths"] if path.get("type") == "gateway"]

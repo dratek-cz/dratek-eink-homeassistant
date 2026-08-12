@@ -2,6 +2,22 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.282] - 2026-08-12
+
+### Vylepšeno – Nové centrum automatických zápisů
+- Kompletně přepracovaná vizuální hierarchie stránky: souhrnné metriky, samostatný harmonogram, stav přenosové trasy, datové vazby a oddělený ovládací panel každého displeje.
+- Horní část nyní používá stejnou světlou kartu a střídmou typografii jako ostatní části integrace; nadbytečné nadpisy a dominantní barevný banner byly odstraněny.
+- Vylepšené stavové indikátory, práce s dlouhými seznamy entit, ukládací stav a prázdná obrazovka.
+- Opravené responzivní rozložení pro mobilní displeje včetně vodorovně posuvné hlavní navigace bez přetékání obsahu.
+
+### Opraveno – Potvrzené doručení obrazu do BWR 800×480
+- Lokální BLE přenos pro SDK 299/315 používá po každých 16 blocích potvrzený kontrolní zápis a povinně potvrzuje poslední blok. BlueZ tak nemůže označit 96kB obraz za odeslaný, zatímco jeho konec je stále pouze v lokální frontě.
+- Dávkové potvrzování zachovává reálnou dobu přenosu kolem jedné až dvou minut a nevrací pomalé potvrzení všech 400 bloků.
+
+### Opraveno – Mizení displejů dostupných přes gateway
+- Nálezy se nyní ukládají a slučují po jednotlivých přenosových trasách. Nález stejného displeje jiným adaptérem už nesmaže dříve potvrzenou gateway trasu.
+- Ochranná doba pro krátkodobě nezachycený displej byla prodloužena z 5 na 30 minut a platí i při skenu vynechaném kvůli aktivnímu přenosu.
+
 ## [0.1.281] - 2026-08-12
 
 ### Opraveno – Rychlost lokálního BLE přenosu

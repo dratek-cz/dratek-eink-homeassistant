@@ -59,7 +59,7 @@ export const storageMixin = {
     } catch (_err) { /* Large image drafts can exceed browser storage; server data remains authoritative. */ }
   },
 
-  _mergeScanResult(nextResult, graceMs = 5 * 60 * 1000) {
+  _mergeScanResult(nextResult, graceMs = 30 * 60 * 1000) {
     const now = Date.now();
     const previousDevices = new Map((this._result?.devices || []).map((device) => [String(device.address || "").toUpperCase(), device]));
     const devices = [];

@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.282
+
+- kompletně přepracovaný grafický vzhled sekce **Automatické zápisy** se souhrnnými metrikami, harmonogramem a přehlednějšími kartami displejů
+- vylepšené mobilní rozložení a odstraněné vodorovné přetékání stránky
+- spolehlivé dávkové potvrzování 96kB obrazu pro BWR 800×480, aby se displej neodpojil s posledními bloky pouze ve frontě BlueZ
+- stabilní slučování nálezů z více gatewayí a 30minutová ochrana proti mizení displejů při krátce vynechaném BLE skenu
+
 ## Novinky ve verzi 0.1.281
 
 - odstraněno 2,5sekundové čekání na každý BLE blok u streaming displejů SDK 46 a 299/315

@@ -2,7 +2,7 @@ DOMAIN = "dratek_eink"
 
 DRATEK_COMPANY_ID = 0x5053
 
-PANEL_VERSION = "0.1.281"
+PANEL_VERSION = "0.1.282"
 GATEWAY_FIRMWARE_VERSION = "0.1.53-gateway"
 
 CONTROL_CHARS = {
@@ -149,4 +149,9 @@ LOCAL_ROUTE_ID = "local"
 # Keeping a recently observed route lets a transfer use a gateway even when a
 # short on-demand scan happens to miss the display's advertisement.
 DISCOVERY_CACHE_KEY = "dratek_eink.discovery_cache"
-DISCOVERY_GRACE_SECONDS = 5 * 60
+# Five minutes was shorter than a long 800x480 transfer plus the sequential
+# scans of several gateways.  A known display could therefore disappear from
+# the UI even though its last reported RSSI was excellent.  Discovery is
+# inherently lossy; keep the last observation long enough to bridge missed or
+# deliberately skipped scans and show it as temporarily unseen instead.
+DISCOVERY_GRACE_SECONDS = 30 * 60

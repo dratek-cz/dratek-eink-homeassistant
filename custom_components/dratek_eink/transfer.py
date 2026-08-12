@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 WRITE_ACK_SDK_TYPES = {51}
+STREAM_CHECKPOINT_SDK_TYPES = {299, 315}
+STREAM_CHECKPOINT_BLOCKS = 16
 FINAL_BLOCK_RESPONSE_TIMEOUT = 2
 MTU_NEGOTIATION_TIMEOUT = 4
 RGB_LED_COMMAND = 0x30
@@ -549,7 +551,24 @@ class DratekTransfer:
 
                     end_block = total_blocks if streaming_mode else next_block + 1
                     for block_number in range(next_block, end_block):
-                        block_requires_response = require_gatt_response
+                        # The 800x480 controller accepts write commands faster
+                        # than BlueZ can physically put them on its long-interval
+                        # BLE link.  A response every 16 blocks is a delivery
+                        # barrier: all preceding commands must leave the kernel
+                        # queue before this ATT request can be acknowledged.
+                        # Always checkpoint the final block as well, otherwise a
+                        # ten-second disconnect drain can still cut off the tail.
+                        checkpoint_response = (
+                            streaming_mode
+                            and not require_gatt_response
+                            and int(sdk_type) in STREAM_CHECKPOINT_SDK_TYPES
+                            and "write" in write_char.properties
+                            and (
+                                (block_number + 1) % STREAM_CHECKPOINT_BLOCKS == 0
+                                or block_number == total_blocks - 1
+                            )
+                        )
+                        block_requires_response = require_gatt_response or checkpoint_response
                         final_response_missing = False
                         try:
                             block_data = _next_block(payload, block_size, block_number)
@@ -561,7 +580,9 @@ class DratekTransfer:
                                 require_response=block_requires_response,
                                 operation_timeout=(
                                     FINAL_BLOCK_RESPONSE_TIMEOUT
-                                    if streaming_mode and block_number == total_blocks - 1
+                                    if require_gatt_response
+                                    and streaming_mode
+                                    and block_number == total_blocks - 1
                                     else GATT_OPERATION_TIMEOUT
                                 ),
                             )
@@ -596,7 +617,11 @@ class DratekTransfer:
                             if final_response_missing:
                                 delivery = "Final block handed off"
                             elif block_requires_response:
-                                delivery = "Display acknowledged"
+                                delivery = (
+                                    "Display acknowledged checkpoint"
+                                    if checkpoint_response
+                                    else "Display acknowledged"
+                                )
                             else:
                                 delivery = "Bluetooth queued"
                             self.log(
