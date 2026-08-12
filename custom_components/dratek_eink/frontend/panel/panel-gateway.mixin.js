@@ -11,8 +11,6 @@ export const GATEWAY_BOARDS = [
     chip: "esp32",
     name: "ESP32",
     subtitle: "Vývojová deska 2,4GHz Wi-Fi + Bluetooth s anténou",
-    badge: "Standard",
-    badgeClass: "muted",
     specs: "Classic WROOM • 2.4GHz Wi-Fi • BLE 4.2",
     icon: "mdi:chip",
     firmware: "Firmware pro ESP32 / WROOM",
@@ -21,8 +19,6 @@ export const GATEWAY_BOARDS = [
     chip: "esp32s3",
     name: "ESP32-S3",
     subtitle: "Vývojový modul Wi-Fi a BLE 5.0, s pinovou lištou v balení",
-    badge: "Doporučeno",
-    badgeClass: "featured",
     specs: "16MB Flash • Dual-Core 240MHz • BLE 5.0",
     icon: "mdi:memory",
     firmware: "Firmware pro ESP32-S3",
@@ -63,17 +59,6 @@ const BOARD_PREVIEWS = {
   </svg>`,
 };
 
-// USB-A konektor s kabelem, stejný kreslený styl jako náhledy desek.
-const USB_PREVIEW = `<svg class="usb-preview" viewBox="0 0 120 64" role="img" aria-label="USB konektor">
-  <rect x="4" y="20" width="14" height="24" rx="3" fill="#5c6167"/>
-  <rect x="16" y="24" width="42" height="16" rx="2" fill="#2f3237"/>
-  <rect x="56" y="14" width="26" height="36" rx="3" fill="#b9bec4" stroke="#8f959b"/>
-  <rect x="82" y="20" width="34" height="24" rx="2" fill="#d5d9dd" stroke="#8f959b"/>
-  <rect x="88" y="26" width="22" height="5" rx="1" fill="#3d4248"/>
-  <rect x="88" y="34" width="14" height="4" rx="1" fill="#3d4248"/>
-  <path d="M62 24h4v16h-4z" fill="#8f959b"/>
-</svg>`;
-
 export const gatewayMixin = {
 
   _renderGatewayPortPicker() {
@@ -84,27 +69,16 @@ export const gatewayMixin = {
         ? this._escape(selected.description || selected.name || selected.device)
         : "Vyberte port, do kterého je deska zapojená"
       : "Zatím žádný port. Zapojte desku do USB stroje s Home Assistantem a načtěte porty znovu.";
-    const statusBadge = ports.length
-      ? `<span class="port-status-badge is-connected"><i class="dot"></i>${ports.length} ${ports.length === 1 ? "port nalezen" : "porty nalezeny"}</span>`
-      : `<span class="port-status-badge is-disconnected"><i class="dot"></i>Žádný port</span>`;
-    return `<div class="port-picker-card ${ports.length ? "" : "is-empty"}">
-      <div class="port-picker-visual">
-        ${USB_PREVIEW}
-        ${statusBadge}
-      </div>
-      <div class="port-picker-field">
-        <div class="port-picker-label-row">
-          <label for="flashPort">USB / Sériový port</label>
-        </div>
+    return `<div class="gateway-port-form gateway-form-fields"><div class="field">
+        <label for="flashPort"><ha-icon icon="mdi:usb-port"></ha-icon>USB / Sériový port</label>
         <div class="field-with-icon">
           <ha-icon icon="mdi:usb-port" class="field-icon"></ha-icon>
           <select id="flashPort" ${ports.length ? "" : "disabled"}>${ports.length
             ? ports.map((port) => `<option value="${this._escape(port.device)}" ${port.device === this._flashForm.port ? "selected" : ""}>${this._escape(port.device)} — ${this._escape(port.description || port.name || "")}</option>`).join("")
             : `<option value="">Žádný port nenalezen</option>`}</select>
         </div>
-        <small class="port-picker-hint"><ha-icon icon="${ports.length ? "mdi:check-circle-outline" : "mdi:alert-circle-outline"}"></ha-icon>${hint}</small>
-      </div>
-    </div>`;
+        <small class="port-picker-hint ${ports.length ? "is-ready" : "is-empty"}"><ha-icon icon="${ports.length ? "mdi:check-circle-outline" : "mdi:alert-circle-outline"}"></ha-icon>${hint}</small>
+      </div></div>`;
   },
 
   _selectedGatewayBoard() {
@@ -114,8 +88,7 @@ export const gatewayMixin = {
   _renderGatewayBoardPicker() {
     return `<div class="board-picker-grid" role="radiogroup" aria-label="Typ ESP32 desky">${GATEWAY_BOARDS.map((board) => {
       const selected = this._flashForm.chip === board.chip;
-      return `<div class="board-card ${selected ? "is-selected" : ""} ${board.badgeClass === "featured" ? "is-featured" : ""}">
-        ${board.badge ? `<span class="board-tag ${board.badgeClass}">${this._escape(board.badge)}</span>` : ""}
+      return `<div class="board-card ${selected ? "is-selected" : ""}" role="radio" aria-checked="${selected ? "true" : "false"}" aria-disabled="${this._gatewayBusy ? "true" : "false"}" tabindex="${this._gatewayBusy ? "-1" : "0"}" data-flash-chip="${board.chip}">
         <div class="board-card-visual">${BOARD_PREVIEWS[board.chip] || ""}</div>
         <div class="board-card-info">
           <strong>${this._escape(board.name)}</strong>
@@ -123,7 +96,7 @@ export const gatewayMixin = {
           ${board.specs ? `<span class="board-specs-pill">${this._escape(board.specs)}</span>` : ""}
         </div>
         <div class="board-card-actions">
-          <button class="board-option-pick ${selected ? "primary" : "secondary"}" role="radio" aria-checked="${selected ? "true" : "false"}" data-flash-chip="${board.chip}" ${this._gatewayBusy ? "disabled" : ""}>
+          <button class="board-option-pick ${selected ? "primary" : "secondary"}" type="button" tabindex="-1" ${this._gatewayBusy ? "disabled" : ""}>
             <ha-icon icon="${selected ? "mdi:check-circle" : "mdi:radiobox-blank"}"></ha-icon>
             ${selected ? "Vybráno" : "Vybrat desku"}
           </button>

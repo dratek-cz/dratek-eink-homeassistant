@@ -204,6 +204,17 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn("board.shop", self.source)
         self.assertNotIn("mdi:cart-outline", self.source)
 
+    def test_gateway_usb_and_board_picker_use_the_simplified_controls(self):
+        self.assertIn('class="gateway-port-form gateway-form-fields"', self.source)
+        self.assertNotIn('class="port-picker-card', self.source)
+        self.assertNotIn('class="usb-preview"', self.source)
+        self.assertNotIn('board.badge', self.source)
+        self.assertNotIn('class="board-tag', self.source)
+        self.assertIn('class="board-card ${selected ? "is-selected" : ""}" role="radio"', self.source)
+        self.assertIn('data-flash-chip="${board.chip}"', self.source)
+        self.assertIn('querySelectorAll(".board-card[data-flash-chip]")', self.source)
+        self.assertIn('["Enter", " "].includes(event.key)', self.source)
+
     def test_stat_tiles_are_shared_by_queue_gateways_automations_and_designer(self):
         # Fronta zápisu, Gatewaye, Automatické zápisy a Designer používají stejné dlaždice.
         self.assertIn(".stat-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))", self.source)
@@ -697,6 +708,20 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".display-preview-slot .device-preview-wrap{background:transparent}", self.source)
         self.assertIn(".display-preview-slot .device-preview-screen", self.source)
         self.assertIn("box-shadow:none!important;filter:none!important", self.source)
+
+    def test_main_display_cards_show_the_supported_color_strip(self):
+        self.assertIn("_displayPaletteColors(device)", self.source)
+        self.assertIn("const bwrySdkTypes = new Set([46, 78, 142, 270, 302, 310, 318, 558, 654, 686, 2670, 2702])", self.source)
+        self.assertIn('[["black", "Černá"], ["white", "Bílá"], ["red", "Červená"], ["yellow", "Žlutá"]]', self.source)
+        self.assertIn('class="display-tile-tools">${this._renderDisplayPaletteBookmarks(device)}', self.source)
+        self.assertIn('class="display-palette-strip"', self.source)
+        self.assertIn(".display-palette-strip{box-sizing:border-box;display:inline-flex", self.source)
+        self.assertIn("overflow:hidden;border:1px solid", self.source)
+        self.assertIn("border-radius:7px", self.source)
+        self.assertIn(".display-palette-color+.display-palette-color{border-left:1px", self.source)
+        self.assertIn(".display-palette-color.is-yellow{background:#f2c500}", self.source)
+        self.assertNotIn("display-palette-bookmark", self.source)
+        self.assertIn('model:"EPA LCD 296x128 BWRY", sdk_type:46', self.harness)
 
     def test_layers_share_the_sticky_tool_sidebar(self):
         self.assertIn('data-designer-side="tools"', self.source)

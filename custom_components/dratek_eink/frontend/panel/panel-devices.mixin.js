@@ -196,6 +196,20 @@ export const devicesMixin = {
     return !!device && [40, 43, 46, 48, 51].includes(Number(device.sdk_type));
   },
 
+  _displayPaletteColors(device) {
+    const bwrySdkTypes = new Set([46, 78, 142, 270, 302, 310, 318, 558, 654, 686, 2670, 2702]);
+    const descriptor = `${device?.model || ""} ${device?.display_type || ""}`.toUpperCase();
+    const supportsYellow = bwrySdkTypes.has(Number(device?.sdk_type)) || descriptor.includes("BWRY");
+    return supportsYellow
+      ? [["black", "Černá"], ["white", "Bílá"], ["red", "Červená"], ["yellow", "Žlutá"]]
+      : [["black", "Černá"], ["white", "Bílá"], ["red", "Červená"]];
+  },
+
+  _renderDisplayPaletteBookmarks(device) {
+    const colors = this._displayPaletteColors(device);
+    return `<span class="display-palette-strip" aria-label="Paleta displeje: ${colors.map(([, label]) => label.toLowerCase()).join(", ")}" title="Barvy podporované displejem">${colors.map(([color, label]) => `<i class="display-palette-color is-${color}" title="${label}"></i>`).join("")}</span>`;
+  },
+
   _isLarge400Device(device = this._device()) {
     if (!device) return false;
     const size = this._baseDisplaySize(device);
@@ -432,7 +446,7 @@ export const devicesMixin = {
         <header class="display-tile-header">
           <span class="display-online-dot ${temporarilyUnseen ? "stale" : ""}" title="${temporarilyUnseen ? "Displej nebyl zachycen v posledním krátkém skenu" : "Displej je dostupný"}"></span>
           <div class="display-tile-identity ${editing ? "is-editing" : ""}">${editing ? `<input class="display-name-inline" data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Například Kuchyň" aria-label="Název displeje">` : `<strong>${this._escape(this._deviceTitle(device))}</strong>`}<span>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</span></div>
-          ${editing ? `<button class="tile-icon-btn tile-save-name-btn" data-device-name-save="${this._escape(device.address)}" title="Uložit název" aria-label="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button>` : `<button class="tile-icon-btn" data-device-rename="${this._escape(device.address)}" title="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}" aria-label="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>`}
+          <span class="display-tile-tools">${this._renderDisplayPaletteBookmarks(device)}${editing ? `<button class="tile-icon-btn tile-save-name-btn" data-device-name-save="${this._escape(device.address)}" title="Uložit název" aria-label="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button>` : `<button class="tile-icon-btn" data-device-rename="${this._escape(device.address)}" title="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}" aria-label="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>`}</span>
           ${mode === "list" ? `<span class="display-resolution"><ha-icon icon="mdi:aspect-ratio"></ha-icon>${previewSize.width} × ${previewSize.height}</span>` : ""}
           ${mode === "list" ? transferState : ""}
         </header>

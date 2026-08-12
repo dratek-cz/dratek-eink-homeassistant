@@ -32,6 +32,7 @@ FULL_REFRESH_MODE = 0x01
 BLOCK_REQUEST_TIMEOUT = 12
 OPTIONAL_COMPLETION_TIMEOUT = 2
 UNCONFIRMED_WRITE_DRAIN_TIMEOUT = 20
+LARGE_DISPLAY_COMPLETION_TIMEOUT = 60
 MAX_BLOCK_REQUEST_RETRIES = 5
 GATT_OPERATION_TIMEOUT = 8
 TEARDOWN_OPERATION_TIMEOUT = 5
@@ -552,11 +553,26 @@ class DratekTransfer:
                     end_block = total_blocks if streaming_mode else next_block + 1
                     for block_number in range(next_block, end_block):
                         # SDK 299/315 advertises acknowledged writes, but its
-                        # software-129 controller never answers them while an
-                        # image stream is active. Keep every block unconfirmed
-                        # and pace the 96 kB stream instead; otherwise block 16
-                        # always times out with response=yes.
-                        block_requires_response = require_gatt_response
+                        # software-129 controller never answers periodic fences
+                        # while an image stream is active. Keep regular blocks
+                        # unconfirmed and pace the 96 kB stream instead; otherwise
+                        # block 16 always times out with response=yes.
+                        # The large software-129 controller does not tolerate
+                        # acknowledged writes throughout the stream, but it does
+                        # need the final write to act as a delivery fence before
+                        # it commits the image buffer and refreshes the panel.
+                        # Keep the first 399 blocks paced and unconfirmed, then
+                        # request an ATT response only for the final block.
+                        large_display_final_fence = (
+                            streaming_mode
+                            and not require_gatt_response
+                            and int(sdk_type) in PACED_LARGE_STREAM_SDK_TYPES
+                            and "write" in write_char.properties
+                            and block_number == total_blocks - 1
+                        )
+                        block_requires_response = (
+                            require_gatt_response or large_display_final_fence
+                        )
                         final_response_missing = False
                         try:
                             block_data = _next_block(payload, block_size, block_number)
@@ -568,7 +584,7 @@ class DratekTransfer:
                                 require_response=block_requires_response,
                                 operation_timeout=(
                                     FINAL_BLOCK_RESPONSE_TIMEOUT
-                                    if require_gatt_response
+                                    if block_requires_response
                                     and streaming_mode
                                     and block_number == total_blocks - 1
                                     else GATT_OPERATION_TIMEOUT
@@ -585,22 +601,29 @@ class DratekTransfer:
                                 require_gatt_response
                                 and len(confirmed_blocks) == total_blocks - 1
                             )
+                            final_fence_handed_off = (
+                                large_display_final_fence
+                                and block_number == total_blocks - 1
+                            )
                             if (
                                 not streaming_mode
                                 or block_number != total_blocks - 1
-                                or not confirmed_flow_complete
+                                or not (
+                                    confirmed_flow_complete
+                                    or final_fence_handed_off
+                                )
                             ):
                                 raise
                             # Several Picksmart controllers consume the final block
                             # and start refreshing but fail to return the ATT response.
                             # Repeating it would append duplicate image bytes. Treat
                             # only this terminal ambiguity as delivered, then still
-                            # wait below for the optional vendor completion packet.
+                            # wait below for the vendor completion packet.
                             final_response_missing = True
                             self.log(
                                 "The display did not return the final GATT response, "
                                 "but the complete payload was handed to the controller; "
-                                "waiting for the optional refresh confirmation."
+                                "waiting for the refresh confirmation."
                             )
                         else:
                             if block_requires_response:
@@ -620,16 +643,36 @@ class DratekTransfer:
                             )
 
                     if len(sent_blocks) == total_blocks:
+                        require_refresh_confirmation = (
+                            streaming_mode
+                            and int(sdk_type) in PACED_LARGE_STREAM_SDK_TYPES
+                        )
+                        completion_timeout = (
+                            LARGE_DISPLAY_COMPLETION_TIMEOUT
+                            if require_refresh_confirmation
+                            else OPTIONAL_COMPLETION_TIMEOUT
+                            if require_gatt_response
+                            else UNCONFIRMED_WRITE_DRAIN_TIMEOUT
+                        )
+                        if require_refresh_confirmation:
+                            self.log(
+                                "All image blocks were handed off; keeping Bluetooth open "
+                                f"for up to {completion_timeout} seconds until the display "
+                                "confirms the physical refresh with 05 08."
+                            )
                         try:
                             response = await self._wait_for_next_transfer_response(
                                 responses,
-                                timeout=(
-                                    OPTIONAL_COMPLETION_TIMEOUT
-                                    if require_gatt_response
-                                    else UNCONFIRMED_WRITE_DRAIN_TIMEOUT
-                                ),
+                                timeout=completion_timeout,
                             )
                         except TimeoutError:
+                            if require_refresh_confirmation:
+                                raise RuntimeError(
+                                    "The 800x480 display received all image blocks but did not "
+                                    "confirm the physical refresh with 05 08 within "
+                                    f"{LARGE_DISPLAY_COMPLETION_TIMEOUT} seconds. The transfer "
+                                    "will not be marked successful."
+                                )
                             self.log(
                                 "All image blocks were handed off and the Bluetooth connection "
                                 "was kept open for the controller; no optional 05 08 "

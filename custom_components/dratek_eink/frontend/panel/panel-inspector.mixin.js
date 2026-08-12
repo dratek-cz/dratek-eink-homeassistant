@@ -111,12 +111,20 @@ export const inspectorMixin = {
       const port = (this._serialPorts || []).find((item) => item.device === this._flashForm.port);
       if (hint) hint.lastChild.textContent = port ? (port.description || port.name || port.device) : "Vyberte port, do kterého je deska zapojená";
     });
-    this.shadowRoot.querySelectorAll("[data-flash-chip]").forEach((button) => button.addEventListener("click", (event) => {
-      event.preventDefault();
-      this._flashForm.chip = button.dataset.flashChip;
+    const selectFlashBoard = (card) => {
+      if (this._gatewayBusy || !card?.dataset.flashChip) return;
+      this._flashForm.chip = card.dataset.flashChip;
       this._render();
       this._paint();
-    }));
+    };
+    this.shadowRoot.querySelectorAll(".board-card[data-flash-chip]").forEach((card) => {
+      card.addEventListener("click", (event) => { event.preventDefault(); selectFlashBoard(card); });
+      card.addEventListener("keydown", (event) => {
+        if (event.target !== card || !["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        selectFlashBoard(card);
+      });
+    });
     this.shadowRoot.querySelector("#flashSsid")?.addEventListener("input", (event) => { this._flashForm.ssid = event.target.value; syncFlashButton(); });
     this.shadowRoot.querySelector("#flashPassword")?.addEventListener("input", (event) => { this._flashForm.password = event.target.value; });
     this.shadowRoot.querySelector("#flashHostname")?.addEventListener("input", (event) => { this._flashForm.hostname = event.target.value; });

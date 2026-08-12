@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.284
+
+- **Jednodušší USB připojení** – port se vybírá ve stejném formulářovém stylu jako síťové údaje, bez samostatného obrázkového panelu.
+- **Přímá volba desky** – ESP32 nebo ESP32-S3 lze zvolit kliknutím kamkoliv na kartu včetně obrázku; rušivé štítky Standard a Doporučeno byly odstraněny.
+- **Paleta přímo u displeje** – vedle tužky jsou tři barevné záložky pro BWR a čtyři pro BWRY včetně žluté.
+- **Kompaktní barevný proužek** – podporované barvy jsou spojené do jednoho čistého zaobleného obdélníku bez mezer.
+- **Spolehlivé dokončení BWR 800×480** – poslední blok rychlého streamu je potvrzený a integrace čeká až 60 sekund na `05 08`, tedy na skutečné fyzické překreslení; pouhé zařazení 400 bloků do Bluetooth fronty už není považované za úspěch.
+
 ## Novinky ve verzi 0.1.283
 
   - **Přehledné menu nové gatewaye** – menší USB a síťový sloupec doplňuje velká volba ESP32/ESP32-S3 a přepracovaná instalace s kontrolou připravenosti, bez vnitřního posuvníku.

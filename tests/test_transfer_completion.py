@@ -43,9 +43,9 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertIn('"display-acknowledged GATT flow control"', source)
         self.assertIn('"display-notification flow control"', source)
         self.assertIn("block_number == total_blocks - 1", section)
-        self.assertIn("block_requires_response = require_gatt_response", section)
+        self.assertIn("large_display_final_fence = (", section)
+        self.assertIn("require_gatt_response or large_display_final_fence", section)
         self.assertNotIn("checkpoint_response", section)
-        self.assertIn("block_requires_response = require_gatt_response", section)
         self.assertIn("int(sdk_type) in PACED_LARGE_STREAM_SDK_TYPES", section)
         self.assertIn("if require_gatt_response", section)
         self.assertIn("require_response=block_requires_response", section)
@@ -64,7 +64,7 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertIn("async_last_service_info", source)
         self.assertIn("manufacturer_data.get(DRATEK_COMPANY_ID)", source)
 
-    def test_local_transfer_accepts_models_without_optional_completion_confirmation(self):
+    def test_large_display_requires_physical_refresh_confirmation(self):
         source = (ROOT / "custom_components" / "dratek_eink" / "transfer.py").read_text(
             encoding="utf-8"
         )
@@ -77,6 +77,10 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertLess(optional, disconnect_log)
         self.assertIn("OPTIONAL_COMPLETION_TIMEOUT = 2", source)
         self.assertIn("UNCONFIRMED_WRITE_DRAIN_TIMEOUT = 20", source)
+        self.assertIn("LARGE_DISPLAY_COMPLETION_TIMEOUT = 60", source)
+        self.assertIn("require_refresh_confirmation = (", source)
+        self.assertIn("confirm the physical refresh with 05 08", source)
+        self.assertIn("will not be marked successful", source)
         self.assertIn("+ bytes([FULL_REFRESH_MODE])", source)
         self.assertIn("if len(sent_blocks) != total_blocks:", source)
 

@@ -2,6 +2,21 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.284] - 2026-08-12
+
+### Vylepšeno – USB připojení a volba desky
+- Výběr USB portu používá stejný jednoduchý formulářový vzhled jako síťová nastavení, bez samostatného obrázkového panelu.
+- Z karet ESP32 a ESP32-S3 byly odstraněny štítky Standard a Doporučeno.
+- Desku lze vybrat kliknutím kamkoliv na její kartu, včetně obrázku, a také klávesami Enter nebo mezerník.
+- Karty displejů na hlavní stránce ukazují vedle tužky barevné záložky podporované palety: černou, bílou a červenou, u BWRY navíc žlutou.
+- BWRY modely jsou rozpoznané podle SDK typu i názvu modelu, takže se žlutá zobrazí i u staršího nebo nepřesného popisu displeje.
+- Barevná paleta je nově sjednocená do jednoho kompaktního obdélníku se zaoblenými rohy a navazujícími barevnými segmenty.
+
+### Opraveno – dokončení přenosu BWR 800×480
+- Rychlý stream SDK 299/315 používá potvrzený zápis posledního bloku jako doručovací bariéru, aniž by vracel pomalé potvrzování všech 400 bloků.
+- Po odeslání obrazu zůstane Bluetooth spojení otevřené až 60 sekund na skutečné potvrzení fyzického překreslení `05 08`.
+- Pokud displej překreslení nepotvrdí, úloha se už falešně neoznačí jako úspěšná a může bezpečně přejít do dalšího pokusu.
+
 ## [0.1.283] - 2026-08-12
 
 ### Vylepšeno – Přehledná instalace nové gatewaye
