@@ -159,6 +159,53 @@ class AdvertisedFramingTests(unittest.TestCase):
         self.assertIsNone(discovery.raw_type_for("FF:FF:00:00:00:01"))
         self.assertFalse(quicklz.needs_vendor_framing(None))
 
+    def test_a_restart_falls_back_to_the_home_assistant_bluetooth_cache(self):
+        """An automatic update can fire before anything has scanned.
+
+        Home Assistant restarts with our map empty, and a queued refresh does not
+        wait for the panel to be opened. Reading Home Assistant's own record of
+        what its adapter heard is what keeps that first send from going out in
+        the wrong framing.
+        """
+        address = "FF:FF:99:80:41:53"
+        self.assertIsNone(discovery.raw_type_for(address))
+
+        service_info = types.SimpleNamespace(
+            address=address,
+            name="NEMR99804153",
+            rssi=-52,
+            manufacturer_data={0x5053: bytes.fromhex("2B1D810101")},
+        )
+        bluetooth = types.ModuleType("homeassistant.components.bluetooth")
+        bluetooth.async_discovered_service_info = lambda hass, connectable=True: [service_info]
+        components = types.ModuleType("homeassistant.components")
+        components.bluetooth = bluetooth
+        homeassistant = types.ModuleType("homeassistant")
+        homeassistant.components = components
+
+        injected = {
+            "homeassistant": homeassistant,
+            "homeassistant.components": components,
+            "homeassistant.components.bluetooth": bluetooth,
+        }
+        saved = {name: sys.modules.get(name) for name in injected}
+        sys.modules.update(injected)
+        try:
+            self.assertEqual(discovery.resolve_raw_type(object(), address), 299)
+        finally:
+            for name, module in saved.items():
+                if module is None:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = module
+
+        # The lookup also seeds the map, so the next send skips the walk.
+        self.assertEqual(discovery.raw_type_for(address), 299)
+        self.assertTrue(quicklz.needs_vendor_framing(299))
+
+    def test_resolving_without_home_assistant_stays_silent(self):
+        self.assertIsNone(discovery.resolve_raw_type(None, "FF:FF:00:00:00:02"))
+
 
 if __name__ == "__main__":
     unittest.main()

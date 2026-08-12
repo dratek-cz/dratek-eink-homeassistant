@@ -504,6 +504,14 @@ export const renderUiMixin = {
         .device-large400-label{display:grid;width:100%;height:100%;box-sizing:border-box;grid-template-rows:minmax(0,1fr) auto;gap:1px;padding:4% 7% 3%;overflow:hidden;background:#fff;color:#111}
         .device-large400-label .device-preview-barcode.horizontal{display:block;width:100%;height:100%;min-height:0;background:#fff}
         .device-large400-mac{display:block;overflow:hidden;font:700 clamp(3px,.62vw,8px)/1 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.015em;text-align:center;text-overflow:clip;white-space:nowrap}
+        /* 800x480 body proportions are taken from the supplied 1080px SVG:
+           outer body 1014x658, screen 927x504 and the lower label 173x40. */
+        .designer-device-wide800:before{display:none}
+        .designer-device-wide800 .designer-device-screen{left:50%;top:50%;width:91.42%;height:76.6%;transform:translate(-50%,-50%)}
+        .designer-device-wide800 .device-large400-bottom-band{left:41.42%;right:41.52%;bottom:3.8%;height:6.1%;background:#b7b7b7}
+        .designer-device-wide800 .device-large400-label{grid-template-rows:minmax(0,4fr) minmax(3px,1fr);gap:2%;padding:5% 8% 4%;background:#b7b7b7}
+        .designer-device-wide800 .device-large400-label .device-preview-barcode.horizontal{background:transparent}
+        .designer-device-wide800 .device-large400-mac{font-size:clamp(4px,calc(var(--designer-frame-width) / 125),8px);line-height:1}
         .device-large400-top-band{display:none}
         .device-preview-large400.device-preview-portrait:before,.designer-device-large400.designer-device-portrait:before{left:-1%;right:auto;top:3.8%;bottom:3.8%;width:14%;height:auto}
         .device-preview-large400.device-preview-portrait:after,.designer-device-large400.designer-device-portrait:after{left:auto;right:-2%;top:3.8%;bottom:3.8%;width:16%;height:auto}

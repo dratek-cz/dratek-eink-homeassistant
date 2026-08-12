@@ -17,7 +17,7 @@ from .const import (
     WRITE_CHARS,
 )
 from . import quicklz
-from .discovery import raw_type_for
+from .discovery import resolve_raw_type
 from .render import pack_bwr_image, pack_bwr_region
 
 if TYPE_CHECKING:
@@ -193,7 +193,7 @@ class DratekTransfer:
         QuickLZ stream: they accept every block of a raw payload and acknowledge
         the transfer, then refresh nothing at all.
         """
-        raw_type = raw_type_for(address)
+        raw_type = resolve_raw_type(self._hass, address)
         if raw_type is None:
             self.log(
                 "Display has not been seen advertising, so its payload framing is "

@@ -874,7 +874,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
             'class="designer-device-stage ${designerLarge400',
             self.source,
         )
-        self.assertIn('${large400Layout ? "designer-device-large400" : ""}', self.source)
+        self.assertIn('${labelledLargeLayout ? "designer-device-large400" : ""}', self.source)
         self.assertIn('"designer-device-large400"', self.source)
         self.assertIn(".device-preview-empty{position:absolute", self.source)
         self.assertIn("background:#fff;mix-blend-mode:normal", self.source)
@@ -886,6 +886,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('class="device-large400-mac"', self.source)
         self.assertIn("_renderDeviceBarcode(address, true)", self.source)
         self.assertIn(".device-large400-label .device-preview-barcode.horizontal", self.source)
+        self.assertIn("_isWide800Device", self.source)
+        self.assertIn('wide800Layout ? 1014 / 658', self.source)
+        self.assertIn('${wide800Layout ? "designer-device-wide800" : ""}', self.source)
+        self.assertIn(".designer-device-wide800 .device-large400-bottom-band{left:41.42%;right:41.52%;bottom:3.8%;height:6.1%;background:#b7b7b7}", self.source)
+        self.assertIn(".designer-device-wide800 .device-large400-label .device-preview-barcode.horizontal{background:transparent}", self.source)
+        self.assertIn("grid-template-rows:minmax(0,4fr) minmax(3px,1fr)", self.source)
 
     def test_connection_map_uses_plain_lines(self):
         self.assertIn(".connection-device:after{display:none}", self.source)

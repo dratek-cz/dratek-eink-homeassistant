@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.289
+
+- **Přesný rámeček displeje 800×480** – náhled odpovídá dodanému SVG včetně proporcí displeje a spodního tmavého štítku.
+- **Čárový kód i adresa přímo na štítku** – čárový kód je dominantní, adresa menší a oba prvky zůstávají uvnitř tmavé plochy.
+- **Správný první přenos po restartu** – integrace dohledá inzerovaný typ displeje také v Bluetooth cache Home Assistantu, takže automatický zápis nepoužije chybné formátování obrazu.
+
 ## Novinky ve verzi 0.1.288
 
 - **Rozložení velkých displejů** – osm variant se vybírá v kompaktním popupu s grafickými ikonami; kliknutí i drag & drop používají stejné pozice.

@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.289] - 2026-08-12
+
+### Opraveno – fyzický náhled a první přenos po restartu
+- Fyzický náhled displeje 800×480 používá proporce dodaného SVG: tělo 1014×658, obrazovku 927×504 a spodní štítek 173×40.
+- Čárový kód a menší Bluetooth adresa jsou vykreslené přímo na tmavém štítku pod obrazovkou.
+- Inzerovaný typ displeje se před přenosem dohledá také v Bluetooth cache Home Assistantu. První automatický zápis po restartu proto nepoužije nesprávné formátování obrazu.
+
 ## [0.1.288] - 2026-08-12
 
 ### Přidáno – vícenásobná rozložení velkých displejů

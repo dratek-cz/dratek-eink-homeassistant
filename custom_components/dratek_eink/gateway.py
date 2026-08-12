@@ -19,7 +19,7 @@ from homeassistant.helpers.storage import Store
 from PIL import Image
 
 from . import quicklz
-from .discovery import raw_type_for
+from .discovery import resolve_raw_type
 from .render import pack_bwr_image, pack_bwr_region
 
 GATEWAY_STORE_KEY = "dratek_eink.gateways"
@@ -380,7 +380,7 @@ async def async_send_gateway_payload(
             pack_bwr_region if partial else pack_bwr_image,
             *([image] if partial else [sdk_type, image, transform, orientation]),
         )
-        raw_type = raw_type_for(address)
+        raw_type = resolve_raw_type(hass, address)
         if raw_type is None:
             add_log(
                 "Display has not been seen advertising, so its payload framing is "

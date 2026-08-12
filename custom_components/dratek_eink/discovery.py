@@ -114,6 +114,36 @@ def raw_type_for(address: str) -> int | None:
     return _ADVERTISED_RAW_TYPES.get((address or "").upper())
 
 
+def resolve_raw_type(hass: Any, address: str) -> int | None:
+    """The advertised type, from our own scans or Home Assistant's own cache.
+
+    The map above only fills once something scans, and a restart empties it. An
+    automatic update that fires before the panel has been opened would then find
+    no advertised type at all - which is exactly when the wrong payload framing
+    is least recoverable, because the display accepts the transfer and refreshes
+    nothing. Home Assistant keeps its own record of what its adapter has heard,
+    so ask that before giving up.
+    """
+    remembered = raw_type_for(address)
+    if remembered is not None:
+        return remembered
+    if hass is None:
+        return None
+    try:
+        from homeassistant.components import bluetooth
+    except ImportError:
+        return None
+    target = (address or "").upper()
+    for service_info in bluetooth.async_discovered_service_info(hass, connectable=False):
+        if str(getattr(service_info, "address", "")).upper() != target:
+            continue
+        # Parsing also feeds the map above, so the next send skips this walk.
+        parsed = parse_dratek_advertisement(service_info)
+        if parsed is not None:
+            return parsed.raw_type
+    return None
+
+
 def sdk_type_from_raw(raw_type: int) -> int:
     if raw_type in MODEL_BY_SDK_TYPE:
         return raw_type
