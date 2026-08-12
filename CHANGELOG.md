@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.281] - 2026-08-12
+
+### Opraveno – Rychlost lokálního BLE přenosu
+- Streaming displeje SDK 46 a 299/315 znovu používají bezpečně dávkovaný `write-without-response`; BlueZ již nečeká přibližně 2,5 sekundy na ATT odpověď každého bloku.
+- Povinné potvrzení jednotlivých bloků zůstává zachované pro SDK 51, které ho skutečně potřebuje k fyzickému obnovení obrazu.
+
 ## [0.1.280] - 2026-08-12
 
 ### Opraveno – BWRY 296×128 a BWR 800×480

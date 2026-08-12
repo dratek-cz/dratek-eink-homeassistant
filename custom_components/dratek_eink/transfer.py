@@ -511,9 +511,15 @@ class DratekTransfer:
                 streaming_mode = bool(int(software_version or 0) & 0x80)
                 if streaming_mode and "write" not in write_char.properties:
                     self.log("Display does not expose acknowledged block writes; using unconfirmed fallback stream.")
+                # Only SDK type 51 is known to require an ATT response for every
+                # image block before its controller commits the frame.  Requiring
+                # responses for every streaming model makes BlueZ wait about
+                # 2.5 seconds per block (17 minutes for a 96 kB 800x480 image).
+                # Other models use their write-without-response characteristic,
+                # paced below and kept connected during the drain interval.
                 require_gatt_response = (
                     "write" in write_char.properties
-                    and (int(sdk_type) in WRITE_ACK_SDK_TYPES or streaming_mode)
+                    and int(sdk_type) in WRITE_ACK_SDK_TYPES
                 ) or ("write-without-response" not in write_char.properties)
 
 

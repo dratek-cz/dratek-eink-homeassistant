@@ -34,7 +34,8 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertIn("int(sdk_type) in WRITE_ACK_SDK_TYPES", source)
         self.assertIn('"write-without-response" not in write_char.properties', source)
         self.assertIn('if streaming_mode and "write" not in write_char.properties:', source)
-        self.assertIn("or streaming_mode", source)
+        self.assertNotIn("int(sdk_type) in WRITE_ACK_SDK_TYPES or streaming_mode", source)
+        self.assertIn("and int(sdk_type) in WRITE_ACK_SDK_TYPES", source)
         self.assertIn("using unconfirmed fallback stream", source)
 
         self.assertIn('"display-acknowledged GATT flow control"', source)

@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.281
+
+- odstraněno 2,5sekundové čekání na každý BLE blok u streaming displejů SDK 46 a 299/315
+- rychlý přenos zůstává dávkovaný a spojení se zavře až po bezpečném doposlání dat
+
 ## Novinky ve verzi 0.1.280
 
 - opravené barvy a orientace BWRY 296×128 (SDK 46) podle čtyřbarevného formátu výrobce
