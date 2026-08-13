@@ -437,8 +437,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('${this._displaySettingsView === "templates" ? this._renderDisplayTemplatesSection(device) : ""}', self.source)
         self.assertNotIn('return this._renderDisplayTemplatesPage(device)', self.source)
         self.assertIn('class="display-template-grid"', self.source)
-        # 24 templates after adding the hardware dithering calibration card.
-        self.assertEqual(self.source.count('number: "'), 24)
+        # 28 templates including five hardware dithering calibration cards.
+        self.assertEqual(self.source.count('number: "'), 28)
 
         self.assertIn("variables: [", self.source)
         # A promotion is a decision rather than a reading, so a price tag carries a
@@ -450,13 +450,31 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("_blockPriceTag(row, box) {", self.source)
         self.assertIn('id: "shading_test"', self.source)
         self.assertIn("_blockDither(row, box) {", self.source)
-        self.assertIn('patternUnits="userSpaceOnUse" width="2" height="2"', self.source)
+        self.assertIn(
+            'patternUnits="userSpaceOnUse" width="${matrix}" height="${matrix}"',
+            self.source,
+        )
         self.assertIn('{ ink: "red", base: "yellow", density: 0.5 }', self.source)
         shading_source = (PANEL_MODULES / "templates" / "shading_test.js").read_text(encoding="utf-8")
         design_source = shading_source[shading_source.index("design:"):]
         self.assertNotIn("label:", design_source)
         self.assertNotIn("title:", design_source)
         self.assertIn("pixelPerfect: true", design_source)
+        for template_id in (
+            "shading_light_test",
+            "shading_dark_test",
+            "shading_warm_test",
+            "shading_complete_test",
+        ):
+            self.assertIn(f'id: "{template_id}"', self.source)
+        complete_source = (
+            PANEL_MODULES / "templates" / "shading_complete_test.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("const LEVELS = Array.from({ length: 17 }", complete_source)
+        self.assertIn("columns: 17", complete_source)
+        self.assertNotIn("label:", complete_source[complete_source.index("design:"):])
+        self.assertIn("matrix: 4", self.source)
+        self.assertIn("const foregroundCount = Math.round(density * matrix * matrix);", self.source)
         self.assertIn('class="display-template-variable-count blank-badge"', self.source)
         self.assertIn('class="display-template-variables-row"', self.source)
         self.assertIn('aria-label="Použité údaje"', self.source)

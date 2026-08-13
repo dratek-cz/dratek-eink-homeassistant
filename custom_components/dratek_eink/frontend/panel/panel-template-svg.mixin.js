@@ -901,19 +901,18 @@ export const templateSvgMixin = {
       const density = Math.max(0, Math.min(1, Number(cell.density) || 0));
       const base = ink(cell.base || "white");
       const foreground = ink(cell.ink || "black");
+      const matrix = Number(cell.matrix || row.matrix) === 4 ? 4 : 2;
+      const bayerOrder = matrix === 4
+        ? [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
+        : [0, 2, 3, 1];
+      const foregroundCount = Math.round(density * matrix * matrix);
       const patternId = `dratek-dither-${serial}-${index}`;
-      const foregroundPixels = density >= 1
-        ? '<rect width="2" height="2"></rect>'
-        : density >= 0.75
-          ? '<path d="M0 0h1v1H0zM1 0h1v1H1zM0 1h1v1H0z"></path>'
-          : density >= 0.5
-            ? '<path d="M0 0h1v1H0zM1 1h1v1H1z"></path>'
-            : density >= 0.25
-              ? '<rect width="1" height="1"></rect>'
-              : "";
+      const foregroundPixels = bayerOrder.map((order, pixel) => order < foregroundCount
+        ? `<rect x="${pixel % matrix}" y="${Math.floor(pixel / matrix)}" width="1" height="1"></rect>`
+        : "").join("");
       parts.push(
-        `<defs><pattern id="${patternId}" patternUnits="userSpaceOnUse" width="2" height="2" shape-rendering="crispEdges">`
-        + `<rect width="2" height="2" fill="${base}"></rect>`
+        `<defs><pattern id="${patternId}" patternUnits="userSpaceOnUse" width="${matrix}" height="${matrix}" shape-rendering="crispEdges">`
+        + `<rect width="${matrix}" height="${matrix}" fill="${base}"></rect>`
         + `<g fill="${foreground}">${foregroundPixels}</g></pattern></defs>`,
       );
       parts.push(`<rect x="${x}" y="${y}" width="${cellWidth}" height="${cellHeight}" fill="url(#${patternId})" shape-rendering="crispEdges"></rect>`);

@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.291
+
+- **Kompletní test barev** – jedna šablona zobrazuje všech šest dvojic bílé, černé, červené a žluté ve všech 17 poměrech mřížky 4×4, tedy od 0 do 16 pixelů druhé barvy.
+- **Další kalibrační palety** – samostatné testy světlých, tmavých a teplých odstínů jsou tvořené pouze fyzickými pixely bez textu, mezer a rámečků.
+
 ## Novinky ve verzi 0.1.290
 
 - **Rychlý lokální přenos na displeje 800×480** – SDK 299/315 už nečeká přibližně 2,5 sekundy na potvrzení každého ze 419 bloků. Data se posílají přesně časovaným proudem a poslední blok zůstá bezpečnou GATT bariérou.

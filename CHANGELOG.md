@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.291] - 2026-08-13
+
+### Přidáno
+- Přibyly tři samostatné pixelové testy světlých, tmavých a teplých odstínů bez textu, mezer a rámečků.
+- Nová šablona `Kompletní test barev` obsahuje všech šest dvojic podporovaných barev a všech 17 poměrů míchání dosažitelných v přesné mřížce 4×4 pixelů.
+
 ## [0.1.290] - 2026-08-13
 
 ### Opraveno

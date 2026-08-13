@@ -60,13 +60,21 @@ MINIMUM_TEMPLATES = 20
 # distinctive - there is nothing the old icon/title/rule/value/list/footer
 # skeleton could be confused with here, so the row-count floor below does not
 # apply to it. Each entry needs a reason, not just a name.
+CALIBRATION_TEMPLATES = {
+    "shading_test",
+    "shading_light_test",
+    "shading_dark_test",
+    "shading_warm_test",
+    "shading_complete_test",
+}
+
 SINGLE_ROW_TEMPLATES = {
     # The whole panel is one live map image; anything else drawn over it would
     # just cover the data it exists to show.
     "radar",
     # A hardware calibration target must be nothing except its edge-to-edge
     # palette pixels; titles, footers or extra rows would contaminate the test.
-    "shading_test",
+    *CALIBRATION_TEMPLATES,
 }
 
 
@@ -156,6 +164,8 @@ class DisplayTemplateShapeTests(unittest.TestCase):
     def test_no_two_templates_are_built_the_same_way(self) -> None:
         seen: dict[tuple[str, ...], list[str]] = {}
         for name, shape in self.shapes.items():
+            if name in CALIBRATION_TEMPLATES:
+                continue
             seen.setdefault(shape, []).append(name)
         duplicates = {shape: names for shape, names in seen.items() if len(names) > 1}
         self.assertEqual(

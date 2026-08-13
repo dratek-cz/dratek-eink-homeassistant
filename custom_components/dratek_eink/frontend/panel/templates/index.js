@@ -28,6 +28,10 @@ import { template as server } from "./server.js";
 import { template as garden } from "./garden.js";
 import { template as price } from "./price.js";
 import { template as shadingTest } from "./shading_test.js";
+import { template as shadingLightTest } from "./shading_light_test.js";
+import { template as shadingDarkTest } from "./shading_dark_test.js";
+import { template as shadingWarmTest } from "./shading_warm_test.js";
+import { template as shadingCompleteTest } from "./shading_complete_test.js";
 
 export const DISPLAY_TEMPLATES = [
   weather,
@@ -53,6 +57,10 @@ export const DISPLAY_TEMPLATES = [
   garden,
   price,
   shadingTest,
+  shadingLightTest,
+  shadingDarkTest,
+  shadingWarmTest,
+  shadingCompleteTest,
 ];
 
 export const DISPLAY_TEMPLATE_CATALOG = DISPLAY_TEMPLATES.map((entry) => entry.catalog);
