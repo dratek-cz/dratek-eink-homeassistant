@@ -42,6 +42,26 @@ class GatewayDiscoveryRetentionTests(unittest.TestCase):
         source = (COMPONENT / "ws_devices.py").read_text(encoding="utf-8")
         self.assertIn('not bool(path.get("temporarily_unseen"))', source)
 
+    def test_configured_gateways_are_monitored_and_rediscovered_automatically(self) -> None:
+        gateway_source = (COMPONENT / "gateway.py").read_text(encoding="utf-8")
+        init_source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
+        panel_source = (
+            COMPONENT / "frontend" / "panel" / "panel-gateway.mixin.js"
+        ).read_text(encoding="utf-8")
+        overview_source = (
+            COMPONENT / "frontend" / "dratek-eink-overview-card.js"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("await async_discover_gateways(hass, seconds=4)", gateway_source)
+        self.assertIn("_gateway_matches_discovery(gateway, item)", gateway_source)
+        self.assertIn('gateway["host"] = host', gateway_source)
+        self.assertIn('"gateway_refresh_lock", asyncio.Lock()', gateway_source)
+        self.assertIn("GATEWAY_MONITOR_INTERVAL = timedelta(seconds=30)", init_source)
+        self.assertIn("async_track_time_interval(", init_source)
+        self.assertIn("_scheduleGatewayStatusPoll(delay = 15000)", panel_source)
+        self.assertIn('type: "dratek_eink/gateways/list"', panel_source)
+        self.assertIn("this._scheduleRefresh();", overview_source)
+
 
 if __name__ == "__main__":
     unittest.main()

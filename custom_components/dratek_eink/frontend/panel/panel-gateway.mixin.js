@@ -61,6 +61,34 @@ const BOARD_PREVIEWS = {
 
 export const gatewayMixin = {
 
+  _scheduleGatewayStatusPoll(delay = 15000) {
+    window.clearTimeout(this._gatewayStatusPollTimer);
+    if (!this.isConnected || !this._hass) return;
+    this._gatewayStatusPollTimer = window.setTimeout(async () => {
+      this._gatewayStatusPollTimer = null;
+      if (!this._gatewayBusy) await this._loadGatewaysInBackground();
+      this._scheduleGatewayStatusPoll();
+    }, delay);
+  },
+
+  async _loadGatewaysInBackground() {
+    if (!this._hass || this._gatewayBusy) return;
+    try {
+      const result = await this._hass.callWS({ type: "dratek_eink/gateways/list" });
+      const gateways = result.gateways || [];
+      const before = JSON.stringify(this._gateways || []);
+      const after = JSON.stringify(gateways);
+      this._gateways = gateways;
+      if (before !== after) {
+        this._render();
+        this._paint();
+      }
+    } catch (_err) {
+      // Keep the last known cards and routes visible. The backend monitor will
+      // continue retrying even when this particular browser request is lost.
+    }
+  },
+
   _renderGatewayPortPicker() {
     const ports = this._serialPorts || [];
     const selected = ports.find((port) => port.device === this._flashForm.port);

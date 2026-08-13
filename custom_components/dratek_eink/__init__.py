@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from pathlib import Path
 
 import voluptuous as vol
@@ -10,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.event import async_track_time_interval
 
 from .const import DOMAIN, PANEL_VERSION
 from .render import render_text_image
@@ -23,6 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 # Tools like any other camera, and read through the same camera.async_get_image
 # API a user's own camera entities already go through.
 PLATFORMS: list[Platform] = [Platform.CAMERA]
+GATEWAY_MONITOR_INTERVAL = timedelta(seconds=30)
 PANEL_URL_PATH = "dratek-eink"
 # The version belongs in the path, not in a ?v= query on the entry file alone.
 # dratek-eink-panel.js imports its mixins with plain relative specifiers, and those
@@ -96,6 +99,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     from .automation import get_entity_auto_update_manager
     auto_update = get_entity_auto_update_manager(hass)
+
+    if "gateway_monitor_unsubscribe" not in hass.data[DOMAIN]:
+        from .gateway import async_refresh_all_gateways
+
+        async def _async_refresh_known_gateways(_now: Any = None) -> None:
+            try:
+                await async_refresh_all_gateways(hass)
+            except Exception as exc:
+                _LOGGER.debug("Automatic gateway refresh failed: %s", exc)
+
+        unsubscribe = async_track_time_interval(
+            hass,
+            _async_refresh_known_gateways,
+            GATEWAY_MONITOR_INTERVAL,
+        )
+        hass.data[DOMAIN]["gateway_monitor_unsubscribe"] = unsubscribe
+        hass.async_create_task(_async_refresh_known_gateways())
+
+        def _stop_gateway_monitor() -> None:
+            cancel = hass.data.get(DOMAIN, {}).pop(
+                "gateway_monitor_unsubscribe", None
+            )
+            if callable(cancel):
+                cancel()
+
+        entry.async_on_unload(_stop_gateway_monitor)
 
     async def _async_on_stop(_event: Any) -> None:
         await auto_update.async_stop()

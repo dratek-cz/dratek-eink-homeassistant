@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.293
+
+- **Věrnější barvy na BWRY displejích** – oranžová se skládá z pravidelně střídaných červených a žlutých pixelů; zelené a modré plochy fotografie se už chybně nemění na velké žlutočervené oblasti.
+- **Papoušek je součástí integrace** – původní fotografie je uložená přímo v HA, lze ji kdykoli znovu vybrat a při použití se uloží k danému displeji v jeho přesném rozlišení.
+- **Statický obrázek zůstane na displeji** – odeslání obrázkové šablony zruší starou automatickou obnovu, takže dřívější obsah papouška později nepřepíše.
+- **Gatewaye zůstávají dostupné** – integrace je průběžně kontroluje, po dočasném výpadku zachová jejich identitu a při změně IP adresy je automaticky znovu dohledá přes mDNS.
+
 ## Novinky ve verzi 0.1.292
 
 - **Vlastní barevné obrázky** – nová šablona přijímá PNG, JPEG i WebP, nabízí výchozí fotografii papouška a převede obraz do fyzických barev e-paperu pomocí pixelového ditheringu.

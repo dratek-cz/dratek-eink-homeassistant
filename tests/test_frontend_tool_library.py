@@ -480,12 +480,15 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("const foregroundCount = Math.round(density * matrix * matrix);", self.source)
         self.assertIn('id: "custom_image"', self.source)
         self.assertIn("_ditherImportedTemplateImageData(pixels, width, height)", self.source)
-        self.assertIn("Floyd–Steinbergovým rozptylem", self.source)
+        self.assertIn("Oranžová vzniká střídáním červených a žlutých pixelů", self.source)
         self.assertIn("data-custom-image-template-upload", self.source)
+        self.assertIn("data-custom-image-template-default", self.source)
+        self.assertIn('_frontendAssetUrl("images/parrot-source.png")', self.source)
         self.assertIn('preserveAspectRatio="none" image-rendering="pixelated"', self.source)
         self.assertIn('const customImage = () => this._customImageDataUrl || this._frontendAssetUrl("images/parrot-dithered.png")', self.source)
         self.assertNotIn("_customImageNativeRaster", self.source)
         self.assertNotIn("custom_image_original", self.source)
+        self.assertIn('template?.id === "custom_image" || template?.base_template_id === "custom_image"', self.source)
         custom_image_source = (
             PANEL_MODULES / "templates" / "custom_image.js"
         ).read_text(encoding="utf-8")
@@ -1430,6 +1433,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("const luminance = (38 * red + 75 * green + 15 * blue) >> 7;", self.source)
         self.assertIn("green < red * 0.68 && blue < red * 0.72", self.source)
         self.assertIn("context.imageSmoothingEnabled = false;", self.source)
+        self.assertIn("const yellowRatio = Math.max(0, Math.min(1, (green - 28) / 168));", self.source)
+        self.assertIn("const coolColour = hue >= 67 && hue <= 265 && saturation >= 0.22;", self.source)
         self.assertNotIn("const palette = [[255, 255, 255], [10, 10, 10], [227, 27, 27]]", self.source)
 
     def test_template_placement_uses_the_page_teal_accent(self):

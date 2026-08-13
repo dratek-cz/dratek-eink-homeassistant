@@ -19,6 +19,7 @@ from homeassistant.helpers.storage import Store
 from PIL import Image
 
 from . import quicklz
+from .const import DOMAIN
 from .discovery import resolve_raw_type
 from .render import pack_bwr_image, pack_bwr_region
 
@@ -68,6 +69,12 @@ async def async_save_gateways(hass: HomeAssistant, gateways: list[dict[str, Any]
     await _gateway_store(hass).async_save({"gateways": gateways})
 
 
+def _gateway_store_lock(hass: HomeAssistant) -> asyncio.Lock:
+    return hass.data.setdefault(DOMAIN, {}).setdefault(
+        "gateway_refresh_lock", asyncio.Lock()
+    )
+
+
 def _normalize_host(host: str) -> str:
     host = str(host or "").strip()
     return host.removeprefix("http://").removeprefix("https://").strip("/")
@@ -89,50 +96,53 @@ def _looks_like_ip(host: str) -> bool:
 def _gateway_send_base_url(gateway: dict[str, Any]) -> str:
     status = gateway.get("status") if isinstance(gateway.get("status"), dict) else {}
     status_ip = _normalize_host(str(status.get("ip") or ""))
-    if _looks_like_ip(status_ip):
+    if status.get("ok") and _looks_like_ip(status_ip):
         return f"http://{status_ip}"
     return _gateway_base_url(gateway)
 
 
 async def async_add_gateway(hass: HomeAssistant, name: str, host: str) -> dict[str, Any]:
-    gateways = await async_load_gateways(hass)
-    normalized_host = _normalize_host(host)
-    gateway_id = str(uuid.uuid4())
-    now = int(time.time())
-    gateway = {
-        "id": gateway_id,
-        "name": str(name or "DRATEK eInk gateway").strip(),
-        "host": normalized_host,
-        "created_at": now,
-        "updated_at": now,
-        "status": {"ok": None, "message": "Zatim neovereno."},
-    }
-    gateways = [item for item in gateways if item.get("host") != normalized_host]
-    gateways.append(gateway)
-    await async_save_gateways(hass, gateways)
-    return gateway
+    async with _gateway_store_lock(hass):
+        gateways = await async_load_gateways(hass)
+        normalized_host = _normalize_host(host)
+        gateway_id = str(uuid.uuid4())
+        now = int(time.time())
+        gateway = {
+            "id": gateway_id,
+            "name": str(name or "DRATEK eInk gateway").strip(),
+            "host": normalized_host,
+            "created_at": now,
+            "updated_at": now,
+            "status": {"ok": None, "message": "Zatim neovereno."},
+        }
+        gateways = [item for item in gateways if item.get("host") != normalized_host]
+        gateways.append(gateway)
+        await async_save_gateways(hass, gateways)
+        return gateway
 
 
 async def async_delete_gateway(hass: HomeAssistant, gateway_id: str) -> bool:
-    gateways = await async_load_gateways(hass)
-    next_gateways = [item for item in gateways if item.get("id") != gateway_id]
-    await async_save_gateways(hass, next_gateways)
-    return len(next_gateways) != len(gateways)
+    async with _gateway_store_lock(hass):
+        gateways = await async_load_gateways(hass)
+        next_gateways = [item for item in gateways if item.get("id") != gateway_id]
+        await async_save_gateways(hass, next_gateways)
+        return len(next_gateways) != len(gateways)
 
 
 async def async_rename_gateway(hass: HomeAssistant, gateway_id: str, name: str) -> dict[str, Any] | None:
-    gateways = await async_load_gateways(hass)
     normalized_name = str(name or "").strip()
     if not normalized_name:
         raise ValueError("Gateway name cannot be empty.")
-    for gateway in gateways:
-        if gateway.get("id") != gateway_id:
-            continue
-        gateway["name"] = normalized_name
-        gateway["updated_at"] = int(time.time())
-        await async_save_gateways(hass, gateways)
-        return gateway
-    return None
+    async with _gateway_store_lock(hass):
+        gateways = await async_load_gateways(hass)
+        for gateway in gateways:
+            if gateway.get("id") != gateway_id:
+                continue
+            gateway["name"] = normalized_name
+            gateway["updated_at"] = int(time.time())
+            await async_save_gateways(hass, gateways)
+            return gateway
+        return None
 
 
 async def async_gateway_status(hass: HomeAssistant, gateway: dict[str, Any]) -> dict[str, Any]:
@@ -183,25 +193,126 @@ async def async_gateway_status(hass: HomeAssistant, gateway: dict[str, Any]) -> 
     }
 
 
-async def async_refresh_gateway(hass: HomeAssistant, gateway_id: str) -> dict[str, Any] | None:
-    gateways = await async_load_gateways(hass)
-    for gateway in gateways:
-        if gateway.get("id") != gateway_id:
-            continue
-        gateway["status"] = await async_gateway_status(hass, gateway)
+def _remember_gateway_status(gateway: dict[str, Any], status: dict[str, Any]) -> bool:
+    """Apply a probe without forgetting the gateway after a transient failure."""
+    previous = gateway.get("status") if isinstance(gateway.get("status"), dict) else {}
+    if status.get("ok"):
+        gateway["status"] = status
+        gateway["last_seen_at"] = int(status.get("checked_at") or time.time())
+        stable_id = str(status.get("gateway_id") or gateway.get("gateway_id") or "").strip()
+        if stable_id:
+            gateway["gateway_id"] = stable_id
+        return True
+
+    # Keep the last successful identity, IP and firmware data. Only availability
+    # fields are replaced, so one lost HTTP response cannot make a configured
+    # gateway disappear from routing or prevent mDNS from matching it again.
+    gateway["status"] = {
+        **previous,
+        "ok": False,
+        "message": status.get("message") or "Gateway is temporarily unavailable.",
+        "checked_at": int(status.get("checked_at") or time.time()),
+    }
+    return False
+
+
+def _gateway_matches_discovery(
+    gateway: dict[str, Any], discovered: dict[str, Any]
+) -> bool:
+    status = gateway.get("status") if isinstance(gateway.get("status"), dict) else {}
+    stored_id = str(gateway.get("gateway_id") or status.get("gateway_id") or "").strip()
+    discovered_id = str(discovered.get("gateway_id") or "").strip()
+    if stored_id and discovered_id:
+        return stored_id == discovered_id
+
+    stored_hosts = {
+        _normalize_host(value).lower()
+        for value in (gateway.get("host"), status.get("ip"), status.get("hostname"))
+        if _normalize_host(value)
+    }
+    discovered_hosts = {
+        _normalize_host(value).lower()
+        for value in (discovered.get("host"), discovered.get("server"))
+        if _normalize_host(value)
+    }
+    return bool(stored_hosts & discovered_hosts)
+
+
+async def _async_refresh_gateway_set(
+    hass: HomeAssistant, gateways: list[dict[str, Any]]
+) -> None:
+    if not gateways:
+        return
+    statuses = await asyncio.gather(
+        *(async_gateway_status(hass, gateway) for gateway in gateways),
+        return_exceptions=True,
+    )
+    unavailable: list[dict[str, Any]] = []
+    for gateway, result in zip(gateways, statuses, strict=False):
+        status = (
+            result
+            if isinstance(result, dict)
+            else {"ok": False, "message": str(result), "checked_at": int(time.time())}
+        )
+        if not _remember_gateway_status(gateway, status):
+            unavailable.append(gateway)
         gateway["updated_at"] = int(time.time())
+
+    if not unavailable:
+        return
+    try:
+        discovered = await async_discover_gateways(hass, seconds=4)
+    except Exception:
+        return
+
+    recovered: list[dict[str, Any]] = []
+    for gateway in unavailable:
+        match = next(
+            (item for item in discovered if _gateway_matches_discovery(gateway, item)),
+            None,
+        )
+        if not match:
+            continue
+        host = _normalize_host(match.get("host") or match.get("server") or "")
+        if host:
+            gateway["host"] = host
+        stable_id = str(match.get("gateway_id") or "").strip()
+        if stable_id:
+            gateway["gateway_id"] = stable_id
+        recovered.append(gateway)
+
+    if recovered:
+        retry_statuses = await asyncio.gather(
+            *(async_gateway_status(hass, gateway) for gateway in recovered),
+            return_exceptions=True,
+        )
+        for gateway, result in zip(recovered, retry_statuses, strict=False):
+            status = (
+                result
+                if isinstance(result, dict)
+                else {"ok": False, "message": str(result), "checked_at": int(time.time())}
+            )
+            _remember_gateway_status(gateway, status)
+            gateway["updated_at"] = int(time.time())
+
+
+async def async_refresh_gateway(hass: HomeAssistant, gateway_id: str) -> dict[str, Any] | None:
+    async with _gateway_store_lock(hass):
+        gateways = await async_load_gateways(hass)
+        gateway = next((item for item in gateways if item.get("id") == gateway_id), None)
+        if not gateway:
+            return None
+        await _async_refresh_gateway_set(hass, [gateway])
         await async_save_gateways(hass, gateways)
-        return gateway
-    return None
+    return gateway
 
 
 async def async_refresh_all_gateways(hass: HomeAssistant) -> list[dict[str, Any]]:
-    gateways = await async_load_gateways(hass)
-    for gateway in gateways:
-        gateway["status"] = await async_gateway_status(hass, gateway)
-        gateway["updated_at"] = int(time.time())
-    await async_save_gateways(hass, gateways)
-    return gateways
+    async with _gateway_store_lock(hass):
+        gateways = await async_load_gateways(hass)
+        await _async_refresh_gateway_set(hass, gateways)
+        await async_save_gateways(hass, gateways)
+        return gateways
 
 
 async def async_start_gateway_ota(
@@ -299,9 +410,20 @@ async def async_start_gateway_ota(
                 if refreshed.get("ok"):
                     reported_version = str(refreshed.get("firmware") or "")
                     if reported_version == expected_version:
-                        gateway["status"] = refreshed
-                        gateway["updated_at"] = int(time.time())
-                        await async_save_gateways(hass, gateways)
+                        async with _gateway_store_lock(hass):
+                            current_gateways = await async_load_gateways(hass)
+                            current_gateway = next(
+                                (
+                                    item
+                                    for item in current_gateways
+                                    if item.get("id") == gateway_id
+                                ),
+                                None,
+                            )
+                            if current_gateway:
+                                _remember_gateway_status(current_gateway, refreshed)
+                                current_gateway["updated_at"] = int(time.time())
+                                await async_save_gateways(hass, current_gateways)
                         job["reported_version"] = reported_version
                         job["ok"] = True
                         job["completed_at"] = int(time.time())

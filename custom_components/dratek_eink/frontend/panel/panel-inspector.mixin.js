@@ -394,6 +394,12 @@ export const inspectorMixin = {
     const openDisplayTemplate = (templateId, replaceIndex = null, stayInCatalog = false, placement = null) => {
       const device = this._device();
       const template = this._displayTemplateCards().find((item) => item.id === templateId);
+      if (templateId === "custom_image" && !this._customImageDataUrl) {
+        this._useBundledCustomImageTemplate().catch((error) => {
+          this._templateSendResult = { ok: false, message: this._message(error) };
+          this._render();
+        });
+      }
       const previousAssigned = this._assignedDisplayTemplates(device);
       const layoutSlotMatch = String(placement || "").match(/^slot-(\d+)$/);
       const isPlacementMove = Boolean(layoutSlotMatch) || ["left", "right", "top", "bottom", "full"].includes(placement);
@@ -506,6 +512,12 @@ export const inspectorMixin = {
     const openTemplateDesigner = (templateId) => {
       const template = this._displayTemplateCards().find((item) => item.id === templateId);
       if (!template) return;
+      if (templateId === "custom_image" && !this._customImageDataUrl) {
+        this._useBundledCustomImageTemplate().catch((error) => {
+          this._templateSendResult = { ok: false, message: this._message(error) };
+          this._render();
+        });
+      }
       this._rememberActiveTemplateEditorState?.();
       this._prepareDisplayTemplateBindings(template);
       this._selectedDisplayTemplateId = templateId;
@@ -1556,6 +1568,22 @@ export const inspectorMixin = {
         event.preventDefault();
         event.stopPropagation();
         this.shadowRoot.querySelector("#customImageTemplateFile")?.click();
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-custom-image-template-default]").forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        button.disabled = true;
+        try {
+          await this._useBundledCustomImageTemplate(true);
+          await this._saveDisplayTemplateDraft?.();
+        } catch (error) {
+          this._templateSendResult = { ok: false, message: this._message(error) };
+          this._render();
+        } finally {
+          button.disabled = false;
+        }
       });
     });
     this.shadowRoot.querySelector("#customImageTemplateFile")?.addEventListener("change", (event) => {

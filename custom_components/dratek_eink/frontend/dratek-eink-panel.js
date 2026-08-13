@@ -137,6 +137,7 @@ class DratekEinkPanel extends HTMLElement {
     this._gateways = [];
     this._gatewayResult = null;
     this._gatewayBusy = false;
+    this._gatewayStatusPollTimer = null;
     this._gatewayDiscovery = [];
     this._gatewaySubtab = "manage";
     this._editingGatewayId = "";
@@ -186,6 +187,7 @@ class DratekEinkPanel extends HTMLElement {
     this._render();
     this._paint();
     this._scheduleDeviceStatusPoll(1000);
+    this._scheduleGatewayStatusPoll?.(1500);
   }
 
   disconnectedCallback() {
@@ -204,6 +206,7 @@ class DratekEinkPanel extends HTMLElement {
     window.clearTimeout(this._otaPollTimer);
     window.clearTimeout(this._queuePollTimer);
     window.clearTimeout(this._deviceStatusPollTimer);
+    window.clearTimeout(this._gatewayStatusPollTimer);
     if (this._gwmapPanMove) window.removeEventListener("mousemove", this._gwmapPanMove);
     if (this._gwmapPanEnd) window.removeEventListener("mouseup", this._gwmapPanEnd);
     // A draft save is debounced by 700 ms. Leaving the panel inside that window
@@ -236,6 +239,7 @@ class DratekEinkPanel extends HTMLElement {
       this._paint();
       this._loadQueue(false);
       this._scheduleDeviceStatusPoll(1000);
+      this._scheduleGatewayStatusPoll?.(1500);
       this._loadUserDisplayTemplates?.();
       if (this._result?.devices?.length) {
         this._loadDevicePreviewDrafts(this._result.devices).then(() => {

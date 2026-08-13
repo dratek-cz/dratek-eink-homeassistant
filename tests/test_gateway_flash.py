@@ -58,6 +58,51 @@ gateway = _load_gateway_module()
 
 
 class GatewayFlashTests(unittest.TestCase):
+    def test_transient_status_failure_keeps_the_last_gateway_identity(self):
+        configured = {
+            "host": "192.168.1.20",
+            "gateway_id": "stable-gateway",
+            "status": {
+                "ok": True,
+                "gateway_id": "stable-gateway",
+                "ip": "192.168.1.20",
+                "firmware": "0.1.56-gateway",
+            },
+        }
+
+        online = gateway._remember_gateway_status(
+            configured,
+            {"ok": False, "message": "timeout", "checked_at": 123},
+        )
+
+        self.assertFalse(online)
+        self.assertFalse(configured["status"]["ok"])
+        self.assertEqual("stable-gateway", configured["status"]["gateway_id"])
+        self.assertEqual("192.168.1.20", configured["status"]["ip"])
+        self.assertEqual("0.1.56-gateway", configured["status"]["firmware"])
+
+    def test_mdns_matches_a_saved_gateway_after_its_ip_changes(self):
+        configured = {
+            "host": "192.168.1.20",
+            "gateway_id": "stable-gateway",
+            "status": {"gateway_id": "stable-gateway", "ip": "192.168.1.20"},
+        }
+        discovered = {
+            "gateway_id": "stable-gateway",
+            "host": "192.168.1.77",
+            "server": "dratek-eink-gateway.local",
+        }
+
+        self.assertTrue(gateway._gateway_matches_discovery(configured, discovered))
+
+    def test_failed_old_status_does_not_override_a_recovered_host(self):
+        configured = {
+            "host": "192.168.1.77",
+            "status": {"ok": False, "ip": "192.168.1.20"},
+        }
+
+        self.assertEqual("http://192.168.1.77", gateway._gateway_send_base_url(configured))
+
     def test_internal_linux_uart_is_not_offered_for_flashing(self):
         self.assertFalse(gateway._is_flashable_serial_device("/dev/ttyS3"))
         self.assertFalse(gateway._is_flashable_serial_device("/dev/ttyAMA0"))
@@ -161,6 +206,47 @@ class GatewayFlashTests(unittest.TestCase):
         self.assertFalse(fake_serial_instance.rts)
         self.assertTrue(fake_serial_instance.opened)
         self.assertTrue(any("attempt 2" in line for line in log))
+
+
+class GatewayAvailabilityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_probe_rediscovers_changed_ip_and_retries(self):
+        configured = {
+            "id": "stored-record",
+            "host": "192.168.1.20",
+            "gateway_id": "stable-gateway",
+            "status": {"ok": True, "gateway_id": "stable-gateway", "ip": "192.168.1.20"},
+        }
+        probed_hosts = []
+
+        async def status(_hass, item):
+            probed_hosts.append(item["host"])
+            if item["host"] == "192.168.1.20":
+                return {"ok": False, "message": "timeout", "checked_at": 100}
+            return {
+                "ok": True,
+                "message": "Online",
+                "checked_at": 101,
+                "gateway_id": "stable-gateway",
+                "ip": "192.168.1.77",
+            }
+
+        async def discover(_hass, seconds):
+            self.assertEqual(4, seconds)
+            return [{"gateway_id": "stable-gateway", "host": "192.168.1.77"}]
+
+        original_status = gateway.async_gateway_status
+        original_discover = gateway.async_discover_gateways
+        gateway.async_gateway_status = status
+        gateway.async_discover_gateways = discover
+        try:
+            await gateway._async_refresh_gateway_set(object(), [configured])
+        finally:
+            gateway.async_gateway_status = original_status
+            gateway.async_discover_gateways = original_discover
+
+        self.assertEqual(["192.168.1.20", "192.168.1.77"], probed_hosts)
+        self.assertEqual("192.168.1.77", configured["host"])
+        self.assertTrue(configured["status"]["ok"])
 
 
 if __name__ == "__main__":

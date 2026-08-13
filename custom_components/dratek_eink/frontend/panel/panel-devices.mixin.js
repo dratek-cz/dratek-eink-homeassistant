@@ -2000,8 +2000,9 @@ export const devicesMixin = {
       </div>
       <input id="customImageTemplateFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
       <button type="button" class="primary-action" data-custom-image-template-upload><ha-icon icon="mdi:image-plus"></ha-icon> Vybrat barevný obrázek</button>
+      <button type="button" data-custom-image-template-default><ha-icon icon="mdi:bird"></ha-icon> Použít ukázkového papouška</button>
       <small>${this._escape(this._customImageName || "Ukázkový papoušek")}</small>
-      <p>Obrázek se automaticky ořízne na poměr displeje a Floyd–Steinbergovým rozptylem převede na bílé, černé, červené a žluté fyzické pixely.</p>
+      <p>Obrázek se automaticky ořízne na přesné rozlišení displeje a barevným rozptylem převede na bílé, černé, červené a žluté fyzické pixely. Oranžová vzniká střídáním červených a žlutých pixelů.</p>
     </div>` : "";
 
     const crop = this._templateVariableCropContext(activeTemplate);
@@ -2914,6 +2915,13 @@ export const devicesMixin = {
 
   async _displayTemplateEntityAutomation(image, device, gatewayId = "") {
     const request = this._currentDisplayTemplateSvgRequest(device);
+    // An imported picture is a deliberately static design.  Never carry
+    // entity automation over from another slot (or from what was on the tag
+    // before): both websocket send paths interpret an omitted automation as
+    // an instruction to remove the old one.
+    if (request?.templates?.some((template) =>
+      template?.id === "custom_image" || template?.base_template_id === "custom_image"
+    )) return undefined;
     const size = this._devicePreviewSize(device);
     const landscape = this._displayTemplateOrientation !== "portrait";
     const width = landscape ? Math.max(size.width, size.height) : Math.min(size.width, size.height);
@@ -3126,6 +3134,9 @@ export const devicesMixin = {
       if (label) label.textContent = "Odesílám náhled…";
     }
     try {
+      if (this._assignedDisplayTemplates(device).includes("custom_image")) {
+        await this._useBundledCustomImageTemplate();
+      }
       await this._saveDisplayTemplateDraft();
       image = await this._renderCurrentDisplayTemplateImage(device);
       const gatewayId = String(this._selectedGatewayId || "");
@@ -3804,6 +3815,48 @@ export const devicesMixin = {
     ];
     const work = new Float32Array(pixels.data.length);
     for (let index = 0; index < pixels.data.length; index += 1) work[index] = pixels.data[index];
+    const bayer4 = [
+      0, 8, 2, 10,
+      12, 4, 14, 6,
+      3, 11, 1, 9,
+      15, 7, 13, 5,
+    ];
+    const clamp = (value) => Math.max(0, Math.min(255, value));
+    const chooseInk = (source, x, y) => {
+      const [red, green, blue] = source.map(clamp);
+      const max = Math.max(red, green, blue);
+      const min = Math.min(red, green, blue);
+      const delta = max - min;
+      const saturation = max > 0 ? delta / max : 0;
+      let hue = 0;
+      if (delta > 0) {
+        if (max === red) hue = 60 * (((green - blue) / delta) % 6);
+        else if (max === green) hue = 60 * (((blue - red) / delta) + 2);
+        else hue = 60 * (((red - green) / delta) + 4);
+        if (hue < 0) hue += 360;
+      }
+
+      // A four-colour panel has no orange ink.  Preserve orange as a literal
+      // sub-pixel-like red/yellow pattern instead of collapsing the whole area
+      // to whichever of the two happens to be nearer in RGB space.
+      if (hue >= 4 && hue <= 66 && saturation >= 0.28 && red >= 105 && blue < 145) {
+        const yellowRatio = Math.max(0, Math.min(1, (green - 28) / 168));
+        const threshold = (bayer4[(y % 4) * 4 + (x % 4)] + 0.5) / 16;
+        return yellowRatio >= threshold ? palette[3] : palette[2];
+      }
+
+      // Greens, cyans and blues cannot be represented chromatically on this
+      // panel.  Rendering their brightness in black/white keeps foliage and
+      // blue feathers neutral, rather than incorrectly flooding them yellow.
+      const coolColour = hue >= 67 && hue <= 265 && saturation >= 0.22;
+      const candidates = coolColour ? palette.slice(0, 2) : palette;
+      return candidates.reduce((best, color) => {
+        const distance = 2 * (red - color[0]) ** 2
+          + 3 * (green - color[1]) ** 2
+          + (blue - color[2]) ** 2;
+        return distance < best.distance ? { color, distance } : best;
+      }, { color: candidates[0], distance: Number.POSITIVE_INFINITY }).color;
+    };
     const addError = (x, y, error, weight) => {
       if (x < 0 || x >= width || y < 0 || y >= height) return;
       const offset = (y * width + x) * 4;
@@ -3819,10 +3872,7 @@ export const devicesMixin = {
           continue;
         }
         const source = [work[offset], work[offset + 1], work[offset + 2]];
-        const chosen = palette.reduce((best, color) => {
-          const distance = (source[0] - color[0]) ** 2 + (source[1] - color[1]) ** 2 + (source[2] - color[2]) ** 2;
-          return distance < best.distance ? { color, distance } : best;
-        }, { color: palette[0], distance: Number.POSITIVE_INFINITY }).color;
+        const chosen = chooseInk(source, x, y);
         const error = source.map((value, channel) => value - chosen[channel]);
         [work[offset], work[offset + 1], work[offset + 2], work[offset + 3]] = [...chosen, 255];
         const direction = reverse ? -1 : 1;
@@ -3836,10 +3886,29 @@ export const devicesMixin = {
     return pixels;
   },
 
-  _importCustomImageTemplate(file) {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
+  _storeCustomImageTemplateData(dataUrl, name) {
+    this._customImageDataUrl = dataUrl;
+    this._customImageName = String(name || "Vlastní obrázek");
+    this._displayTemplateConfig ||= {};
+    this._displayTemplateConfig.custom_image_data = this._customImageDataUrl;
+    this._displayTemplateConfig.custom_image_name = this._customImageName;
+    const address = String(this._selectedDeviceAddress || "").toUpperCase();
+    if (address) {
+      this._deviceDrafts ||= {};
+      const draft = this._deviceDrafts[address] || {};
+      draft.template_config ||= {};
+      draft.template_config.custom_image_data = this._customImageDataUrl;
+      draft.template_config.custom_image_name = this._customImageName;
+      this._deviceDrafts[address] = draft;
+    }
+    this._scheduleDraftSave();
+    this._render();
+    this._paint();
+    return dataUrl;
+  },
+
+  _convertCustomImageTemplateSource(source, name = "Vlastní obrázek") {
+    return new Promise((resolve, reject) => {
       const image = new Image();
       image.onload = () => {
         const device = this._device?.();
@@ -3862,26 +3931,36 @@ export const devicesMixin = {
         const pixels = context.getImageData(0, 0, width, height);
         this._ditherImportedTemplateImageData(pixels, width, height);
         context.putImageData(pixels, 0, 0);
-        this._customImageDataUrl = canvas.toDataURL("image/png");
-        this._customImageName = String(file.name || "Vlastní obrázek");
-        this._displayTemplateConfig ||= {};
-        this._displayTemplateConfig.custom_image_data = this._customImageDataUrl;
-        this._displayTemplateConfig.custom_image_name = this._customImageName;
-        const address = String(this._selectedDeviceAddress || "").toUpperCase();
-        if (address) {
-          this._deviceDrafts ||= {};
-          const draft = this._deviceDrafts[address] || {};
-          draft.template_config ||= {};
-          draft.template_config.custom_image_data = this._customImageDataUrl;
-          draft.template_config.custom_image_name = this._customImageName;
-          this._deviceDrafts[address] = draft;
-        }
-        this._scheduleDraftSave();
-        this._render();
-        this._paint();
+        resolve(this._storeCustomImageTemplateData(canvas.toDataURL("image/png"), name));
       };
-      image.src = reader.result;
-    };
+      image.onerror = () => reject(new Error("Obrázek se nepodařilo načíst."));
+      image.src = source;
+    });
+  },
+
+  async _useBundledCustomImageTemplate(force = false) {
+    if (this._customImageDataUrl && !force) return this._customImageDataUrl;
+    if (this._bundledCustomImagePromise && !force) return this._bundledCustomImagePromise;
+    const pending = this._convertCustomImageTemplateSource(
+      this._frontendAssetUrl("images/parrot-source.png"),
+      "Ukázkový papoušek",
+    );
+    this._bundledCustomImagePromise = pending;
+    try {
+      return await pending;
+    } finally {
+      if (this._bundledCustomImagePromise === pending) this._bundledCustomImagePromise = null;
+    }
+  },
+
+  _importCustomImageTemplate(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => this._convertCustomImageTemplateSource(reader.result, file.name || "Vlastní obrázek")
+      .catch((error) => {
+        this._templateSendResult = { ok: false, message: this._message(error) };
+        this._render();
+      });
     reader.readAsDataURL(file);
   },
 
