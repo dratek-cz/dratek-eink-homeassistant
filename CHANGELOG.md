@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.292] - 2026-08-13
+
+### Přidáno a vylepšeno
+- Nová šablona `Vlastní obrázek` umožňuje vložit barevný PNG, JPEG nebo WebP soubor a obsahuje výchozí testovací fotografii papouška.
+- Barevné fotografie se převádějí Floydovým–Steinbergovým ditheringem pouze do fyzických barev e-paperu: bílé, černé, červené a žluté.
+- Obrázek se při vložení automaticky ořízne, přizpůsobí rozměrům zvoleného displeje a překreslí do jeho pixelové mřížky.
+- Šablona vlastního obrázku a pixelové testy barev jsou nyní umístěné na začátku katalogu.
+
+### Opraveno
+- Přímý Bluetooth přenos z Home Assistantu na displeje 800×480 (SDK 299/315) už nespoléhá na neúplně hlášené vlastnosti BlueZ. Použije časovaný proud bez potvrzování každého z 419 bloků, poslední potvrzený blok a fyzické potvrzení překreslení, takže nepřekročí desetiminutový limit.
+
 ## [0.1.291] - 2026-08-13
 
 ### Přidáno

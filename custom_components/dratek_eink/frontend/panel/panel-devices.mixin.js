@@ -1427,6 +1427,8 @@ export const devicesMixin = {
       image_library: structuredClone(this._templateImageLibrary || []),
       designer_viewport: this._templateDesignerViewport || "wide",
       meteoradar_country: this._meteoradarCountry || "cz",
+      custom_image_data: this._customImageDataUrl || "",
+      custom_image_name: this._customImageName || "",
     };
   },
 
@@ -1435,6 +1437,10 @@ export const devicesMixin = {
     this._templateRedoStack = [];
     this._templatePropertyHistoryKey = "";
     this._meteoradarCountry = config?.meteoradar_country || "cz";
+    this._customImageDataUrl = String(config?.custom_image_data || "").startsWith("data:image/")
+      ? String(config.custom_image_data)
+      : "";
+    this._customImageName = String(config?.custom_image_name || "");
     const address = String(this._selectedDeviceAddress || "").toUpperCase();
     if (!config || typeof config !== "object") {
       if (address) {
@@ -1451,6 +1457,8 @@ export const devicesMixin = {
       this._templateElementAdjustments = {};
       this._templateImageLibrary = [];
       this._templateDesignerViewport = "wide";
+      this._customImageDataUrl = "";
+      this._customImageName = "";
       this._displayTemplateLargeLayout = "single";
       this._selectedTemplatePart = "";
       return;
@@ -1985,6 +1993,16 @@ export const devicesMixin = {
     const isRadarTemplate = activeTemplate?.id === "radar" || activeTemplate?.category === "radar" || String(activeTemplate?.id || "").includes("radar");
     const selectedCountry = this._meteoradarCountry || this._displayTemplateConfig?.meteoradar_country || "cz";
     const mapWidget = isRadarTemplate ? this._renderInteractiveCountryMap(selectedCountry, this._selectedDeviceAddress) : "";
+    const isCustomImageTemplate = activeTemplate?.id === "custom_image";
+    const customImageWidget = isCustomImageTemplate ? `<div class="custom-image-template-widget">
+      <div class="custom-image-template-preview">
+        <img src="${this._escape(this._customImageDataUrl || this._frontendAssetUrl("images/parrot-dithered.png"))}" alt="Stínovaný náhled vlastního obrázku">
+      </div>
+      <input id="customImageTemplateFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+      <button type="button" class="primary-action" data-custom-image-template-upload><ha-icon icon="mdi:image-plus"></ha-icon> Vybrat barevný obrázek</button>
+      <small>${this._escape(this._customImageName || "Ukázkový papoušek")}</small>
+      <p>Obrázek se automaticky ořízne na poměr displeje a Floyd–Steinbergovým rozptylem převede na bílé, černé, červené a žluté fyzické pixely.</p>
+    </div>` : "";
 
     const crop = this._templateVariableCropContext(activeTemplate);
     // The automatic-refresh controls used to sit here, at the top of the
@@ -1992,10 +2010,11 @@ export const devicesMixin = {
     // belong to the automation - so they live on each automation's own card in
     // the Automations tab now (see panel-automations.mixin.js).
     const variableList = `<div class="template-variables-header">
-      <h4><ha-icon icon="mdi:tune-vertical"></ha-icon> Napojení proměnných</h4>
-      <p class="template-settings-intro">U každé položky vyberte entitu v Home Assistantu. Systémové údaje (čas, datum) se doplňují automaticky.</p>
+      <h4><ha-icon icon="mdi:${isCustomImageTemplate ? "image-edit-outline" : "tune-vertical"}"></ha-icon> ${isCustomImageTemplate ? "Import obrázku" : "Napojení proměnných"}</h4>
+      <p class="template-settings-intro">${isCustomImageTemplate ? "Vyberte barevnou fotografii; převod do stínované palety proběhne přímo v prohlížeči a uloží se k tomuto displeji." : "U každé položky vyberte entitu v Home Assistantu. Systémové údaje (čas, datum) se doplňují automaticky."}</p>
     </div>
     ${mapWidget}
+    ${customImageWidget}
     <div class="template-variable-settings">${activeTemplate.variables.map((variable, index) => this._renderTemplateVariableSetting(activeTemplate, variable, index, crop)).join("")}</div>`;
     return `<div class="template-settings-backdrop" data-template-settings-close><section class="card template-settings-dialog is-guide-layout" role="dialog" aria-modal="true" aria-label="Nastavení šablony" data-template-settings-dialog>
       <header><span><small>Jak zprovoznit a nastavit šablonu</small><strong>${this._escape(activeTemplate.title)}</strong></span><button type="button" data-template-settings-close title="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button></header>
@@ -3776,6 +3795,96 @@ export const devicesMixin = {
     return [255, 255, 255, 255];
   },
 
+  _ditherImportedTemplateImageData(pixels, width, height) {
+    const palette = [
+      [255, 255, 255],
+      [0, 0, 0],
+      [220, 20, 12],
+      [244, 196, 0],
+    ];
+    const work = new Float32Array(pixels.data.length);
+    for (let index = 0; index < pixels.data.length; index += 1) work[index] = pixels.data[index];
+    const addError = (x, y, error, weight) => {
+      if (x < 0 || x >= width || y < 0 || y >= height) return;
+      const offset = (y * width + x) * 4;
+      for (let channel = 0; channel < 3; channel += 1) work[offset + channel] += error[channel] * weight;
+    };
+    for (let y = 0; y < height; y += 1) {
+      const reverse = y % 2 === 1;
+      for (let step = 0; step < width; step += 1) {
+        const x = reverse ? width - 1 - step : step;
+        const offset = (y * width + x) * 4;
+        if (work[offset + 3] < 40) {
+          [work[offset], work[offset + 1], work[offset + 2], work[offset + 3]] = [255, 255, 255, 255];
+          continue;
+        }
+        const source = [work[offset], work[offset + 1], work[offset + 2]];
+        const chosen = palette.reduce((best, color) => {
+          const distance = (source[0] - color[0]) ** 2 + (source[1] - color[1]) ** 2 + (source[2] - color[2]) ** 2;
+          return distance < best.distance ? { color, distance } : best;
+        }, { color: palette[0], distance: Number.POSITIVE_INFINITY }).color;
+        const error = source.map((value, channel) => value - chosen[channel]);
+        [work[offset], work[offset + 1], work[offset + 2], work[offset + 3]] = [...chosen, 255];
+        const direction = reverse ? -1 : 1;
+        addError(x + direction, y, error, 7 / 16);
+        addError(x - direction, y + 1, error, 3 / 16);
+        addError(x, y + 1, error, 5 / 16);
+        addError(x + direction, y + 1, error, 1 / 16);
+      }
+    }
+    for (let index = 0; index < pixels.data.length; index += 1) pixels.data[index] = Math.max(0, Math.min(255, Math.round(work[index])));
+    return pixels;
+  },
+
+  _importCustomImageTemplate(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const device = this._device?.();
+        const physical = this._devicePreviewSize?.(device) || { width: 296, height: 128 };
+        const portrait = this._displayTemplateOrientation === "portrait";
+        const width = Math.max(1, Math.round(portrait ? Math.min(physical.width, physical.height) : Math.max(physical.width, physical.height)));
+        const height = Math.max(1, Math.round(portrait ? Math.max(physical.width, physical.height) : Math.min(physical.width, physical.height)));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        context.fillStyle = "#fff";
+        context.fillRect(0, 0, width, height);
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = "high";
+        const scale = Math.max(width / image.width, height / image.height);
+        const drawWidth = image.width * scale;
+        const drawHeight = image.height * scale;
+        context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+        const pixels = context.getImageData(0, 0, width, height);
+        this._ditherImportedTemplateImageData(pixels, width, height);
+        context.putImageData(pixels, 0, 0);
+        this._customImageDataUrl = canvas.toDataURL("image/png");
+        this._customImageName = String(file.name || "Vlastní obrázek");
+        this._displayTemplateConfig ||= {};
+        this._displayTemplateConfig.custom_image_data = this._customImageDataUrl;
+        this._displayTemplateConfig.custom_image_name = this._customImageName;
+        const address = String(this._selectedDeviceAddress || "").toUpperCase();
+        if (address) {
+          this._deviceDrafts ||= {};
+          const draft = this._deviceDrafts[address] || {};
+          draft.template_config ||= {};
+          draft.template_config.custom_image_data = this._customImageDataUrl;
+          draft.template_config.custom_image_name = this._customImageName;
+          this._deviceDrafts[address] = draft;
+        }
+        this._scheduleDraftSave();
+        this._render();
+        this._paint();
+      };
+      image.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  },
+
   _templateEditorSurfaceRatio() {
     const surface = this.shadowRoot?.querySelector(".display-template-editor-stage .display-template-surface");
     const bounds = surface?.getBoundingClientRect?.();
@@ -3848,12 +3957,7 @@ export const devicesMixin = {
         context.imageSmoothingEnabled = false;
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
         const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
-        for (let index = 0; index < pixels.data.length; index += 4) {
-          const color = this._quantizeImportedTemplatePixel(
-            pixels.data[index], pixels.data[index + 1], pixels.data[index + 2], pixels.data[index + 3]
-          );
-          [pixels.data[index], pixels.data[index + 1], pixels.data[index + 2], pixels.data[index + 3]] = color;
-        }
+        this._ditherImportedTemplateImageData(pixels, canvas.width, canvas.height);
         context.putImageData(pixels, 0, 0);
         const aspect = canvas.width / Math.max(1, canvas.height);
         const asset = this._rememberTemplateImageAsset(canvas.toDataURL("image/png"), file.name || "Obrázek", aspect);

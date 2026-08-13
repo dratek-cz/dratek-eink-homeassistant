@@ -75,6 +75,8 @@ SINGLE_ROW_TEMPLATES = {
     # A hardware calibration target must be nothing except its edge-to-edge
     # palette pixels; titles, footers or extra rows would contaminate the test.
     *CALIBRATION_TEMPLATES,
+    # A photo template is intentionally one edge-to-edge raster image.
+    "custom_image",
 }
 
 

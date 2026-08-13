@@ -1551,6 +1551,18 @@ export const inspectorMixin = {
         this._paint();
       });
     });
+    this.shadowRoot.querySelectorAll("[data-custom-image-template-upload]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.shadowRoot.querySelector("#customImageTemplateFile")?.click();
+      });
+    });
+    this.shadowRoot.querySelector("#customImageTemplateFile")?.addEventListener("change", (event) => {
+      const file = event.target.files?.[0];
+      if (file) this._importCustomImageTemplate(file);
+      event.target.value = "";
+    });
     [
       { id: "mrOptPrecipitation", key: "meteoradar_show_precipitation" },
       { id: "mrOptDotted", key: "meteoradar_dotted_light" },

@@ -32,8 +32,15 @@ import { template as shadingLightTest } from "./shading_light_test.js";
 import { template as shadingDarkTest } from "./shading_dark_test.js";
 import { template as shadingWarmTest } from "./shading_warm_test.js";
 import { template as shadingCompleteTest } from "./shading_complete_test.js";
+import { template as customImage } from "./custom_image.js";
 
 export const DISPLAY_TEMPLATES = [
+  customImage,
+  shadingTest,
+  shadingLightTest,
+  shadingDarkTest,
+  shadingWarmTest,
+  shadingCompleteTest,
   weather,
   radar,
   czSpotPrices,
@@ -56,11 +63,6 @@ export const DISPLAY_TEMPLATES = [
   server,
   garden,
   price,
-  shadingTest,
-  shadingLightTest,
-  shadingDarkTest,
-  shadingWarmTest,
-  shadingCompleteTest,
 ];
 
 export const DISPLAY_TEMPLATE_CATALOG = DISPLAY_TEMPLATES.map((entry) => entry.catalog);

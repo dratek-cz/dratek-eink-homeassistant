@@ -75,7 +75,6 @@ const ICON_REQUESTS = new Map();
 let TEMPLATE_ICONS_WARMED = false;
 
 export const templateSvgMixin = {
-
   // ---------------------------------------------------------------- icons ---
 
   // Icon geometry, resolved once per icon name by letting Home Assistant's own
@@ -463,7 +462,7 @@ export const templateSvgMixin = {
   // same layout math, not something worth recomputing separately (and risking
   // it drifting from what actually gets drawn).
   _layoutTemplateSvg(rows, width, height, collector) {
-    if (rows.length === 1 && rows[0]?.dither && rows[0]?.pixelPerfect) {
+    if (rows.length === 1 && (rows[0]?.dither || rows[0]?.customImage) && rows[0]?.pixelPerfect) {
       const box = { x: 0, y: 0, w: width, h: height, fullX: 0, fullW: width };
       if (collector && rows[0].__rowIndex !== undefined) collector.push({ rowIndex: rows[0].__rowIndex, box });
       return this._renderTemplateBlock(rows[0], box);
@@ -612,6 +611,7 @@ export const templateSvgMixin = {
     if (row.ring) return this._blockRing(row, box);
     if (row.dial) return this._blockDial(row, box);
     if (row.dither) return this._blockDither(row, box);
+    if (row.customImage) return this._blockCustomImage(row, box);
     if (row.grid) return this._blockGrid(row, box);
     if (row.steps) return this._blockSteps(row, box);
     if (row.checklist) return this._blockChecklist(row, box);
@@ -918,6 +918,15 @@ export const templateSvgMixin = {
       parts.push(`<rect x="${x}" y="${y}" width="${cellWidth}" height="${cellHeight}" fill="url(#${patternId})" shape-rendering="crispEdges"></rect>`);
     });
     return parts.join("");
+  },
+
+  _blockCustomImage(row, box) {
+    const source = String(row.customImage?.src || "");
+    if (!source) return `<rect x="0" y="0" width="${box.fullW}" height="${box.h}" fill="#ffffff"></rect>`;
+    const width = Math.max(1, Math.round(box.fullW));
+    const height = Math.max(1, Math.round(box.h));
+    return `<image x="0" y="0" width="${width}" height="${height}" href="${this._escape(source)}"`
+      + ` preserveAspectRatio="none" image-rendering="pixelated"></image>`;
   },
 
   // Tiles of equal weight. A list ranks what it stacks; a grid says these readings
@@ -1294,7 +1303,8 @@ export const templateSvgMixin = {
     const day = (index) => this._templateForecastDay(template, index);
     const event = (index) => this._templateCalendarEntry(template, index);
     const option = (name) => this._templateOptionActive(template, name);
-    const helpers = { v, series, ratio, day, event, option };
+    const customImage = () => this._customImageDataUrl || this._frontendAssetUrl("images/parrot-dithered.png");
+    const helpers = { v, series, ratio, day, event, option, customImage };
     return Object.fromEntries(
       DISPLAY_TEMPLATES.map((entry) => [entry.catalog.id, () => entry.design(helpers)]),
     );

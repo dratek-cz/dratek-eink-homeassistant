@@ -1,6 +1,9 @@
 """Regression tests for the categorized display-designer tool library."""
 
 from pathlib import Path
+import json
+import shutil
+import subprocess
 import unittest
 
 
@@ -437,8 +440,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('${this._displaySettingsView === "templates" ? this._renderDisplayTemplatesSection(device) : ""}', self.source)
         self.assertNotIn('return this._renderDisplayTemplatesPage(device)', self.source)
         self.assertIn('class="display-template-grid"', self.source)
-        # 28 templates including five hardware dithering calibration cards.
-        self.assertEqual(self.source.count('number: "'), 28)
+        # 29 templates including five calibration cards and a custom photo card.
+        self.assertEqual(self.source.count('number: "'), 29)
 
         self.assertIn("variables: [", self.source)
         # A promotion is a decision rather than a reading, so a price tag carries a
@@ -475,6 +478,32 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn("label:", complete_source[complete_source.index("design:"):])
         self.assertIn("matrix: 4", self.source)
         self.assertIn("const foregroundCount = Math.round(density * matrix * matrix);", self.source)
+        self.assertIn('id: "custom_image"', self.source)
+        self.assertIn("_ditherImportedTemplateImageData(pixels, width, height)", self.source)
+        self.assertIn("Floyd–Steinbergovým rozptylem", self.source)
+        self.assertIn("data-custom-image-template-upload", self.source)
+        self.assertIn('preserveAspectRatio="none" image-rendering="pixelated"', self.source)
+        self.assertIn('const customImage = () => this._customImageDataUrl || this._frontendAssetUrl("images/parrot-dithered.png")', self.source)
+        self.assertNotIn("_customImageNativeRaster", self.source)
+        self.assertNotIn("custom_image_original", self.source)
+        custom_image_source = (
+            PANEL_MODULES / "templates" / "custom_image.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("customImage: { src: customImage() }", custom_image_source)
+        self.assertIn("pixelPerfect: true", custom_image_source)
+        template_index = (PANEL_MODULES / "templates" / "index.js").read_text(encoding="utf-8")
+        catalog = template_index[template_index.index("export const DISPLAY_TEMPLATES = ["):]
+        featured = [
+            "customImage,",
+            "shadingTest,",
+            "shadingLightTest,",
+            "shadingDarkTest,",
+            "shadingWarmTest,",
+            "shadingCompleteTest,",
+            "weather,",
+        ]
+        positions = [catalog.index(item) for item in featured]
+        self.assertEqual(sorted(positions), positions)
         self.assertIn('class="display-template-variable-count blank-badge"', self.source)
         self.assertIn('class="display-template-variables-row"', self.source)
         self.assertIn('aria-label="Použité údaje"', self.source)
@@ -1354,11 +1383,49 @@ class FrontendToolLibraryTests(unittest.TestCase):
 
         self.assertIn('@media(max-width:800px){.studio-pro-top-row{position:relative;top:auto', self.source)
 
-    def test_template_image_import_uses_the_original_colour_classifier(self):
-        """Imports retain yellow while warm neutrals stay outside the red pigment."""
+    def test_template_image_import_retains_the_palette_classifier_and_adds_dithering(self):
+        """Imports retain yellow classification and gain real palette dithering."""
         self.assertIn("_quantizeImportedTemplatePixel(red, green, blue, alpha = 255)", self.source)
         self.assertIn("if (yellow) return [244, 196, 0, 255];", self.source)
         self.assertIn("the final device quantizer maps it to red on a three-colour panel", self.source)
+
+    def test_colour_photo_dithering_outputs_only_physical_inks(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is not available")
+        module_url = (PANEL_MODULES / "panel-devices.mixin.js").as_uri()
+        script = f"""
+          import {{ devicesMixin }} from {json.dumps(module_url)};
+          const width = 24, height = 16;
+          const data = new Uint8ClampedArray(width * height * 4);
+          for (let y = 0; y < height; y += 1) {{
+            for (let x = 0; x < width; x += 1) {{
+              const i = (y * width + x) * 4;
+              data[i] = Math.round(255 * x / (width - 1));
+              data[i + 1] = Math.round(255 * y / (height - 1));
+              data[i + 2] = Math.round(255 * (width - 1 - x) / (width - 1));
+              data[i + 3] = 255;
+            }}
+          }}
+          devicesMixin._ditherImportedTemplateImageData({{ data }}, width, height);
+          const colours = [...new Set(Array.from({{ length: width * height }}, (_, p) =>
+            `${{data[p * 4]}},${{data[p * 4 + 1]}},${{data[p * 4 + 2]}}`
+          ))].sort();
+          console.log(JSON.stringify(colours));
+        """
+        result = subprocess.run(
+            [node, "--input-type=module", "-e", script],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode:
+            self.fail(result.stderr)
+        colours = set(json.loads(result.stdout))
+        self.assertGreaterEqual(len(colours), 3)
+        self.assertLessEqual(
+            colours,
+            {"255,255,255", "0,0,0", "220,20,12", "244,196,0"},
+        )
         self.assertIn("const redScore = red - Math.max(green, blue);", self.source)
         self.assertIn("const luminance = (38 * red + 75 * green + 15 * blue) >> 7;", self.source)
         self.assertIn("green < red * 0.68 && blue < red * 0.72", self.source)

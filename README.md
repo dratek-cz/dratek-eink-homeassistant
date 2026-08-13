@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.292
+
+- **Vlastní barevné obrázky** – nová šablona přijímá PNG, JPEG i WebP, nabízí výchozí fotografii papouška a převede obraz do fyzických barev e-paperu pomocí pixelového ditheringu.
+- **Automaticky podle displeje** – při vložení se obrázek ořízne, přizpůsobí rozměrům zvoleného displeje a převede do jeho pixelové mřížky.
+- **Opravený přímý přenos 800×480** – Home Assistant posílá velký displej časovaným proudem bez pomalého potvrzování všech 419 bloků, i když BlueZ neohlásí podporu zápisu bez odpovědi.
+
 ## Novinky ve verzi 0.1.291
 
 - **Kompletní test barev** – jedna šablona zobrazuje všech šest dvojic bílé, černé, červené a žluté ve všech 17 poměrech mřížky 4×4, tedy od 0 do 16 pixelů druhé barvy.

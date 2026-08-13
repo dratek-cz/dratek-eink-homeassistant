@@ -565,17 +565,34 @@ class DratekTransfer:
                 # queue's 10-minute safety timeout. Those controllers support the
                 # paced write-without-response stream below and use an acknowledged
                 # final block as the delivery fence.
+                # BlueZ may expose the SDK 299/315 image characteristic only as
+                # `write`, even though the controller accepts GATT Write Commands
+                # and the official client and ESP32 gateway both stream them. The
+                # old property check therefore selected acknowledged writes for
+                # all 419 blocks and needed about 19 minutes on Home Assistant.
+                # Treat either advertised write capability as sufficient for these
+                # known controllers; the final acknowledged block and 05 08
+                # completion notification still prove delivery before disconnect.
+                write_properties = set(write_char.properties)
                 paced_large_stream = (
                     streaming_mode
                     and int(sdk_type) in PACED_LARGE_STREAM_SDK_TYPES
-                    and "write-without-response" in write_char.properties
+                    and bool({"write", "write-without-response"} & write_properties)
                 )
+                if paced_large_stream and "write-without-response" not in write_properties:
+                    self.log(
+                        "BlueZ did not advertise write-without-response for this large "
+                        "display; using its known paced command stream compatibility."
+                    )
                 require_gatt_response = (
                     (
                         "write" in write_char.properties
                         and int(sdk_type) in WRITE_ACK_SDK_TYPES
                     )
-                    or ("write-without-response" not in write_char.properties)
+                    or (
+                        "write-without-response" not in write_properties
+                        and not paced_large_stream
+                    )
                     or (
                         vendor_framed
                         and "write" in write_char.properties
@@ -626,7 +643,7 @@ class DratekTransfer:
                         large_display_final_fence = (
                             paced_large_stream
                             and not require_gatt_response
-                            and "write" in write_char.properties
+                            and "write" in write_properties
                             and block_number == total_blocks - 1
                         )
                         block_requires_response = (

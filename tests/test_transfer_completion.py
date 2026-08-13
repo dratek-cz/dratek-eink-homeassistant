@@ -34,7 +34,7 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertIn("await self._negotiate_mtu(client)", source)
         self.assertIn('getattr(backend, "_acquire_mtu", None)', source)
         self.assertIn("int(sdk_type) in WRITE_ACK_SDK_TYPES", source)
-        self.assertIn('"write-without-response" not in write_char.properties', source)
+        self.assertIn("write_properties = set(write_char.properties)", source)
         self.assertIn('if streaming_mode and "write" not in write_char.properties:', source)
         self.assertNotIn("int(sdk_type) in WRITE_ACK_SDK_TYPES or streaming_mode", source)
         self.assertIn("and int(sdk_type) in WRITE_ACK_SDK_TYPES", source)
@@ -49,9 +49,12 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertIn("paced_large_stream = (", source)
         self.assertIn("and not paced_large_stream", source)
         self.assertIn(
-            'and "write-without-response" in write_char.properties',
+            'and bool({"write", "write-without-response"} & write_properties)',
             source,
         )
+        self.assertIn('"write-without-response" not in write_properties', source)
+        self.assertIn("and not paced_large_stream", source)
+        self.assertIn("known paced command stream compatibility", source)
         self.assertIn("block_number == total_blocks - 1", section)
         self.assertIn("large_display_final_fence = (", section)
         self.assertIn("paced_large_stream\n", section)
