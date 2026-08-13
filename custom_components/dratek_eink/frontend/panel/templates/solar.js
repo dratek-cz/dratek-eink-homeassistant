@@ -37,7 +37,7 @@ export const template = {
       { icon: "weather-sunny", label: "Dnes", value: v(1, "8,2 kWh") },
       { icon: "calendar-month", label: "Měsíc", value: v(2, "152 kWh") },
       { icon: "counter", label: "Celkem", value: v(3, "3,45 MWh") },
-    ], h: 0.3 },
+    ], h: 0.37 },
     { flex: true },
     { footer: [{ label: "ÚSPORA CO₂", value: v(4, "125 kg") }], h: 0.13 },
   ],

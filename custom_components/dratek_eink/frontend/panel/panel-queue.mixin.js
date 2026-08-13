@@ -74,9 +74,9 @@ export const queueMixin = {
     if (render) {
       this._renderQueueKeepingFocus();
     }
-    if (Number(this._queue?.queued || 0) + Number(this._queue?.writing || 0) > 0) {
+    if (Number(this._queue?.queued || 0) + Number(this._queue?.writing || 0) > 0 || this._activeTab === "automations") {
       this._queuePollTimer = window.setTimeout(() => {
-        const visible = ["queue", "devices", "topology", "gateways"].includes(this._activeTab);
+        const visible = ["queue", "devices", "topology", "gateways", "automations"].includes(this._activeTab);
         this._loadQueue(visible);
       }, 1000);
     }
@@ -193,8 +193,6 @@ export const queueMixin = {
   _renderQueue() {
     const queue = this._queue || { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0, skipped: 0, skipped_reasons: [], skipped_devices: [] };
     const allJobs = queue.jobs || [];
-    const skippedReasons = queue.skipped_reasons || [];
-    const skippedDevices = queue.skipped_devices || [];
     const filters = this._queueFilters();
     const filtersActive = this._queueFiltersActive();
 
@@ -203,20 +201,6 @@ export const queueMixin = {
 
     const deviceAddresses = [...new Set(allJobs.map((job) => String(job.address || "").toUpperCase()))].filter(Boolean).sort();
     const operations = [...new Set(allJobs.map((job) => String(job.operation || "")))].filter(Boolean).sort();
-
-    const skipWarningBanner = (queue.skipped > 0 || skippedReasons.length > 0) ? `
-      <div class="card queue-skip-warning">
-        <div class="warning-header">
-          <ha-icon icon="mdi:alert-decagram-outline"></ha-icon>
-          <div>
-            <strong>Upozornění: Některé automatické zápisy byly přeskočeny (${queue.skipped})</strong>
-            <small>K přeskočení dochází, pokud je interval zjišťování stavů kratší než doba zápisu na displej nebo při upřednostnění ručního zápisu z editoru.</small>
-          </div>
-        </div>
-        ${skippedReasons.length ? `<div class="warning-reasons"><strong>Důvody přeskočení:</strong><ul>${skippedReasons.map((reason) => `<li>${this._escape(reason)}</li>`).join("")}</ul></div>` : ""}
-        ${skippedDevices.length ? `<div class="warning-devices"><strong>Zasažené displeje:</strong> ${skippedDevices.map((addr) => `<span class="pill muted">${this._escape(addr)}</span>`).join(" ")}</div>` : ""}
-        <div class="warning-tip"><ha-icon icon="mdi:lightbulb-on-outline"></ha-icon><strong>Tip:</strong> Zkraťte interval nahrávání v hlavním záhlaví (např. na 10 s nebo 15 s) nebo prodlužte interval odesílání v automatizaci.</div>
-      </div>` : "";
 
     // Metriky jsou zároveň filtr stavu - proto už pod hledáním nejsou žádné
     // čipy se stejnými stavy, jen zbylé filtry.
@@ -230,18 +214,17 @@ export const queueMixin = {
 
     return `
     <div class="queue-page">
-      <div class="stat-tiles">
-        ${stat("queued", "mdi:tray-full", queue.queued, "Ve frontě")}
-        ${stat("writing", "mdi:progress-upload", queue.writing, "Zapisuje", "is-warn")}
-        ${stat("succeeded", "mdi:check-circle-outline", queue.succeeded, "Dokončeno", "is-good")}
-        ${stat("skipped", "mdi:skip-next-circle-outline", queue.skipped, "Přeskočeno", "is-skipped")}
-        ${stat("failed", "mdi:alert-circle-outline", queue.failed, "Selhalo", "is-bad")}
-      </div>
+      <div class="queue-controls-locked">
+        <div class="stat-tiles">
+          ${stat("queued", "mdi:tray-full", queue.queued, "Ve frontě")}
+          ${stat("writing", "mdi:progress-upload", queue.writing, "Zapisuje", "is-warn")}
+          ${stat("succeeded", "mdi:check-circle-outline", queue.succeeded, "Dokončeno", "is-good")}
+          ${stat("skipped", "mdi:skip-next-circle-outline", queue.skipped, "Přeskočeno", "is-skipped")}
+          ${stat("failed", "mdi:alert-circle-outline", queue.failed, "Selhalo", "is-bad")}
+        </div>
 
-      ${skipWarningBanner}
-
-      <div class="card devices-toolbar-card">
-        <div class="devices-toolbar">
+        <div class="card devices-toolbar-card">
+          <div class="devices-toolbar">
           <div class="device-search"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" id="queueSearch" placeholder="Hledat displej, trasu nebo chybu..." value="${this._escape(this._queueSearch || "")}"></div>
           <button id="resetQueueView" class="reset-icon-btn" title="Zrušit hledání i filtry a obnovit"><ha-icon icon="mdi:refresh"></ha-icon></button>
           <div class="queue-filter-row">
@@ -268,6 +251,7 @@ export const queueMixin = {
           <div class="devices-toolbar-spacer"></div>
           <button id="exportQueueLog" class="secondary" style="margin-right: 8px;"><ha-icon icon="mdi:download-outline"></ha-icon>Stáhnout protokol</button>
           <button id="clearQueueHistory" class="danger"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vyčistit historii</button>
+          </div>
         </div>
       </div>
 

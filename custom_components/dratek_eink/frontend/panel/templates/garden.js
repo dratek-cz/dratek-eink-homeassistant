@@ -39,7 +39,7 @@ export const template = {
     { list: [
       { icon: "weather-sunny", label: "Teplota", value: v(2, "24 °C") },
       { icon: "weather-windy", label: "Vítr", value: v(3, "8 km/h") },
-    ], h: 0.18 },
+    ], h: 0.24 },
     { flex: true },
     { footer: [{ label: "ZÁLIVKA", value: v(4, "18:30") }], h: 0.13 },
   ],

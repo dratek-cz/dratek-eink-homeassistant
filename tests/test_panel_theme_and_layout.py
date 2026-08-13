@@ -1,10 +1,14 @@
 """The panel's status colours follow the Home Assistant theme, and the
-automatic-refresh controls live with the display's own actions.
+automatic-refresh controls live on each automation's own card in the
+Automations tab, not in the template designer.
 
 Both are source-level pins: the rendering itself needs a browser, but what can
 drift silently is the wiring - a status colour drifting back to a hardcoded ink
 that only reads on a light card, or the refresh controls drifting back into the
-template settings dialog they were moved out of.
+designer they were moved out of. They were moved because a template can be
+opened from several displays at once, each with its own cadence, so the
+setting belongs to the automation (which is per-display), not the design
+session (which is per-template).
 """
 
 from __future__ import annotations
@@ -71,58 +75,56 @@ class StatusColourThemeTests(unittest.TestCase):
 class RefreshControlPlacementTests(unittest.TestCase):
     def setUp(self) -> None:
         self.devices = (PANEL / "panel-devices.mixin.js").read_text(encoding="utf-8")
-        self.styles = (PANEL / "panel-render-ui.mixin.js").read_text(encoding="utf-8")
+        self.automations = (PANEL / "panel-automations.mixin.js").read_text(encoding="utf-8")
 
-    def _body(self, definition: str) -> str:
+    def _body(self, source: str, definition: str) -> str:
         """The source of one mixin method, from its definition to its closing brace."""
-        start = self.devices.index(definition)
-        return self.devices[start : self.devices.index("\n  },", start)]
-
-    def _studio_actions(self) -> str:
-        return self._body("_renderStudioActions() {")
+        start = source.index(definition)
+        return source[start : source.index("\n  },", start)]
 
     def _settings_dialog(self) -> str:
-        return self._body("_renderTemplateSettingsDialog(activeTemplate")
+        return self._body(self.devices, "_renderTemplateSettingsDialog(activeTemplate")
 
-    def test_the_controls_sit_with_the_displays_own_actions(self) -> None:
-        actions = self._studio_actions()
-        self.assertIn("_renderRefreshIntervalSelect", actions)
-        self.assertIn("_renderRefreshTriggerModeSelect", actions)
+    def _automations_card(self) -> str:
+        return self._body(self.automations, "_renderAutomations() {")
 
-    def test_they_render_after_the_send_button(self) -> None:
-        actions = self._studio_actions()
-        self.assertLess(
-            actions.index("data-template-send"),
-            actions.index("studio-pro-refresh-settings"),
-            "the refresh controls must come after the send button, not before it",
-        )
+    def test_the_controls_are_gone_from_the_designer(self) -> None:
+        # A template can be opened from several displays at once, each with its
+        # own cadence, so the setting belongs to the automation, not the
+        # per-template design session.
+        self.assertNotIn("_renderRefreshIntervalSelect", self.devices)
+        self.assertNotIn("_renderRefreshTriggerModeSelect", self.devices)
+        self.assertNotIn("studio-pro-refresh-settings\"", self.devices)
+
+    def test_the_detached_top_action_bar_is_gone(self) -> None:
+        # It only ever held the "save" and "send" buttons plus the auto-refresh
+        # row; once those all moved out, a floating bar with a single settings
+        # button left behind wasn't worth keeping. Template settings are still
+        # reachable through the "Nastavení celé šablony" button that already
+        # shows once nothing is selected.
+        self.assertNotIn("_renderStudioActions", self.devices)
+        self.assertNotIn('class="studio-pro-detached-actions"', self.devices)
+        self.assertIn("Nastavení celé šablony", self.devices)
 
     def test_they_are_gone_from_the_template_settings_dialog(self) -> None:
-        # They describe the display, not the template - a template can be sent to
-        # several displays, each with its own cadence.
         dialog = self._settings_dialog()
         self.assertNotIn("_renderRefreshIntervalSelect", dialog)
         self.assertNotIn("_renderRefreshTriggerModeSelect", dialog)
 
-    def test_the_row_claims_a_full_line_in_both_layouts(self) -> None:
-        # The action bar is flex at desktop width and a grid at narrow widths.
-        rule = re.search(r"\.studio-pro-refresh-settings\{([^}]*)\}", self.styles)
-        self.assertIsNotNone(rule)
-        self.assertIn("flex:1 0 100%", rule.group(1))
-        self.assertIn("grid-column:1/-1", rule.group(1))
-        self.assertIn(".studio-pro-detached-actions{flex-wrap:wrap}", self.styles)
+    def test_they_render_on_each_automations_card(self) -> None:
+        card = self._automations_card()
+        self.assertIn("this._automationIntervalSelect(automation)", card)
+        self.assertIn("this._automationTriggerSelect(automation)", card)
 
-    def test_the_full_line_rule_is_not_trapped_in_a_media_query(self) -> None:
-        # It was, at first, and silently did nothing at desktop width.
-        index = self.styles.index(".studio-pro-refresh-settings{flex:1 0 100%")
-        before = self.styles[:index]
-        last_media = before.rfind("@media")
-        self.assertNotEqual(-1, last_media)
-        segment = before[last_media:]
-        self.assertLessEqual(
-            segment.count("{") - segment.count("}"), 0,
-            "the rule sits inside an unclosed @media block, so it only applies at that width",
-        )
+    def test_the_trigger_select_offers_the_three_modes(self) -> None:
+        select = self._body(self.automations, "_automationTriggerSelect(automation) {")
+        for value in ('"both"', '"change_only"', '"interval_only"'):
+            with self.subTest(value=value):
+                self.assertIn(value, select)
+
+    def test_each_control_calls_its_own_websocket_command(self) -> None:
+        self.assertIn('type: "dratek_eink/automations/update_interval",', self.automations)
+        self.assertIn('type: "dratek_eink/automations/update_trigger_mode",', self.automations)
 
 
 if __name__ == "__main__":

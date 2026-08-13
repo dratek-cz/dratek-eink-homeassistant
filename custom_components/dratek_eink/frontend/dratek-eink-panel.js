@@ -1,17 +1,17 @@
 import { storageMixin } from "./panel/panel-storage.mixin.js";
-import { queueMixin } from "./panel/panel-queue.mixin.js";
-import { automationsMixin } from "./panel/panel-automations.mixin.js?v=queue-stats-1";
+import { queueMixin } from "./panel/panel-queue.mixin.js?v=queue-pinned-2";
+import { automationsMixin } from "./panel/panel-automations.mixin.js?v=writing-highlight-2";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=usb-fields-4";
-import { devicesMixin } from "./panel/panel-devices.mixin.js?v=wide800-physical-label-7";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=small-display-panel-8";
 import { projectsMixin } from "./panel/panel-projects.mixin.js?v=template-save-queue-1";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
 import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-3";
 import { templatesMixin } from "./panel/panel-templates.mixin.js?v=readable-chart-type-2";
 import { variablesMixin } from "./panel/panel-variables.mixin.js?v=readable-chart-type-2";
 import { previewMixin } from "./panel/panel-preview.mixin.js";
-import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=wide800-physical-label-7";
+import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=queue-auto-sidebar-10";
 import { i18nMixin } from "./panel/panel-i18n.mixin.js";
-import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=layout-icon-popup-4";
+import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=automation-queue-poll-5";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js?v=templates-4c-1";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
 import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=viewport-transposed-layout-6";
@@ -84,7 +84,7 @@ class DratekEinkPanel extends HTMLElement {
     this._pendingDisplayTemplateConflict = null;
     this._templateSending = false;
     this._templateSendResult = null;
-    this._displayDesignerReturnView = "overview";
+    this._templateDesignerReturnView = "overview";
     this._editingDeviceAddress = "";
     this._deviceNameDraft = "";
     this._objects = [];
@@ -116,13 +116,16 @@ class DratekEinkPanel extends HTMLElement {
     this._variables = {};
     this._orientation = "landscape";
     this._displayTransform = "rotate_cw";
-    this._refreshIntervalSeconds = 60;
+    this._refreshIntervalSeconds = 600;
     this._activeTab = "devices";
     this._language = this._loadUiPreference("language", "cs") === "en" ? "en" : "cs";
     this._deviceViewMode = this._loadUiPreference("device-view-mode", "auto");
     this._deviceSearchQuery = "";
     this._displayCatalogOpen = false;
     this._topologyViewMode = this._loadUiPreference("topology-view-mode", "auto");
+    this._gatewayMapMode = this._loadUiPreference("gateway-map-mode", "list");
+    this._gatewayMapFocusAddress = "";
+    this._gatewayMapView = { scale: 1, x: 0, y: 0 };
     this._queue = { jobs: [], queued: 0, writing: 0, succeeded: 0, failed: 0 };
     this._queuePollTimer = null;
     this._automations = [];
@@ -201,6 +204,8 @@ class DratekEinkPanel extends HTMLElement {
     window.clearTimeout(this._otaPollTimer);
     window.clearTimeout(this._queuePollTimer);
     window.clearTimeout(this._deviceStatusPollTimer);
+    if (this._gwmapPanMove) window.removeEventListener("mousemove", this._gwmapPanMove);
+    if (this._gwmapPanEnd) window.removeEventListener("mouseup", this._gwmapPanEnd);
     // A draft save is debounced by 700 ms. Leaving the panel inside that window
     // used to drop the edit silently, so flush it instead of clearing it.
     if (this._draftSaveTimer) {

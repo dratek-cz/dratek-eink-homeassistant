@@ -165,7 +165,7 @@ export const projectsMixin = {
     const source = this._normalizeStoredDraft(draft) || this._emptyDeviceDraft(device);
     this._orientation = source.orientation === "portrait" ? "portrait" : "landscape";
     this._displayTransform = source.display_transform || "rotate_cw";
-    this._refreshIntervalSeconds = Math.max(30, Math.min(86400, Number(source.refresh_interval_seconds) || 60));
+    this._refreshIntervalSeconds = Math.max(30, Math.min(86400, Number(source.refresh_interval_seconds) || 600));
     this._refreshTriggerMode = ["both", "change_only", "interval_only"].includes(source.refresh_trigger_mode)
       ? source.refresh_trigger_mode
       : "both";

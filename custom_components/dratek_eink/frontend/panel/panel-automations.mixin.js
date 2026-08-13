@@ -26,7 +26,7 @@ export const automationsMixin = {
   },
 
   _automationIntervalSelect(automation) {
-    const seconds = Math.max(30, Math.min(86400, Number(automation.refresh_interval_seconds) || 60));
+    const seconds = Math.max(30, Math.min(86400, Number(automation.refresh_interval_seconds) || 600));
     const presets = [
       [30, "30 s"], [60, "1 min"], [300, "5 min"], [600, "10 min"],
       [900, "15 min"], [1800, "30 min"], [3600, "1 hod"], [7200, "2 hod"],
@@ -36,7 +36,7 @@ export const automationsMixin = {
   },
 
   _automationIntervalLabel(automation) {
-    const seconds = Math.max(30, Math.min(86400, Number(automation.refresh_interval_seconds) || 60));
+    const seconds = Math.max(30, Math.min(86400, Number(automation.refresh_interval_seconds) || 600));
     if (seconds < 60) return `${seconds} sekund`;
     if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
     return `${Math.round(seconds / 3600)} hod`;
@@ -50,8 +50,25 @@ export const automationsMixin = {
     })[mode] || "Při změně entity i pravidelně";
   },
 
+  _automationTriggerSelect(automation) {
+    const mode = ["both", "change_only", "interval_only"].includes(automation.refresh_trigger_mode)
+      ? automation.refresh_trigger_mode
+      : "both";
+    const options = [
+      ["both", "Při změně i pravidelně"],
+      ["change_only", "Jen při změně entity"],
+      ["interval_only", "Jen pravidelně (podle intervalu)"],
+    ];
+    return `<label class="automation-interval-field"><span>Co spouští obnovu</span><div><ha-icon icon="mdi:swap-horizontal"></ha-icon><select aria-label="Co spouští automatickou obnovu" data-automation-trigger="${this._escape(automation.address)}" ${this._automationBusyAddress === automation.address ? "disabled" : ""}>${options.map(([value, label]) => `<option value="${value}" ${mode === value ? "selected" : ""}>${label}</option>`).join("")}</select><ha-icon class="automation-select-chevron" icon="mdi:chevron-down"></ha-icon></div></label>`;
+  },
+
   _renderAutomations() {
     const automations = this._automations || [];
+    const writingAddresses = new Set(
+      (this._queue?.jobs || [])
+        .filter((job) => job.status === "writing" && job.operation === "entity_update")
+        .map((job) => String(job.address || "").toUpperCase()),
+    );
     const entityCount = automations.reduce(
       (total, item) => total + Math.max(
         Array.isArray(item.entity_ids) ? item.entity_ids.length : 0,
@@ -84,13 +101,14 @@ export const automationsMixin = {
           ? "mdi:clock-outline"
           : "mdi:sync";
       const busy = this._automationBusyAddress === automation.address;
-      return `<article class="automation-card ${busy ? "is-busy" : ""}">
+      const writing = writingAddresses.has(String(automation.address || "").toUpperCase());
+      return `<article class="automation-card ${busy ? "is-busy" : ""} ${writing ? "is-writing" : ""}">
         <span class="automation-card-accent"></span>
         ${busy ? `<span class="automation-card-working"><ha-icon class="spin" icon="mdi:loading"></ha-icon>Ukládám změnu</span>` : ""}
         <header class="automation-card-head">
           <span class="automation-device-icon"><span>${String(index + 1).padStart(2, "0")}</span><ha-icon icon="mdi:monitor-dashboard"></ha-icon></span>
           <div class="automation-card-title"><span class="automation-card-kicker">Automatický zápis</span><strong>${this._escape(name)}</strong><small>${this._escape(automation.address)}</small></div>
-          <span class="automation-live"><i></i>Aktivní</span>
+          ${writing ? `<span class="automation-live is-writing"><ha-icon icon="mdi:progress-upload"></ha-icon>Právě zapisuje</span>` : `<span class="automation-live"><i></i>Aktivní</span>`}
         </header>
         <section class="automation-schedule">
           <span class="automation-schedule-icon"><ha-icon icon="mdi:calendar-sync-outline"></ha-icon></span>
@@ -101,7 +119,7 @@ export const automationsMixin = {
           <span><span class="automation-fact-icon"><ha-icon icon="mdi:database-sync-outline"></ha-icon></span><span><small>Obsah záznamu</small><strong>${bindings} ${bindings === 1 ? "datová vazba" : "datových vazeb"}${templates ? ` · ${templates} ${templates === 1 ? "šablona" : "šablony"}` : ""}</strong></span></span>
         </div>
         <section class="automation-entities"><header><span><ha-icon icon="mdi:link-variant"></ha-icon>Napojené entity</span><b>${bindings}</b></header><div>${entities.length ? entities.map((entityId) => `<code><i></i>${this._escape(entityId)}</code>`).join("") : `<span class="automation-no-entities"><ha-icon icon="mdi:vector-combine"></ha-icon>Interní nebo složené datové vazby</span>`}</div></section>
-        <footer class="automation-card-actions">${this._automationIntervalSelect(automation)}<button type="button" class="automation-delete" title="Smazat automatický zápis" data-automation-delete="${this._escape(automation.address)}" ${busy ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon><span>Smazat zápis</span></button></footer>
+        <footer class="automation-card-actions">${this._automationIntervalSelect(automation)}${this._automationTriggerSelect(automation)}<button type="button" class="automation-delete" title="Smazat automatický zápis" data-automation-delete="${this._escape(automation.address)}" ${busy ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon><span>Smazat zápis</span></button></footer>
       </article>`;
     }).join("");
     return `<div class="automations-page">
@@ -130,6 +148,29 @@ export const automationsMixin = {
             refresh_interval_seconds: Number(select.value),
           });
           this._automationsResult = "Interval automatického zápisu byl uložen.";
+          await this._loadAutomations(false);
+        } catch (err) {
+          this._automationsError = this._message(err);
+        } finally {
+          this._automationBusyAddress = "";
+          this._render(); this._paint();
+        }
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-automation-trigger]").forEach((select) => {
+      select.addEventListener("change", async () => {
+        const address = select.dataset.automationTrigger;
+        this._automationBusyAddress = address;
+        this._automationsError = "";
+        this._automationsResult = "";
+        this._render(); this._paint();
+        try {
+          await this._hass.callWS({
+            type: "dratek_eink/automations/update_trigger_mode",
+            address,
+            refresh_trigger_mode: select.value,
+          });
+          this._automationsResult = "Způsob spouštění obnovy byl uložen.";
           await this._loadAutomations(false);
         } catch (err) {
           this._automationsError = this._message(err);

@@ -34,7 +34,7 @@ export const template = {
     { icon: "cake-variant", h: 0.15 },
     { stat: { value: v(0, "Lucie"), caption: v(1, "32 let"), color: "red" }, h: 0.28 },
     { rule: true, h: 0.02 },
-    { datebox: { day: "27", month: "KVĚ", lines: [v(2, "Tomáš"), "za 4 dny"] }, h: 0.25 },
+    { datebox: { day: "27", month: "KVĚ", lines: [v(2, "Tomáš"), "za 4 dny"] }, h: 0.4 },
     { flex: true },
     { footer: [{ label: "PŘIPOMÍNKA", value: v(3, "Popřát ráno") }], h: 0.14 },
   ],

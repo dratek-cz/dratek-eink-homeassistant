@@ -1035,7 +1035,7 @@ export const devicesMixin = {
     const previewZoom = Math.max(0.5, Math.min(1.8, Number(this._displayTemplatePreviewZoom || 1)));
     return `<section class="display-templates-inline">
       <div class="display-template-workspace">
-        <aside class="card display-template-drop-panel">
+        <aside class="card display-template-drop-panel ${largeDisplay ? "is-large-display" : "is-small-display"}">
           <div class="display-template-device-info ${primaryTemplate ? "is-configurable" : ""}" ${primaryTemplate ? `data-display-template-configure="${this._escape(primaryTemplate.id)}" role="button" tabindex="0" title="Nastavit zdroje dat šablony ${this._escape(primaryTemplate.title)}"` : ""}>
             <div class="display-template-device-info-top">
               <span class="display-template-device-info-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></span>
@@ -1169,7 +1169,7 @@ export const devicesMixin = {
                   <button type="button" class="card-edit-option-btn" data-display-template-edit-choice="designer" data-display-template-id="${this._escape(template.id)}">
                     <span class="option-icon"><ha-icon icon="mdi:palette-outline"></ha-icon></span>
                     <div class="option-text">
-                      <strong>Designer displeje</strong>
+                      <strong>Designer šablon</strong>
                       <small>Rozložení, prvky a vzhled v eInk Studiu</small>
                     </div>
                     <ha-icon icon="mdi:chevron-right" class="option-arrow"></ha-icon>
@@ -1691,9 +1691,6 @@ export const devicesMixin = {
     const previewCanvasWidth = Math.round(canvasWidth * canvasScale);
     const canvasFormat = canvasWidth >= canvasHeight ? "wide" : "narrow";
     return `<section class="display-template-editor-page studio-pro-workspace">
-      <div class="studio-pro-top-row">
-        ${this._renderStudioActions()}
-      </div>
       <div class="display-template-editor-layout">
         <div class="studio-pro-selection-row">
           ${this._renderTemplateSelectionBar(activeTemplate, previewZoom, viewport)}
@@ -1714,6 +1711,7 @@ export const devicesMixin = {
         </main>
 
         <div class="display-template-editor-right-column">
+          ${this._renderTemplateSaveRow()}
           ${this._templateSendResult ? `<div class="template-send-result ${this._templateSendResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSendResult.ok ? "check-circle-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSendResult.message)}</span></div>` : ""}
           ${this._templateSaveResult ? `<div class="template-send-result ${this._templateSaveResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSaveResult.ok ? "content-save-check-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSaveResult.message)}</span></div>` : ""}
           <aside class="card display-template-editor-panel display-template-editor-right" aria-label="Nastavení prvku nebo šablony">
@@ -1925,10 +1923,28 @@ export const devicesMixin = {
 
     const steps = (recipe.steps || []).map((step, index) => `<li class="template-guide-step-card"><span class="template-step-num">${index + 1}</span><span class="template-step-text">${this._escape(step)}</span></li>`).join("");
 
+    // The "Nalezeno" badges above only say the integration exists - not that
+    // this template's own variables actually resolved to a real entity yet.
+    // Both can be true (integration installed, auto-suggest still empty) or
+    // both already satisfied, and the numbered steps below always read as an
+    // outstanding task either way ("V Nastavit přiřaďte…") because they are
+    // static per-template text, not aware of live binding state. A user whose
+    // data already came in automatically had no way to tell that apart from
+    // one who still had to go pick an entity - this banner is that signal.
+    const status = this._templateBindingStatus(template);
+    const statusBanner = status.total > 0 ? (
+      status.state === "complete"
+        ? `<div class="template-setup-status-banner is-complete"><ha-icon icon="mdi:check-decagram"></ha-icon><span><strong>Hotovo automaticky</strong><small>Všech ${status.total} ${status.total === 1 ? "hodnota se" : status.total < 5 ? "hodnoty se" : "hodnot se"} už napojilo samo - kroky níž jsou jen pro kontrolu nebo změnu.</small></span></div>`
+        : status.state === "partial"
+          ? `<div class="template-setup-status-banner is-partial"><ha-icon icon="mdi:progress-check"></ha-icon><span><strong>${status.done} z ${status.total} hotovo automaticky</strong><small>Zbytek zatím ukazuje ukázková data - dokončete ho v Nastavit u šablony.</small></span></div>`
+          : `<div class="template-setup-status-banner is-empty"><ha-icon icon="mdi:progress-alert"></ha-icon><span><strong>Zatím jen ukázková data</strong><small>Žádnou z ${status.total} hodnot se nepodařilo přiřadit automaticky - dokončete je v Nastavit u šablony.</small></span></div>`
+    ) : "";
+
     return `<div class="template-guide-summary-card">
         <ha-icon icon="mdi:lightbulb-outline"></ha-icon>
         <p>${this._escape(recipe.summary)}</p>
       </div>
+      ${statusBanner}
       ${integrations ? `<div class="template-guide-section">
         <h4><ha-icon icon="mdi:puzzle-outline"></ha-icon> Co je potřeba v Home Assistantu</h4>
         <ul class="template-guide-integrations-list">${integrations}</ul>
@@ -1941,54 +1957,6 @@ export const devicesMixin = {
         <ha-icon icon="mdi:information-outline"></ha-icon>
         <span>${this._escape(recipe.note)}</span>
       </div>` : ""}`;
-  },
-
-  _renderRefreshIntervalSelect(address, currentSeconds, extraClass = "") {
-    const seconds = Math.max(30, Math.min(86400, Number(currentSeconds) || 60));
-    const presets = [
-      { value: 30, label: "30 s" },
-      { value: 60, label: "1 min" },
-      { value: 300, label: "5 min" },
-      { value: 600, label: "10 min" },
-      { value: 900, label: "15 min" },
-      { value: 1800, label: "30 min" },
-      { value: 3600, label: "1 hod" },
-      { value: 7200, label: "2 hod" },
-      { value: 21600, label: "6 hod" },
-      { value: 43200, label: "12 hod" },
-      { value: 86400, label: "24 hod" },
-    ];
-    return `<div class="display-interval-control ${extraClass}" title="Interval automatického nahrávání a obnovy displeje">
-      <ha-icon icon="mdi:timer-refresh-outline"></ha-icon>
-      <select class="display-refresh-interval-select" data-device-refresh-interval="${this._escape(address || '')}" aria-label="Interval automatické obnovy">
-        ${presets.map((p) => `<option value="${p.value}" ${seconds === p.value ? "selected" : ""}>${p.label}</option>`).join("")}
-      </select>
-    </div>`;
-  },
-
-  // What actually has to happen before a display redraws: only a real change
-  // to a napojená entita, only the interval ticking over, or either - kept
-  // separate from the interval itself, because "how often" and "on what"
-  // are two different questions (a display with nothing that needs periodic
-  // insurance, e.g. no camera binding, may want to never redraw between real
-  // changes; a fast-changing entity may want throttling to a fixed cadence
-  // instead of redrawing on every update).
-  _renderRefreshTriggerModeSelect(address, currentMode, extraClass = "") {
-    const mode = ["both", "change_only", "interval_only"].includes(currentMode) ? currentMode : "both";
-    const options = [
-      { value: "both", label: "Při změně i pravidelně" },
-      { value: "change_only", label: "Jen při změně entity" },
-      { value: "interval_only", label: "Jen pravidelně (podle intervalu)" },
-    ];
-    // Reuses display-interval-control/display-refresh-interval-select's styling
-    // (icon + borderless select in a pill) rather than defining a parallel set
-    // of rules for what is visually the same kind of control.
-    return `<div class="display-interval-control display-trigger-mode-control ${extraClass}" title="Co spouští automatickou obnovu displeje">
-      <ha-icon icon="mdi:swap-horizontal"></ha-icon>
-      <select class="display-refresh-interval-select display-refresh-trigger-mode-select" data-device-refresh-trigger-mode="${this._escape(address || '')}" aria-label="Co spouští automatickou obnovu">
-        ${options.map((o) => `<option value="${o.value}" ${mode === o.value ? "selected" : ""}>${o.label}</option>`).join("")}
-      </select>
-    </div>`;
   },
 
   _toggleModalScrollLock(active) {
@@ -2021,8 +1989,8 @@ export const devicesMixin = {
     const crop = this._templateVariableCropContext(activeTemplate);
     // The automatic-refresh controls used to sit here, at the top of the
     // template settings dialog. They are not a property of the template - they
-    // belong to the display - so they live with the display's own actions now,
-    // right under "Odeslat do displeje" (_renderStudioActions).
+    // belong to the automation - so they live on each automation's own card in
+    // the Automations tab now (see panel-automations.mixin.js).
     const variableList = `<div class="template-variables-header">
       <h4><ha-icon icon="mdi:tune-vertical"></ha-icon> Napojení proměnných</h4>
       <p class="template-settings-intro">U každé položky vyberte entitu v Home Assistantu. Systémové údaje (čas, datum) se doplňují automaticky.</p>
@@ -2039,26 +2007,12 @@ export const devicesMixin = {
   },
 
 
-  _renderStudioActions() {
-    return `<div class="studio-pro-detached-actions" aria-label="Akce návrhu">
-        <button type="button" class="studio-pro-btn secondary" data-template-settings-open>
-          <ha-icon icon="mdi:tune-variant"></ha-icon> Nastavení šablony
-        </button>
-        <button type="button" class="display-template-save-button studio-pro-btn" data-template-save>
-          <ha-icon icon="mdi:content-save-outline"></ha-icon> Uložit návrh
-        </button>
-        <button type="button" class="display-template-send-button studio-pro-btn primary" data-template-send ${this._templateSending ? "disabled" : ""}>
-          <ha-icon icon="mdi:${this._templateSending ? "loading" : "send"}" ${this._templateSending ? 'class="spin"' : ""}></ha-icon>
-          <span>${this._templateSending ? "Odesílám…" : "Odeslat do displeje"}</span>
-        </button>
-        <div class="studio-pro-refresh-settings">
-          <span class="studio-pro-refresh-title">
-            <ha-icon icon="mdi:timer-refresh-outline"></ha-icon> Automatická obnova displeje
-          </span>
-          ${this._renderRefreshIntervalSelect(this._selectedDeviceAddress, this._refreshIntervalSeconds, "in-actions")}
-          ${this._renderRefreshTriggerModeSelect(this._selectedDeviceAddress, this._refreshTriggerMode, "in-actions")}
-        </div>
-      </div>`;
+  _renderTemplateSaveRow() {
+    return `<div class="template-designer-save-row">
+      <button type="button" class="template-designer-save-btn" data-template-save>
+        <ha-icon icon="mdi:content-save-outline"></ha-icon> Uložit šablonu
+      </button>
+    </div>`;
   },
 
   _renderTemplateSelectionBar(activeTemplate, previewZoom, viewport) {
@@ -2954,7 +2908,7 @@ export const devicesMixin = {
     for (const source of this._templateEditorElements || []) {
       const item = this._quarterTurnedUserTemplateElement(source);
       const entityId = String(item.entityId || "").trim();
-      if (!entityId || !["chart", "gauge", "signal", "slider"].includes(item.type)) continue;
+      if (!entityId || !["text", "chart", "gauge", "signal", "slider"].includes(item.type)) continue;
       const x = px(item.x, width);
       const y = px(item.y, height);
       const w = Math.min(width - x, px(item.w, width, 1));
@@ -2968,6 +2922,22 @@ export const devicesMixin = {
         backgroundColor: "white",
         rotation: Number(item.rotation || 0),
       };
+
+      if (item.type === "text") {
+        bindings.push({
+          ...common,
+          type: "text",
+          fallback: String(item.text || ""),
+          include_unit: true,
+          fontSize: Math.max(8, Math.round(Number(item.fontSize || 17) * height / 128)),
+          minFontSize: 7,
+          bold: ["700", "900"].includes(String(item.fontWeight)),
+          textAlign: item.textAlign || "left",
+          verticalAlign: "middle",
+          color: this._templateAutomationPalette(item.color, "black"),
+        });
+        continue;
+      }
 
       if (item.type === "chart") {
         bindings.push({
@@ -3071,7 +3041,7 @@ export const devicesMixin = {
       software_version: Number(device.sw || 0),
       orientation: landscape ? "landscape" : "portrait",
       transform: this._displayTransform || "rotate_cw",
-      refresh_interval_seconds: Math.max(30, Math.min(86400, Number(this._refreshIntervalSeconds) || 60)),
+      refresh_interval_seconds: Math.max(30, Math.min(86400, Number(this._refreshIntervalSeconds) || 600)),
       refresh_trigger_mode: ["both", "change_only", "interval_only"].includes(this._refreshTriggerMode)
         ? this._refreshTriggerMode
         : "both",
@@ -3417,6 +3387,7 @@ export const devicesMixin = {
       tool("text", "format-text", "Běžný text", { text: "Vlastní text", fontSize: 17, fontWeight: "400", variant: "body" }),
       tool("text", "numeric", "Velká hodnota", { text: "24,5 °C", fontSize: 32, fontWeight: "900", h: 16, variant: "value" }),
       tool("button", "label-outline", "Text v rámečku", { text: "Popisek", fontSize: 14, radius: 7, variant: "label" }),
+      tool("text", "database-search-outline", "Proměnný text", { text: "Proměnná", fontSize: 20, fontWeight: "700", variant: "variable" }),
     ].join("");
     else if (category === "shapes") content = [
       tool("rect", "rectangle-outline", "Obdélník", { variant: "outline" }),
@@ -3434,27 +3405,18 @@ export const devicesMixin = {
       tool("barcode", "barcode", "EAN-13", { text: "859123456789", variant: "ean13" }),
     ].join("");
     else if (category === "charts") content = [
-      tool("chart", "chart-line", "Čárový", { variant: "line" }),
-      tool("chart", "chart-areaspline", "Plošný", { variant: "area" }),
-      tool("chart", "chart-bar", "Sloupcový", { variant: "bar" }),
-      tool("chart", "chart-timeline-variant-shimmer", "Schodový", { variant: "steps" }),
-      tool("chart", "chart-donut", "Prstencový", { variant: "donut", value: 68 }),
-      tool("chart", "chart-line-variant", "Mini trend", { variant: "sparkline", fill: "transparent", strokeWidth: 3, h: 18 }),
+      tool("chart", "chart-bar", "Sloupcový graf", { variant: "bars", color: "#111111" }),
+      tool("chart", "chart-line-variant", "Trend", { variant: "spark", color: "#d71912" }),
     ].join("");
     else if (category === "gauges") content = [
-      tool("gauge", "gauge", "Kruhový", { variant: "ring", value: 72 }),
-      tool("gauge", "gauge-low", "Půlkruhový", { variant: "semicircle", value: 54 }),
-      tool("gauge", "battery-70", "Baterie", { variant: "battery", value: 72 }),
-      tool("gauge", "thermometer", "Teploměr", { variant: "thermometer", value: 64 }),
-      tool("slider", "progress-check", "Průběh", { variant: "progress", value: 68 }),
+      tool("gauge", "gauge", "Kruhový ukazatel", { variant: "ring", value: 68, color: "#d71912" }),
+      tool("gauge", "gauge-low", "Půlkruhový ukazatel", { variant: "dial", value: 54, color: "#d71912" }),
+      tool("slider", "progress-check", "Průběh", { value: 68, color: "#d71912" }),
     ].join("");
     else if (category === "controls") content = [
-      tool("signal", "toggle-switch", "Zapnuto", { variant: "on", text: "Zapnuto", icon: "power", value: 100, fill: "#ffffff", color: "#111111" }),
-      tool("signal", "toggle-switch-off-outline", "Vypnuto", { variant: "off", text: "Vypnuto", icon: "power-off", value: 0 }),
-      tool("signal", "check-circle", "Aktivní", { variant: "active", text: "Aktivní", icon: "check-circle", value: 100 }),
-      tool("signal", "minus-circle-outline", "Neaktivní", { variant: "inactive", text: "Neaktivní", icon: "minus-circle-outline", value: 0 }),
-      tool("signal", "alert-circle", "Výstraha", { variant: "warning", text: "Výstraha", icon: "alert-circle", color: "#d71912", stroke: "#d71912" }),
-      tool("signal", "image-outline", "Obrázková", { variant: "picture", text: "Stav", icon: "lightbulb-on-outline", w: 28, h: 24 }),
+      tool("signal", "toggle-switch", "Zapnuto", { variant: "on", text: "Stav", color: "#111111" }),
+      tool("signal", "toggle-switch-off-outline", "Vypnuto", { variant: "off", text: "Stav", color: "#111111" }),
+      tool("signal", "alert-circle", "Výstraha", { variant: "on", text: "Výstraha", color: "#d71912" }),
     ].join("");
     else if (category === "images") {
       const assets = this._templateImageLibrary || [];
@@ -3490,43 +3452,32 @@ export const devicesMixin = {
     const entity = item.entityId ? this._hass?.states?.[item.entityId] : null;
     const entityValue = this._templateElementEntityRaw?.(item);
     const propertyTab = (title, content, open = false, extraClass = "") => `<details class="template-property-section ${extraClass}" ${open ? "open" : ""}><summary><span>${title}</span><ha-icon icon="mdi:chevron-down"></ha-icon></summary><div class="template-property-section-body">${content}</div></details>`;
-    const entityBinding = ["chart", "gauge", "signal", "slider"].includes(item.type) ? propertyTab("Home Assistant", `<label class="template-property-wide"><span>Entita nebo pomocník</span><ha-selector data-template-element-entity-picker="${this._escape(item.id)}"></ha-selector></label><label class="template-property-wide"><span>Entity ID</span><input type="text" value="${this._escape(item.entityId || "")}" data-template-element-entity-id placeholder="sensor.teplota"></label><label class="template-property-wide"><span>Atribut (volitelné)</span><input type="text" value="${this._escape(item.entityAttribute || "")}" data-template-element-prop="entityAttribute" placeholder="Například prices"></label>${item.entityId ? `<div class="template-entity-current"><ha-icon icon="mdi:home-assistant"></ha-icon><span><strong>${this._escape(entity?.attributes?.friendly_name || item.entityId)}</strong><small>${this._escape(entityValue === undefined ? "Entita nemá hodnotu" : String(entityValue))}</small></span></div>` : `<p class="template-entity-help">Bez vybrané entity se používá ručně nastavená hodnota.</p>`}`, true, "template-ha-binding") : "";
+    const entityBinding = ["text", "chart", "gauge", "signal", "slider"].includes(item.type) ? propertyTab("Home Assistant", `<label class="template-property-wide"><span>Entita nebo pomocník</span><ha-selector data-template-element-entity-picker="${this._escape(item.id)}"></ha-selector></label><label class="template-property-wide"><span>Entity ID</span><input type="text" value="${this._escape(item.entityId || "")}" data-template-element-entity-id placeholder="sensor.teplota"></label><label class="template-property-wide"><span>Atribut (volitelné)</span><input type="text" value="${this._escape(item.entityAttribute || "")}" data-template-element-prop="entityAttribute" placeholder="Například prices"></label>${item.entityId ? `<div class="template-entity-current"><ha-icon icon="mdi:home-assistant"></ha-icon><span><strong>${this._escape(entity?.attributes?.friendly_name || item.entityId)}</strong><small>${this._escape(entityValue === undefined ? "Entita nemá hodnotu" : String(entityValue))}</small></span></div>` : `<p class="template-entity-help">Bez vybrané entity se používá ručně nastavená hodnota.</p>`}`, true, "template-ha-binding") : "";
     const textTypes = ["text", "button", "signal"];
     const shapeTypes = ["rect", "circle", "button", "signal"];
     return `<div class="template-element-inspector">
       <div class="template-editor-panel-heading"><ha-icon icon="mdi:tune-vertical-variant"></ha-icon><span><strong>Vlastnosti prvku</strong><small>${this._escape(item.label)}</small></span></div>
       <div class="template-inspector-actions"><button type="button" data-template-element-duplicate><ha-icon icon="mdi:content-duplicate"></ha-icon>Duplikovat</button><button type="button" class="is-danger" data-template-element-delete><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat</button></div>
-      ${propertyTab("Poloha a velikost", `<div class="template-property-row">${field("X", "x", item.x, 0, 100, .1, "%")}${field("Y", "y", item.y, 0, 100, .1, "%")}</div><div class="template-property-row">${field("Šířka", "w", item.w, 2, 100, .1, "%")}${field("Výška", "h", item.h, 2, 100, .1, "%")}</div>${field("Natočení", "rotation", item.rotation, -180, 180, 1, "°")}`, true)}
+      ${propertyTab("Umístění, velikost a barva", `<div class="template-property-row">${field("X", "x", item.x, 0, 100, .1, "%")}${field("Y", "y", item.y, 0, 100, .1, "%")}</div><div class="template-property-row">${field("Šířka", "w", item.w, 2, 100, .1, "%")}${field("Výška", "h", item.h, 2, 100, .1, "%")}</div>${field("Natočení", "rotation", item.rotation, -180, 180, 1, "°")}<label class="template-property-wide"><span>Barva podkladu</span>${colors("fill", item.fill, true)}</label>`, true)}
       ${["qr", "barcode"].includes(item.type) ? propertyTab(item.type === "qr" ? "Obsah QR kódu" : "Data EAN-13", `<label class="template-property-wide"><span>${item.type === "qr" ? "Text, URL nebo Wi-Fi konfigurace" : "12 nebo 13 číslic"}</span><input type="text" value="${this._escape(item.text || "")}" data-template-element-prop="text"></label><p class="template-entity-help">Kód se po změně automaticky znovu vygeneruje.</p>`, true) : ""}
       ${textTypes.includes(item.type) ? `${propertyTab("Text a typografie", `
         <label class="template-property-wide"><span>Obsah</span><input type="text" value="${this._escape(item.text || "")}" data-template-element-prop="text"></label>
-        ${select("Font", "fontFamily", item.fontFamily, [["DRATEK eInk Sans", "DRATEK eInk Sans"], ["Arial", "Arial"], ["Georgia", "Georgia / patkové"], ["Courier New", "Courier / monospace"]])}
         <div class="template-property-row">${field("Velikost", "fontSize", item.fontSize, 6, 72, 1, "px")}${select("Řez", "fontWeight", String(item.fontWeight), [["400", "Normální"], ["700", "Tučný"], ["900", "Extra tučný"]])}</div>
-        <div class="template-property-row">${select("Styl", "fontStyle", item.fontStyle, [["normal", "Normální"], ["italic", "Kurzíva"]])}${select("Dekorace", "textDecoration", item.textDecoration, [["none", "Bez dekorace"], ["underline", "Podtržení"], ["line-through", "Přeškrtnutí"]])}</div>
         <label class="template-property-wide"><span>Zarovnání</span><div class="template-align-buttons">${[["left", "format-align-left"], ["center", "format-align-center"], ["right", "format-align-right"]].map(([value, icon]) => `<button type="button" class="${item.textAlign === value ? "is-selected" : ""}" data-template-element-align="${value}"><ha-icon icon="mdi:${icon}"></ha-icon></button>`).join("")}</div></label>
         <label class="template-property-wide"><span>Barva textu</span>${colors("color", item.color)}</label>
-      `, true)}
-      ${propertyTab("Podbarvení a overlay", `
-        <label class="template-property-wide"><span>Barva podkladu</span>${colors("fill", item.fill, true)}</label>
-        <div class="template-property-row">${field("Krytí overlay", "overlayOpacity", item.overlayOpacity, 0, 100, 5, "%")}${field("Zaoblení", "radius", item.radius, 0, 50, 1, "px")}</div>
-      `)}
-      ${propertyTab("Orámování textu", `
-        <label class="template-property-wide"><span>Barva rámečku oblasti</span>${colors("textBorderColor", item.textBorderColor)}</label>
-        ${field("Tloušťka rámečku", "textBorderWidth", item.textBorderWidth, 0, 12, 1, "px")}
-        <label class="template-property-wide"><span>Barva obrysu písma</span>${colors("textOutlineColor", item.textOutlineColor)}</label>
-        ${field("Obrys písma", "textOutlineWidth", item.textOutlineWidth, 0, 6, 1, "px")}
-      `)}` : ""}
+      `, true)}` : ""}
       ${["icon", "signal"].includes(item.type) ? propertyTab("Ikona", `<label class="template-property-wide"><span>Název MDI ikony</span><input type="text" value="${this._escape(item.icon || "star")}" data-template-element-prop="icon"></label><label class="template-property-wide"><span>Barva</span>${colors("color", item.color)}</label>`, true) : ""}
-      ${shapeTypes.includes(item.type) ? propertyTab("Vzhled", `<label class="template-property-wide"><span>Výplň</span>${colors("fill", item.fill, true)}</label><label class="template-property-wide"><span>Rámeček</span>${colors("stroke", item.stroke)}</label><div class="template-property-row">${field("Tloušťka", "strokeWidth", item.strokeWidth, 0, 12, 1, "px")}${field("Zaoblení", "radius", item.radius, 0, 50, 1, "px")}</div>`, true) : ""}
-      ${item.type === "slider" ? propertyTab("Průběh a hodnota", `${field("Hodnota", "value", item.value, 0, 100, 1, "%")}${textField("Jednotka", "unit", item.unit || "%", "%") }<label class="template-property-wide"><span>Aktivní barva</span>${colors("color", item.color)}</label>`, true) : ""}
-      ${item.type === "chart" ? propertyTab("Vzhled grafu", `${select("Typ grafu", "variant", item.variant, [["line", "Čárový"], ["area", "Plošný"], ["bar", "Sloupcový"], ["steps", "Schodový"], ["donut", "Prstencový"], ["sparkline", "Mini trend"]])}${textField("Nadpis", "chartTitle", item.chartTitle || "", "Např. Teplota")}${textField("Jednotka", "unit", item.unit || "", "°C, %, kWh…")}<div class="template-property-row">${field("Hodnota", "value", item.value, -100000, 100000, .1, "")}${field("Tloušťka", "strokeWidth", item.strokeWidth, 1, 8, 1, "px")}</div><label class="template-property-wide"><span>Barva dat</span>${colors("color", item.color)}</label>`, true) : ""}
-      ${item.type === "gauge" ? propertyTab("Ukazatel", `${select("Typ ukazatele", "variant", item.variant, [["ring", "Kruh"], ["semicircle", "Půlkruh"], ["battery", "Baterie"], ["thermometer", "Teploměr"]])}${textField("Popisek", "text", item.text || "", "Hodnota")}${textField("Jednotka", "unit", item.unit || "%", "%")}${field("Hodnota", "value", item.value, 0, 100, 1, "%")}<label class="template-property-wide"><span>Aktivní barva</span>${colors("color", item.color)}</label>`, true) : ""}
+      ${shapeTypes.includes(item.type) && item.type !== "signal" ? propertyTab("Vzhled", `<label class="template-property-wide"><span>Výplň</span>${colors("fill", item.fill, true)}</label><label class="template-property-wide"><span>Rámeček</span>${colors("stroke", item.stroke)}</label>${field("Tloušťka rámečku", "strokeWidth", item.strokeWidth, 0, 12, 1, "px")}`, true) : ""}
+      ${item.type === "signal" ? propertyTab("Stav", `${textField("Popisek", "text", item.text || "", "Stav")}<label class="template-property-wide"><span>Barva</span>${colors("color", item.color)}</label>`, true) : ""}
+      ${item.type === "slider" ? propertyTab("Průběh a hodnota", `${textField("Popisek", "text", item.text || "", "Průběh")}${field("Hodnota", "value", item.value, 0, 100, 1, "%")}${textField("Jednotka", "unit", item.unit || "%", "%")}<label class="template-property-wide"><span>Barva</span>${colors("color", item.color)}</label>`, true) : ""}
+      ${item.type === "chart" ? propertyTab("Graf", `${select("Typ grafu", "variant", item.variant, [["bars", "Sloupcový"], ["spark", "Trend"]])}${textField("Nadpis", "chartTitle", item.chartTitle || "", "Např. Teplota")}<label class="template-property-wide"><span>Barva</span>${colors("color", item.color)}</label>`, true) : ""}
+      ${item.type === "gauge" ? propertyTab("Ukazatel", `${select("Typ ukazatele", "variant", item.variant, [["ring", "Kruh"], ["dial", "Půlkruh"]])}${textField("Popisek", "text", item.text || "", "Hodnota")}${textField("Jednotka", "unit", item.unit || "%", "%")}${field("Hodnota", "value", item.value, 0, 100, 1, "%")}<label class="template-property-wide"><span>Barva</span>${colors("color", item.color)}</label>`, true) : ""}
       ${entityBinding}
-      ${item.type === "chart" ? propertyTab("Data a rozsah", `<label class="template-property-wide"><span>Vlastní hodnoty oddělené čárkou</span><textarea rows="3" data-template-chart-values placeholder="18, 24, 21, 32">${this._escape((item.historyValues || []).join(", "))}</textarea></label><div class="template-property-row">${freeNumber("Minimum osy", "chartMin", item.chartMin)}${freeNumber("Maximum osy", "chartMax", item.chartMax)}</div>${field("Počet posledních hodnot", "historyLimit", item.historyLimit, 2, 20, 1, "")} ${select("Interval ukládání hodnot", "sampleInterval", item.sampleInterval, intervalOptions)}${select("Automatické mazání historie", "resetInterval", item.resetInterval, resetOptions)}<button type="button" class="template-history-clear" data-template-element-history-clear><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vymazat uložené hodnoty</button><small class="template-history-count">Uloženo ${(item.historyValues || []).length} z ${item.historyLimit} hodnot</small>`, true) : ""}
-      ${item.type === "chart" ? propertyTab("Části grafu", toggles([["showValue", "Hodnota"], ["showPercent", "Znak %"], ["showLabel", "Popisek"], ["showGrid", "Mřížka"], ["showPoints", "Body grafu"], ["showFill", "Barevná plocha"], ["showTrack", "Podklad kruhu"]])) : ""}
-      ${item.type === "gauge" ? propertyTab("Části ukazatele", toggles([["showValue", "Hodnota"], ["showPercent", "Jednotka"], ["showLabel", "Popisek"], ["showTrack", "Podkladová stupnice"]])) : ""}
-      ${item.type === "signal" ? propertyTab("Části signalizace", toggles([["showIcon", "Ikona"], ["showLabel", "Text"], ["showState", "Stav / přepínač"]])) : ""}
-      ${item.type === "slider" ? propertyTab("Části průběhu", toggles([["showValue", "Hodnota"], ["showPercent", "Znak %"], ["showScale", "Číselná stupnice"], ["showTrack", "Podkladová čára"]])) : ""}
+      ${item.type === "chart" ? propertyTab("Data grafu", `<label class="template-property-wide"><span>Vlastní hodnoty oddělené čárkou</span><textarea rows="3" data-template-chart-values placeholder="18, 24, 21, 32">${this._escape((item.historyValues || []).join(", "))}</textarea></label>${field("Počet posledních hodnot", "historyLimit", item.historyLimit, 2, 20, 1, "")} ${select("Interval ukládání hodnot", "sampleInterval", item.sampleInterval, intervalOptions)}<button type="button" class="template-history-clear" data-template-element-history-clear><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vymazat uložené hodnoty</button><small class="template-history-count">Uloženo ${(item.historyValues || []).length} z ${item.historyLimit} hodnot</small>`, true) : ""}
+      ${item.type === "chart" && item.variant === "spark" ? propertyTab("Popisky", toggles([["showLabel", "Popisek"]])) : ""}
+      ${item.type === "gauge" ? propertyTab("Popisky", toggles([["showValue", "Hodnota"], ["showLabel", "Popisek"]])) : ""}
+      ${item.type === "signal" ? propertyTab("Popisky", toggles([["showLabel", "Popisek"], ["showState", "Stav"]])) : ""}
+      ${item.type === "slider" ? propertyTab("Popisky", toggles([["showValue", "Hodnota"], ["showLabel", "Popisek"]])) : ""}
       ${propertyTab("Pořadí vrstev", `<div class="template-layer-order"><button type="button" data-template-element-order="back"><ha-icon icon="mdi:arrange-send-backward"></ha-icon>Dozadu</button><button type="button" data-template-element-order="front"><ha-icon icon="mdi:arrange-bring-forward"></ha-icon>Dopředu</button></div><p class="template-entity-help">Polohu, velikost a orientaci upravíte v úzkém panelu nad náhledem displeje.</p>`)}
       <button type="button" class="template-inspector-close" data-template-element-deselect><ha-icon icon="mdi:arrow-left"></ha-icon>Zpět k nastavení šablony</button>
     </div>`;
@@ -3713,7 +3664,7 @@ export const devicesMixin = {
       x: Math.max(0, Math.min(100 - w, legacy ? sourceX - w / 2 : sourceX)),
       y: Math.max(0, Math.min(100 - h, legacy ? sourceY - h / 2 : sourceY)),
       rotation: Number(source.rotation || 0), color: paletteColor(source.color, "#111111"), fill: paletteColor(source.fill, defaults.fill ?? "transparent", true),
-      stroke: paletteColor(source.stroke, "#111111"), strokeWidth: Number(source.strokeWidth ?? 2), radius: Number(source.radius ?? defaults.radius ?? 0),
+      stroke: paletteColor(source.stroke, "#111111"), strokeWidth: Number(source.strokeWidth ?? 3), radius: Number(source.radius ?? defaults.radius ?? 0),
       fontSize: Number(source.fontSize ?? defaults.fontSize ?? 16), fontWeight: String(source.fontWeight || "700"), fontFamily: ["DRATEK eInk Sans", "Arial", "Georgia", "Courier New"].includes(source.fontFamily) ? source.fontFamily : (defaults.fontFamily || "DRATEK eInk Sans"), fontStyle: source.fontStyle === "italic" ? "italic" : "normal", textDecoration: ["underline", "line-through"].includes(source.textDecoration) ? source.textDecoration : "none", textAlign: source.textAlign || "center",
       textOutlineWidth: Math.max(0, Math.min(6, Number(source.textOutlineWidth ?? defaults.textOutlineWidth ?? 0))), textOutlineColor: paletteColor(source.textOutlineColor, defaults.textOutlineColor || "#ffffff"), textBorderWidth: Math.max(0, Math.min(12, Number(source.textBorderWidth ?? defaults.textBorderWidth ?? 0))), textBorderColor: paletteColor(source.textBorderColor, defaults.textBorderColor || "#111111"), overlayOpacity: Math.max(0, Math.min(100, Number(source.overlayOpacity ?? defaults.overlayOpacity ?? 100))),
       value: Number(source.value ?? defaults.value ?? 50), historyLimit: Math.max(1, Math.min(20, Number(source.historyLimit ?? defaults.historyLimit ?? 10))),
@@ -3924,6 +3875,31 @@ export const devicesMixin = {
     return attribute ? state.attributes?.[attribute] : state.state;
   },
 
+  // Mirrors _state_value in automation.py: word translation for known
+  // domains (light/lock/person/...) when reading the bare state, otherwise a
+  // Czech-formatted number with the entity's own unit appended. Manual sends
+  // and automatic refreshes must format an entity-bound text element the
+  // same way, so this and the backend function stay in lockstep.
+  _templateElementEntityText(item) {
+    const entityId = String(item?.entityId || "").trim();
+    if (!entityId) return undefined;
+    const state = this._hass?.states?.[entityId];
+    const attribute = String(item.entityAttribute || "").trim();
+    const raw = attribute ? state?.attributes?.[attribute] : state?.state;
+    if (raw === undefined || raw === null || ["", "unknown", "unavailable"].includes(String(raw).toLowerCase())) return undefined;
+    if (!attribute) {
+      const words = this._templateStateWords(entityId, state, "");
+      if (words) return words;
+    }
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) {
+      const unit = String(state?.attributes?.unit_of_measurement || "").trim();
+      const text = new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 2 }).format(numeric);
+      return unit ? `${text} ${unit}` : text;
+    }
+    return String(raw);
+  },
+
   _templateEntityIntervalMs(interval) {
     return { minute: 60_000, hour: 3_600_000, day: 86_400_000, week: 604_800_000 }[interval] || 0;
   },
@@ -3936,7 +3912,12 @@ export const devicesMixin = {
   _refreshTemplateEntityElements(now = Date.now()) {
     let changed = false;
     for (const item of this._templateEditorElements || []) {
-      if (!["chart", "gauge", "signal", "slider"].includes(item.type) || !item.entityId) continue;
+      if (!["text", "chart", "gauge", "signal", "slider"].includes(item.type) || !item.entityId) continue;
+      if (item.type === "text") {
+        const text = this._templateElementEntityText(item);
+        if (text !== undefined && item.text !== text) { item.text = text; changed = true; }
+        continue;
+      }
       const raw = this._templateElementEntityRaw(item);
       if (raw === undefined || raw === null) continue;
       if (item.type === "signal") {
@@ -4004,54 +3985,62 @@ export const devicesMixin = {
     });
   },
 
+  // These four delegate straight to the same block-drawing functions every
+  // built-in template uses (_blockBars/_blockSpark/_blockRing/_blockDial/
+  // _blockBand/_blockMeters in panel-template-svg.mixin.js) instead of
+  // maintaining a second, parallel set of chart/gauge/signal graphics - one
+  // drawing routine per shape, reused by both the free-form designer and
+  // every prepared template.
+  _templateEditorBlockBox(padding = 3) {
+    return { x: padding, y: padding, w: 100 - padding * 2, h: 60 - padding * 2 };
+  },
+
+  _templateEditorBlockValues(item) {
+    const values = (item.historyValues || []).map(Number).filter(Number.isFinite);
+    return values.length >= 2 ? values : [10, 18, 14, 22, 17, 25];
+  },
+
   _renderTemplateChartVisual(item) {
-    const variant = String(item.variant || "line");
-    const names = { line: "Vývoj", area: "Plocha", bar: "Sloupce", steps: "Změny", donut: "Podíl", sparkline: "Trend" };
-    const labelText = String(item.chartTitle || names[variant] || "Data");
-    const unit = String(item.unit || (item.showPercent !== false ? "%" : ""));
-    const label = item.showLabel !== false ? `<small class="eink-component-label">${this._escape(labelText)}</small>` : "";
-    const value = item.showValue !== false ? `<strong class="eink-component-value">${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}${unit ? `<em>${this._escape(unit)}</em>` : ""}</strong>` : "";
-    const grid = item.showGrid !== false && variant !== "sparkline" && variant !== "donut" ? `<g class="chart-grid"><path d="M4 12H96M4 30H96M4 48H96"></path></g>` : "";
-    const points = this._templateChartNormalizedPoints(item);
-    const pointText = points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(" ");
-    let svg = "";
-    if (variant === "bar") { const barWidth = Math.max(2, Math.min(14, 78 / points.length)); svg = `<svg viewBox="0 0 100 60" preserveAspectRatio="none">${grid}<g class="chart-bars">${points.map((point, index) => `<rect x="${(5 + index * (90 / points.length)).toFixed(2)}" y="${point.y.toFixed(2)}" width="${barWidth.toFixed(2)}" height="${(56 - point.y).toFixed(2)}"></rect>`).join("")}</g></svg>`; }
-    else if (variant === "donut") svg = `<svg class="chart-donut" viewBox="0 0 60 60" preserveAspectRatio="none">${item.showTrack !== false ? `<circle class="donut-track" cx="30" cy="30" r="21"></circle>` : ""}<circle class="donut-value" cx="30" cy="30" r="21" pathLength="100" stroke-dasharray="${Math.max(0, Math.min(100, item.value))} 100"></circle></svg>`;
-    else if (variant === "steps") { const steps = points.flatMap((point, index) => index ? [{ x: point.x, y: points[index - 1].y }, point] : [point]); svg = `<svg viewBox="0 0 100 60" preserveAspectRatio="none">${grid}<polyline points="${steps.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(" ")}"></polyline></svg>`; }
-    else {
-      const area = variant === "area" && item.showFill !== false ? `<path class="chart-area" d="M${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)} ${points.slice(1).map((point) => `L${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ")} L${points.at(-1).x.toFixed(2)} 56 L${points[0].x.toFixed(2)} 56Z"></path>` : "";
-      const dots = variant !== "sparkline" && item.showPoints !== false ? `<g class="chart-points">${points.map((point) => `<circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="2"></circle>`).join("")}</g>` : "";
-      svg = `<svg viewBox="0 0 100 60" preserveAspectRatio="none">${grid}${area}<polyline points="${pointText}"></polyline>${dots}</svg>`;
-    }
-    return `<span class="eink-chart-visual variant-${this._escape(variant)} ${item.showLabel !== false || item.showValue !== false ? "has-header" : ""}">${label}${value}${svg}</span>`;
+    const variant = String(item.variant || "bars");
+    const ink = this._templateAutomationPalette(item.color, "black");
+    const values = this._templateEditorBlockValues(item);
+    const row = variant === "spark"
+      ? { spark: { values, caption: item.showLabel !== false ? (item.chartTitle || "Trend") : null, color: ink } }
+      : { bars: { values, labels: [], highlight: null } };
+    return `<svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet">${this._renderTemplateBlock(row, this._templateEditorBlockBox())}</svg>`;
   },
 
   _renderTemplateProgressVisual(item) {
+    const ink = this._templateAutomationPalette(item.color, "red");
+    const percent = Math.max(0, Math.min(100, Number(item.value) || 0)) / 100;
     const unit = String(item.unit || "%");
-    const value = item.showValue !== false ? `<strong>${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}${item.showPercent !== false && unit ? `<em>${this._escape(unit)}</em>` : ""}</strong>` : "";
-    const scale = item.showScale !== false ? `<span class="eink-progress-scale"><b>0</b><b>50</b><b>100</b></span>` : "";
-    return `<span class="eink-progress-visual">${value}<span class="template-slider-track ${item.showTrack === false ? "without-track" : ""}"><i></i></span>${scale}</span>`;
+    const value = item.showValue !== false ? `${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}${unit}` : null;
+    const meter = { label: item.showLabel !== false ? (item.text || "Průběh") : "", value, percent, color: ink };
+    return `<svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet">${this._renderTemplateBlock({ meters: [meter] }, this._templateEditorBlockBox())}</svg>`;
   },
 
   _renderTemplateGaugeVisual(item) {
     const variant = String(item.variant || "ring");
-    const names = { battery: "Baterie", thermometer: "Teplota", semicircle: "Rozsah", ring: "Hodnota" };
-    const unit = String(item.unit || (variant === "thermometer" ? "°C" : "%"));
-    const value = item.showValue !== false ? `<span class="eink-gauge-value"><strong>${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}</strong>${item.showPercent !== false && unit ? `<em>${this._escape(unit)}</em>` : ""}</span>` : "";
-    const label = item.showLabel !== false ? `<small class="eink-component-label">${this._escape(item.text || names[variant] || "Hodnota")}</small>` : "";
-    let visual = `<span class="template-gauge-ring ${item.showTrack === false ? "without-track" : ""}" style="--gauge-value:${Math.max(0, Math.min(100, item.value)) * 3.6}deg"></span>`;
-    if (variant === "battery") visual = `<span class="template-battery-gauge"><i style="width:${Math.max(4, Math.min(100, item.value))}%"></i></span>`;
-    else if (variant === "thermometer") visual = `<span class="template-thermometer-gauge"><i style="height:${Math.max(6, Math.min(100, item.value))}%"></i></span>`;
-    else if (variant === "semicircle") visual = `<span class="template-semicircle-gauge"><i style="--gauge-value:${Math.max(0, Math.min(100, item.value)) * 1.8}deg"></i></span>`;
-    return `<span class="eink-gauge-visual variant-${this._escape(variant)}">${label}${visual}${value}</span>`;
+    const ink = this._templateAutomationPalette(item.color, "red");
+    const percent = Math.max(0, Math.min(100, Number(item.value) || 0)) / 100;
+    const unit = String(item.unit || "%");
+    const value = item.showValue !== false ? `${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}${unit}` : null;
+    const caption = item.showLabel !== false ? (item.text || "Hodnota") : null;
+    const row = variant === "dial"
+      ? { dial: { percent, value, caption, color: ink, min: "0", max: "100" } }
+      : { ring: { percent, value, caption, color: ink } };
+    return `<svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet">${this._renderTemplateBlock(row, this._templateEditorBlockBox())}</svg>`;
   },
 
   _renderTemplateSignalVisual(item) {
-    const active = typeof item.resolvedActive === "boolean" ? item.resolvedActive : !["off", "inactive"].includes(String(item.variant || ""));
-    const icon = item.showIcon !== false ? `<ha-icon icon="mdi:${this._escape(item.icon || (active ? "check-circle" : "minus-circle-outline"))}"></ha-icon>` : "";
-    const label = item.showLabel !== false ? `<span class="eink-signal-label">${this._escape(item.text || item.label || "Stav")}</span>` : "";
-    const state = item.showState !== false && ["on", "off"].includes(item.variant) ? `<i><em></em></i>` : item.showState !== false ? `<small>${active ? "ON" : "OFF"}</small>` : "";
-    return `<span class="template-signal-visual ${active ? "is-active" : "is-inactive"}">${icon}${label}${state}</span>`;
+    const active = typeof item.resolvedActive === "boolean" ? item.resolvedActive : String(item.variant || "") !== "off";
+    const ink = active ? this._templateAutomationPalette(item.color, "red") : "black";
+    const band = {
+      color: ink === "black" && active ? "black" : ink === "red" ? "red" : "black",
+      label: item.showLabel !== false ? (item.text || item.label || "Stav") : null,
+      value: item.showState !== false ? (active ? "Zapnuto" : "Vypnuto") : null,
+    };
+    return `<svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet">${this._renderTemplateBlock({ band }, this._templateEditorBlockBox(2))}</svg>`;
   },
 
   _renderTemplateEditorOverlays(template = this._currentUserDisplayTemplate(), targetOrientation = this._displayTemplateOrientation, targetRatio = 0) {
@@ -4651,7 +4640,12 @@ export const devicesMixin = {
     if (has("pm2", "aqi", "kvalit")) return "air_quality";
     if (has("bateri")) return "battery";
     if (has("signál")) return "signal_strength";
-    if (has("cena", "tarif", "minimum")) return "monetary";
+    // "cena" alone misses its own adjective form: cz_spot_prices' "Cenový
+    // průběh dnes" (the chart series feed) contains "cenov", never the bare
+    // noun stem "cena" - so it fell all the way through to generic and lost
+    // the monetary device_class/unit hint that actually finds the right
+    // sensor automatically.
+    if (has("cena", "cenov", "tarif", "minimum")) return "monetary";
     if (has("výkon")) return "power";
     // "výrob" alone (solar's "Výroba …"), not "spotřeb" - that word is shared
     // with the water template's "Spotřeba vody …" labels below, and checking
@@ -4691,7 +4685,10 @@ export const devicesMixin = {
     // get misclassified as a timestamp/duration sensor because of it.
     // "zálivk" (garden's "Další zálivka") belongs here too - see the comment
     // by the water kind above for why it moved.
-    if (has("zbývající čas", "dokonč", "změn", "zálivk")) return "timestamp";
+    // "aktualiz" (presence's "Aktualizace") is a last-updated timestamp, same
+    // shape as the others on this line - it fell through to generic only
+    // because none of the existing stems happened to cover that word.
+    if (has("zbývající čas", "dokonč", "změn", "zálivk", "aktualiz")) return "timestamp";
     return "generic";
   },
 
@@ -4760,22 +4757,46 @@ export const devicesMixin = {
     const kind = this._templateSlotKind(meta.label, meta.icon);
     const { domains = [], classes = [], units = [] } = this._templateSlotTargets(kind);
     const strip = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-    const keywords = strip(meta.label).split(/\s+/).filter((word) => word.length > 2);
+    // A UI label like "CPU" or "RAM" is the abbreviation a person reads, but
+    // Home Assistant's own core System Monitor integration names its entities
+    // by the English word instead ("Processor use", "Memory use") - so the
+    // plain keyword match below saw zero overlap and this fell back to
+    // manual selection even though the right entity was sitting right there.
+    // server.js's own setup guide already calls this out as a known gap; this
+    // is what actually closes it instead of just warning about it.
+    const SYNONYMS = { cpu: ["processor"], ram: ["memory"], disk: ["storage"] };
+    const keywords = strip(meta.label).split(/\s+/).filter((word) => word.length > 2)
+      .flatMap((word) => [word, ...(SYNONYMS[word] || [])]);
     const scored = entries.map(([entityId, state]) => {
       const domain = entityId.split(".")[0];
       const attributes = state?.attributes || {};
       let score = 0;
+      let keywordHit = false;
       if (domains.includes(domain)) score += 6;
       if (classes.length && classes.includes(String(attributes.device_class || ""))) score += 10;
       if (units.length && units.some((unit) => strip(attributes.unit_of_measurement).includes(strip(unit)))) score += 4;
-      score += keywords.reduce((sum, word) => sum + (strip(`${entityId} ${attributes.friendly_name || ""}`).includes(word) ? 3 : 0), 0);
+      keywords.forEach((word) => {
+        if (strip(`${entityId} ${attributes.friendly_name || ""}`).includes(word)) { score += 3; keywordHit = true; }
+      });
       if ([attributes.values, attributes.prices, attributes.data, attributes.history].some(Array.isArray)) score += 2;
       // An unavailable entity renders as its fallback anyway, so anything live is
       // a better binding than one that will show nothing.
       if (["unavailable", "unknown"].includes(String(state?.state).toLowerCase())) score -= 5;
-      return { entityId, score };
+      return { entityId, score, keywordHit };
     }).sort((a, b) => b.score - a.score || a.entityId.localeCompare(b.entityId));
-    return scored[0]?.score >= 6 ? scored[0].entityId : "";
+    const best = scored[0];
+    if (!best || best.score < 6) return "";
+    // "generic" has no device_class to lean on, so its domain list (sensor,
+    // binary_sensor, input_number, input_text) is broad enough that a bare
+    // domain match is close to no signal at all - on a real install with
+    // dozens of sensors, that used to silently wire a slot to an unrelated
+    // entity just because it sorted first alphabetically among same-score
+    // candidates, which is worse than leaving it unbound: a wrong answer
+    // reads as configured when it is not. Require at least one keyword hit
+    // (a word from the slot's own label found in the entity's id/name)
+    // before trusting a generic-kind guess enough to auto-apply it.
+    if (kind === "generic" && classes.length === 0 && !best.keywordHit) return "";
+    return best.entityId;
   },
 
   _templateBinding(template, meta) {

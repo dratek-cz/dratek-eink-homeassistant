@@ -27,6 +27,7 @@ import { template as birthdays } from "./birthdays.js";
 import { template as server } from "./server.js";
 import { template as garden } from "./garden.js";
 import { template as price } from "./price.js";
+import { template as shadingTest } from "./shading_test.js";
 
 export const DISPLAY_TEMPLATES = [
   weather,
@@ -51,6 +52,7 @@ export const DISPLAY_TEMPLATES = [
   server,
   garden,
   price,
+  shadingTest,
 ];
 
 export const DISPLAY_TEMPLATE_CATALOG = DISPLAY_TEMPLATES.map((entry) => entry.catalog);

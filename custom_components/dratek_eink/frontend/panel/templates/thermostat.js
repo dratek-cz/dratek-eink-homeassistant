@@ -31,7 +31,7 @@ export const template = {
     { split: [
       { value: v(1, "22 °C"), label: "Cíl" },
       { value: v(2, "60 %"), label: "Výkon", color: "red" },
-    ], h: 0.28 },
+    ], h: 0.4 },
     { flex: true },
     { footer: [{ label: "DALŠÍ ZMĚNA", value: v(3, "22:00") }], h: 0.14 },
   ],

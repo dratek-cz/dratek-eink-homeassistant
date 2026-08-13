@@ -29,11 +29,16 @@ export const template = {
     { text: "Wi-Fi", h: 0.075, size: 0.055, bold: true },
     // Low redundancy on purpose: it costs four modules of symbol size, and on a
     // tag this small every module is a device pixel that decides whether a phone
-    // can read the code at all.
-    { qr: { text: `WIFI:T:WPA;S:${v(0, "Home_Network")};P:${v(1, "MyPassword123")};;`, correction: "L" }, h: 0.36 },
-    { band: { label: "SÍŤ", value: v(0, "Home_Network") }, bleed: true, h: 0.16 },
+    // can read the code at all. The QR's own box is height-bound (its side is
+    // min(box.w, box.h) rounded to whole device pixels), so a wider row does
+    // nothing - only a taller one grows the code. 0.36 left the code noticeably
+    // smaller than the box around it; the setup note already warns the printed
+    // code is borderline readable on small tags, so this reclaims height from
+    // the two text bands below (still fully readable at 0.145) instead.
+    { qr: { text: `WIFI:T:WPA;S:${v(0, "Home_Network")};P:${v(1, "MyPassword123")};;`, correction: "L" }, h: 0.44 },
+    { band: { label: "SÍŤ", value: v(0, "Home_Network") }, bleed: true, h: 0.145 },
     { gap: true, h: 0.02 },
-    { band: { label: "HESLO", value: v(1, "MyPassword123"), color: "black" }, bleed: true, h: 0.16 },
+    { band: { label: "HESLO", value: v(1, "MyPassword123"), color: "black" }, bleed: true, h: 0.145 },
     { flex: true },
     { footer: [{ label: "NASKENUJ", value: "a připoj se" }], h: 0.13 },
   ],

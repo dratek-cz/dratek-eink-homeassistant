@@ -34,7 +34,7 @@ export const template = {
       { label: `Dveře · ${v(1, "Zamčeno")}`, done: true },
       { label: `Okna · ${v(2, "Zavřeno")}`, done: true },
       { label: `Pohyb · ${v(3, "Klid")}`, done: true },
-    ], marker: "dot", h: 0.36 },
+    ], marker: "dot", h: 0.47 },
     { flex: true },
     { footer: [{ label: "ZÓNY", value: "3 / 3 v pořádku" }], h: 0.14 },
   ],

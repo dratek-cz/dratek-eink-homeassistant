@@ -251,6 +251,25 @@ class FrontendToolLibraryTests(unittest.TestCase):
         # Metriky fronty zůstávají klikacím filtrem stavu.
         self.assertIn('data-queue-status="${status}"', self.source)
 
+    def test_automation_card_highlights_the_display_currently_writing(self):
+        self.assertIn('const writingAddresses = new Set(', self.source)
+        self.assertIn('.filter((job) => job.status === "writing" && job.operation === "entity_update")', self.source)
+        self.assertIn('${writing ? "is-writing" : ""}', self.source)
+        self.assertIn('Právě zapisuje', self.source)
+        self.assertIn('.automation-card.is-writing{border-color:', self.source)
+        self.assertIn('["queue", "devices", "topology", "gateways", "automations"]', self.source)
+        self.assertIn('|| this._activeTab === "automations"', self.source)
+
+    def test_queue_controls_stay_pinned_without_the_skipped_warning_banner(self):
+        self.assertIn('class="queue-controls-locked"', self.source)
+        self.assertIn('.queue-controls-locked{position:sticky;z-index:55;top:var(--dratek-sticky-top,12px)', self.source)
+        self.assertNotIn('class="card queue-skip-warning"', self.source)
+        self.assertNotIn('Upozornění: Některé automatické zápisy byly přeskočeny', self.source)
+
+    def test_small_display_sidebar_uses_its_four_actual_rows(self):
+        self.assertIn('${largeDisplay ? "is-large-display" : "is-small-display"}', self.source)
+        self.assertIn('.display-template-drop-panel.is-small-display{grid-template-rows:auto minmax(0,1fr) auto auto}', self.source)
+
     def test_ha_element_designer_is_removed(self):
         self.assertNotIn('data-tab="custom"', self.source)
         self.assertNotIn('data-tool-category="custom"', self.source)
@@ -354,19 +373,24 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn('this._displayTemplateOrientation = template.orientation === "landscape" ? "landscape" : "portrait";', self.source)
 
     def test_every_studio_category_has_richer_visual_variants(self):
+        # Charts, gauges and signal all delegate to the same block-drawing
+        # functions every prepared template uses (_blockBars/_blockSpark/
+        # _blockRing/_blockDial/_blockBand in panel-template-svg.mixin.js),
+        # not a second, bespoke set of shapes - so the variant list is
+        # deliberately just the block vocabulary, not a wide catalogue.
         self.assertIn('["controls", "toggle-switch-outline", "Signalizace"]', self.source)
-        for variant in ('"line"', '"area"', '"bar"', '"steps"', '"donut"', '"sparkline"'):
+        for variant in ('"bars"', '"spark"'):
             self.assertIn(f'tool("chart",', self.source)
             self.assertIn(f'variant: {variant}', self.source)
-        for variant in ('"ring"', '"semicircle"', '"battery"', '"thermometer"'):
+        for variant in ('"ring"', '"dial"'):
             self.assertIn(f'variant: {variant}', self.source)
-        for label in ("Zapnuto", "Vypnuto", "Aktivní", "Neaktivní", "Výstraha", "Obrázková"):
+        for label in ("Zapnuto", "Vypnuto", "Výstraha"):
             self.assertIn(label, self.source)
         self.assertIn('_renderTemplateChartVisual(item)', self.source)
         self.assertIn('_renderTemplateGaugeVisual(item)', self.source)
         self.assertIn('_renderTemplateSignalVisual(item)', self.source)
-        for component_class in ('eink-chart-visual', 'eink-gauge-visual', 'eink-progress-visual', 'template-component-toggles'):
-            self.assertIn(component_class, self.source)
+        self.assertIn('this._renderTemplateBlock(row, this._templateEditorBlockBox())', self.source)
+        self.assertIn('template-component-toggles', self.source)
         self.assertNotIn('paintEditorialCard(', self.source)
         self.assertIn('data-template-element-toggle=', self.source)
         self.assertIn('"#d71912"', self.source)
@@ -413,8 +437,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('${this._displaySettingsView === "templates" ? this._renderDisplayTemplatesSection(device) : ""}', self.source)
         self.assertNotIn('return this._renderDisplayTemplatesPage(device)', self.source)
         self.assertIn('class="display-template-grid"', self.source)
-        # 23 templates after removing energy and priceshelf.
-        self.assertEqual(self.source.count('number: "'), 23)
+        # 24 templates after adding the hardware dithering calibration card.
+        self.assertEqual(self.source.count('number: "'), 24)
 
         self.assertIn("variables: [", self.source)
         # A promotion is a decision rather than a reading, so a price tag carries a
@@ -424,6 +448,15 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("_templateOptionActive(template, option) {", self.source)
         self.assertIn('data-template-option="${this._escape(`${template.id}:${option}`)}"', self.source)
         self.assertIn("_blockPriceTag(row, box) {", self.source)
+        self.assertIn('id: "shading_test"', self.source)
+        self.assertIn("_blockDither(row, box) {", self.source)
+        self.assertIn('patternUnits="userSpaceOnUse" width="2" height="2"', self.source)
+        self.assertIn('{ ink: "red", base: "yellow", density: 0.5 }', self.source)
+        shading_source = (PANEL_MODULES / "templates" / "shading_test.js").read_text(encoding="utf-8")
+        design_source = shading_source[shading_source.index("design:"):]
+        self.assertNotIn("label:", design_source)
+        self.assertNotIn("title:", design_source)
+        self.assertIn("pixelPerfect: true", design_source)
         self.assertIn('class="display-template-variable-count blank-badge"', self.source)
         self.assertIn('class="display-template-variables-row"', self.source)
         self.assertIn('aria-label="Použité údaje"', self.source)
@@ -619,7 +652,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('class="template-tool-rail"', self.source)
         self.assertIn("context.putImageData(pixels, 0, 0)", self.source)
         self.assertIn('this._displaySettingsView = stayInCatalog ? "templates" : "designer";', self.source)
-        self.assertIn('this._displayDesignerReturnView = "templates";', self.source)
+        self.assertIn('this._templateDesignerReturnView = "templates";', self.source)
         self.assertIn('<small>Designer</small>', self.source)
         self.assertIn(".display-template-editor-left{grid-column:1;grid-row:1/3;min-height:0;overflow:auto}", self.source)
         self.assertIn(".display-template-editor-bottom{grid-column:2;grid-row:2;box-sizing:border-box;height:150px}", self.source)
@@ -674,7 +707,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         # sample data on every installation since.
         self.assertIn('this._hass.callService("weather", "get_forecasts"', self.source)
         self.assertIn('this._hass.callService("calendar", "get_events"', self.source)
-        self.assertIn('{ strip: [day(0), day(1), day(2), day(3)], group: "forecast", h: 0.25 },', self.source)
+        self.assertIn('{ strip: [day(0), day(1), day(2), day(3)], group: "forecast", h: 0.29 },', self.source)
         # The thumbnail a tile remembers is the image the panel was actually given,
         # not a second rendering of its own.
         self.assertIn("const image = await this._renderCurrentDisplayTemplateImage(device);", self.source)
@@ -710,10 +743,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('[["black", "Černá"], ["white", "Bílá"], ["red", "Červená"], ["yellow", "Žlutá"]]', self.source)
         self.assertIn('class="display-tile-tools">${this._renderDisplayPaletteBookmarks(device)}', self.source)
         self.assertIn('class="display-palette-strip"', self.source)
-        self.assertIn(".display-palette-strip{box-sizing:border-box;display:inline-flex", self.source)
-        self.assertIn("overflow:hidden;border:1px solid", self.source)
-        self.assertIn("border-radius:7px", self.source)
-        self.assertIn(".display-palette-color+.display-palette-color{border-left:1px", self.source)
+        self.assertIn(".display-palette-strip{position:absolute;z-index:3;top:0;right:14px", self.source)
+        self.assertIn("width:min(25%,88px);height:2px", self.source)
+        self.assertIn("border-radius:0 0 2px 2px", self.source)
+        self.assertIn(".display-palette-color+.display-palette-color{border-left:0}", self.source)
         self.assertIn(".display-palette-color.is-yellow{background:#f2c500}", self.source)
         self.assertNotIn("display-palette-bookmark", self.source)
         self.assertIn('model:"EPA LCD 296x128 BWRY", sdk_type:46', self.harness)
@@ -843,7 +876,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("Úspěšně nahráno · displej se vykresluje", self.source)
         self.assertIn(".connection-device.is-writing", self.source)
         self.assertIn(".connection-device.is-uploaded", self.source)
-        self.assertIn('["queue", "devices", "topology", "gateways"].includes(this._activeTab)', self.source)
+        self.assertIn('["queue", "devices", "topology", "gateways", "automations"].includes(this._activeTab)', self.source)
         self.assertIn("this._queuePollTimer = window.setTimeout", self.source)
         self.assertIn("Number(this._queue?.queued || 0) + Number(this._queue?.writing || 0) > 0", self.source)
         self.assertIn("window.clearTimeout(this._queuePollTimer)", self.source)
@@ -1043,7 +1076,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('_svgReadableText(value, size, maxWidth, bold', self.source)
         self.assertIn("Math.max(7, labelHeight * 0.7)", self.source)
         self.assertIn("step * 3.5", self.source)
-        self.assertIn("Math.max(10, Math.min(box.h * 0.32, cellWidth * 0.36))", self.source)
+        self.assertIn("Math.max(10, Math.min(box.h * 0.32, cellWidth * 0.33))", self.source)
 
     def test_device_cards_do_not_request_background_backend_previews(self):
         self.assertNotIn('type: "dratek_eink/render_preview"', self.source)
@@ -1070,7 +1103,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".display-preview-slot>.display-writing-state", self.source)
         self.assertIn("position:absolute", self.source)
         self.assertIn(
-            '["queue", "devices", "topology", "gateways"].includes(this._activeTab)',
+            '["queue", "devices", "topology", "gateways", "automations"].includes(this._activeTab)',
             self.source,
         )
 
@@ -1228,10 +1261,15 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('data-template-element-delete', self.source)
         self.assertIn('data-template-settings-open', self.source)
         self.assertIn('class="template-settings-backdrop"', self.source)
-        self.assertIn('select("Font", "fontFamily"', self.source)
-        self.assertIn('"overlayOpacity", item.overlayOpacity', self.source)
-        self.assertIn('"textOutlineWidth", item.textOutlineWidth', self.source)
-        self.assertIn('"textBorderWidth", item.textBorderWidth', self.source)
+        # Position, background colour and text-outline/border used to be three
+        # separate sections with a dozen fine-grained knobs each; they were
+        # folded into one "Umístění, velikost a barva" section and trimmed to
+        # the essentials (position, size, rotation, colour) the user actually
+        # reaches for, per an explicit request to simplify the panel.
+        self.assertNotIn('select("Font", "fontFamily"', self.source)
+        self.assertNotIn('"overlayOpacity", item.overlayOpacity', self.source)
+        self.assertNotIn('"textOutlineWidth", item.textOutlineWidth', self.source)
+        self.assertNotIn('"textBorderWidth", item.textBorderWidth', self.source)
 
     def test_czech_spot_price_template_autobinds_and_has_setup_guide(self):
         self.assertIn('id: "cz_spot_prices"', self.source)
@@ -1262,15 +1300,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
 
     def test_prepared_template_automation_uses_safe_refresh_interval(self):
         self.assertIn(
-            "refresh_interval_seconds: Math.max(30, Math.min(86400, Number(this._refreshIntervalSeconds) || 60))",
+            "refresh_interval_seconds: Math.max(30, Math.min(86400, Number(this._refreshIntervalSeconds) || 600))",
             self.source,
         )
         self.assertNotIn("refresh_interval_seconds: 1,", self.source)
 
     def test_template_studio_keeps_the_header_tools_and_preview_locked(self):
-        self.assertIn('.studio-pro-top-row{position:sticky;top:10px;z-index:110;', self.source)
-        self.assertIn('class="studio-pro-detached-actions"', self.source)
-        self.assertIn('.studio-pro-detached-actions .display-template-send-button{border-color:var(--dratek-teal)!important;background:var(--dratek-teal)!important', self.source)
         self.assertIn('.studio-pro-workspace .display-template-preview-card{box-sizing:border-box;overflow:hidden;border:1px solid var(--studio-line)', self.source)
         self.assertIn('.studio-pro-workspace .display-template-editor-right{box-sizing:border-box;padding:9px;border:1px solid var(--studio-line)', self.source)
         self.assertIn('.studio-pro-selection-row{position:sticky;top:var(--studio-locked-top)', self.source)
@@ -1382,7 +1417,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
     def test_chart_editor_exposes_data_range_and_exact_geometry(self):
         inspector = (PANEL_MODULES / "panel-inspector.mixin.js").read_text(encoding="utf-8")
         for marker in (
-            'propertyTab("Poloha a velikost"',
+            'propertyTab("Umístění, velikost a barva"',
             'data-template-chart-values',
             '"chartMin"',
             '"chartMax"',

@@ -64,6 +64,9 @@ SINGLE_ROW_TEMPLATES = {
     # The whole panel is one live map image; anything else drawn over it would
     # just cover the data it exists to show.
     "radar",
+    # A hardware calibration target must be nothing except its edge-to-edge
+    # palette pixels; titles, footers or extra rows would contaminate the test.
+    "shading_test",
 }
 
 

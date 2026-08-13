@@ -45,7 +45,7 @@ export const template = {
       { icon: "molecule-co2", label: "CO₂", value: v(1, "612 ppm") },
       { icon: "blur", label: "PM2.5", value: v(2, "8 µg") },
       { icon: "water-percent", label: "Vlhkost", value: v(3, "46 %") },
-    ], h: 0.31 },
+    ], h: 0.42 },
     { flex: true },
     { footer: [{ label: "VĚTRÁNÍ", value: "Není třeba" }], h: 0.13 },
   ],

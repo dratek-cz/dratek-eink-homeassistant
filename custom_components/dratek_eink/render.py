@@ -467,18 +467,20 @@ def _render_bound_chart(binding: dict[str, Any], value: str, force_transparent: 
             polygon = [(points[0][0], baseline_y), *points, (points[-1][0], baseline_y)]
             draw.polygon(polygon, fill=color)
         if len(points) > 1:
-            draw.line(points, fill=color, width=max(1, int(binding.get("strokeWidth", 2))))
+            draw.line(points, fill=color, width=max(1, int(binding.get("strokeWidth", 3))))
         for x_pos, y_pos in points:
             draw.ellipse(
-                (round(x_pos) - 1, round(y_pos) - 1, round(x_pos) + 1, round(y_pos) + 1),
-                fill=color,
+                (round(x_pos) - 3, round(y_pos) - 3, round(x_pos) + 3, round(y_pos) + 3),
+                fill=palette["white"],
+                outline=color,
+                width=2,
             )
 
     if show_axes:
         draw.line(
             (left, top, left, top + plot_height, left + plot_width, top + plot_height),
             fill=graph_color,
-            width=1,
+            width=2,
         )
         value_font = load_font(legend_size, False)
         max_text = f"{maximum:.2f}".rstrip("0").rstrip(".")
@@ -748,7 +750,7 @@ def _render_bound_layer(binding: dict[str, Any], value: str, force_transparent: 
             draw.rectangle(
                 (track_x, track_y, track_x + track_w - 1, track_y + track_h - 1),
                 outline=stroke,
-                width=max(1, min(3, int(item.get("stroke_width", 1)))),
+                width=max(2, min(4, int(item.get("stroke_width", 2)))),
             )
             if item.get("orientation") == "vertical":
                 bar_h = round(max(0, track_h - 2) * pct)
@@ -800,13 +802,13 @@ def _render_bound_layer(binding: dict[str, Any], value: str, force_transparent: 
                 (cx - r, cy - r, cx + r, cy + r),
                 fill=colors["white"],
                 outline=colors["black"],
-                width=1,
+                width=2,
             )
             if pct > 0:
                 draw.pieslice((cx - r, cy - r, cx + r, cy + r), 270, 270 + pct * 360, fill=color)
             if hole_pct > 0:
                 hr = round(r * hole_pct)
-                draw.ellipse((cx - hr, cy - hr, cx + hr, cy + hr), fill=colors["white"], outline=colors["black"], width=1)
+                draw.ellipse((cx - hr, cy - hr, cx + hr, cy + hr), fill=colors["white"], outline=colors["black"], width=2)
             if show_value:
                 text_str = f"{round(numeric_val, 1)}{unit}"
                 text_y = y + item_height - value_band / 2 if separate_value else cy
@@ -843,12 +845,12 @@ def _render_bound_layer(binding: dict[str, Any], value: str, force_transparent: 
             label_band = min(10, max(7, round(item_height * 0.2)))
             track_y = y + value_band + max(4, round((item_height - value_band - label_band) * 0.45))
             track_w = max(10, item_width - margin * 2)
-            draw.line([(x + margin, track_y), (x + margin + track_w, track_y)], fill=colors["black"], width=2)
+            draw.line([(x + margin, track_y), (x + margin + track_w, track_y)], fill=colors["black"], width=3)
             fill_w = round(track_w * pct)
             if fill_w > 0:
-                draw.line([(x + margin, track_y), (x + margin + fill_w, track_y)], fill=color, width=5)
+                draw.line([(x + margin, track_y), (x + margin + fill_w, track_y)], fill=color, width=7)
             thumb_x = x + margin + fill_w
-            draw.ellipse((thumb_x - 9, track_y - 9, thumb_x + 9, track_y + 9), fill=color, outline=colors["white"], width=2)
+            draw.ellipse((thumb_x - 10, track_y - 10, thumb_x + 10, track_y + 10), fill=color, outline=colors["white"], width=3)
             label_font = load_font(max(7, min(9, label_band)), False)
             min_text = str(min_val)
             max_text = str(max_val)
@@ -878,7 +880,7 @@ def _render_bound_layer(binding: dict[str, Any], value: str, force_transparent: 
             numeric_val = _extract_item_value(item, render_value, min_val, max_val, 0.72)
             pct = max(0.0, min(1.0, (numeric_val - min_val) / max(0.0001, max_val - min_val)))
             color = colors.get(item.get("color") or "black", colors["black"])
-            stroke_w = max(2, int(item.get("stroke_width", 6)))
+            stroke_w = max(3, int(item.get("stroke_width", 8)))
             arc_mode = str(item.get("arc_mode") or "240")
             if arc_mode == "180":
                 start_deg, end_deg = 180, 360
@@ -899,7 +901,7 @@ def _render_bound_layer(binding: dict[str, Any], value: str, force_transparent: 
                 start_deg,
                 end_deg,
                 fill=colors["black"],
-                width=max(1, min(2, stroke_w)),
+                width=max(2, min(3, stroke_w)),
             )
             curr_deg = start_deg + pct * (end_deg - start_deg)
             if item.get("show_arc") is not False and pct > 0:

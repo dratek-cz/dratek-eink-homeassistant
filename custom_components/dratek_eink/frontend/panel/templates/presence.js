@@ -29,11 +29,15 @@ export const template = {
   design: ({ v }) => [
     { text: "Kdo je doma", h: 0.08, size: 0.052, bold: true },
     { rule: true, h: 0.02 },
+    // 0.5 left roughly a quarter of the panel as bare flex space below the
+    // grid - grid cells scale with their own box (see _blockGrid), so this
+    // reclaimed height goes straight into bigger, more legible tiles instead
+    // of an oversized gap before the footer.
     { grid: [
       { icon: "account", value: v(0, "Petr"), label: v(1, "Doma"), color: "red" },
       { icon: "account", value: "Jana", label: "Doma" },
       { icon: "account", value: "Eliška", label: v(2, "Ve škole") },
-    ], columns: 3, h: 0.5 },
+    ], columns: 3, h: 0.68 },
     { flex: true },
     { footer: [{ label: "AKTUALIZACE", value: v(3, "12:45") }], h: 0.14 },
   ],

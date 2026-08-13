@@ -22,16 +22,20 @@ PANEL = COMPONENT / "frontend" / "panel"
 class FrontendTriggerModeWiringTests(unittest.TestCase):
     def setUp(self) -> None:
         self.devices = (PANEL / "panel-devices.mixin.js").read_text(encoding="utf-8")
+        self.automations = (PANEL / "panel-automations.mixin.js").read_text(encoding="utf-8")
         self.inspector = (PANEL / "panel-inspector.mixin.js").read_text(encoding="utf-8")
         self.projects = (PANEL / "panel-projects.mixin.js").read_text(encoding="utf-8")
         self.storage = (PANEL / "panel-storage.mixin.js").read_text(encoding="utf-8")
 
     def test_settings_dialog_offers_the_three_modes(self) -> None:
-        self.assertIn("_renderRefreshTriggerModeSelect(address, currentMode", self.devices)
+        # The picker moved out of the designer and onto each automation's own
+        # card in the Automations tab - see RefreshControlPlacementTests in
+        # test_panel_theme_and_layout.py for the full placement pin.
+        self.assertIn("_automationTriggerSelect(automation) {", self.automations)
         for value in ('"both"', '"change_only"', '"interval_only"'):
             with self.subTest(value=value):
-                self.assertIn(value, self.devices)
-        self.assertIn("this._renderRefreshTriggerModeSelect(this._selectedDeviceAddress, this._refreshTriggerMode", self.devices)
+                self.assertIn(value, self.automations)
+        self.assertNotIn("_renderRefreshTriggerModeSelect", self.devices)
 
     def test_change_handler_persists_the_chosen_mode_into_the_draft(self) -> None:
         self.assertIn("data-device-refresh-trigger-mode", self.inspector)

@@ -34,7 +34,7 @@ export const template = {
       { icon: "water-percent", label: "Vlhkost", value: v(1, "45 %") },
       { icon: "lightbulb-on", label: "Světla", value: v(2, "3 ON") },
       { icon: "lock", label: "Zámky", value: v(3, "Zamčeno") },
-    ], columns: 2, h: 0.54 },
+    ], columns: 2, h: 0.62 },
     { flex: true },
     { footer: [{ label: "STAV", value: "Vše v pořádku" }], h: 0.14 },
   ],

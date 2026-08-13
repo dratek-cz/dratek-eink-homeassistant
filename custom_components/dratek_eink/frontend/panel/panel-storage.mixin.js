@@ -4,7 +4,7 @@ export const storageMixin = {
   _loadUiPreference(key, fallback) {
     try {
       const value = window.localStorage.getItem(`dratek-eink-${key}`);
-      return ["auto", "full", "large", "compact", "list", "cs", "en"].includes(value) ? value : fallback;
+      return ["auto", "full", "large", "compact", "list", "graph", "cs", "en"].includes(value) ? value : fallback;
     } catch (_err) {
       return fallback;
     }

@@ -2,8 +2,8 @@ DOMAIN = "dratek_eink"
 
 DRATEK_COMPANY_ID = 0x5053
 
-PANEL_VERSION = "0.1.289"
-GATEWAY_FIRMWARE_VERSION = "0.1.55-gateway"
+PANEL_VERSION = "0.1.290"
+GATEWAY_FIRMWARE_VERSION = "0.1.56-gateway"
 
 CONTROL_CHARS = {
     "0000fef1-0000-1000-8000-00805f9b34fb",
@@ -133,11 +133,13 @@ SDK_MODELS = {
     4716: "EPA LCD 1600x1200 BWR",
 }
 
-# Models whose partial refresh has actually been confirmed on hardware.
-# The vendor SDK does not gate startPartScreen on the device type at all - it
-# only requires y and height to be multiples of 8 - so the command is offered
-# for every model. This set marks the one that is known-good, so the UI can say
-# "confirmed" versus "untested" instead of blocking the attempt outright.
+# The only model the vendor SDK can pack a partial update for. startPartScreen
+# does check y and height against a multiple of 8, but the real gate is one line
+# further on: BitmapCovertToBytesAdapter.toByteArray(type, bitmap, int) hands
+# 2635 to EpaLcd960x680BWR and throws "not support part display" for every other
+# type. So this is not a list of models merely confirmed on hardware - the
+# vendor has no partial encoder for anything else, and the region command has
+# nothing meaningful to carry on those panels.
 PARTIAL_UPDATE_CONFIRMED_SDK_TYPES = {2635}
 
 # Sentinel stored in device_gateway_preferences when a display is pinned to the

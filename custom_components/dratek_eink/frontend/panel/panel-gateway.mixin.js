@@ -459,14 +459,20 @@ export const gatewayMixin = {
     }
     if (this._gatewaySubtab === "create") {
       const selectedBoard = this._selectedGatewayBoard();
+      // Kroky maji svuj vlastni vyznam, ne jen poradi: krok je "hotovy", kdyz je
+      // jeho udaj skutecne vyplneny, ne podle toho, ze uzivatel jen dorazil dal.
+      const usbDone = Boolean(this._flashForm.port);
+      const wifiDone = Boolean(this._flashForm.ssid);
+      const stepMark = (n, done) => `<span class="${done ? "is-done" : ""}">${done ? `<ha-icon icon="mdi:check"></ha-icon>` : n}</span>`;
+      const stepRail = `<div class="gateway-step-rail" aria-label="Krok ${wifiDone ? (usbDone ? 4 : 3) : usbDone ? 2 : 1} ze 4">${stepMark(1, usbDone)}<i class="${usbDone ? "is-done" : ""}"></i>${stepMark(2, wifiDone)}<i class="${wifiDone ? "is-done" : ""}"></i>${stepMark(3, true)}<i class="is-done"></i><span class="is-final">4</span></div>`;
       return `${shellStart}<div class="gateway-create-block">
-        <div class="gateway-hero-head"><div class="gateway-hero-title"><span class="hero-icon-badge"><ha-icon icon="mdi:usb-flash-drive"></ha-icon></span><div><h2>Nová gateway přes USB</h2><p>Vyberte připojení, desku a Wi-Fi. Potom nahrajte připravený firmware.</p></div></div><div class="gateway-view-actions"><button id="refreshSerialPorts" class="secondary refresh-ports-btn" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:usb-port" class="${this._gatewayBusy ? "spin" : ""}"></ha-icon>Načíst porty</button></div></div>
+        <div class="gateway-hero-head"><div class="gateway-hero-title"><span class="hero-icon-badge"><ha-icon icon="mdi:usb-flash-drive"></ha-icon></span><div><h2>Nová gateway přes USB</h2><p>Vyberte připojení, desku a Wi-Fi. Potom nahrajte připravený firmware.</p></div></div>${stepRail}<div class="gateway-view-actions"><button id="refreshSerialPorts" class="secondary refresh-ports-btn" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:usb-port" class="${this._gatewayBusy ? "spin" : ""}"></ha-icon>Načíst porty</button></div></div>
         ${this._renderNoSerialPortsWarning()}
         <div class="gateway-setup-grid"><div class="gateway-setup-column gateway-setup-left">
           <section class="gateway-setup-section gateway-usb-section"><div class="gateway-step-header"><span class="step-num">1</span><div><strong>Připojení přes USB</strong><small>Port desky připojené k Home Assistantu</small></div></div>${this._renderGatewayPortPicker()}</section>
-          <section class="gateway-setup-section gateway-network-section"><div class="gateway-step-header"><span class="step-num">3</span><div><strong>Síťové nastavení</strong><small>Údaje se nahrají bezpečně přes USB</small></div></div><div class="gateway-form-fields"><div class="field"><label for="flashHostname"><ha-icon icon="mdi:dns-outline"></ha-icon>Název gatewaye</label><input id="flashHostname" value="${this._escape(this._flashForm.hostname)}" placeholder="dratek-eink-gateway-dilna"></div><div class="field"><label for="flashSsid"><ha-icon icon="mdi:wifi"></ha-icon>Wi-Fi SSID</label><input id="flashSsid" value="${this._escape(this._flashForm.ssid)}" placeholder="Název Wi-Fi sítě"></div><div class="field"><label for="flashPassword"><ha-icon icon="mdi:lock-outline"></ha-icon>Wi-Fi heslo</label><input id="flashPassword" type="password" value="${this._escape(this._flashForm.password)}" placeholder="Heslo k Wi-Fi síti"></div></div></section>
+          <section class="gateway-setup-section gateway-network-section"><div class="gateway-step-header"><span class="step-num">2</span><div><strong>Síťové nastavení</strong><small>Údaje se nahrají bezpečně přes USB</small></div></div><div class="gateway-form-fields"><div class="field"><label for="flashHostname"><ha-icon icon="mdi:dns-outline"></ha-icon>Název gatewaye</label><input id="flashHostname" value="${this._escape(this._flashForm.hostname)}" placeholder="dratek-eink-gateway-dilna"></div><div class="field"><label for="flashSsid"><ha-icon icon="mdi:wifi"></ha-icon>Wi-Fi SSID</label><input id="flashSsid" value="${this._escape(this._flashForm.ssid)}" placeholder="Název Wi-Fi sítě"></div><div class="field"><label for="flashPassword"><ha-icon icon="mdi:lock-outline"></ha-icon>Wi-Fi heslo</label><input id="flashPassword" type="password" value="${this._escape(this._flashForm.password)}" placeholder="Heslo k Wi-Fi síti"></div></div></section>
         </div><div class="gateway-setup-column gateway-setup-right">
-          <section class="gateway-setup-section gateway-board-section"><div class="gateway-step-header"><span class="step-num">2</span><div><strong>Vyberte typ desky</strong><small>Dvě podporované varianty gateway firmwaru</small></div></div>${this._renderGatewayBoardPicker()}</section>
+          <section class="gateway-setup-section gateway-board-section"><div class="gateway-step-header"><span class="step-num">3</span><div><strong>Vyberte typ desky</strong><small>Dvě podporované varianty gateway firmwaru</small></div></div>${this._renderGatewayBoardPicker()}</section>
           ${this._renderGatewayInstallPanel(selectedBoard)}
         </div></div>
       </div>${shellEnd}`;
@@ -647,6 +653,251 @@ export const gatewayMixin = {
         }).join("") : gateway ? `<div class="connection-drop-empty"><ha-icon icon="mdi:drag-variant"></ha-icon><span>Přetáhněte sem displej</span></div>` : ""}</div>
       </section>`;
     }).join("")}</div>`;
+  },
+
+  // Stejný klíč jako skupiny v _topologyGroups(), jinak by se vybledlé spoje
+  // vypočtené z device.paths netrefily do bubliny odpovídající gatewaye.
+  _gatewayHubKey(path) {
+    if (!path || !path.type) return "";
+    if (path.type === "local") {
+      const identity = path.host || path.name || "default";
+      return `local:${String(identity).trim().toLowerCase()}`;
+    }
+    if (path.type === "gateway") {
+      const identity = path.id || path.gateway_id || path.host || path.name || "default";
+      return `gateway:${String(identity).trim().toLowerCase()}`;
+    }
+    return "";
+  },
+
+  // Mysslenkova mapa: gatewaye (a lokalni BLE) jsou bubliny rozlozene do kruhu,
+  // displeje jsou bubliny vejrazene do vejseku sve domovske gatewaye. Kazda
+  // trasa, kterou displej hlasi (device.paths), dostane vybledly spoj; trasa,
+  // po ktere prave bezi provoz (preferred_path), dostane barevny spoj navrch.
+  _renderGatewayMindMap(devices, preparedGroups) {
+    const groups = preparedGroups || this._topologyGroups(devices);
+    const hubGroups = groups.filter((group) => group.path);
+    const orphanGroup = groups.find((group) => !group.path) || null;
+    const orphanDevices = orphanGroup ? orphanGroup.devices : [];
+    if (!hubGroups.length && !orphanDevices.length) {
+      return `<div class="inspector-empty"><ha-icon icon="mdi:graph-outline"></ha-icon><p>Zatím není dostupný žádný displej.</p></div>`;
+    }
+
+    const focusCandidate = this._gatewayMapFocusAddress;
+    const focus = focusCandidate && (devices || []).some((device) => device.address === focusCandidate) ? focusCandidate : "";
+
+    // Sirsi plocha nez puvodni ctverec - mapa ma bezet pres celou sirku obrazovky,
+    // ne se skrcovat na vysku podle uzsiho pomeru stran.
+    const W = 1400, H = 780;
+    const cx = W / 2, cy = H / 2 - 6;
+    const hubR = Math.min(W, H) * 0.28;
+    const devR = Math.min(W, H) * 0.47;
+
+    const hubPositions = new Map();
+    hubGroups.forEach((group, index) => {
+      const angle = hubGroups.length === 1
+        ? -Math.PI / 2
+        : -Math.PI / 2 + (index / hubGroups.length) * Math.PI * 2;
+      hubPositions.set(group.key, {
+        x: cx + Math.cos(angle) * hubR,
+        y: cy + Math.sin(angle) * hubR,
+        angle,
+        group,
+      });
+    });
+
+    const devicePositions = new Map();
+    hubPositions.forEach((hub) => {
+      const list = hub.group.devices;
+      const n = list.length;
+      const spread = n <= 1 ? 0 : Math.min(Math.PI * 0.82, 0.3 + n * 0.19);
+      list.forEach((entry, i) => {
+        const t = n === 1 ? 0.5 : i / (n - 1);
+        const angle = hub.angle - spread / 2 + t * spread;
+        devicePositions.set(entry.device.address, {
+          x: cx + Math.cos(angle) * devR,
+          y: cy + Math.sin(angle) * devR,
+        });
+      });
+    });
+    // Displeje bez trasy nemaji kotvu u zadne gatewaye - polozi se do rady dole,
+    // ať v mapě nezmizí.
+    const orphanY = H - 34;
+    orphanDevices.forEach((entry, i) => {
+      const n = orphanDevices.length;
+      const spanW = Math.min(W - 120, 70 + n * 60);
+      const startX = cx - spanW / 2;
+      const x = n === 1 ? cx : startX + (spanW * i) / (n - 1);
+      devicePositions.set(entry.device.address, { x, y: orphanY });
+    });
+
+    const edgesFaded = [];
+    const edgesActive = [];
+    (devices || []).forEach((device) => {
+      const pos = devicePositions.get(device.address);
+      if (!pos) return;
+      const preferredKey = this._gatewayHubKey(device.preferred_path);
+      const related = !focus || focus === device.address;
+      // Kliknuti na displej pripojeny k vice gatewayim ma zvyraznit UPLNE
+      // vsechny jeho trasy, ne jen tu aktivni - proto vybledly spoj dostane
+      // navic "highlight" priznak, kdyz patri fokusovanemu displeji.
+      const highlight = focus && related;
+      let matchedPreferred = false;
+      (device.paths || []).forEach((path) => {
+        const key = this._gatewayHubKey(path);
+        const hub = hubPositions.get(key);
+        if (!hub) return;
+        const isActive = Boolean(key) && key === preferredKey;
+        if (isActive) matchedPreferred = true;
+        (isActive ? edgesActive : edgesFaded).push({ x1: hub.x, y1: hub.y, x2: pos.x, y2: pos.y, dimmed: !related, highlight: highlight && !isActive });
+      });
+      // Rucni zamek muze mirit na gateway, kterou displej sam nikdy nehlasil
+      // (device.paths ji neobsahuje) - i tak potrebuje viditelny barevny spoj.
+      if (!matchedPreferred && preferredKey && hubPositions.has(preferredKey)) {
+        const hub = hubPositions.get(preferredKey);
+        edgesActive.push({ x1: hub.x, y1: hub.y, x2: pos.x, y2: pos.y, dimmed: !related, highlight: false });
+      }
+    });
+
+    const curve = (edge) => {
+      const mx = (edge.x1 + edge.x2) / 2, my = (edge.y1 + edge.y2) / 2;
+      const dx = mx - cx, dy = my - cy;
+      const len = Math.hypot(dx, dy) || 1;
+      const qx = mx + (dx / len) * len * 0.14;
+      const qy = my + (dy / len) * len * 0.14;
+      return `M${edge.x1.toFixed(1)},${edge.y1.toFixed(1)} Q${qx.toFixed(1)},${qy.toFixed(1)} ${edge.x2.toFixed(1)},${edge.y2.toFixed(1)}`;
+    };
+    const edgesSvg = [
+      ...edgesFaded.map((edge) => `<path class="gwmap-edge gwmap-edge-faded ${edge.dimmed ? "is-dimmed" : ""} ${edge.highlight ? "is-focus-highlight" : ""}" d="${curve(edge)}"></path>`),
+      ...edgesActive.map((edge) => `<path class="gwmap-edge gwmap-edge-active ${edge.dimmed ? "is-dimmed" : ""}" d="${curve(edge)}"></path>`),
+    ].join("");
+
+    const hubsSvg = [...hubPositions.values()].map((hub) => {
+      const group = hub.group;
+      const path = group.path;
+      const local = path.type === "local";
+      const gatewayObj = local ? null : (this._gateways || []).find((item) => String(item.id) === String(path.id || path.gateway_id || ""));
+      const online = local ? true : Boolean(gatewayObj?.status?.ok);
+      const known = local ? true : Boolean(gatewayObj);
+      const stateClass = local ? "is-local" : !known ? "is-unknown" : online ? "is-online" : "is-offline";
+      const related = !focus || group.devices.some((entry) => entry.device.address === focus);
+      const count = group.devices.length;
+      // Gateway ukazuje skutecny nahled desky (stejny jako karta v Gatewaye),
+      // lokalni BLE nema desku, ta zustava na ikonce Home Assistantu.
+      const hubChip = String(gatewayObj?.status?.chip || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+      const hubBoardArt = local ? "" : (BOARD_PREVIEWS[hubChip] || BOARD_PREVIEWS.esp32);
+      const hubVisual = local
+        ? `<foreignObject class="gwmap-hub-icon-slot" x="-16" y="-16" width="32" height="32"><div xmlns="http://www.w3.org/1999/xhtml" class="gwmap-hub-icon"><ha-icon icon="mdi:home-assistant"></ha-icon></div></foreignObject>`
+        : `<foreignObject class="gwmap-hub-board-slot" x="-34" y="-20" width="68" height="40"><div xmlns="http://www.w3.org/1999/xhtml" class="gwmap-hub-board">${hubBoardArt}</div></foreignObject>`;
+      return `<g class="gwmap-hub-wrap ${related ? "" : "is-dimmed"}" transform="translate(${hub.x.toFixed(1)},${hub.y.toFixed(1)})">
+        <circle class="gwmap-hub ${stateClass}" r="34"></circle>
+        ${hubVisual}
+        <foreignObject x="-58" y="38" width="116" height="42"><div xmlns="http://www.w3.org/1999/xhtml" class="gwmap-hub-label"><strong title="${this._escape(path.name || "Gateway")}">${this._escape(path.name || "Gateway")}</strong><small>${count} ${count === 1 ? "displej" : count < 5 ? "displeje" : "displejů"}</small></div></foreignObject>
+      </g>`;
+    }).join("");
+
+    const deviceEntries = [...hubGroups.flatMap((group) => group.devices), ...orphanDevices];
+    const devicesSvg = deviceEntries.map((entry) => {
+      const device = entry.device;
+      const pos = devicePositions.get(device.address);
+      if (!pos) return "";
+      const preferredKey = this._gatewayHubKey(device.preferred_path);
+      const hasRoute = Boolean(preferredKey && hubPositions.has(preferredKey));
+      const rssi = Number(device.preferred_path?.rssi ?? device.rssi);
+      const related = !focus || focus === device.address;
+      const isFocused = focus === device.address;
+      const manual = device.gateway_selection === "manual" && Boolean(device.selected_gateway_id);
+      const title = this._deviceTitle(device);
+      return `<g class="gwmap-device-wrap ${hasRoute ? "" : "is-unrouted"} ${related ? "" : "is-dimmed"} ${isFocused ? "is-focused" : ""}" transform="translate(${pos.x.toFixed(1)},${pos.y.toFixed(1)})" data-map-focus-device="${this._escape(device.address)}">
+        <rect class="gwmap-device ${manual ? "is-locked" : ""} ${hasRoute ? this._signalClass(rssi) : ""}" x="-26" y="-19" width="52" height="38" rx="9"></rect>
+        <foreignObject class="gwmap-device-thumb-slot" x="-23" y="-16" width="46" height="32"><div xmlns="http://www.w3.org/1999/xhtml" class="gwmap-device-thumb">${this._renderDevicePreview(device, "mini")}</div></foreignObject>
+        <text class="gwmap-device-label" y="34" text-anchor="middle">${this._escape(title)}</text>
+        <title>${this._escape(title)} · ${Number.isFinite(rssi) ? `${rssi} dBm` : "bez signálu"}</title>
+      </g>`;
+    }).join("");
+
+    const { scale: viewScale, x: viewX, y: viewY } = this._gatewayMapView || { scale: 1, x: 0, y: 0 };
+
+    return `<div class="gwmap-wrap">
+      <button class="gwmap-reset-view" data-map-reset-view title="Resetovat přiblížení a posun" aria-label="Resetovat přiblížení a posun"><ha-icon icon="mdi:image-filter-center-focus"></ha-icon></button>
+      <svg class="gwmap-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Myšlenková mapa gatewayí a displejů">
+        <g class="gwmap-viewport" transform="translate(${viewX} ${viewY}) scale(${viewScale})">
+          <g class="gwmap-edges">${edgesSvg}</g>
+          <g class="gwmap-devices">${devicesSvg}</g>
+          <g class="gwmap-hubs">${hubsSvg}</g>
+        </g>
+      </svg>
+      <div class="gwmap-legend">
+        <span><i class="gwmap-legend-dot is-online"></i>Gateway</span>
+        <span><i class="gwmap-legend-dot is-local"></i>Bluetooth Home Assistantu</span>
+        <span><i class="gwmap-legend-line is-faded"></i>Displej byl nalezen</span>
+        <span><i class="gwmap-legend-line is-active"></i>Právě obsluhuje</span>
+        <span class="gwmap-legend-hint"><ha-icon icon="mdi:mouse-move-vertical"></ha-icon>Kolečko = zoom, pravé tlačítko = posun</span>
+        ${focus ? `<button class="gwmap-legend-clear" data-map-focus-device="">Zrušit zvýraznění</button>` : ""}
+      </div>
+    </div>`;
+  },
+
+  // Kazdy _render() nahrazuje cely .page element novym uzlem, takze primo
+  // navesene listenery na <svg> zaniknou spolu s nim - nevadi, ty se pripoji
+  // znovu pri kazdem _bind(). Listenery na window ale prezivaji stary uzel,
+  // proto se pred pripojenim noveho pruvodce vzdy nejdriv odpoji ty predchozi
+  // (viz volani v _bind()), jinak by se hromadily donekonecna.
+  _bindGatewayMapViewport(svg) {
+    const view = this._gatewayMapView || (this._gatewayMapView = { scale: 1, x: 0, y: 0 });
+    const viewport = svg.querySelector(".gwmap-viewport");
+    const clampScale = (value) => Math.min(4, Math.max(0.5, value));
+    const applyView = () => {
+      if (viewport) viewport.setAttribute("transform", `translate(${view.x} ${view.y}) scale(${view.scale})`);
+    };
+    const svgPoint = (event) => {
+      const point = svg.createSVGPoint();
+      point.x = event.clientX;
+      point.y = event.clientY;
+      const ctm = svg.getScreenCTM();
+      return ctm ? point.matrixTransform(ctm.inverse()) : { x: 0, y: 0 };
+    };
+    svg.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      // Bod pod kurzorem musi zustat na miste - dopocita se v prostoru PRED
+      // zmenou meritka a nove translate se od nej odvodi zpetne.
+      const before = svgPoint(event);
+      const localX = (before.x - view.x) / view.scale;
+      const localY = (before.y - view.y) / view.scale;
+      view.scale = clampScale(view.scale * (event.deltaY < 0 ? 1.12 : 1 / 1.12));
+      view.x = before.x - localX * view.scale;
+      view.y = before.y - localY * view.scale;
+      applyView();
+    }, { passive: false });
+    svg.addEventListener("contextmenu", (event) => event.preventDefault());
+    svg.addEventListener("dblclick", () => {
+      view.scale = 1;
+      view.x = 0;
+      view.y = 0;
+      applyView();
+    });
+    let panState = null;
+    svg.addEventListener("mousedown", (event) => {
+      if (event.button !== 2) return;
+      event.preventDefault();
+      const start = svgPoint(event);
+      panState = { startX: start.x, startY: start.y, originX: view.x, originY: view.y };
+      svg.classList.add("is-panning");
+    });
+    this._gwmapPanMove = (event) => {
+      if (!panState) return;
+      const current = svgPoint(event);
+      view.x = panState.originX + (current.x - panState.startX);
+      view.y = panState.originY + (current.y - panState.startY);
+      applyView();
+    };
+    this._gwmapPanEnd = () => {
+      if (!panState) return;
+      panState = null;
+      svg.classList.remove("is-panning");
+    };
+    window.addEventListener("mousemove", this._gwmapPanMove);
+    window.addEventListener("mouseup", this._gwmapPanEnd);
   },
 
   _renderDiscoveredGateways() {
@@ -831,7 +1082,9 @@ export const gatewayMixin = {
         `<div class="gateway-fact"><ha-icon icon="${icon}"></ha-icon><div><small>${label}</small><strong>${value}</strong></div>${extra}</div>`;
       const iconAction = (attr, icon, label, cls = "", disabled = false) =>
         `<button class="gateway-icon-action ${cls}" data-gateway-${attr}="${this._escape(gateway.id)}" title="${label}" aria-label="${label}" ${disabled ? "disabled" : ""}><ha-icon icon="${icon}"></ha-icon></button>`;
-      // Karta shora dolů: obrázek desky, pod ním informace, dole tlačítka.
+      // Karta shora dolů: velký nahled desky + stav, pod nim jmeno a napadne
+      // pasmo kapacity, pak uz jen dva klicove udaje (displeje, signal) -
+      // IP a firmware presly do sbaleneho detailu, tam patri jako technikalie.
       return `<article class="gateway-compact-card ${stateClass} ${routingClass}">
         <div class="gateway-card-board">
           <span class="gateway-state ${stateClass}"><i></i>${stateText}</span>
@@ -844,12 +1097,10 @@ export const gatewayMixin = {
             : `<strong>${this._escape(gateway.name)}</strong><span>${this._escape(status.hostname || gateway.host)}</span>`}</div></header>
           <div class="gateway-routing-state ${routingClass}"><ha-icon icon="mdi:${activeJob ? "progress-upload" : routingAvailable ? "check-circle-outline" : "router-wireless-off"}"></ha-icon><span><small>Kapacita gatewaye</small><strong>${this._escape(routingText)}</strong></span></div>
           <div class="gateway-facts">
-            ${fact("mdi:ip-network-outline", "IP adresa", this._escape(status.ip || gateway.host || "-"), webUrl ? `<button class="gateway-fact-open" data-gateway-open="${this._escape(webUrl)}" title="Otevřít web gatewaye" aria-label="Otevřít web gatewaye"><ha-icon icon="mdi:open-in-new"></ha-icon></button>` : "")}
-            ${fact(Number.isFinite(wifiRssi) ? "mdi:wifi" : "mdi:wifi-off", "Wi-Fi signál", `<span class="gateway-fact-signal">${this._renderSignalBars(wifiRssi)}<span class="${this._signalClass(wifiRssi)}">${Number.isFinite(wifiRssi) ? `${wifiRssi} dBm` : "-"}</span></span>`)}
-            ${fact("mdi:memory", "Firmware", `${this._escape(status.firmware || "-")}${currentFirmware ? `<ha-icon class="gateway-fact-ok" icon="mdi:check-decagram" title="Aktuální firmware"></ha-icon>` : ""}`)}
             ${fact("mdi:tablet-dashboard", displays.length === 1 ? "Připojený displej" : "Připojené displeje", `${displays.length}${displayNames ? ` <em>${this._escape(displayNames)}${displays.length > 3 ? ` +${displays.length - 3}` : ""}</em>` : ` <em>Připravená pro přiřazení v mapě</em>`}`)}
+            ${fact(Number.isFinite(wifiRssi) ? "mdi:wifi" : "mdi:wifi-off", "Wi-Fi signál", `<span class="gateway-fact-signal">${this._renderSignalBars(wifiRssi)}<span class="${this._signalClass(wifiRssi)}">${Number.isFinite(wifiRssi) ? `${wifiRssi} dBm` : "-"}</span></span>`)}
           </div>
-          <details class="gateway-diagnostics"><summary><ha-icon icon="mdi:information-outline"></ha-icon>Technické informace<ha-icon class="gateway-diagnostics-caret" icon="mdi:chevron-down"></ha-icon></summary><div class="gateway-diagnostic-grid"><span><ha-icon icon="mdi:timer-outline"></ha-icon><div><small>Doba běhu</small><strong>${this._formatGatewayUptime(status.uptime_ms)}</strong></div></span><span><ha-icon icon="mdi:bluetooth"></ha-icon><div><small>BLE</small><strong>${status.ble_initialized === true ? "Aktivní" : status.ble_initialized === false ? "Čeká" : "-"}</strong></div></span><span><ha-icon icon="mdi:chip"></ha-icon><div><small>Volná paměť</small><strong>${this._escape(status.free_heap ?? "-")}</strong></div></span><span><ha-icon icon="mdi:restart"></ha-icon><div><small>Restart</small><strong>${this._escape(status.reset_reason || "-")}</strong></div></span></div></details>
+          <details class="gateway-diagnostics"><summary><ha-icon icon="mdi:information-outline"></ha-icon>Technické informace<ha-icon class="gateway-diagnostics-caret" icon="mdi:chevron-down"></ha-icon></summary><div class="gateway-diagnostic-grid"><span class="${webUrl ? "has-action" : ""}"><ha-icon icon="mdi:ip-network-outline"></ha-icon><div><small>IP adresa</small><strong>${this._escape(status.ip || gateway.host || "-")}</strong></div>${webUrl ? `<button class="gateway-fact-open" data-gateway-open="${this._escape(webUrl)}" title="Otevřít web gatewaye" aria-label="Otevřít web gatewaye"><ha-icon icon="mdi:open-in-new"></ha-icon></button>` : ""}</span><span><ha-icon icon="mdi:memory"></ha-icon><div><small>Firmware</small><strong>${this._escape(status.firmware || "-")}${currentFirmware ? `<ha-icon class="gateway-fact-ok" icon="mdi:check-decagram" title="Aktuální firmware"></ha-icon>` : ""}</strong></div></span><span><ha-icon icon="mdi:timer-outline"></ha-icon><div><small>Doba běhu</small><strong>${this._formatGatewayUptime(status.uptime_ms)}</strong></div></span><span><ha-icon icon="mdi:bluetooth"></ha-icon><div><small>BLE</small><strong>${status.ble_initialized === true ? "Aktivní" : status.ble_initialized === false ? "Čeká" : "-"}</strong></div></span><span><ha-icon icon="mdi:chip"></ha-icon><div><small>Volná paměť</small><strong>${this._escape(status.free_heap ?? "-")}</strong></div></span><span><ha-icon icon="mdi:restart"></ha-icon><div><small>Restart</small><strong>${this._escape(status.reset_reason || "-")}</strong></div></span></div></details>
         </div>
         <footer class="gateway-card-actions">
           <button class="gateway-ota-action" data-gateway-ota="${this._escape(gateway.id)}" ${this._gatewayBusy || !otaReady || currentFirmware ? "disabled" : ""}><ha-icon icon="${currentFirmware ? "mdi:check-circle-outline" : "mdi:update"}"></ha-icon>${otaLabel}</button>

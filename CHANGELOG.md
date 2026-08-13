@@ -2,6 +2,21 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.290] - 2026-08-13
+
+### Opraveno
+- Lokální Bluetooth přenos vendorového streamu pro velké displeje SDK 299/315 již nevynucuje potvrzení ATT po každém bloku. Používá časované zápisy bez odpovědi, potvrzený poslední blok a následné fyzické potvrzení překreslení.
+- Selhání jedné automatické vazby nebo vykreslení už nezastaví další aktualizace bez viditelné stopy; chyba se zaloguje s adresou displeje a ostatní hodnoty se dále obnovují.
+- Automatické hodnoty času, data, termostatu a počasí se vyhodnocují z aktuálního stavu a se správnou jednotkou.
+
+### Přidáno a vylepšeno
+- Přibyla šablona `Test stínování` s čistými barevnými plochami a přesnou mřížkou 2×2 fyzických pixelů bez textu, mezer a rámečků.
+- Automatické zápisy nabízejí samostatnou volbu spouštění při změně entity, podle intervalu, nebo oběma způsoby; výchozí interval nových konfigurací je 600 sekund.
+- Karty automatizací zvýrazňují právě zapisovaný displej, ovládání fronty zůstá připnuté a přibylo přehlednější rozložení menších displejů.
+- Mapa připojení dostala interaktivní pohled na gatewaye, displeje, aktivní i alternativní trasy a ovládání přiblížení.
+- Nastavení prvků Designeru bylo zjednodušeno a grafy, ukazatele i stavové prvky používají stejné vykreslovací bloky jako připravené šablony.
+- Gateway firmware `0.1.56-gateway` po připojení vyžádá interval 15–30 ms, což urychluje potvrzované BLE přenosy na ESP32 i ESP32-S3.
+
 ## [0.1.289] - 2026-08-12
 
 ### Opraveno – fyzický náhled a první přenos po restartu

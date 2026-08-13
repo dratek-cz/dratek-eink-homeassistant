@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.290
+
+- **Rychlý lokální přenos na displeje 800×480** – SDK 299/315 už nečeká přibližně 2,5 sekundy na potvrzení každého ze 419 bloků. Data se posílají přesně časovaným proudem a poslední blok zůstá bezpečnou GATT bariérou.
+- **Test pixelového stínování** – nová kalibrační šablona vyplní displej pouze čistými barvami a skutečnými 2×2 pixelovými vzorky bez textu, mezer a rámečků.
+- **Odolnější automatické aktualizace** – chybná vazba už nezastaví celý displej, interní čas a datum se vyhodnocují dynamicky a výchozí interval je bezpečných 10 minut. Lze zvolit obnovu při změně, podle intervalu, nebo obojí.
+- **Přehlednější správa** – automatizace zvýrazní právě zapisovaný displej, ovládání fronty zůstá připnuté a mapa připojení umí nový interaktivní pohled na gatewaye a jejich trasy.
+- **Gateway firmware 0.1.56** – ESP32/ESP32-S3 po připojení požádá o rychlejší BLE interval 15–30 ms, takže potvrzovaný přenos velkého obrazu netrvá zbytečně dlouho.
+
 ## Novinky ve verzi 0.1.289
 
 - **Přesný rámeček displeje 800×480** – náhled odpovídá dodanému SVG včetně proporcí displeje a spodního tmavého štítku.

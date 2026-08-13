@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.55-gateway";
+static const char* FIRMWARE_VERSION = "0.1.56-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -441,6 +441,19 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
     return false;
   }
   addLog(log, "Using service " + serviceUuid + ".");
+
+  // Every image block is an acknowledged write, so the transfer advances at the
+  // pace of the connection interval and nothing else. NimBLE's default 30-50 ms
+  // window is what makes a 419-block image take about 90 seconds here, while the
+  // same acknowledged stream over BlueZ - which negotiates a faster interval -
+  // takes about a third of that. The vendor app asks Android for
+  // CONNECTION_PRIORITY_HIGH at exactly this point; this is the same request.
+  //
+  // 12-24 units is 15-30 ms: a real speed-up without dropping to the shortest
+  // intervals, which on an ESP32 have to share the radio with Wi-Fi. The display
+  // is free to decline, in which case the transfer simply runs at the old pace.
+  client->updateConnParams(12, 24, 0, 400);
+  delay(100);
 
   if (controlChar->canNotify()) controlChar->subscribe(true, notifyCallback);
   if (writeChar->canNotify()) writeChar->subscribe(true, notifyCallback);

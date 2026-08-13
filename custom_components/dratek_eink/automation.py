@@ -5,9 +5,11 @@ import base64
 from datetime import datetime, timedelta
 import io
 import json
+import logging
 import math
 import re
 import time
+import unicodedata
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
@@ -36,11 +38,13 @@ from .render import (
 from .display_preview import async_save_display_preview
 from .transfer import DratekTransfer
 
+_LOGGER = logging.getLogger(__name__)
+
 STORE_KEY = "dratek_eink.entity_automations"
 STORE_VERSION = 1
 DATA_KEY = "entity_auto_update_manager"
 DEBOUNCE_SECONDS = 0.15
-DEFAULT_REFRESH_INTERVAL_SECONDS = 60
+DEFAULT_REFRESH_INTERVAL_SECONDS = 600
 MIN_REFRESH_INTERVAL_SECONDS = 30
 MAX_REFRESH_INTERVAL_SECONDS = 86400
 BATTERY_SAVER_THRESHOLD_PERCENT = 15
@@ -275,6 +279,54 @@ def _state_words(entity_id: str, state: Any, kind: str) -> str:
 
 _WEEKDAY_ABBR_CS = ("PO", "ÚT", "ST", "ČT", "PÁ", "SO", "NE")
 _MONTH_ABBR_CS = ("LED", "ÚNO", "BŘE", "DUB", "KVĚ", "ČVN", "ČVC", "SRP", "ZÁŘ", "ŘÍJ", "LIS", "PRO")
+_MONTH_NAMES_GENITIVE_CS = (
+    "ledna", "února", "března", "dubna", "května", "června",
+    "července", "srpna", "září", "října", "listopadu", "prosince"
+)
+
+
+def _remove_diacritics(text: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFD", str(text or ""))
+        if unicodedata.category(c) != "Mn"
+    ).lower()
+
+
+def _resolve_internal_system_value(binding: dict[str, Any]) -> str | None:
+    """Resolve system variables (time, date, interval, update_time) dynamically."""
+    entity_id = str(binding.get("entity_id") or "")
+    kind = str(binding.get("kind") or "")
+    label = str(binding.get("label") or "")
+    key = str(binding.get("key") or "")
+    prefix = str(binding.get("value_prefix") or "")
+    suffix = str(binding.get("value_suffix") or "")
+
+    is_internal = (
+        entity_id.startswith("internal:")
+        or kind in ("time", "date", "clock", "datetime", "update_time", "interval")
+        or entity_id in ("sensor.time", "sensor.date", "sensor.date_time")
+    )
+    if not is_internal:
+        return None
+
+    normalized = _remove_diacritics(f"{entity_id} {kind} {label} {key}")
+    now = datetime.now()
+
+    if "datum" in normalized or "date" in normalized:
+        formatted = f"{now.day}. {_MONTH_NAMES_GENITIVE_CS[now.month - 1]}"
+        return f"{prefix}{formatted}{suffix}"
+    if "interval" in normalized:
+        next_hour = now + timedelta(hours=1)
+        return f"{prefix}{now.strftime('%H:%M')}–{next_hour.strftime('%H:%M')}{suffix}"
+    if (
+        "cas" in normalized
+        or "time" in normalized
+        or "aktualizace" in normalized
+        or "clock" in normalized
+        or entity_id.startswith("internal:")
+    ):
+        return f"{prefix}{now.strftime('%H:%M')}{suffix}"
+    return None
 
 
 def _parse_iso_datetime(value: Any) -> datetime | None:
@@ -755,10 +807,52 @@ class EntityAutoUpdateManager:
     @staticmethod
     def _state_value(state: Any, binding: dict[str, Any]) -> str:
         fallback = str(binding.get("fallback", ""))
+        prefix = str(binding.get("value_prefix") or "")
+        suffix = str(binding.get("value_suffix") or "")
+
+        internal_val = _resolve_internal_system_value(binding)
+        if internal_val is not None:
+            return internal_val
+
         if state is None:
             return fallback
+
+        entity_id = str(binding.get("entity_id") or "")
         attribute = str(binding.get("entity_attribute") or "")
+        kind = str(binding.get("kind") or "")
+        label = str(binding.get("label") or "")
+        domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
+
         value = state.attributes.get(attribute) if attribute else state.state
+
+        # Handle climate entities specifically when attribute is not explicitly provided
+        if domain == "climate" and not attribute:
+            normalized_meta = _remove_diacritics(f"{kind} {label} {entity_id}")
+            if "vykon" in normalized_meta or kind == "hvac_action":
+                action = str(state.attributes.get("hvac_action") or state.state or "").lower()
+                action_text = {
+                    "heating": "Topí", "idle": "Klid", "off": "Vypnuto",
+                    "cooling": "Chladí", "drying": "Vysouší", "fan": "Ventilace"
+                }.get(action, fallback)
+                return f"{prefix}{action_text}{suffix}"
+            if kind == "temperature" or "teplot" in normalized_meta or not attribute:
+                if "cil" in normalized_meta:
+                    value = state.attributes.get("temperature")
+                else:
+                    value = state.attributes.get("current_temperature")
+                    if value is None:
+                        value = state.attributes.get("temperature")
+                unit = str(state.attributes.get("temperature_unit") or "°C")
+                if value is not None and value != "" and str(value).lower() not in {"unavailable", "unknown"}:
+                    return f"{prefix}{_format_czech_number(value)} {unit}{suffix}"
+
+        # Handle weather entity temperature
+        if domain == "weather" and (attribute == "temperature" or kind == "temperature" or "teplot" in _remove_diacritics(f"{kind} {label}")):
+            value = state.attributes.get("temperature") if attribute == "temperature" else (state.attributes.get("temperature") or value)
+            unit = str(state.attributes.get("temperature_unit") or state.attributes.get("unit_of_measurement") or "°C")
+            if value is not None and value != "" and str(value).lower() not in {"unavailable", "unknown"}:
+                return f"{prefix}{_format_czech_number(value)} {unit}{suffix}"
+
         if value is None or str(value).strip().lower() in {"unavailable", "unknown"}:
             return fallback
 
@@ -777,26 +871,16 @@ class EntityAutoUpdateManager:
             return str(binding.get("status_on_symbol") or "●") if str(value).strip().lower() in active_values else str(binding.get("status_off_symbol") or "○")
         if isinstance(value, (list, dict, tuple)):
             return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-        # A row that writes `Dveře · ${v(1, "Zamčeno")}` (security.js's
-        # checklist) captures as one binding whose currentText is the whole
-        # run - prefix and suffix are whatever surrounded the marker when
-        # the panel diffed it out, empty for a slot that is the entire run.
-        # They belong around *every* return below, not just the plain
-        # formatted-number tail: skipping them for a word-translated value
-        # ("Zavřeno") would silently drop "Dveře · " during an automatic
-        # refresh even though the manual send that produced this binding
-        # showed it.
-        prefix = str(binding.get("value_prefix") or "")
-        suffix = str(binding.get("value_suffix") or "")
-        # Word translation is for what a person reads on the display. The
-        # same _state_value also computes a "layered" binding's __selection__
-        # (which layer id to show) via this same call - that needs the raw
-        # state to match a layer's own id, not "Zapnuto" for "on".
+
         if not attribute and binding.get("type") in (None, "", "text"):
-            words = _state_words(str(binding.get("entity_id") or ""), state, str(binding.get("kind") or ""))
+            words = _state_words(entity_id, state, kind)
             if words:
                 return f"{prefix}{words}{suffix}"
-        unit = state.attributes.get("unit_of_measurement") if binding.get("include_unit") and not attribute else ""
+
+        unit = ""
+        if binding.get("include_unit") or kind == "temperature" or domain in ("sensor", "number", "weather", "climate") or state.attributes.get("unit_of_measurement"):
+            unit = str(state.attributes.get("unit_of_measurement") or state.attributes.get("temperature_unit") or "")
+
         raw_result = f"{prefix}{_format_czech_number(value)}{f' {unit}' if unit else ''}{suffix}"
         for u in ("°C", "%", "kW", "kWh", "hPa", "bar", "V", "A", "W", "l/min", "ppm", "°", "dBm", "EUR", "Kč"):
             dupe = f"{u} {u}"
@@ -862,43 +946,57 @@ class EntityAutoUpdateManager:
         address: str,
         bindings: list[dict[str, Any]],
     ) -> dict[str, str]:
-        """Read all binding values through the same path for previews and writes."""
+        """Read all binding values through the same path for previews and writes.
+
+        One binding with unexpected data (a non-numeric ratio divisor, a
+        malformed chart fallback) used to raise straight out of this loop and
+        abort the whole render. Because that happens before automation.py ever
+        reaches the transfer queue, the failure produced no queue job and no
+        visible error - just a display that silently stopped receiving new
+        images every cycle, forever, since the same bad value keeps recurring.
+        Isolating each binding keeps every *other* binding on the display
+        updating even while one of them is broken.
+        """
         values: dict[str, str] = {}
         for binding in bindings:
-            binding_type = binding.get("type")
-            # A ratio() binding has no single entity_id of its own - a dial or
-            # ring reads one meter, a bar list several - so it resolves each
-            # meter's own state itself instead of the single lookup below.
-            if binding_type == "ratio":
-                value = self._ratio_value(binding)
-                values[str(binding.get("id"))] = value
-                continue
-            state = self.hass.states.get(str(binding.get("entity_id")))
-            if binding_type == "series":
-                value = self._series_value(state, binding)
-            elif binding_type == "chart":
-                value = self._chart_value(address, state, binding)
-            elif binding_type == "layered":
-                entity_values = {
-                    "__selection__": self._state_value(state, binding),
-                }
-                for entity_id, _attribute in _binding_sources(binding):
-                    entity_state = self.hass.states.get(entity_id)
-                    if entity_state is None:
-                        continue
-                    entity_values[entity_id] = {
-                        "state": entity_state.state,
-                        **dict(entity_state.attributes),
-                    }
-                value = json.dumps(
-                    entity_values,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
+            binding_id = str(binding.get("id"))
+            try:
+                values[binding_id] = self._resolve_binding_value(address, binding)
+            except Exception:
+                _LOGGER.exception(
+                    "[%s] Automatic refresh could not resolve binding %r; using its fallback.",
+                    address,
+                    binding_id,
                 )
-            else:
-                value = self._state_value(state, binding)
-            values[str(binding.get("id"))] = value
+                values[binding_id] = str(binding.get("fallback", ""))
         return values
+
+    def _resolve_binding_value(self, address: str, binding: dict[str, Any]) -> str:
+        binding_type = binding.get("type")
+        # A ratio() binding has no single entity_id of its own - a dial or
+        # ring reads one meter, a bar list several - so it resolves each
+        # meter's own state itself instead of the single lookup below.
+        if binding_type == "ratio":
+            return self._ratio_value(binding)
+        state = self.hass.states.get(str(binding.get("entity_id")))
+        if binding_type == "series":
+            return self._series_value(state, binding)
+        if binding_type == "chart":
+            return self._chart_value(address, state, binding)
+        if binding_type == "layered":
+            entity_values = {
+                "__selection__": self._state_value(state, binding),
+            }
+            for entity_id, _attribute in _binding_sources(binding):
+                entity_state = self.hass.states.get(entity_id)
+                if entity_state is None:
+                    continue
+                entity_values[entity_id] = {
+                    "state": entity_state.state,
+                    **dict(entity_state.attributes),
+                }
+            return json.dumps(entity_values, ensure_ascii=False, separators=(",", ":"))
+        return self._state_value(state, binding)
 
     async def async_render_preview(
         self,
@@ -1033,6 +1131,20 @@ class EntityAutoUpdateManager:
                 self._pending_refreshes.discard(address)
                 try:
                     await self._async_refresh(address)
+                except Exception:
+                    # Rendering and hardware-format conversion run before
+                    # _async_refresh ever reaches the transfer queue, so a
+                    # failure there (a bad binding value, a corrupt stored
+                    # base_image) never became a queue job and never surfaced
+                    # anywhere - just a task exception nobody awaited, logged
+                    # by asyncio (if at all) with no display address attached.
+                    # The loop still retried every interval, so the display
+                    # looked like it had simply stopped: the same failure kept
+                    # recurring silently for as long as its cause persisted.
+                    _LOGGER.exception(
+                        "[%s] Automatic refresh failed before reaching the transfer queue.",
+                        address,
+                    )
                 finally:
                     # A skipped/merged queue entry must not schedule itself again.
                     # A manual upload explicitly requests one reconciliation after

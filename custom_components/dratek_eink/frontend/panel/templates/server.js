@@ -32,7 +32,7 @@ export const template = {
     ],
     steps: [
       "Přidejte integraci System Monitor v Nastavení → Zařízení a služby a při konfiguraci zaškrtněte Processor use, Memory use, Disk use a Processor temperature.",
-      "V Nastavit přiřaďte CPU, RAM, Disk a Teplota - automatické rozpoznání hledá v názvu entity slovo z popisku údaje, takže u System Monitoru (anglické názvy Processor use/Memory use) je často potřeba vybrat entitu ručně, ne spoléhat na automatický návrh.",
+      "Šablona zná anglické názvy System Monitoru (CPU → Processor use, RAM → Memory use) a entity si najde sama; otevřete Nastavit jen pro kontrolu nebo pokud máte v Home Assistantu senzorů stejného druhu víc.",
       "Dostupnost je volitelná - System Monitor sám o sobě dostupnost nehlásí (běží-li Home Assistant, běží i on); pro skutečné sledování jiného stroje použijte binary_sensor s device_class connectivity (např. z integrace Ping).",
     ],
   },
@@ -44,7 +44,7 @@ export const template = {
       { label: "RAM", value: v(2, "61 %"), percent: ratio(2, 61) },
       { label: "Disk", value: v(3, "73 %"), percent: ratio(3, 73), color: "red" },
       { label: "Teplota", value: v(4, "48 °C"), percent: ratio(4, 48) },
-    ], group: "ratio", h: 0.48 },
+    ], group: "ratio", h: 0.6 },
     { flex: true },
     { footer: [{ label: "PROVOZ", value: v(5, "18 dní") }], h: 0.13 },
   ],

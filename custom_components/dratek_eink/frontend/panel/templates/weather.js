@@ -31,11 +31,14 @@ export const template = {
     note: "Čas a datum si šablona doplňuje sama z hodin Home Assistantu - nejsou to údaje z počasí, takže se nedají přepojit na jinou entitu.",
   },
   design: ({ v, day }) => [
-    { icon: "weather-partly-cloudy", h: 0.19 },
+    // Ikonový řádek sedí na stejné výšce (0.15) jako u home/living/security/
+    // thermostat/parcel/birthdays - dřívějších 0.19 nechávalo nahoře pruh
+    // prázdna, který nikde jinde v katalogu není.
+    { icon: "weather-partly-cloudy", h: 0.15 },
     { stat: { value: v(0, "23"), unit: "°C", caption: v(1, "Polojasno") }, h: 0.30 },
     { text: v(3, "23. května"), h: 0.07, size: 0.045 },
     { rule: true, h: 0.02 },
-    { strip: [day(0), day(1), day(2), day(3)], group: "forecast", h: 0.25 },
+    { strip: [day(0), day(1), day(2), day(3)], group: "forecast", h: 0.29 },
     { flex: true },
     { footer: [{ label: "AKTUALIZOVÁNO", value: v(2, "12:45") }], h: 0.13 },
   ],

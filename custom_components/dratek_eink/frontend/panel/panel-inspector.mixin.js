@@ -218,7 +218,12 @@ export const inspectorMixin = {
         await this._loadQueue(true);
       }
       if (this._activeTab === "automations") {
-        await this._loadAutomations(true);
+        await Promise.all([
+          this._loadAutomations(false),
+          this._loadQueue(false),
+        ]);
+        this._render();
+        this._paint();
       }
       if (this._activeTab === "topology") {
         await Promise.all([
@@ -460,7 +465,7 @@ export const inspectorMixin = {
         this._displayTemplateFormats.secondary = format;
       }
       this._pendingDisplayTemplateConflict = null;
-      this._displayDesignerReturnView = "templates";
+      this._templateDesignerReturnView = "templates";
       this._displaySettingsView = stayInCatalog ? "templates" : "designer";
 
       // Load template objects into canvas state. _applyTemplate ends with its
@@ -510,7 +515,7 @@ export const inspectorMixin = {
       this._templateOrientationMenuOpen = false;
       this._templateSettingsDialogOpen = false;
       this._pendingDisplayTemplateConflict = null;
-      this._displayDesignerReturnView = "templates";
+      this._templateDesignerReturnView = "templates";
       this._displaySettingsView = "designer";
       // See the matching branch in openDisplayTemplate above for why this
       // must not render+paint a second time after _applyTemplate already did.
@@ -1672,6 +1677,30 @@ export const inspectorMixin = {
       this._render();
       this._paint();
     }));
+    this.shadowRoot.querySelectorAll("[data-gateway-map-mode]").forEach((button) => button.addEventListener("click", () => {
+      this._gatewayMapMode = button.dataset.gatewayMapMode;
+      this._saveUiPreference("gateway-map-mode", this._gatewayMapMode);
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelectorAll("[data-map-focus-device]").forEach((node) => node.addEventListener("click", () => {
+      const address = node.dataset.mapFocusDevice;
+      this._gatewayMapFocusAddress = this._gatewayMapFocusAddress === address ? "" : address;
+      this._render();
+      this._paint();
+    }));
+    this.shadowRoot.querySelector("[data-map-reset-view]")?.addEventListener("click", () => {
+      this._gatewayMapView = { scale: 1, x: 0, y: 0 };
+      this._render();
+      this._paint();
+    });
+    // Stary uzel se vzdy zahodi spolu s .page - listenery zavesene na nem same
+    // odejdou s nim, ale ty pripojene na window (kolo/tazeni presahujici svg)
+    // je treba odpojit rucne, jinak by se pri kazdem _bind() hromadily.
+    if (this._gwmapPanMove) window.removeEventListener("mousemove", this._gwmapPanMove);
+    if (this._gwmapPanEnd) window.removeEventListener("mouseup", this._gwmapPanEnd);
+    const gwmapSvg = this.shadowRoot.querySelector(".gwmap-svg");
+    if (gwmapSvg) this._bindGatewayMapViewport(gwmapSvg);
     this.shadowRoot.querySelectorAll("[data-layer-select]").forEach((button) => button.addEventListener("click", (event) => {
       const id = button.dataset.layerSelect;
       if (event.shiftKey) {

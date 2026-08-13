@@ -42,8 +42,19 @@ class TransferCompletionTests(unittest.TestCase):
 
         self.assertIn('"display-acknowledged GATT flow control"', source)
         self.assertIn('"display-notification flow control"', source)
+        self.assertIn(
+            '"paced write-without-response with a final GATT fence"',
+            source,
+        )
+        self.assertIn("paced_large_stream = (", source)
+        self.assertIn("and not paced_large_stream", source)
+        self.assertIn(
+            'and "write-without-response" in write_char.properties',
+            source,
+        )
         self.assertIn("block_number == total_blocks - 1", section)
         self.assertIn("large_display_final_fence = (", section)
+        self.assertIn("paced_large_stream\n", section)
         self.assertIn("require_gatt_response or large_display_final_fence", section)
         self.assertNotIn("checkpoint_response", section)
         self.assertIn("int(sdk_type) in PACED_LARGE_STREAM_SDK_TYPES", section)

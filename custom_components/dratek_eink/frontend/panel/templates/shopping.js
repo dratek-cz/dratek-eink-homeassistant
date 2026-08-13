@@ -34,13 +34,16 @@ export const template = {
   design: ({ v }) => [
     { text: "Nákupní seznam", h: 0.075, size: 0.048, bold: true },
     { rule: true, h: 0.02 },
+    // 0.55 left over a fifth of the panel as bare flex before the footer -
+    // checklist rows scale with their own share of box height, so growing
+    // this gives all five lines more room instead of leaving it unused.
     { checklist: [
       { label: v(1, "Mléko"), done: true },
       { label: "Chléb", done: true },
       { label: v(0, "Jablka") },
       { label: "Káva" },
       { label: "Prací gel" },
-    ], marker: "box", strike: true, h: 0.55 },
+    ], marker: "box", strike: true, h: 0.72 },
     { flex: true },
     { footer: [{ label: "ZBÝVÁ", value: v(2, "3 položky") }], h: 0.14 },
   ],

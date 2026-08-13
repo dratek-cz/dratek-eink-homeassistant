@@ -130,7 +130,7 @@ class AutomationBindingTests(unittest.TestCase):
     def test_refresh_interval_clamps_old_one_second_configs(self):
         refresh_interval = automation.EntityAutoUpdateManager._refresh_interval
 
-        self.assertEqual(60, refresh_interval({}))
+        self.assertEqual(600, refresh_interval({}))
         self.assertEqual(30, refresh_interval({"refresh_interval_seconds": 1}))
         self.assertEqual(45, refresh_interval({"refresh_interval_seconds": 45}))
 
@@ -817,6 +817,71 @@ class AutomationBindingTests(unittest.TestCase):
         self.assertEqual("70 %", meters[0]["text"])
         self.assertEqual("Vlhkost", meters[0]["label"])
         self.assertEqual("red", meters[0]["color"])
+
+    def test_current_binding_values_isolates_a_failing_binding(self):
+        # A single binding raising (a non-numeric ratio divisor here, but any
+        # bad stored value behaves the same) used to abort the whole render:
+        # _current_binding_values propagated the exception straight out of
+        # async_render_preview, so no binding on the display got a fresh
+        # value and no display write ever happened. Because the failure never
+        # reached the transfer queue, it produced no queue job and no visible
+        # error either - the display just silently stopped receiving updates
+        # for as long as that one binding kept failing. Every other binding
+        # must still resolve from live state even while one of them is broken.
+        manager = automation.EntityAutoUpdateManager.__new__(automation.EntityAutoUpdateManager)
+        manager.hass = types.SimpleNamespace(
+            states=_States({"sensor.temperature": _State("21.5", unit_of_measurement="°C")})
+        )
+        manager._chart_series = {}
+        bindings = [
+            {
+                "id": "broken",
+                "type": "ratio",
+                "meters": [{"entity_id": "sensor.aqi", "divisor": "not-a-number"}],
+                "fallback": "[]",
+            },
+            {"id": "temperature", "type": "text", "entity_id": "sensor.temperature"},
+        ]
+
+        values = manager._current_binding_values("FF:FF:92:81:46:32", bindings)
+
+        self.assertEqual("[]", values["broken"])
+        self.assertEqual("21,5 °C", values["temperature"])
+
+    def test_async_refresh_loop_survives_a_render_failure(self):
+        # The equivalent failure one layer up: a render/hardware-format
+        # exception raised inside _async_refresh itself (before it ever
+        # reaches the transfer queue) used to escape _async_refresh_loop as
+        # an unretrieved task exception with no display address attached.
+        # The loop must log it and keep its bookkeeping consistent so the
+        # next scheduled refresh - not a wedged one - gets a real chance.
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager._configs = {
+            address: {
+                "enabled": True,
+                "bindings": [{"type": "text", "entity_id": "sensor.time"}],
+                "refresh_interval_seconds": 1,
+            }
+        }
+        manager._pending_refreshes = {address}
+        manager._refresh_tasks = {}
+        manager._last_refresh_at = {}
+        attempts = []
+
+        async def failing_refresh(current_address):
+            attempts.append(current_address)
+            raise ValueError("boom")
+
+        manager._async_refresh = failing_refresh
+
+        asyncio.run(manager._async_refresh_loop(address))
+
+        self.assertEqual([address], attempts)
+        self.assertNotIn(address, manager._pending_refreshes)
+        self.assertIn(address, manager._last_refresh_at)
 
     def test_series_binding_reads_the_live_timestamped_attribute_series(self):
         manager = automation.EntityAutoUpdateManager.__new__(automation.EntityAutoUpdateManager)
@@ -1536,6 +1601,56 @@ class SplitLayoutAutomationTests(unittest.TestCase):
             ],
         }
         self.assertTrue(automation.EntityAutoUpdateManager._is_split_or_multi_template_config(config))
+
+
+class SystemAndClimateAutomaticValueTests(unittest.TestCase):
+    def test_internal_time_and_date_system_values_resolve_dynamically(self):
+        time_binding = {"entity_id": "internal:time", "kind": "time", "fallback": "10:00"}
+        date_binding = {"entity_id": "internal:date", "kind": "date", "fallback": "1. ledna"}
+        interval_binding = {"entity_id": "internal:interval", "kind": "interval", "fallback": "10:00–11:00"}
+
+        time_val = automation.EntityAutoUpdateManager._state_value(None, time_binding)
+        date_val = automation.EntityAutoUpdateManager._state_value(None, date_binding)
+        interval_val = automation.EntityAutoUpdateManager._state_value(None, interval_binding)
+
+        self.assertRegex(time_val, r"^\d{2}:\d{2}$")
+        self.assertRegex(date_val, r"^\d{1,2}\.\s+[a-zčěšžřšťúůáéíóý]+$")
+        self.assertRegex(interval_val, r"^\d{2}:\d{2}–\d{2}:\d{2}$")
+
+    def test_climate_entity_resolves_temperatures_and_action(self):
+        class FakeState:
+            def __init__(self, state, attributes):
+                self.state = state
+                self.attributes = attributes
+
+        state = FakeState("heat", {
+            "current_temperature": 21.5,
+            "temperature": 22.0,
+            "hvac_action": "heating",
+            "temperature_unit": "°C",
+        })
+
+        temp_binding = {"entity_id": "climate.thermostat", "kind": "temperature", "label": "Teplota"}
+        target_binding = {"entity_id": "climate.thermostat", "kind": "temperature", "label": "Cílová teplota"}
+        action_binding = {"entity_id": "climate.thermostat", "kind": "text", "label": "Výkon topení"}
+
+        self.assertEqual("21,5 °C", automation.EntityAutoUpdateManager._state_value(state, temp_binding))
+        self.assertEqual("22 °C", automation.EntityAutoUpdateManager._state_value(state, target_binding))
+        self.assertEqual("Topí", automation.EntityAutoUpdateManager._state_value(state, action_binding))
+
+    def test_weather_entity_resolves_temperature_with_unit(self):
+        class FakeState:
+            def __init__(self, state, attributes):
+                self.state = state
+                self.attributes = attributes
+
+        state = FakeState("sunny", {
+            "temperature": 25.0,
+            "temperature_unit": "°C",
+        })
+
+        weather_binding = {"entity_id": "weather.home", "kind": "temperature", "label": "Teplota"}
+        self.assertEqual("25 °C", automation.EntityAutoUpdateManager._state_value(state, weather_binding))
 
 
 if __name__ == "__main__":

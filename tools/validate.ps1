@@ -37,6 +37,15 @@ if (-not (Get-Command $NodePath -ErrorAction SilentlyContinue)) {
     throw "Node.js nebyl nalezen ($NodePath). Nainstalujte jej (winget install OpenJS.NodeJS.LTS) nebo predejte cestu prepinacem -NodePath."
 }
 
+# Several Python regression tests execute small JavaScript reference snippets
+# through the plain `node` command. When -NodePath points to a bundled runtime
+# outside PATH, make that same runtime visible to those child processes too.
+$nodeCommand = Get-Command $NodePath -ErrorAction Stop
+$nodeDirectory = Split-Path -Parent $nodeCommand.Source
+if ($nodeDirectory -and (($env:PATH -split ";") -notcontains $nodeDirectory)) {
+    $env:PATH = "$nodeDirectory;$env:PATH"
+}
+
 Invoke-Native -Executable $PythonPath `
     -Arguments @("-m", "compileall", "-q", (Join-Path $repoRoot "custom_components\dratek_eink")) `
     -FailureMessage "Kompilace Python souboru selhala."

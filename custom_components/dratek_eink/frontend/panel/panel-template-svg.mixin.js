@@ -463,6 +463,11 @@ export const templateSvgMixin = {
   // same layout math, not something worth recomputing separately (and risking
   // it drifting from what actually gets drawn).
   _layoutTemplateSvg(rows, width, height, collector) {
+    if (rows.length === 1 && rows[0]?.dither && rows[0]?.pixelPerfect) {
+      const box = { x: 0, y: 0, w: width, h: height, fullX: 0, fullW: width };
+      if (collector && rows[0].__rowIndex !== undefined) collector.push({ rowIndex: rows[0].__rowIndex, box });
+      return this._renderTemplateBlock(rows[0], box);
+    }
     return width / height >= LANDSCAPE_ASPECT
       ? this._layoutTemplateSvgColumns(rows, width, height, collector)
       : this._layoutTemplateSvgStacked(rows, width, height, collector);
@@ -606,6 +611,7 @@ export const templateSvgMixin = {
     if (row.meters) return this._blockMeters(row, box);
     if (row.ring) return this._blockRing(row, box);
     if (row.dial) return this._blockDial(row, box);
+    if (row.dither) return this._blockDither(row, box);
     if (row.grid) return this._blockGrid(row, box);
     if (row.steps) return this._blockSteps(row, box);
     if (row.checklist) return this._blockChecklist(row, box);
@@ -864,6 +870,57 @@ export const templateSvgMixin = {
     return parts.join("");
   },
 
+  // Exact-palette 2×2 pixel patterns for the hardware shading test. The SVG is
+  // rasterized at the panel's native resolution, so patternUnits=userSpaceOnUse
+  // keeps every pattern cell one physical output pixel instead of blending it
+  // into an intermediate RGB colour that the e-ink quantizer would discard.
+  _blockDither(row, box) {
+    const cells = Array.isArray(row.dither) ? row.dither : [];
+    if (!cells.length) return "";
+    const columns = Math.max(1, Math.min(cells.length, Number(row.columns) || 4));
+    const lines = Math.max(1, Math.ceil(cells.length / columns));
+    const left = Math.round(box.x);
+    const top = Math.round(box.y);
+    const right = Math.round(box.x + box.w);
+    const bottom = Math.round(box.y + box.h);
+    const gridWidth = Math.max(1, right - left);
+    const gridHeight = Math.max(1, bottom - top);
+    const serial = this._ditherPatternSerial = (this._ditherPatternSerial || 0) + 1;
+    const ink = (color) => color === "white" ? "#ffffff" : this._templateInk(color);
+    const parts = [];
+
+    cells.forEach((cell, index) => {
+      const column = index % columns;
+      const line = Math.floor(index / columns);
+      const x = Math.round(left + gridWidth * column / columns);
+      const y = Math.round(top + gridHeight * line / lines);
+      const nextX = Math.round(left + gridWidth * (column + 1) / columns);
+      const nextY = Math.round(top + gridHeight * (line + 1) / lines);
+      const cellWidth = Math.max(1, nextX - x);
+      const cellHeight = Math.max(1, nextY - y);
+      const density = Math.max(0, Math.min(1, Number(cell.density) || 0));
+      const base = ink(cell.base || "white");
+      const foreground = ink(cell.ink || "black");
+      const patternId = `dratek-dither-${serial}-${index}`;
+      const foregroundPixels = density >= 1
+        ? '<rect width="2" height="2"></rect>'
+        : density >= 0.75
+          ? '<path d="M0 0h1v1H0zM1 0h1v1H1zM0 1h1v1H0z"></path>'
+          : density >= 0.5
+            ? '<path d="M0 0h1v1H0zM1 1h1v1H1z"></path>'
+            : density >= 0.25
+              ? '<rect width="1" height="1"></rect>'
+              : "";
+      parts.push(
+        `<defs><pattern id="${patternId}" patternUnits="userSpaceOnUse" width="2" height="2" shape-rendering="crispEdges">`
+        + `<rect width="2" height="2" fill="${base}"></rect>`
+        + `<g fill="${foreground}">${foregroundPixels}</g></pattern></defs>`,
+      );
+      parts.push(`<rect x="${x}" y="${y}" width="${cellWidth}" height="${cellHeight}" fill="url(#${patternId})" shape-rendering="crispEdges"></rect>`);
+    });
+    return parts.join("");
+  },
+
   // Tiles of equal weight. A list ranks what it stacks; a grid says these readings
   // are peers, which is what a room summary actually means.
   _blockGrid(row, box) {
@@ -907,7 +964,13 @@ export const templateSvgMixin = {
         parts.push(item.done
           ? `<circle cx="${cx.toFixed(2)}" cy="${lineY.toFixed(2)}" r="${dot.toFixed(2)}" fill="${this._templateInk(item.color)}"></circle>`
           : `<circle cx="${cx.toFixed(2)}" cy="${lineY.toFixed(2)}" r="${dot.toFixed(2)}" fill="#ffffff" stroke="${BLACK}" stroke-width="1"></circle>`);
-        parts.push(this._svgText(item.label, cx, box.y + box.h * 0.75, Math.max(8.5, box.h * 0.28), { bold: !!item.done, color: this._templateInk(item.color), maxWidth: step * 0.96 }));
+        // Sized from box.h alone, a tall column with many close-together steps asked
+        // for a font far bigger than any one step's own width could ever hold, then
+        // leaned on the same single-shot proportional shrink as the strip block
+        // above - the same glyph-estimate margin problem, just reached from a
+        // wildly oversized starting point instead of a merely tight one. Capping
+        // the ask by the step's own width keeps the correction small.
+        parts.push(this._svgText(item.label, cx, box.y + box.h * 0.75, Math.max(8.5, Math.min(box.h * 0.28, step * 0.3)), { bold: !!item.done, color: this._templateInk(item.color), maxWidth: step * 0.94 }));
       });
       return parts.join("");
     }
@@ -976,9 +1039,17 @@ export const templateSvgMixin = {
     cells.forEach((cell, index) => {
       const cx = box.x + cellWidth * (index + 0.5);
       if (index > 0) parts.push(this._svgHairline(box.x + cellWidth * index, box.y + box.h * 0.12, 1, box.h * 0.76));
-      parts.push(this._svgText(cell.label, cx, labelY, Math.max(8.5, Math.min(box.h * 0.25, cellWidth * 0.32)), { bold: true, maxWidth: cellWidth * 0.9 }));
+      // maxWidth here is a soft target, not a hard measurement: the glyph-width
+      // table behind it is an estimate (there is no way to measure real text
+      // extents inside a detached SVG string - see the file header), and it can
+      // run a little narrow for glyphs it does not special-case, like the "³"
+      // in "0,84 m³". A value sized right up to that edge used to land close
+      // enough that a small estimation error tipped it into ellipsis-clipping
+      // instead of just shrinking a few px. Sizing a bit under the box's own
+      // ceiling leaves that error margin instead of spending it.
+      parts.push(this._svgText(cell.label, cx, labelY, Math.max(8.5, Math.min(box.h * 0.25, cellWidth * 0.3)), { bold: true, maxWidth: cellWidth * 0.92 }));
       if (cell.icon) parts.push(this._svgIcon(cell.icon, cx, box.y + box.h * 0.5, Math.min(box.h * 0.34, cellWidth * 0.5), this._templateInk(cell.color)));
-      parts.push(this._svgText(cell.value, cx, valueY, Math.max(10, Math.min(box.h * 0.32, cellWidth * 0.36)), { bold: true, color: this._templateInk(cell.color), maxWidth: cellWidth * 0.9 }));
+      parts.push(this._svgText(cell.value, cx, valueY, Math.max(10, Math.min(box.h * 0.32, cellWidth * 0.33)), { bold: true, color: this._templateInk(cell.color), maxWidth: cellWidth * 0.92 }));
     });
     return parts.join("");
   },

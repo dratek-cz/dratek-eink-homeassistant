@@ -248,11 +248,11 @@ class DratekTransfer:
     ) -> None:
         if int(sdk_type) not in PARTIAL_UPDATE_CONFIRMED_SDK_TYPES:
             self.log(
-                f"Partial update on SDK type {sdk_type} is untested - the vendor SDK does not "
-                "restrict it by model, but only type(s) "
+                f"Partial update on SDK type {sdk_type} is unsupported by the vendor SDK, "
+                "which can only pack a partial image for type(s) "
                 f"{', '.join(str(item) for item in sorted(PARTIAL_UPDATE_CONFIRMED_SDK_TYPES))} "
-                "have been confirmed on hardware. If the display ignores it or refreshes "
-                "incorrectly, send the whole design instead."
+                "and rejects the rest with \"not support part display\". If the display "
+                "ignores it or refreshes incorrectly, send the whole design instead."
             )
         if y % 8 != 0 or height % 8 != 0:
             raise ValueError("Partial update requires y and height to be divisible by 8.")
@@ -558,24 +558,37 @@ class DratekTransfer:
                 # A framed payload changes what a dropped block costs. Raw planes
                 # survive one: the display draws a corrupt strip and refreshes
                 # anyway. The vendor stream does not - every block after the lost
-                # one decodes against the wrong state, so the display quietly
-                # declines to refresh at all and the transfer looks like a
-                # 60-second timeout waiting for 05 08. Unconfirmed writes offer no
-                # back-pressure whatsoever, so framed payloads take the ATT
-                # response as their flow control, the same way the gateway does.
+                # one decodes against the wrong state, so it normally takes the ATT
+                # response as its flow control. The known large software-129
+                # controllers are the exception: BlueZ needs roughly 2.5 seconds
+                # for every acknowledged write, so a 419-block image exceeds the
+                # queue's 10-minute safety timeout. Those controllers support the
+                # paced write-without-response stream below and use an acknowledged
+                # final block as the delivery fence.
+                paced_large_stream = (
+                    streaming_mode
+                    and int(sdk_type) in PACED_LARGE_STREAM_SDK_TYPES
+                    and "write-without-response" in write_char.properties
+                )
                 require_gatt_response = (
                     (
                         "write" in write_char.properties
                         and int(sdk_type) in WRITE_ACK_SDK_TYPES
                     )
                     or ("write-without-response" not in write_char.properties)
-                    or (vendor_framed and "write" in write_char.properties)
+                    or (
+                        vendor_framed
+                        and "write" in write_char.properties
+                        and not paced_large_stream
+                    )
                 )
 
 
                 write_mode = (
                     "display-acknowledged GATT flow control"
                     if require_gatt_response
+                    else "paced write-without-response with a final GATT fence"
+                    if paced_large_stream
                     else "display-notification flow control"
                 )
                 self.log(
@@ -608,12 +621,11 @@ class DratekTransfer:
                         # acknowledged writes throughout the stream, but it does
                         # need the final write to act as a delivery fence before
                         # it commits the image buffer and refreshes the panel.
-                        # Keep the first 399 blocks paced and unconfirmed, then
+                        # Keep every regular block paced and unconfirmed, then
                         # request an ATT response only for the final block.
                         large_display_final_fence = (
-                            streaming_mode
+                            paced_large_stream
                             and not require_gatt_response
-                            and int(sdk_type) in PACED_LARGE_STREAM_SDK_TYPES
                             and "write" in write_char.properties
                             and block_number == total_blocks - 1
                         )

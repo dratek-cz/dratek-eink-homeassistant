@@ -285,7 +285,7 @@ const EN_EXACT = new Map(Object.entries({
 
   // HA element library and layered designer.
   "Knihovna dynamických prvků": "Dynamic element library",
-  "Stejná pracovní plocha a nástroje jako v designeru displeje, doplněné o vrstvy a pravidla Home Assistantu.": "The same workspace and tools as the display designer, extended with Home Assistant layers and rules.",
+  "Stejná pracovní plocha a nástroje jako v designeru šablon, doplněné o vrstvy a pravidla Home Assistantu.": "The same workspace and tools as the template designer, extended with Home Assistant layers and rules.",
   "Vytvořit nový prvek": "Create new element",
   "Uložených HA prvků": "Saved HA elements",
   "Stavových vrstev": "State layers",
@@ -313,7 +313,7 @@ const EN_EXACT = new Map(Object.entries({
   "Název vrstvy": "Layer name",
   "Duplikovat vrstvu": "Duplicate layer",
   "Smazat vrstvu": "Delete layer",
-  "Stejné základní a datové prvky jako v designeru displeje": "The same basic and data elements as in the display designer",
+  "Stejné základní a datové prvky jako v designeru šablon": "The same basic and data elements as in the template designer",
   "Čárový kód EAN‑13": "EAN‑13 barcode",
   "Sloupcový ukazatel": "Bar gauge",
   "Koláčový / Donut graf": "Pie / donut chart",
