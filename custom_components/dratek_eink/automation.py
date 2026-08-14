@@ -1042,6 +1042,7 @@ class EntityAutoUpdateManager:
                 show_precipitation=bool(binding.get("show_precipitation", True)),
                 dotted_light=bool(binding.get("dotted_light", True)),
                 show_wind=bool(binding.get("show_wind", False)),
+                location_address=str(binding.get("location_address") or ""),
             )
             if data_url:
                 values[str(binding.get("id"))] = data_url

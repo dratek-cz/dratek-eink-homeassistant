@@ -244,6 +244,25 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         unavailable = self._compose((0, 0, 0, 0), show_wind=True)
         self.assertEqual(list(unavailable.getdata()), list(plain.getdata()))
 
+    def test_home_location_draws_a_small_eink_safe_house_marker(self) -> None:
+        plain = self._compose((0, 0, 0, 0))
+        marked = self._compose((0, 0, 0, 0), home_location=(0.0, 0.0))
+        self.assertGreater(
+            sum(pixel == meteoradar.PRECIPITATION_COLOR for pixel in marked.getdata()),
+            sum(pixel == meteoradar.PRECIPITATION_COLOR for pixel in plain.getdata()),
+        )
+        self.assertTrue(set(marked.getdata()) <= {
+            (255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.BORDER_COLOR,
+        })
+
+    def test_address_geocoding_and_marker_are_wired_into_the_live_renderer(self) -> None:
+        source = (COMPONENT / "meteoradar.py").read_text(encoding="utf-8")
+        websocket = (COMPONENT / "ws_meteoradar.py").read_text(encoding="utf-8")
+        self.assertIn("NOMINATIM_SEARCH_URL", source)
+        self.assertIn("location_address: str = \"\"", source)
+        self.assertIn("home_location=home_location", source)
+        self.assertIn('vol.Optional("location_address"): str', websocket)
+
     def test_no_text_badge_is_baked_into_the_radar_image(self) -> None:
         source = (COMPONENT / "meteoradar.py").read_text(encoding="utf-8")
         self.assertNotIn("draw_corner_badge", source)

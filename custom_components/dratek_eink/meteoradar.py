@@ -32,6 +32,7 @@ import io
 import math
 import time
 from typing import TYPE_CHECKING
+from urllib.parse import urlencode
 
 from PIL import Image, ImageChops, ImageDraw
 
@@ -40,6 +41,7 @@ if TYPE_CHECKING:
 
 RAINVIEWER_INDEX_URL = "https://api.rainviewer.com/public/weather-maps.json"
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
 TILE_SIZE = 512
 ZOOM = 6
 COLOR_SCHEME = 2
@@ -594,6 +596,55 @@ def _scaled_border_width(extent_px: float, base_width: int) -> int:
     return base_width if ratio <= 1 else max(base_width, round(base_width * ratio))
 
 
+def _draw_home_marker(
+    image: Image.Image,
+    location: tuple[float, float] | None,
+    *,
+    zoom: int,
+    tile_size: int,
+    origin_x: float,
+    origin_y: float,
+    extent: float,
+) -> None:
+    """Draw a compact red house at ``(longitude, latitude)`` on the map."""
+    if location is None:
+        return
+    longitude, latitude = location
+    world_x, world_y = mercator_pixel(latitude, longitude, zoom, tile_size)
+    x = round(world_x - origin_x)
+    y = round(world_y - origin_y)
+    if not (0 <= x < image.width and 0 <= y < image.height):
+        return
+    size = max(10, min(34, round(extent * 0.038)))
+    stroke = max(2, _scaled_border_width(extent, 2))
+    half = size / 2
+    roof_y = y - half
+    wall_top = y - size * 0.08
+    bottom = y + half
+    left = x - half * 0.72
+    right = x + half * 0.72
+    draw = ImageDraw.Draw(image)
+    draw.polygon(
+        [(x, roof_y), (x - half, wall_top), (x + half, wall_top)],
+        fill=PRECIPITATION_COLOR,
+        outline=BORDER_COLOR,
+    )
+    draw.rectangle(
+        (round(left), round(wall_top), round(right), round(bottom)),
+        fill=PRECIPITATION_COLOR,
+        outline=BORDER_COLOR,
+        width=stroke,
+    )
+    door_w = max(3, round(size * 0.2))
+    door_h = max(4, round(size * 0.3))
+    draw.rectangle(
+        (x - door_w // 2, round(bottom) - door_h, x + door_w // 2, round(bottom)),
+        fill="white",
+        outline=BORDER_COLOR,
+        width=max(1, stroke // 2),
+    )
+
+
 def _generate_precipitation_pattern(
     size: tuple[int, int], *, dense: bool
 ) -> Image.Image:
@@ -754,6 +805,7 @@ def compose_country_radar_image(
     dotted_light: bool = True,
     show_wind: bool = False,
     wind_samples: tuple[tuple[float, float, float, float], ...] = (),
+    home_location: tuple[float, float] | None = None,
 ) -> Image.Image:
     """Stitch fetched tiles and draw the black-outlined, red/white precipitation map.
 
@@ -805,6 +857,15 @@ def compose_country_radar_image(
         _draw_wind_vectors(output, polygon, extent, projected_wind_samples)
 
     draw.polygon(polygon, outline=BORDER_COLOR, width=_scaled_border_width(extent, border_width))
+    _draw_home_marker(
+        output,
+        home_location,
+        zoom=zoom,
+        tile_size=tile_size,
+        origin_x=origin_x,
+        origin_y=origin_y,
+        extent=extent,
+    )
 
     crop_box = (
         max(0, int(min(xs)) - margin),
@@ -832,6 +893,7 @@ def compose_multi_country_radar_image(
     dotted_light: bool = True,
     show_wind: bool = False,
     wind_samples: tuple[tuple[float, float, float, float], ...] = (),
+    home_location: tuple[float, float] | None = None,
 ) -> Image.Image:
     """The Europe-overview counterpart to `compose_country_radar_image`."""
     grid_width = (x_max - x_min + 1) * tile_size
@@ -884,6 +946,15 @@ def compose_multi_country_radar_image(
         if show_wind:
             _draw_wind_vectors(output, polygon, extent, projected_wind_samples)
         output_draw.polygon(polygon, outline=BORDER_COLOR, width=scaled_width)
+    _draw_home_marker(
+        output,
+        home_location,
+        zoom=zoom,
+        tile_size=tile_size,
+        origin_x=origin_x,
+        origin_y=origin_y,
+        extent=extent,
+    )
 
     crop_box = (
         max(0, int(min(xs)) - margin),
@@ -908,6 +979,49 @@ def fit_to_size(image: Image.Image, width: int, height: int) -> Image.Image:
 
 _cache: dict[str, dict[str, object]] = {}
 _wind_cache: dict[str, dict[str, object]] = {}
+_geocode_cache: dict[str, dict[str, object]] = {}
+
+
+async def _async_geocode_address(
+    hass: "HomeAssistant", address: str, country: str
+) -> tuple[float, float] | None:
+    """Resolve a user-entered address to ``(longitude, latitude)`` with caching."""
+    normalized = " ".join(str(address or "").strip().split())
+    if not normalized:
+        return None
+    country_key = str(country or "cz").lower()
+    key = f"{country_key}:{normalized.casefold()}"
+    now = time.monotonic()
+    cached = _geocode_cache.get(key)
+    if cached and now - float(cached.get("checked_at", 0)) < 24 * 60 * 60:
+        return cached.get("location")  # type: ignore[return-value]
+
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+    query = {"q": normalized, "format": "jsonv2", "limit": "1"}
+    if country_key in COUNTRY_BORDERS:
+        query["countrycodes"] = country_key
+    url = f"{NOMINATIM_SEARCH_URL}?{urlencode(query)}"
+    try:
+        session = async_get_clientsession(hass)
+        async with session.get(
+            url,
+            timeout=HTTP_TIMEOUT_SECONDS,
+            headers={"User-Agent": "DRATEK-eInk-HomeAssistant/0.1.295"},
+        ) as response:
+            if response.status != 200:
+                raise RuntimeError(f"Nominatim HTTP {response.status}")
+            payload = await response.json(content_type=None)
+        first = payload[0] if isinstance(payload, list) and payload else None
+        location = (
+            (float(first["lon"]), float(first["lat"]))
+            if isinstance(first, dict) and "lon" in first and "lat" in first
+            else None
+        )
+    except Exception:
+        location = None
+    _geocode_cache[key] = {"location": location, "checked_at": now}
+    return location
 
 
 async def _async_fetch_json(hass: "HomeAssistant", url: str) -> object:
@@ -994,11 +1108,13 @@ async def _async_composed_base_image(
     show_precipitation: bool = True,
     dotted_light: bool = True,
     show_wind: bool = False,
+    home_location: tuple[float, float] | None = None,
 ) -> Image.Image | None:
     """Return the current country (or "eu" overview) map at native resolution,
     refetching only when RainViewer's own frame timestamp has actually moved on.
     """
-    key = f"{str(country or 'cz').lower()}_p{int(show_precipitation)}_d{int(dotted_light)}_w{int(show_wind)}"
+    marker_key = "none" if home_location is None else f"{home_location[0]:.5f},{home_location[1]:.5f}"
+    key = f"{str(country or 'cz').lower()}_p{int(show_precipitation)}_d{int(dotted_light)}_w{int(show_wind)}_h{marker_key}"
     country_key = str(country or "cz").lower()
     is_europe = country_key == "eu"
     all_points = (
@@ -1069,6 +1185,7 @@ async def _async_composed_base_image(
                 dotted_light=dotted_light,
                 show_wind=show_wind,
                 wind_samples=wind_samples,
+                home_location=home_location,
             )
         )
     else:
@@ -1087,6 +1204,7 @@ async def _async_composed_base_image(
                 dotted_light=dotted_light,
                 show_wind=show_wind,
                 wind_samples=wind_samples,
+                home_location=home_location,
             )
         )
     _cache[key] = {
@@ -1104,16 +1222,19 @@ async def async_render_meteoradar(
     show_precipitation: bool = True,
     dotted_light: bool = True,
     show_wind: bool = False,
+    location_address: str = "",
 ) -> Image.Image | None:
     """Return the live precipitation map for the requested country - or, for
     country="eu", the multi-country Europe overview - at its own cropped aspect.
     """
+    home_location = await _async_geocode_address(hass, location_address, country)
     base = await _async_composed_base_image(
         hass,
         country=country,
         show_precipitation=show_precipitation,
         dotted_light=dotted_light,
         show_wind=show_wind,
+        home_location=home_location,
     )
     if base is None:
         return None

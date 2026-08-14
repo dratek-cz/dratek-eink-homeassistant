@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.295";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js";
 
 export const devicesMixin = {
@@ -1172,13 +1172,13 @@ export const devicesMixin = {
                 </div>`}
               </div>
               <div class="display-template-tile-actions">
-                <button type="button" class="display-template-card-action" data-display-template-edit-menu="${template.id}" aria-expanded="${this._templateEditMenuId === template.id}"><ha-icon icon="mdi:${onDisplay ? "check-circle" : "tune-variant"}"></ha-icon>Upravit šablonu<ha-icon icon="mdi:chevron-down"></ha-icon></button>
+                <button type="button" class="display-template-card-action" data-display-template-edit-menu="${template.id}" aria-expanded="${this._templateEditMenuId === template.id}"><ha-icon icon="mdi:${customImageCard ? "image-edit-outline" : onDisplay ? "check-circle" : "tune-variant"}"></ha-icon>${customImageCard ? "Spravovat obrázky" : "Upravit šablonu"}<ha-icon icon="mdi:chevron-down"></ha-icon></button>
               </div>
               ${this._templateEditMenuId === template.id ? `<div class="display-template-card-edit-view" role="menu" aria-label="Možnosti úpravy šablony ${this._escape(template.title)}">
                 <header class="card-edit-header">
-                  <span class="card-edit-kind-icon"><ha-icon icon="mdi:tune-variant"></ha-icon></span>
+                  <span class="card-edit-kind-icon"><ha-icon icon="mdi:${customImageCard ? "image-multiple-outline" : "tune-variant"}"></ha-icon></span>
                   <div class="card-edit-identity">
-                    <strong>Možnosti úpravy</strong>
+                    <strong>${customImageCard ? "Obrázkové studio" : "Možnosti úpravy"}</strong>
                     <small>${this._escape(template.title)}</small>
                   </div>
                   <button type="button" class="card-edit-close-btn" data-display-template-edit-menu="${template.id}" title="Zavřít nastavení">
@@ -1187,7 +1187,32 @@ export const devicesMixin = {
                 </header>
 
                 <div class="card-edit-options">
-                  <button type="button" class="card-edit-option-btn" data-display-template-edit-choice="variables" data-display-template-id="${this._escape(template.id)}">
+                  ${customImageCard ? `<button type="button" class="card-edit-option-btn" data-display-template-edit-choice="download" data-display-template-id="custom_image" ${this._activeCustomImageAsset() || this._customImageDataUrl ? "" : "disabled"}>
+                    <span class="option-icon"><ha-icon icon="mdi:download-outline"></ha-icon></span>
+                    <div class="option-text">
+                      <strong>Stáhnout obrázek</strong>
+                      <small>Uložit právě vybranou eInk variantu</small>
+                    </div>
+                    <ha-icon icon="mdi:download" class="option-arrow"></ha-icon>
+                  </button>
+
+                  <button type="button" class="card-edit-option-btn" data-display-template-edit-choice="images" data-display-template-id="custom_image">
+                    <span class="option-icon"><ha-icon icon="mdi:image-edit-outline"></ha-icon></span>
+                    <div class="option-text">
+                      <strong>Upravit obrázky</strong>
+                      <small>Otevřít náhled a přidat nebo změnit obrázek</small>
+                    </div>
+                    <ha-icon icon="mdi:chevron-right" class="option-arrow"></ha-icon>
+                  </button>
+
+                  <button type="button" class="card-edit-option-btn" data-display-template-edit-choice="gallery" data-display-template-id="custom_image">
+                    <span class="option-icon"><ha-icon icon="mdi:image-multiple-outline"></ha-icon></span>
+                    <div class="option-text">
+                      <strong>Galerie a střídání</strong>
+                      <small>Vybrat snímky a nastavit automatický cyklus</small>
+                    </div>
+                    <ha-icon icon="mdi:chevron-right" class="option-arrow"></ha-icon>
+                  </button>` : `<button type="button" class="card-edit-option-btn" data-display-template-edit-choice="variables" data-display-template-id="${this._escape(template.id)}">
                     <span class="option-icon"><ha-icon icon="mdi:database-edit-outline"></ha-icon></span>
                     <div class="option-text">
                       <strong>Upravit zdroje dat</strong>
@@ -1212,7 +1237,7 @@ export const devicesMixin = {
                       <small>Stáhnout šablonu jako .json soubor</small>
                     </div>
                     <ha-icon icon="mdi:download" class="option-arrow"></ha-icon>
-                  </button>
+                  </button>`}
 
                   ${userCreated ? `<button type="button" class="card-edit-option-btn is-delete" data-delete-user-template="${this._escape(template.id)}">
                     <span class="option-icon is-delete-icon"><ha-icon icon="mdi:trash-can-outline"></ha-icon></span>
@@ -1457,6 +1482,10 @@ export const devicesMixin = {
       image_library: structuredClone(this._templateImageLibrary || []),
       designer_viewport: this._templateDesignerViewport || "wide",
       meteoradar_country: this._meteoradarCountry || "cz",
+      meteoradar_home_address: this._meteoradarHomeAddress || "",
+      meteoradar_show_precipitation: this._displayTemplateConfig?.meteoradar_show_precipitation !== false,
+      meteoradar_dotted_light: this._displayTemplateConfig?.meteoradar_dotted_light !== false,
+      meteoradar_show_wind: this._displayTemplateConfig?.meteoradar_show_wind === true,
       custom_image_data: this._customImageDataUrl || "",
       custom_image_source: this._customImageSourceUrl || "",
       custom_image_variants: structuredClone(this._customImageVariants || {}),
@@ -1474,6 +1503,14 @@ export const devicesMixin = {
     this._templateRedoStack = [];
     this._templatePropertyHistoryKey = "";
     this._meteoradarCountry = config?.meteoradar_country || "cz";
+    this._meteoradarHomeAddress = String(config?.meteoradar_home_address || "");
+    this._displayTemplateConfig = {
+      meteoradar_country: this._meteoradarCountry,
+      meteoradar_home_address: this._meteoradarHomeAddress,
+      meteoradar_show_precipitation: config?.meteoradar_show_precipitation !== false,
+      meteoradar_dotted_light: config?.meteoradar_dotted_light !== false,
+      meteoradar_show_wind: config?.meteoradar_show_wind === true,
+    };
     this._customImageDataUrl = String(config?.custom_image_data || "").startsWith("data:image/")
       ? String(config.custom_image_data)
       : "";
@@ -1749,6 +1786,45 @@ export const devicesMixin = {
     return this._queueDeviceDraftSave(device, payload);
   },
 
+  _handleCustomImageCardAction(choice = "images") {
+    if (choice === "download") {
+      const active = this._activeCustomImageAsset();
+      const source = active ? this._paletteImageSrc(active) : this._customImageDataUrl;
+      if (!source) return;
+      const anchor = document.createElement("a");
+      anchor.href = source;
+      anchor.download = String(active?.name || this._customImageName || "dratek-eink.png").replace(/\.[^.]+$/, "") + "-eink.png";
+      anchor.click();
+      this._render();
+      this._paint();
+      return;
+    }
+    const template = this._displayTemplateCards().find((item) => item.id === "custom_image");
+    if (!template) return;
+    if (!this._customImageDataUrl) {
+      this._useBundledCustomImageTemplate().catch((error) => {
+        this._templateSendResult = { ok: false, message: this._message(error) };
+        this._render();
+      });
+    }
+    this._rememberActiveTemplateEditorState?.();
+    this._prepareDisplayTemplateBindings(template);
+    this._selectedDisplayTemplateId = "custom_image";
+    this._selectedDisplayTemplateSecondaryId = "";
+    this._selectedTemplateCanvasSlot = "primary";
+    this._displayTemplateLargeLayout = "single";
+    this._templateOrientationMenuOpen = false;
+    this._templateSettingsDialogOpen = false;
+    this._pendingDisplayTemplateConflict = null;
+    this._templateDesignerReturnView = "templates";
+    this._displaySettingsView = "designer";
+    this._applyTemplate("custom_image", true);
+    this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
+    if (choice === "gallery") {
+      requestAnimationFrame(() => this.shadowRoot.querySelector("[data-custom-image-gallery]")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+  },
+
   _renderCustomImageStudio(device) {
     const assets = this._templateImageLibrary || [];
     const active = assets.find((asset) => asset.id === this._customImageActiveId)
@@ -1936,6 +2012,7 @@ export const devicesMixin = {
     const showPrecipitation = config.meteoradar_show_precipitation !== false;
     const dottedLight = config.meteoradar_dotted_light !== false;
     const showWind = config.meteoradar_show_wind === true;
+    const homeAddress = this._meteoradarHomeAddress || config.meteoradar_home_address || "";
 
     return `<div class="interactive-country-map-widget">
       <div class="country-map-header">
@@ -1995,6 +2072,12 @@ export const devicesMixin = {
           <span class="country-name">${this._escape(c.name)}</span>
         </button>`).join("")}
       </div>
+
+      <label class="meteoradar-home-address">
+        <span class="meteoradar-home-address-icon"><ha-icon icon="mdi:home-map-marker"></ha-icon></span>
+        <span class="meteoradar-home-address-copy"><strong>Označit můj domov</strong><small>Zadejte ulici, město a PSČ. Na výsledné mapě se vykreslí malá červená ikona domu.</small></span>
+        <input type="text" data-meteoradar-home-address data-device-address="${this._escape(address)}" value="${this._escape(homeAddress)}" placeholder="Např. Václavské náměstí 1, Praha" autocomplete="street-address">
+      </label>
 
       <div class="meteoradar-options-card" style="margin-top: 14px; padding: 12px 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
@@ -3019,6 +3102,7 @@ export const devicesMixin = {
         show_precipitation: this._displayTemplateConfig?.meteoradar_show_precipitation !== false,
         dotted_light: this._displayTemplateConfig?.meteoradar_dotted_light !== false,
         show_wind: this._displayTemplateConfig?.meteoradar_show_wind === true,
+        location_address: this._meteoradarHomeAddress || this._displayTemplateConfig?.meteoradar_home_address || "",
       });
     }
     // currentDocument's tagged nodes are what the backend substitutes fresh

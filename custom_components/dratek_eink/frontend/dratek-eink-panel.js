@@ -2,21 +2,21 @@ import { storageMixin } from "./panel/panel-storage.mixin.js";
 import { queueMixin } from "./panel/panel-queue.mixin.js?v=queue-pinned-2";
 import { automationsMixin } from "./panel/panel-automations.mixin.js?v=writing-highlight-2";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=usb-fields-4";
-import { devicesMixin } from "./panel/panel-devices.mixin.js?v=catalog-lazy-1";
-import { projectsMixin } from "./panel/panel-projects.mixin.js?v=template-save-queue-1";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=0.1.295";
+import { projectsMixin } from "./panel/panel-projects.mixin.js?v=0.1.295";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
 import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-3";
 import { templatesMixin } from "./panel/panel-templates.mixin.js?v=readable-chart-type-2";
 import { variablesMixin } from "./panel/panel-variables.mixin.js?v=readable-chart-type-2";
 import { previewMixin } from "./panel/panel-preview.mixin.js?v=device-preview-quality-1";
-import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=catalog-lazy-1";
+import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=0.1.295";
 import { i18nMixin } from "./panel/panel-i18n.mixin.js";
-import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=catalog-lazy-1";
+import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=0.1.295";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js?v=templates-4c-1";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
-import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=catalog-lazy-1";
+import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=0.1.295";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.295";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -42,6 +42,8 @@ class DratekEinkPanel extends HTMLElement {
     this._displayTemplateOrientation = "portrait";
     this._displayTemplateLargeLayout = "single";
     this._displayTemplateBindings = {};
+    this._displayTemplateConfig = {};
+    this._meteoradarHomeAddress = "";
     this._templateOrientationMenuOpen = false;
     this._templateEditorElements = [];
     this._templateEditorStates = {};
@@ -189,6 +191,41 @@ class DratekEinkPanel extends HTMLElement {
     this._devicePreviewRequests = new Map();
   }
 
+  _openCustomImageStudioView(choice = "images") {
+    if (choice === "download") {
+      const active = this._activeCustomImageAsset?.();
+      const source = active ? this._paletteImageSrc?.(active) : this._customImageDataUrl;
+      if (!source) return;
+      const anchor = document.createElement("a");
+      anchor.href = source;
+      anchor.download = String(active?.name || this._customImageName || "dratek-eink.png").replace(/\.[^.]+$/, "") + "-eink.png";
+      anchor.click();
+      return;
+    }
+    if (!this._customImageDataUrl) {
+      this._useBundledCustomImageTemplate?.().catch((error) => {
+        this._templateSendResult = { ok: false, message: this._message?.(error) || String(error) };
+        this._render();
+      });
+    }
+    this._selectedDisplayTemplateId = "custom_image";
+    this._selectedDisplayTemplateSecondaryId = "";
+    this._selectedTemplateCanvasSlot = "primary";
+    this._displayTemplateLargeLayout = "single";
+    this._templateOrientationMenuOpen = false;
+    this._templateSettingsDialogOpen = false;
+    this._templateEditMenuId = "";
+    this._pendingDisplayTemplateConflict = null;
+    this._templateDesignerReturnView = "templates";
+    this._displaySettingsView = "designer";
+    this._render();
+    this._paint();
+    this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
+    if (choice === "gallery") {
+      requestAnimationFrame(() => this.shadowRoot.querySelector("[data-custom-image-gallery]")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+  }
+
   connectedCallback() {
     // Keyboard shortcuts must also work after a pointer click on the canvas.
     // Such a click does not necessarily focus the custom element, so a listener
@@ -196,6 +233,42 @@ class DratekEinkPanel extends HTMLElement {
     if (!this._designerGlobalKeyHandler) {
       this._designerGlobalKeyHandler = (event) => this._onKeyDown?.(event);
       window.addEventListener("keydown", this._designerGlobalKeyHandler, true);
+    }
+    // The template catalog is replaced wholesale on every render. Keep the
+    // custom-image card controls on the stable shadow root so they cannot lose
+    // their click handler while a lazy preview or an image import is repainting
+    // the catalog underneath the pointer.
+    if (!this._customImageCardClickHandler) {
+      this._customImageCardClickHandler = (event) => {
+        const back = event.composedPath().find((node) => node?.hasAttribute?.("data-template-editor-back"));
+        if (back && this._selectedDisplayTemplateId === "custom_image") {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          this._templateEditMenuId = "";
+          this._displaySettingsView = "templates";
+          this._render();
+          this._paint();
+          this.shadowRoot.querySelector('[data-display-template-drag="custom_image"]')?.scrollIntoView({ block: "center" });
+          return;
+        }
+        const menu = event.composedPath().find((node) => node?.dataset?.displayTemplateEditMenu === "custom_image");
+        if (menu) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          this._templateEditMenuId = this._templateEditMenuId === "custom_image" ? "" : "custom_image";
+          this._render();
+          this._paint();
+          return;
+        }
+        const choice = event.composedPath().find((node) => node?.dataset?.displayTemplateId === "custom_image" && node?.dataset?.displayTemplateEditChoice);
+        const configure = event.composedPath().find((node) => node?.dataset?.displayTemplateConfigure === "custom_image");
+        if (!choice && !configure) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        this._templateEditMenuId = "";
+        this._openCustomImageStudioView(choice?.dataset?.displayTemplateEditChoice || "images");
+      };
+      this.shadowRoot.addEventListener("click", this._customImageCardClickHandler, true);
     }
     this._render();
     this._paint();
@@ -212,6 +285,10 @@ class DratekEinkPanel extends HTMLElement {
     if (this._designerGlobalKeyHandler) {
       window.removeEventListener("keydown", this._designerGlobalKeyHandler, true);
       this._designerGlobalKeyHandler = null;
+    }
+    if (this._customImageCardClickHandler) {
+      this.shadowRoot.removeEventListener("click", this._customImageCardClickHandler, true);
+      this._customImageCardClickHandler = null;
     }
     window.clearTimeout(this._propertyEditTimer);
     window.clearTimeout(this._templateEntityHistorySaveTimer);

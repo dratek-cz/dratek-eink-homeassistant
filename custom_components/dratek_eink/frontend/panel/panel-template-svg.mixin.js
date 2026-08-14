@@ -195,8 +195,9 @@ export const templateSvgMixin = {
     const showPrecipitation = this._displayTemplateConfig?.meteoradar_show_precipitation !== false;
     const dottedLight = this._displayTemplateConfig?.meteoradar_dotted_light !== false;
     const showWind = this._displayTemplateConfig?.meteoradar_show_wind === true;
+    const locationAddress = this._meteoradarHomeAddress || this._displayTemplateConfig?.meteoradar_home_address || "";
 
-    const key = `${Math.round(width)}x${Math.round(height)}_${country}_p${showPrecipitation}_d${dottedLight}_w${showWind}`;
+    const key = `${Math.round(width)}x${Math.round(height)}_${country}_p${showPrecipitation}_d${dottedLight}_w${showWind}_h${locationAddress}`;
     const cached = this._meteoradarImageCache;
     const age = cached ? Date.now() - cached.fetchedAt : Infinity;
     const ttl = cached?.dataUrl ? METEORADAR_CACHE_MS : METEORADAR_RETRY_MS;
@@ -211,6 +212,7 @@ export const templateSvgMixin = {
         show_precipitation: showPrecipitation,
         dotted_light: dottedLight,
         show_wind: showWind,
+        location_address: locationAddress,
       });
       if (!result?.ok || !result?.image) {
         this._meteoradarImageCache = { key, dataUrl: "", fetchedAt: Date.now(), error: "Server nevrátil obrázek." };

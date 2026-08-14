@@ -47,6 +47,17 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('data-custom-image-download', self.source)
         self.assertIn('data-custom-image-studio-upload', self.source)
         self.assertIn('data-custom-image-gallery-focus', self.source)
+        self.assertIn('data-display-template-edit-choice="download" data-display-template-id="custom_image"', self.source)
+        self.assertIn('data-display-template-edit-choice="images" data-display-template-id="custom_image"', self.source)
+        self.assertIn('data-display-template-edit-choice="gallery" data-display-template-id="custom_image"', self.source)
+        self.assertIn('customImageCard ? "Spravovat obrázky" : "Upravit šablonu"', self.source)
+        self.assertIn('node?.hasAttribute?.("data-template-editor-back")', self.source)
+
+    def test_meteoradar_accepts_and_persists_a_home_address_marker(self):
+        self.assertIn('data-meteoradar-home-address', self.source)
+        self.assertIn('meteoradar_home_address: this._meteoradarHomeAddress || ""', self.source)
+        self.assertIn('location_address: this._meteoradarHomeAddress', self.source)
+        self.assertIn('this._meteoradarImageCache = null', self.source)
         self.assertIn('data-custom-image-cycle-enabled', self.source)
         self.assertIn('data-custom-image-cycle-minutes', self.source)
         self.assertIn('data-custom-image-save', self.source)
@@ -1559,8 +1570,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("this._customImageRendererVersion !== this._importedImageRendererVersion()", self.source)
         self.assertIn("this._convertCustomImageTemplateSource(source, name)", self.source)
         self.assertIn("_renderCustomImageTemplateForDevice(source, device = this._device())", self.source)
-        self.assertIn("? await this._renderCustomImageTemplateForDevice(this._customImageSourceUrl, device)", self.source)
-        self.assertIn("const targetCustomImage = this._paletteImageSrc({", self.source)
+        self.assertIn("? await this._renderCustomImageTemplateForDevice(activeSource, device)", self.source)
+        self.assertIn("const targetCustomImage = usesCustomImage && activeSource", self.source)
         self.assertIn("}, device);", self.source)
         self.assertIn("this._customImageDataUrl = previousCustomImage;", self.source)
 

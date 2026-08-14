@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.295
+
+- **Správná orientace 296×128 BWRY** – čtyřbarevná varianta je při každém nastavení otočení vždy přesně o 180° proti stejné tříbarevné PE29 variantě.
+- **Domov na radarové mapě** – do nastavení Meteoradaru lze zadat adresu; mapa ji dohledá a vykreslí na displeji malou červenou ikonou domu.
+- **Spolehlivé menu vlastního obrázku** – karta má samostatné funkční volby pro stažení, úpravu obrázků a galerii se střídáním.
+- **Opravný HACS balíček** – verze, frontendové cache klíče a ZIP asset jsou znovu sjednocené, aby HACS nový update správně rozpoznal.
+
 ## Novinky ve verzi 0.1.294
 
 - **Samostatné vykreslení pro BWR a BWRY** – fotografie se vždy znovu převádí přímo pro paletu cílového displeje; tříbarevný a čtyřbarevný výsledek se už nepřevádějí jeden z druhého.

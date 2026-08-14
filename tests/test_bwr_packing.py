@@ -170,6 +170,18 @@ class BwrClassificationTests(unittest.TestCase):
         # Pillow's -90 degrees maps the source top-left to output top-right.
         self.assertEqual((0, 0, 0), prepared.getpixel((127, 0)))
 
+    def test_sdk_type_46_is_always_180_degrees_opposite_to_three_colour_pe29(self):
+        for transform in (None, "rotate_cw", "rotate_ccw", "rotate_180", "flip_lr", "flip_tb"):
+            with self.subTest(transform=transform):
+                image = Image.new("RGB", (296, 128), "white")
+                image.putpixel((17, 23), (0, 0, 0))
+                bw = render.prepare_image_for_display(43, image, transform=transform)
+                bwry = render.prepare_image_for_display(46, image, transform=transform)
+                self.assertEqual(
+                    list(bw.rotate(180).getdata()),
+                    list(bwry.getdata()),
+                )
+
     def test_sdk_type_299_uses_inverted_first_plane_and_vertical_flip(self):
         image = Image.new("RGB", (800, 480), "white")
         ImageDraw.Draw(image).rectangle((0, 0, 799, 0), fill="black")

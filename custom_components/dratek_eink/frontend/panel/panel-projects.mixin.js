@@ -175,6 +175,7 @@ export const projectsMixin = {
     this._objects = structuredClone(source.objects);
     this._variables = structuredClone(source.variables);
     this._meteoradarCountry = source.template_config?.meteoradar_country || "cz";
+    this._meteoradarHomeAddress = String(source.template_config?.meteoradar_home_address || "");
     this._restoreDisplayTemplateConfig?.(source.template_config);
     const led = source.rgb_led || {};
     this._rgbLed = {

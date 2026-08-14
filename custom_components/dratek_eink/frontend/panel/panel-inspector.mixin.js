@@ -332,7 +332,7 @@ export const inspectorMixin = {
         if (!templateId) return;
         if (templateId === "custom_image") {
           this._templateSettingsDialogOpen = false;
-          openTemplateDesigner(templateId);
+          this._openCustomImageStudioView?.("images");
           return;
         }
         this._templateEditMenuId = "";
@@ -605,8 +605,7 @@ export const inspectorMixin = {
         const choice = button.dataset.displayTemplateEditChoice || "designer";
         this._templateEditMenuId = "";
         if (templateId === "custom_image") {
-          this._templateSettingsDialogOpen = false;
-          openTemplateDesigner(templateId);
+          this._openCustomImageStudioView?.(choice);
           return;
         }
         if (choice === "variables") {
@@ -1668,6 +1667,33 @@ export const inspectorMixin = {
         this._scheduleDraftSave();
         this._render();
         this._paint();
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-meteoradar-home-address]").forEach((input) => {
+      const saveAddress = () => {
+        const value = String(input.value || "").trim();
+        this._meteoradarHomeAddress = value;
+        if (!this._displayTemplateConfig) this._displayTemplateConfig = {};
+        this._displayTemplateConfig.meteoradar_home_address = value;
+        this._meteoradarImageCache = null;
+        const address = input.dataset.deviceAddress || this._selectedDeviceAddress;
+        const upperAddr = String(address || "").toUpperCase();
+        if (upperAddr) {
+          if (!this._deviceDrafts) this._deviceDrafts = {};
+          const draft = this._deviceDrafts[upperAddr] || {};
+          if (!draft.template_config) draft.template_config = {};
+          draft.template_config.meteoradar_home_address = value;
+          this._deviceDrafts[upperAddr] = draft;
+        }
+        this._scheduleDraftSave();
+        this._render();
+        this._paint();
+      };
+      input.addEventListener("change", saveAddress);
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        saveAddress();
       });
     });
     this.shadowRoot.querySelectorAll("[data-custom-image-template-upload]").forEach((button) => {

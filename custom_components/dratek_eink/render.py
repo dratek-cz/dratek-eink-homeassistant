@@ -1603,6 +1603,7 @@ async def async_render_camera_binding_data_url(
     show_precipitation: bool = True,
     dotted_light: bool = True,
     show_wind: bool = False,
+    location_address: str = "",
 ) -> str | None:
     """Fetch a camera entity's current snapshot, fit and quantise it for the panel."""
     from homeassistant.components.camera import async_get_image
@@ -1643,6 +1644,7 @@ async def async_render_camera_binding_data_url(
             show_precipitation=show_precipitation,
             dotted_light=dotted_light,
             show_wind=show_wind,
+            location_address=location_address,
         )
         if radar_img is not None:
             def _prepare_radar() -> bytes:
@@ -1936,6 +1938,21 @@ def prepare_image_for_display(
         if image.size != (native_w, native_h):
             image = image.resize((native_w, native_h), Image.Resampling.LANCZOS)
 
+        # The 296x128 four-colour Picksmart controller is physically mounted
+        # upside down relative to the otherwise identical three-colour PE29
+        # panels. Keep its baseline exactly 180 degrees opposite for every
+        # transform choice, not only for the default orientation.
+        if code == BWRY_296X128_CODE:
+            angle = 90 if transform in ("rotate_ccw", "rotate_180") else -90
+            image = image.rotate(angle, expand=True)
+            if transform == "flip_lr":
+                image = image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+            elif transform == "flip_tb":
+                image = image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+            if image.size != (target_w, target_h):
+                image = image.resize((target_w, target_h), Image.Resampling.LANCZOS)
+            return image
+
         if transform == "rotate_180":
             image = image.rotate(180, expand=True)
         elif transform == "flip_lr":
@@ -1943,7 +1960,7 @@ def prepare_image_for_display(
         elif transform == "flip_tb":
             image = image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
 
-        if code in (46, 270):
+        if code == 270:
             image = image.rotate(-90, expand=True)
         elif code == 558:
             image = image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)

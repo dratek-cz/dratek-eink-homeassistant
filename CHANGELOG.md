@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.295] - 2026-08-14
+
+### Přidáno a vylepšeno
+- Meteoradar přijímá adresu domova, geokóduje ji přes OpenStreetMap Nominatim a kreslí na mapu malou eInk ikonu domu.
+- Adresa i nastavení mapy se ukládají ke konkrétnímu displeji a používají se při ručním odeslání i automatickém překreslení.
+
+### Opraveno
+- EPA LCD 296×128 BWRY drží fyzickou orientaci vždy o 180° proti tříbarevné PE29 variantě, včetně ručních transformací.
+- Karta vlastního obrázku má funkční samostatné menu a návrat z Obrázkového studia.
+- Verze manifestu, frontendu a release ZIPu jsou sjednocené pro korektní detekci aktualizace v HACS.
+
 ## [0.1.294] - 2026-08-14
 
 ### Přidáno a vylepšeno
