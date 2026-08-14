@@ -80,7 +80,8 @@ export const previewMixin = {
         const draft = this._deviceDrafts[address];
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.imageSmoothingEnabled = false;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
         if (this._paintStoredDevicePreview(canvas, address, draft)) return;
         // A physical-device preview must never silently substitute an unsent
         // editor draft. Until the first successful write is recorded, the
@@ -105,7 +106,8 @@ export const previewMixin = {
     const draw = (target, image) => {
       const context = target.getContext("2d", { willReadFrequently: true });
       context.clearRect(0, 0, target.width, target.height);
-      context.imageSmoothingEnabled = false;
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = "high";
       context.drawImage(image, 0, 0, target.width, target.height);
     };
     if (cached?.key === key && cached.image?.complete) {
@@ -119,9 +121,13 @@ export const previewMixin = {
       if (this._devicePreviewRequests.get(address) !== key) return;
       this._devicePreviewImages.set(address, { key, image });
       this._devicePreviewRequests.delete(address);
-      const currentCanvas = [...this.shadowRoot.querySelectorAll("canvas[data-device-preview]")]
-        .find((item) => String(item.dataset.devicePreview || "").toUpperCase() === address);
-      if (currentCanvas) draw(currentCanvas, image);
+      // The same physical display can be visible in the overview, settings and
+      // topology at once. Paint every matching surface after the shared image
+      // finishes loading; updating only the first one left the others blank or
+      // stale until an unrelated re-render happened.
+      const currentCanvases = [...this.shadowRoot.querySelectorAll("canvas[data-device-preview]")]
+        .filter((item) => String(item.dataset.devicePreview || "").toUpperCase() === address);
+      currentCanvases.forEach((currentCanvas) => draw(currentCanvas, image));
     };
     image.onerror = () => {
       if (this._devicePreviewRequests.get(address) === key) this._devicePreviewRequests.delete(address);

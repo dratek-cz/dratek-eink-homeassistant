@@ -2,19 +2,19 @@ import { storageMixin } from "./panel/panel-storage.mixin.js";
 import { queueMixin } from "./panel/panel-queue.mixin.js?v=queue-pinned-2";
 import { automationsMixin } from "./panel/panel-automations.mixin.js?v=writing-highlight-2";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=usb-fields-4";
-import { devicesMixin } from "./panel/panel-devices.mixin.js?v=small-display-panel-8";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=catalog-lazy-1";
 import { projectsMixin } from "./panel/panel-projects.mixin.js?v=template-save-queue-1";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
 import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-3";
 import { templatesMixin } from "./panel/panel-templates.mixin.js?v=readable-chart-type-2";
 import { variablesMixin } from "./panel/panel-variables.mixin.js?v=readable-chart-type-2";
-import { previewMixin } from "./panel/panel-preview.mixin.js";
-import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=queue-auto-sidebar-10";
+import { previewMixin } from "./panel/panel-preview.mixin.js?v=device-preview-quality-1";
+import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=catalog-lazy-1";
 import { i18nMixin } from "./panel/panel-i18n.mixin.js";
-import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=automation-queue-poll-5";
+import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=catalog-lazy-1";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js?v=templates-4c-1";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
-import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=viewport-transposed-layout-6";
+import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=catalog-lazy-1";
 
 import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js";
 
@@ -49,6 +49,18 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedTemplateEditorElementId = "";
     this._templateElementPaletteCategory = "";
     this._templateImageLibrary = [];
+    this._customImageDataUrl = "";
+    this._customImageSourceUrl = "";
+    this._customImageVariants = {};
+    this._customImageRendererVersion = "";
+    this._customImageName = "";
+    this._customImageActiveId = "";
+    this._customImageCycleIds = [];
+    this._customImageCycleEnabled = false;
+    this._customImageCycleMinutes = 10;
+    this._customImageStudioTab = "gallery";
+    this._customImageStudioZoom = 1;
+    this._customImageViewportPan = { x: 0, y: 0 };
     this._templateOverlayDrag = null;
     this._templateUndoStack = [];
     this._templateRedoStack = [];
@@ -78,6 +90,7 @@ class DratekEinkPanel extends HTMLElement {
       secondary: "small",
     };
     this._displayTemplatePreviewZoom = 1;
+    this._templateDesignerPan = { x: 0, y: 0 };
     this._templateDesignerViewport = "wide";
     this._templateCanvasDrag = null;
     this._displayTemplateAssignments = {};

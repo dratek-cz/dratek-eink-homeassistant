@@ -208,6 +208,20 @@ export const devicesMixin = {
     return bwrySdkTypes.has(Number(device?.sdk_type)) || descriptor.includes("BWRY");
   },
 
+  _displayPaletteKey(device = this._device()) {
+    return this._displaySupportsYellow(device) ? "bwry" : "bwr";
+  },
+
+  _paletteImageSrc(image, device = this._device()) {
+    if (!image || typeof image === "string") return String(image || "");
+    const key = this._displayPaletteKey(device);
+    return String(image.variants?.[key] || image.src || image.source || "");
+  },
+
+  _importedImageRendererVersion() {
+    return "bwr-optical-floyd-3";
+  },
+
   _renderDisplayPaletteBookmarks(device) {
     const colors = this._displayPaletteColors(device);
     return `<span class="display-palette-strip" aria-label="Paleta displeje: ${colors.map(([, label]) => label.toLowerCase()).join(", ")}" title="Barvy podporované displejem">${colors.map(([color, label]) => `<i class="display-palette-color is-${color}" title="${label}"></i>`).join("")}</span>`;
@@ -974,6 +988,24 @@ export const devicesMixin = {
     return this._templateSvgThumbnail(template, width, height);
   },
 
+  _renderDisplayTemplateCatalogPreviewSlot(template, orientation, size) {
+    const base = size && size.width && size.height ? size : { width: 250, height: 128 };
+    const long = Math.max(base.width, base.height);
+    const short = Math.min(base.width, base.height);
+    const width = orientation === "landscape" ? long : short;
+    const height = orientation === "landscape" ? short : long;
+    if (template?.user_created && String(template.preview_image || "").startsWith("data:image/")) {
+      return this._renderDisplayTemplateCatalogPreview(template, orientation, base);
+    }
+    if (template?.id === "blank") {
+      return `<span class="template-catalog-empty-preview"><ha-icon icon="mdi:plus"></ha-icon><small>Nová šablona</small></span>`;
+    }
+    if (template?.id === "custom_image" && !this._customImageDataUrl) {
+      return `<span class="template-catalog-empty-preview is-image"><ha-icon icon="mdi:image-plus-outline"></ha-icon><small>Přidat obrázek</small></span>`;
+    }
+    return `<span class="template-catalog-lazy-preview" data-template-catalog-preview="${this._escape(template?.id || "")}" data-template-preview-orientation="${orientation}" data-template-preview-width="${width}" data-template-preview-height="${height}"><span class="template-catalog-preview-skeleton"><i></i><i></i><i></i></span></span>`;
+  },
+
   _renderUserDisplayTemplateCatalogPreview(template, orientation = template?.orientation, width = 250, height = 128) {
     if (String(template?.preview_image || "").startsWith("data:image/")) {
       return `<span class="user-template-catalog-canvas has-captured-preview"><img class="user-template-captured-preview" src="${this._escape(template.preview_image)}" alt="Náhled ${this._escape(template.title || "vlastní šablony")}"></span>`;
@@ -985,7 +1017,7 @@ export const devicesMixin = {
       const item = this._orientedUserTemplateElement(source, template, orientation);
       const style = `left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;transform:rotate(${item.rotation}deg);--element-color:${item.color};--element-fill:${item.fill};--element-stroke:${item.stroke};--element-stroke-width:${item.strokeWidth}px;--element-radius:${item.radius}px;--element-font-size:${item.fontSize}px;--element-font-weight:${item.fontWeight};--element-font-family:${item.fontFamily};--element-font-style:${item.fontStyle};--element-text-decoration:${item.textDecoration};--element-text-outline-width:${item.textOutlineWidth}px;--element-text-outline-color:${item.textOutlineColor};--element-text-border-width:${item.textBorderWidth}px;--element-text-border-color:${item.textBorderColor};--element-overlay-opacity:${item.overlayOpacity}%;--element-text-align:${item.textAlign};--element-value:${Math.max(0, Math.min(100, item.value))}%`;
       let content = "";
-      if (item.type === "image") content = `<img src="${this._escape(item.src || "")}" alt="">`;
+      if (item.type === "image") content = `<img src="${this._escape(this._paletteImageSrc(item))}" alt="">`;
       else if (["text", "button"].includes(item.type)) content = `<span>${this._escape(item.text || item.label)}</span>`;
       else if (item.type === "icon") content = `<ha-icon icon="mdi:${this._escape(item.icon || "star")}"></ha-icon>`;
       else if (item.type === "qr") content = this._renderTemplateQrVisual(item);
@@ -1033,6 +1065,7 @@ export const devicesMixin = {
       ? this._displayTemplateLayoutDefinition(this._displayTemplateLargeLayout).id
       : "single";
     const previewZoom = Math.max(0.5, Math.min(1.8, Number(this._displayTemplatePreviewZoom || 1)));
+    const imageNavigation = assignedTemplates.includes("custom_image");
     return `<section class="display-templates-inline">
       <div class="display-template-workspace">
         <aside class="card display-template-drop-panel ${largeDisplay ? "is-large-display" : "is-small-display"}">
@@ -1064,18 +1097,14 @@ export const devicesMixin = {
             </div>
           </div>
           ${largeDisplay ? this._renderDisplayTemplateLayoutControls(layout, orientation) : ""}
-          <div class="display-template-dropzone ${assignedTemplates.length ? "has-template" : ""}" data-display-template-dropzone tabindex="0" aria-label="Přetáhněte sem šablonu">
+          <div class="display-template-dropzone ${assignedTemplates.length ? "has-template" : ""} ${imageNavigation ? "is-image-navigation" : ""}" data-display-template-dropzone tabindex="0" aria-label="Přetáhněte sem šablonu">
             ${primaryTemplate
               ? this._renderTemplatePhysicalDevicePreview(device, assignedTemplateCards, orientation, layout, true)
               : this._renderDevicePreview(device, "template")}
             ${largeDisplay ? this._renderDisplayTemplateDropZones(layout, orientation) : ""}
           </div>
           <div class="display-template-drop-controls">
-            <div class="template-preview-zoom" role="group" aria-label="Přiblížení náhledu">
-              <button type="button" data-template-preview-zoom="out" title="Oddálit"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon></button>
-              <button type="button" class="template-preview-zoom-value" data-template-preview-zoom="reset">${Math.round(previewZoom * 100)} %</button>
-              <button type="button" data-template-preview-zoom="in" title="Přiblížit"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></button>
-            </div>
+            ${imageNavigation ? `<span class="template-preview-mouse-hint"><ha-icon icon="mdi:mouse"></ha-icon>Kolečko: přiblížení · levé tlačítko: posun</span>` : `<span></span>`}
             <div class="display-template-orientation" role="group" aria-label="Orientace displeje">
               <button type="button" class="${orientation === "portrait" ? "is-active" : ""}" data-template-orientation="portrait" title="Na výšku"><ha-icon icon="mdi:phone-rotate-portrait"></ha-icon></button>
               <button type="button" class="${orientation === "landscape" ? "is-active" : ""}" data-template-orientation="landscape" title="Na šířku"><ha-icon icon="mdi:phone-rotate-landscape"></ha-icon></button>
@@ -1104,6 +1133,7 @@ export const devicesMixin = {
             const used = assignedTemplates.includes(template.id);
             const onDisplay = sentTemplates.includes(template.id);
             const userCreated = !!template.user_created;
+            const customImageCard = template.id === "custom_image";
             const configStatus = this._templateBindingStatus(template);
             if (template.id === "blank") {
               return `<article class="display-template-card display-template-drag-card display-template-blank-card ${onDisplay ? "is-on-display" : ""}" data-display-template-open="blank" aria-label="Vytvořit vlastní šablonu od nuly. Kliknutím otevřete designer.">
@@ -1113,7 +1143,7 @@ export const devicesMixin = {
                   <span class="display-template-variable-count blank-badge">+ Nová</span>
                 </header>
                 <div class="display-template-tile-preview is-${orientation} is-blank-preview" data-display-template-open="blank" role="button" tabindex="0" aria-label="Otevřít prázdný designer">
-                  <span class="display-template-preview" style="aspect-ratio:${previewAspect};min-height:0">${this._renderDisplayTemplateCatalogPreview(template, orientation, size)}</span>
+                  <span class="display-template-preview" style="aspect-ratio:${previewAspect};min-height:0">${this._renderDisplayTemplateCatalogPreviewSlot(template, orientation, size)}</span>
                 </div>
                 <div class="display-template-tile-actions">
                   <button type="button" class="display-template-card-action is-blank-action-btn" data-display-template-open="blank"><ha-icon icon="mdi:palette-outline"></ha-icon> Otevřít prázdný Designer</button>
@@ -1124,13 +1154,13 @@ export const devicesMixin = {
               <header class="display-template-tile-header">
                 <span class="display-template-kind-icon"><ha-icon icon="mdi:${userCreated ? "palette-outline" : template.kind === "prepared" ? "auto-fix" : "tune-variant"}"></ha-icon></span>
                 <span class="display-template-tile-identity"><strong>${this._escape(template.title)}</strong><small>${userCreated ? "Vytvořeno uživatelem" : template.kind === "prepared" ? "Automatické nastavení" : "Vlastní zdroje dat"}</small></span>
-                ${userCreated ? `<button type="button" class="display-template-delete-btn" data-delete-user-template="${this._escape(template.id)}" title="Smazat uživatelskou šablonu ${this._escape(template.title)}" aria-label="Smazat uživatelskou šablonu ${this._escape(template.title)}"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>` : `<button type="button" class="display-template-settings-shortcut" data-display-template-configure="${this._escape(template.id)}" title="Nastavení šablony ${this._escape(template.title)}" aria-label="Nastavení šablony ${this._escape(template.title)}"><ha-icon icon="mdi:tune-variant"></ha-icon><span>Nastavení šablony</span></button>`}
+                ${userCreated ? `<button type="button" class="display-template-delete-btn" data-delete-user-template="${this._escape(template.id)}" title="Smazat uživatelskou šablonu ${this._escape(template.title)}" aria-label="Smazat uživatelskou šablonu ${this._escape(template.title)}"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>` : customImageCard ? `<button type="button" class="display-template-settings-shortcut" data-display-template-configure="custom_image" title="Otevřít obrázkové studio" aria-label="Změnit nebo přidat obrázek"><ha-icon icon="mdi:image-edit-outline"></ha-icon><span>Změnit / přidat</span></button>` : `<button type="button" class="display-template-settings-shortcut" data-display-template-configure="${this._escape(template.id)}" title="Nastavení šablony ${this._escape(template.title)}" aria-label="Nastavení šablony ${this._escape(template.title)}"><ha-icon icon="mdi:tune-variant"></ha-icon><span>Nastavení šablony</span></button>`}
               </header>
               <div class="display-template-tile-preview is-${orientation}" data-display-template-select="${template.id}" role="button" tabindex="0" aria-label="Vybrat šablonu ${this._escape(template.title)} pro displej">
-                <span class="display-template-preview ${userCreated ? "has-user-template" : ""}" style="aspect-ratio:${previewAspect};min-height:0">${this._renderDisplayTemplateCatalogPreview(template, orientation, size)}</span>
+                <span class="display-template-preview ${userCreated ? "has-user-template" : ""}" style="aspect-ratio:${previewAspect};min-height:0">${this._renderDisplayTemplateCatalogPreviewSlot(template, orientation, size)}</span>
               </div>
               <div class="display-template-tile-meta">
-                ${userCreated ? `<span class="user-template-created-note"><ha-icon icon="mdi:palette-outline"></ha-icon>Vytvořeno v eInk Studiu</span>` : `<div class="display-template-meta-row">
+                ${userCreated ? `<span class="user-template-created-note"><ha-icon icon="mdi:palette-outline"></ha-icon>Vytvořeno v eInk Studiu</span>` : customImageCard ? `<div class="display-template-meta-row"><button type="button" class="display-template-config-status is-complete" data-display-template-configure="custom_image"><ha-icon icon="mdi:image-multiple-outline"></ha-icon>${(this._templateImageLibrary || []).length} obrázků v galerii</button><span class="display-template-variables-row"><span class="display-template-variable-icon" title="Obrázková galerie"><ha-icon icon="mdi:image-multiple-outline"></ha-icon></span></span></div>` : `<div class="display-template-meta-row">
                   <button type="button" class="display-template-config-status is-${configStatus.state}" data-display-template-configure="${this._escape(template.id)}" title="${configStatus.state === "complete" ? "Všechny zdroje dat jsou napojené na entity Home Assistantu. Kliknutím upravíte." : configStatus.state === "partial" ? `Napojeno ${configStatus.done} z ${configStatus.total} zdrojů dat. Kliknutím dokončíte.` : "Zdroje dat ještě nejsou napojené. Kliknutím je nastavíte."}"><ha-icon icon="mdi:${configStatus.state === "complete" ? "check-circle" : configStatus.state === "partial" ? "alert-circle" : "circle-off-outline"}"></ha-icon>${configStatus.state === "complete" ? "Nastaveno" : configStatus.state === "partial" ? `${configStatus.done}/${configStatus.total}` : "Nenastaveno"}</button>
                   <span class="display-template-variables-row" aria-label="Použité údaje">${(template.variables.length > 5 ? template.variables.slice(0, 4) : template.variables).map(([iconName, label]) => `<span class="display-template-variable-icon" title="${this._escape(label)}"><ha-icon icon="mdi:${iconName}"></ha-icon></span>`).join("")}${template.variables.length > 5 ? `<span class="display-template-variable-overflow" tabindex="0" aria-label="Další údaje: ${this._escape(template.variables.map(([, label]) => label).join(", "))}">
                     <span class="display-template-variable-overflow-badge">+${template.variables.length}</span>
@@ -1428,7 +1458,14 @@ export const devicesMixin = {
       designer_viewport: this._templateDesignerViewport || "wide",
       meteoradar_country: this._meteoradarCountry || "cz",
       custom_image_data: this._customImageDataUrl || "",
+      custom_image_source: this._customImageSourceUrl || "",
+      custom_image_variants: structuredClone(this._customImageVariants || {}),
+      custom_image_renderer_version: this._customImageRendererVersion || "",
       custom_image_name: this._customImageName || "",
+      custom_image_active_id: this._customImageActiveId || "",
+      custom_image_cycle_ids: [...(this._customImageCycleIds || [])],
+      custom_image_cycle_enabled: this._customImageCycleEnabled === true,
+      custom_image_cycle_minutes: Math.max(1, Math.min(1440, Number(this._customImageCycleMinutes) || 10)),
     };
   },
 
@@ -1440,7 +1477,33 @@ export const devicesMixin = {
     this._customImageDataUrl = String(config?.custom_image_data || "").startsWith("data:image/")
       ? String(config.custom_image_data)
       : "";
+    const hasStoredOriginal = String(config?.custom_image_source || "").startsWith("data:image/");
+    this._customImageSourceUrl = hasStoredOriginal
+      ? String(config.custom_image_source)
+      : this._customImageDataUrl;
+    this._customImageVariants = config?.custom_image_variants && typeof config.custom_image_variants === "object"
+      ? structuredClone(config.custom_image_variants)
+      : {};
+    this._customImageRendererVersion = String(config?.custom_image_renderer_version || "");
+    this._customImageDataUrl = this._paletteImageSrc({
+      src: this._customImageDataUrl,
+      source: this._customImageSourceUrl,
+      variants: this._customImageVariants,
+    });
     this._customImageName = String(config?.custom_image_name || "");
+    this._customImageActiveId = String(config?.custom_image_active_id || "");
+    this._customImageCycleIds = Array.isArray(config?.custom_image_cycle_ids)
+      ? config.custom_image_cycle_ids.map(String)
+      : [];
+    this._customImageCycleEnabled = config?.custom_image_cycle_enabled === true;
+    this._customImageCycleMinutes = Math.max(1, Math.min(1440, Number(config?.custom_image_cycle_minutes) || 10));
+    if (hasStoredOriginal && this._customImageRendererVersion !== this._importedImageRendererVersion()) {
+      const source = this._customImageSourceUrl;
+      const name = this._customImageName;
+      Promise.resolve().then(() => this._convertCustomImageTemplateSource(source, name)).catch((error) => {
+        console.warn("DRATEK eInk image palette refresh failed:", error);
+      });
+    }
     const address = String(this._selectedDeviceAddress || "").toUpperCase();
     if (!config || typeof config !== "object") {
       if (address) {
@@ -1458,7 +1521,14 @@ export const devicesMixin = {
       this._templateImageLibrary = [];
       this._templateDesignerViewport = "wide";
       this._customImageDataUrl = "";
+      this._customImageSourceUrl = "";
+      this._customImageVariants = {};
+      this._customImageRendererVersion = "";
       this._customImageName = "";
+      this._customImageActiveId = "";
+      this._customImageCycleIds = [];
+      this._customImageCycleEnabled = false;
+      this._customImageCycleMinutes = 10;
       this._displayTemplateLargeLayout = "single";
       this._selectedTemplatePart = "";
       return;
@@ -1515,6 +1585,9 @@ export const devicesMixin = {
     this._templateImageLibrary = Array.isArray(config.image_library)
       ? structuredClone(config.image_library).filter((asset) => asset?.id && String(asset.src || "").startsWith("data:image/"))
       : [];
+    const availableImageIds = new Set(this._templateImageLibrary.map((asset) => String(asset.id)));
+    this._customImageCycleIds = this._customImageCycleIds.filter((id) => availableImageIds.has(id));
+    if (!availableImageIds.has(this._customImageActiveId)) this._customImageActiveId = this._customImageCycleIds[0] || "";
     this._displayTemplateFormats = { primary: "narrow", secondary: "narrow", ...(config.formats || {}) };
     this._displayTemplateSizes = { primary: "large", secondary: "small", ...(config.sizes || {}) };
     this._templateCanvasPlacements = {
@@ -1676,9 +1749,59 @@ export const devicesMixin = {
     return this._queueDeviceDraftSave(device, payload);
   },
 
+  _renderCustomImageStudio(device) {
+    const assets = this._templateImageLibrary || [];
+    const active = assets.find((asset) => asset.id === this._customImageActiveId)
+      || this._activeCustomImageAsset()
+      || null;
+    const activePreview = active ? this._paletteImageSrc(active, device) : this._customImageDataUrl;
+    const selected = new Set(this._customImageCycleIds || []);
+    const cycleMinutes = Math.max(1, Math.min(1440, Number(this._customImageCycleMinutes) || 10));
+    return `<section class="custom-image-studio">
+      <header class="card custom-image-studio-header">
+        <button type="button" class="custom-image-studio-back" data-template-editor-back title="Zpět k šablonám"><ha-icon icon="mdi:arrow-left"></ha-icon></button>
+        <span class="custom-image-studio-title"><small>Šablona vlastního obrázku</small><strong>Obrázkové studio</strong><em>${assets.length} ${assets.length === 1 ? "uložený obrázek" : "uložených obrázků"}</em></span>
+        <div class="custom-image-studio-actions">
+          <button type="button" data-custom-image-download ${activePreview ? "" : "disabled"}><ha-icon icon="mdi:download-outline"></ha-icon><span>Stáhnout</span></button>
+          <button type="button" class="is-primary" data-custom-image-studio-upload><ha-icon icon="mdi:image-edit-outline"></ha-icon><span>Změnit / přidat obrázek</span></button>
+          <button type="button" data-custom-image-gallery-focus><ha-icon icon="mdi:image-multiple-outline"></ha-icon><span>Galerie</span></button>
+          <input id="customImageStudioFile" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+        </div>
+      </header>
+      <div class="custom-image-studio-layout">
+        <main class="card custom-image-stage-card">
+          <div class="custom-image-stage" data-custom-image-stage>
+            ${activePreview ? `<img src="${this._escape(activePreview)}" alt="Aktivní obrázek ${this._escape(active?.name || this._customImageName || "")}">` : `<div class="custom-image-stage-empty"><ha-icon icon="mdi:image-plus-outline"></ha-icon><strong>Přidejte první obrázek</strong></div>`}
+          </div>
+          <footer><span><ha-icon icon="mdi:gesture-tap-hold"></ha-icon>Kolečkem přiblížíte, levým tlačítkem posunete</span><strong>${this._escape(active?.name || this._customImageName || "Bez obrázku")}</strong></footer>
+        </main>
+        <aside class="card custom-image-gallery" data-custom-image-gallery>
+          <header><span><small>Knihovna pro tento displej</small><strong>Galerie obrázků</strong></span><b>${selected.size}/12 ve slideshow</b></header>
+          <div class="custom-image-gallery-grid">${assets.length ? assets.map((asset) => `<article class="custom-image-gallery-item ${asset.id === active?.id ? "is-active" : ""}">
+            <button type="button" class="custom-image-gallery-select" data-custom-image-select="${this._escape(asset.id)}"><img src="${this._escape(this._paletteImageSrc(asset, device))}" alt="${this._escape(asset.name || "Obrázek")}"><span><strong>${this._escape(asset.name || "Obrázek")}</strong><small>${asset.id === active?.id ? "Aktivní" : "Použít obrázek"}</small></span></button>
+            <label title="Zařadit do automatického střídání"><input type="checkbox" data-custom-image-cycle="${this._escape(asset.id)}" ${selected.has(asset.id) ? "checked" : ""}><span><ha-icon icon="mdi:autorenew"></ha-icon>Slideshow</span></label>
+            <button type="button" class="custom-image-gallery-remove" data-custom-image-remove="${this._escape(asset.id)}" title="Odstranit obrázek" aria-label="Odstranit ${this._escape(asset.name || "obrázek")}"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>
+          </article>`).join("") : `<div class="custom-image-gallery-empty"><ha-icon icon="mdi:image-multiple-outline"></ha-icon><p>Galerie je prázdná. Přidejte PNG, JPEG nebo WebP.</p></div>`}</div>
+          <section class="custom-image-cycle-settings">
+            <label class="custom-image-cycle-switch"><input type="checkbox" data-custom-image-cycle-enabled ${this._customImageCycleEnabled ? "checked" : ""} ${selected.size < 2 ? "disabled" : ""}><span><i></i><strong>Automaticky střídat vybrané obrázky</strong></span></label>
+            <label><span>Interval změny</span><select data-custom-image-cycle-minutes ${this._customImageCycleEnabled ? "" : "disabled"}>${[[1,"1 minuta"],[5,"5 minut"],[10,"10 minut"],[15,"15 minut"],[30,"30 minut"],[60,"1 hodina"]].map(([value,label]) => `<option value="${value}" ${cycleMinutes === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+            <p><ha-icon icon="mdi:information-outline"></ha-icon>Po odeslání displej přejde na intervalové aktualizace a střídá až 12 vybraných snímků.</p>
+          </section>
+          <div class="custom-image-studio-submit">
+            <button type="button" class="secondary" data-custom-image-save><ha-icon icon="mdi:content-save-outline"></ha-icon><span>Uložit galerii</span></button>
+            <button type="button" class="primary" data-template-send ${assets.length && !this._templateSending ? "" : "disabled"}><ha-icon icon="mdi:${this._templateSending ? "loading" : "send"}" ${this._templateSending ? 'class="spin"' : ""}></ha-icon><span>${this._templateSending ? "Odesílám…" : "Uložit a odeslat"}</span></button>
+          </div>
+          ${this._templateSendResult ? `<div class="template-send-result ${this._templateSendResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSendResult.ok ? "check-circle-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSendResult.message)}</span></div>` : ""}
+          ${this._templateSaveResult ? `<div class="template-send-result ${this._templateSaveResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSaveResult.ok ? "content-save-check-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSaveResult.message)}</span></div>` : ""}
+        </aside>
+      </div>
+    </section>`;
+  },
+
   _renderDisplayTemplateEditor(device) {
     const templates = this._displayTemplateCards();
     const template = templates.find((item) => item.id === this._selectedDisplayTemplateId) || templates[0];
+    if (template?.id === "custom_image") return this._renderCustomImageStudio(device);
     const size = this._devicePreviewSize(device);
     const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
     const selectedSize = "large";
@@ -1711,7 +1834,7 @@ export const devicesMixin = {
         <main class="display-template-editor-canvas" data-photoshop-canvas>
           <div class="display-template-preview-card photoshop-canvas-card">
             <div class="display-template-editor-stage">
-              <div class="template-standalone-editor template-designer-screen viewport-${viewport}" style="--template-canvas-ratio:${canvasWidth}/${canvasHeight};--template-canvas-width:${previewCanvasWidth}px;--template-preview-zoom:${previewZoom}" aria-label="Plátno šablony ${this._escape(template.title)}">
+              <div class="template-standalone-editor template-designer-screen viewport-${viewport}" data-template-designer-viewport-canvas style="--template-canvas-ratio:${canvasWidth}/${canvasHeight};--template-canvas-width:${previewCanvasWidth}px;--template-preview-zoom:${previewZoom};--template-designer-pan-x:${this._templateDesignerPan?.x || 0}px;--template-designer-pan-y:${this._templateDesignerPan?.y || 0}px" aria-label="Plátno šablony ${this._escape(template.title)}">
                 ${this._renderDisplayTemplateSurface(template, canvasFormat, true, "primary", true, "large", false, canvasWidth, canvasHeight)}
               </div>
             </div>
@@ -1994,8 +2117,13 @@ export const devicesMixin = {
     const selectedCountry = this._meteoradarCountry || this._displayTemplateConfig?.meteoradar_country || "cz";
     const mapWidget = isRadarTemplate ? this._renderInteractiveCountryMap(selectedCountry, this._selectedDeviceAddress) : "";
     const isCustomImageTemplate = activeTemplate?.id === "custom_image";
+    const customPreviewSize = this._devicePreviewSize?.(this._device?.() ?? null) || { width: 296, height: 128 };
+    const customPreviewLong = Math.max(customPreviewSize.width, customPreviewSize.height);
+    const customPreviewShort = Math.min(customPreviewSize.width, customPreviewSize.height);
+    const customPreviewWidth = this._displayTemplateOrientation === "portrait" ? customPreviewShort : customPreviewLong;
+    const customPreviewHeight = this._displayTemplateOrientation === "portrait" ? customPreviewLong : customPreviewShort;
     const customImageWidget = isCustomImageTemplate ? `<div class="custom-image-template-widget">
-      <div class="custom-image-template-preview">
+      <div class="custom-image-template-preview" style="aspect-ratio:${customPreviewWidth}/${customPreviewHeight}">
         <img src="${this._escape(this._customImageDataUrl || this._frontendAssetUrl("images/parrot-dithered.png"))}" alt="Stínovaný náhled vlastního obrázku">
       </div>
       <input id="customImageTemplateFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
@@ -2064,11 +2192,7 @@ export const devicesMixin = {
           </div>` : ""}
         </div>
         <span class="template-selection-divider"></span>
-        <div class="template-preview-zoom" role="group" aria-label="Přiblížení náhledu">
-          <button type="button" data-template-preview-zoom="out" title="Oddálit"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon></button>
-          <button type="button" class="template-preview-zoom-value" data-template-preview-zoom="reset" title="Obnovit přiblížení">${Math.round(previewZoom * 100)} %</button>
-          <button type="button" data-template-preview-zoom="in" title="Přiblížit"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></button>
-        </div>
+        <span class="template-designer-mouse-hint"><ha-icon icon="mdi:mouse"></ha-icon>Kolečko zoom · tažením posun</span>
         </div>
         <span class="template-selection-divider"></span>
         <div class="template-toolbar-cluster is-transform">
@@ -2123,11 +2247,7 @@ export const devicesMixin = {
           <span class="photoshop-options-info">${this._escape(device?.name || "Displej")} · <strong>${size.width} × ${size.height} px</strong></span>
           <div class="photoshop-options-divider"></div>
           <div class="template-preview-controls">
-            <div class="template-preview-zoom" role="group" aria-label="Přiblížení náhledu">
-              <button type="button" data-template-preview-zoom="out" title="Oddálit"><ha-icon icon="mdi:magnify-minus-outline"></ha-icon></button>
-              <button type="button" class="template-preview-zoom-value" data-template-preview-zoom="reset">${Math.round(previewZoom * 100)} %</button>
-              <button type="button" data-template-preview-zoom="in" title="Přiblížit"><ha-icon icon="mdi:magnify-plus-outline"></ha-icon></button>
-            </div>
+            <span class="template-designer-mouse-hint"><ha-icon icon="mdi:mouse"></ha-icon>Kolečko zoom · tažením posun</span>
             <div class="photoshop-options-divider"></div>
             <div class="display-template-orientation" role="group" aria-label="Orientace displeje">
               <button type="button" class="${orientation === "portrait" ? "is-active" : ""}" data-template-orientation="portrait" title="Na výšku"><ha-icon icon="mdi:phone-rotate-portrait"></ha-icon></button>
@@ -2220,17 +2340,51 @@ export const devicesMixin = {
   // a portrait tag and 51 px, a sixth of the panel, on a landscape one, while the
   // preview on screen looked correct. Building the SVG directly has no DOM to
   // lose: what the renderer lays out is what the panel gets, to the pixel.
-  async _renderCurrentDisplayTemplateImage(device = this._device()) {
+  _activeCustomImageAsset(now = Date.now()) {
+    const assets = this._templateImageLibrary || [];
+    const selected = (this._customImageCycleIds || [])
+      .map((id) => assets.find((asset) => asset.id === id))
+      .filter(Boolean);
+    if (this._customImageCycleEnabled && selected.length > 1) {
+      const interval = Math.max(1, Number(this._customImageCycleMinutes) || 10) * 60 * 1000;
+      return selected[Math.floor(now / interval) % selected.length];
+    }
+    return assets.find((asset) => asset.id === this._customImageActiveId) || selected[0] || null;
+  },
+
+  async _renderCurrentDisplayTemplateImage(device = this._device(), customSourceOverride = "") {
     const request = this._currentDisplayTemplateSvgRequest(device);
     if (!request) throw new Error("Není vybrána žádná šablona.");
     const overlays = this._collectTemplateOverlayBoxes();
-    return this._rasterizeDisplayTemplateSvg(
-      request.templates,
-      request.width,
-      request.height,
-      request.layout,
-      overlays.length ? (context, width, height) => this._paintTemplateOverlays(context, overlays, width, height) : null,
+    const previousCustomImage = this._customImageDataUrl;
+    const usesCustomImage = request.templates.some((template) =>
+      template?.id === "custom_image" || template?.base_template_id === "custom_image"
     );
+    // Rebuild from the untouched source for every physical render. Cached BWR
+    // and BWRY thumbnails are UI accelerators only; they are never an input to
+    // the bitmap sent to a display.
+    const activeAsset = customSourceOverride ? null : this._activeCustomImageAsset();
+    const activeSource = customSourceOverride || activeAsset?.source || this._customImageSourceUrl;
+    const activeVariants = activeAsset?.variants || this._customImageVariants;
+    const targetCustomImage = usesCustomImage && activeSource
+      ? await this._renderCustomImageTemplateForDevice(activeSource, device)
+      : this._paletteImageSrc({
+        src: previousCustomImage,
+        source: activeSource,
+        variants: activeVariants,
+      }, device);
+    if (targetCustomImage) this._customImageDataUrl = targetCustomImage;
+    try {
+      return await this._rasterizeDisplayTemplateSvg(
+        request.templates,
+        request.width,
+        request.height,
+        request.layout,
+        overlays.length ? (context, width, height) => this._paintTemplateOverlays(context, overlays, width, height) : null,
+      );
+    } finally {
+      this._customImageDataUrl = previousCustomImage;
+    }
   },
 
   // Elements added in the element editor live only in the preview's HTML, so they
@@ -2915,13 +3069,40 @@ export const devicesMixin = {
 
   async _displayTemplateEntityAutomation(image, device, gatewayId = "") {
     const request = this._currentDisplayTemplateSvgRequest(device);
-    // An imported picture is a deliberately static design.  Never carry
-    // entity automation over from another slot (or from what was on the tag
-    // before): both websocket send paths interpret an omitted automation as
-    // an instruction to remove the old one.
-    if (request?.templates?.some((template) =>
+    const usesCustomImage = request?.templates?.some((template) =>
       template?.id === "custom_image" || template?.base_template_id === "custom_image"
-    )) return undefined;
+    );
+    if (usesCustomImage) {
+      const assets = (this._customImageCycleIds || []).slice(0, 12)
+        .map((id) => (this._templateImageLibrary || []).find((asset) => asset.id === id))
+        .filter((asset) => Boolean(asset?.source || asset?.src));
+      if (!this._customImageCycleEnabled || assets.length < 2) return undefined;
+      const cycleImages = [];
+      for (const asset of assets) {
+        cycleImages.push(await this._renderCurrentDisplayTemplateImage(device, asset.source || asset.src));
+      }
+      const intervalSeconds = Math.max(60, Math.min(86400, Number(this._customImageCycleMinutes) * 60 || 600));
+      return {
+        enabled: true,
+        base_image: image,
+        image_cycle: cycleImages,
+        image_cycle_interval_seconds: intervalSeconds,
+        bindings: [],
+        layout: request?.layout || "single",
+        template_ids: (request?.templates || []).map((template) => template.id),
+        sdk_type: Number(device.sdk_type),
+        software_version: Number(device.sw || 0),
+        orientation: this._displayTemplateOrientation === "portrait" ? "portrait" : "landscape",
+        transform: this._displayTransform || "rotate_cw",
+        refresh_interval_seconds: intervalSeconds,
+        refresh_trigger_mode: "interval_only",
+        gateway_selection: "manual",
+        manual_gateway_id: gatewayId || "local",
+        route_type: gatewayId ? "gateway" : "local",
+        gateway_id: gatewayId,
+        transport_name: gatewayId ? "DRATEK eInk gateway" : "Home Assistant Bluetooth",
+      };
+    }
     const size = this._devicePreviewSize(device);
     const landscape = this._displayTemplateOrientation !== "portrait";
     const width = landscape ? Math.max(size.width, size.height) : Math.min(size.width, size.height);
@@ -3321,7 +3502,6 @@ export const devicesMixin = {
         t: visibleTemplates.map((template) => template.id),
         o: orientation,
         l: layout,
-        z: Math.round(previewZoom * 100),
         b: this._displayTemplateBindings || null,
         a: this._templateElementAdjustments || null,
         e: this._templateEditorElements || null,
@@ -3450,7 +3630,7 @@ export const devicesMixin = {
     ].join("");
     else if (category === "images") {
       const assets = this._templateImageLibrary || [];
-      content = `<button type="button" class="template-palette-item is-import" data-template-editor-import><ha-icon icon="mdi:image-plus"></ha-icon><span>Nahrát obrázek</span></button><input id="templateEditorImage" type="file" accept="image/*" hidden>${assets.map((asset) => `<span class="template-library-image"><button type="button" data-template-library-image="${this._escape(asset.id)}" title="Vložit ${this._escape(asset.name || "obrázek")}"><img src="${this._escape(asset.src)}" alt=""><span>${this._escape(asset.name || "Obrázek")}</span></button><button type="button" class="template-library-image-remove" data-template-library-remove="${this._escape(asset.id)}" title="Odstranit z knihovny" aria-label="Odstranit ${this._escape(asset.name || "obrázek")} z knihovny"><ha-icon icon="mdi:close"></ha-icon></button></span>`).join("")}`;
+      content = `<button type="button" class="template-palette-item is-import" data-template-editor-import><ha-icon icon="mdi:image-plus"></ha-icon><span>Nahrát obrázek</span></button><input id="templateEditorImage" type="file" accept="image/*" hidden>${assets.map((asset) => `<span class="template-library-image"><button type="button" data-template-library-image="${this._escape(asset.id)}" title="Vložit ${this._escape(asset.name || "obrázek")}"><img src="${this._escape(this._paletteImageSrc(asset))}" alt=""><span>${this._escape(asset.name || "Obrázek")}</span></button><button type="button" class="template-library-image-remove" data-template-library-remove="${this._escape(asset.id)}" title="Odstranit z knihovny" aria-label="Odstranit ${this._escape(asset.name || "obrázek")} z knihovny"><ha-icon icon="mdi:close"></ha-icon></button></span>`).join("")}`;
     }
     else if (category === "layers") {
       const selected = String(this._selectedTemplateEditorElementId || "");
@@ -3806,57 +3986,86 @@ export const devicesMixin = {
     return [255, 255, 255, 255];
   },
 
-  _ditherImportedTemplateImageData(pixels, width, height) {
-    const palette = [
-      [255, 255, 255],
-      [0, 0, 0],
-      [220, 20, 12],
-      [244, 196, 0],
-    ];
+  _ditherImportedTemplateImageData(pixels, width, height, paletteKey = "") {
+    const supportsYellow = paletteKey === "bwry"
+      || (paletteKey !== "bwr" && this._displaySupportsYellow?.(this._device?.() ?? null) === true);
+    // Keep the natural v0.1.292 colour mapping: choose the physically nearest
+    // ink in plain RGB space, then distribute only the quantization error.
+    // The only change is that each hardware family gets its own real palette.
+    const palette = supportsYellow
+      ? [[255, 255, 255], [0, 0, 0], [220, 20, 12], [244, 196, 0]]
+      : [[255, 255, 255], [0, 0, 0], [220, 20, 12]];
+    const original = new Uint8ClampedArray(pixels.data);
     const work = new Float32Array(pixels.data.length);
-    for (let index = 0; index < pixels.data.length; index += 1) work[index] = pixels.data[index];
-    const bayer4 = [
-      0, 8, 2, 10,
-      12, 4, 14, 6,
-      3, 11, 1, 9,
-      15, 7, 13, 5,
-    ];
-    const clamp = (value) => Math.max(0, Math.min(255, value));
-    const chooseInk = (source, x, y) => {
-      const [red, green, blue] = source.map(clamp);
-      const max = Math.max(red, green, blue);
-      const min = Math.min(red, green, blue);
-      const delta = max - min;
-      const saturation = max > 0 ? delta / max : 0;
-      let hue = 0;
-      if (delta > 0) {
-        if (max === red) hue = 60 * (((green - blue) / delta) % 6);
-        else if (max === green) hue = 60 * (((blue - red) / delta) + 2);
-        else hue = 60 * (((red - green) / delta) + 4);
-        if (hue < 0) hue += 360;
+    // Recover depth before reducing the photograph to physical inks. A small
+    // local-contrast pass separates feather/face/branch midtones that would
+    // otherwise collapse into one bright dither pattern. The summed-area table
+    // keeps this linear even on a 400x300 panel.
+    const luminance = new Float32Array(width * height);
+    const integral = new Float32Array((width + 1) * (height + 1));
+    for (let y = 0; y < height; y += 1) {
+      let rowSum = 0;
+      for (let x = 0; x < width; x += 1) {
+        const pixel = y * width + x;
+        const offset = pixel * 4;
+        const value = (0.2126 * original[offset]
+          + 0.7152 * original[offset + 1]
+          + 0.0722 * original[offset + 2]) / 255;
+        luminance[pixel] = value;
+        rowSum += value;
+        integral[(y + 1) * (width + 1) + x + 1] = integral[y * (width + 1) + x + 1] + rowSum;
       }
-
-      // A four-colour panel has no orange ink.  Preserve orange as a literal
-      // sub-pixel-like red/yellow pattern instead of collapsing the whole area
-      // to whichever of the two happens to be nearer in RGB space.
-      if (hue >= 4 && hue <= 66 && saturation >= 0.28 && red >= 105 && blue < 145) {
-        const yellowRatio = Math.max(0, Math.min(1, (green - 28) / 168));
-        const threshold = (bayer4[(y % 4) * 4 + (x % 4)] + 0.5) / 16;
-        return yellowRatio >= threshold ? palette[3] : palette[2];
+    }
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const pixel = y * width + x;
+        const offset = pixel * 4;
+        const left = Math.max(0, x - 2);
+        const right = Math.min(width - 1, x + 2);
+        const top = Math.max(0, y - 2);
+        const bottom = Math.min(height - 1, y + 2);
+        const stride = width + 1;
+        const localSum = integral[(bottom + 1) * stride + right + 1]
+          - integral[top * stride + right + 1]
+          - integral[(bottom + 1) * stride + left]
+          + integral[top * stride + left];
+        const localAverage = localSum / ((right - left + 1) * (bottom - top + 1));
+        const sourceLuminance = luminance[pixel];
+        const localContrast = (sourceLuminance - localAverage) * 0.55;
+        const shapedLuminance = Math.max(0, Math.min(1,
+          0.42 + (sourceLuminance - 0.42) * 1.10 - 0.015 + localContrast));
+        for (let channel = 0; channel < 3; channel += 1) {
+          const chroma = original[offset + channel] - sourceLuminance * 255;
+          work[offset + channel] = Math.max(0, Math.min(255, shapedLuminance * 255 + chroma * 0.96));
+        }
+        work[offset + 3] = original[offset + 3];
       }
-
-      // Greens, cyans and blues cannot be represented chromatically on this
-      // panel.  Rendering their brightness in black/white keeps foliage and
-      // blue feathers neutral, rather than incorrectly flooding them yellow.
-      const coolColour = hue >= 67 && hue <= 265 && saturation >= 0.22;
-      const candidates = coolColour ? palette.slice(0, 2) : palette;
-      return candidates.reduce((best, color) => {
-        const distance = 2 * (red - color[0]) ** 2
-          + 3 * (green - color[1]) ** 2
-          + (blue - color[2]) ** 2;
+    }
+    // All physical inks participate at every pixel. This is intentional:
+    // Floyd-Steinberg error diffusion uses sparse red/black/white dots to
+    // reproduce hue, brightness, shadows and highlights as an optical mixture.
+    const chooseInk = (source) => palette.reduce((best, color) => {
+        const distance = (source[0] - color[0]) ** 2
+          + (source[1] - color[1]) ** 2
+          + (source[2] - color[2]) ** 2;
         return distance < best.distance ? { color, distance } : best;
-      }, { color: candidates[0], distance: Number.POSITIVE_INFINITY }).color;
-    };
+      }, { color: palette[0], distance: Number.POSITIVE_INFINITY }).color;
+    // A regular 8x8 threshold pattern adds a controlled amount of red ink to
+    // saturated BWR colours (especially greens/blues). At normal viewing
+    // distance those sparse red dots optically mix with black and white. The
+    // density is deliberately derived from the untouched source pixel, so the
+    // Floyd error feedback cannot turn the complete picture solid red.
+    const opticalThreshold = [
+      0, 48, 12, 60, 3, 51, 15, 63,
+      32, 16, 44, 28, 35, 19, 47, 31,
+      8, 56, 4, 52, 11, 59, 7, 55,
+      40, 24, 36, 20, 43, 27, 39, 23,
+      2, 50, 14, 62, 1, 49, 13, 61,
+      34, 18, 46, 30, 33, 17, 45, 29,
+      10, 58, 6, 54, 9, 57, 5, 53,
+      42, 26, 38, 22, 41, 25, 37, 21,
+    ];
+    const redInk = palette[2];
     const addError = (x, y, error, weight) => {
       if (x < 0 || x >= width || y < 0 || y >= height) return;
       const offset = (y * width + x) * 4;
@@ -3872,7 +4081,20 @@ export const devicesMixin = {
           continue;
         }
         const source = [work[offset], work[offset + 1], work[offset + 2]];
-        const chosen = chooseInk(source, x, y);
+        let chosen = chooseInk(source);
+        if (!supportsYellow && chosen !== redInk) {
+          const red = original[offset];
+          const green = original[offset + 1];
+          const blue = original[offset + 2];
+          const maximum = Math.max(red, green, blue);
+          const saturation = maximum > 0
+            ? (maximum - Math.min(red, green, blue)) / maximum
+            : 0;
+          const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
+          const redDensity = saturation * 0.45 * (0.35 + 0.65 * luminance);
+          const threshold = (opticalThreshold[(y % 8) * 8 + (x % 8)] + 0.5) / 64;
+          if (threshold < redDensity) chosen = redInk;
+        }
         const error = source.map((value, channel) => value - chosen[channel]);
         [work[offset], work[offset + 1], work[offset + 2], work[offset + 3]] = [...chosen, 255];
         const direction = reverse ? -1 : 1;
@@ -3886,32 +4108,10 @@ export const devicesMixin = {
     return pixels;
   },
 
-  _storeCustomImageTemplateData(dataUrl, name) {
-    this._customImageDataUrl = dataUrl;
-    this._customImageName = String(name || "Vlastní obrázek");
-    this._displayTemplateConfig ||= {};
-    this._displayTemplateConfig.custom_image_data = this._customImageDataUrl;
-    this._displayTemplateConfig.custom_image_name = this._customImageName;
-    const address = String(this._selectedDeviceAddress || "").toUpperCase();
-    if (address) {
-      this._deviceDrafts ||= {};
-      const draft = this._deviceDrafts[address] || {};
-      draft.template_config ||= {};
-      draft.template_config.custom_image_data = this._customImageDataUrl;
-      draft.template_config.custom_image_name = this._customImageName;
-      this._deviceDrafts[address] = draft;
-    }
-    this._scheduleDraftSave();
-    this._render();
-    this._paint();
-    return dataUrl;
-  },
-
-  _convertCustomImageTemplateSource(source, name = "Vlastní obrázek") {
+  _renderCustomImageTemplateForDevice(source, device = this._device()) {
     return new Promise((resolve, reject) => {
       const image = new Image();
       image.onload = () => {
-        const device = this._device?.();
         const physical = this._devicePreviewSize?.(device) || { width: 296, height: 128 };
         const portrait = this._displayTemplateOrientation === "portrait";
         const width = Math.max(1, Math.round(portrait ? Math.min(physical.width, physical.height) : Math.max(physical.width, physical.height)));
@@ -3929,9 +4129,80 @@ export const devicesMixin = {
         const drawHeight = image.height * scale;
         context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
         const pixels = context.getImageData(0, 0, width, height);
-        this._ditherImportedTemplateImageData(pixels, width, height);
+        this._ditherImportedTemplateImageData(pixels, width, height, this._displayPaletteKey(device));
         context.putImageData(pixels, 0, 0);
-        resolve(this._storeCustomImageTemplateData(canvas.toDataURL("image/png"), name));
+        resolve(canvas.toDataURL("image/png"));
+      };
+      image.onerror = () => reject(new Error("Obrázek se nepodařilo načíst."));
+      image.src = source;
+    });
+  },
+
+  _storeCustomImageTemplateData(source, variants, name, aspect = 1) {
+    const asset = this._rememberTemplateImageAsset(source, variants, name, aspect);
+    this._customImageActiveId = asset.id;
+    this._customImageCycleIds ||= [];
+    if (!this._customImageCycleIds.includes(asset.id)) this._customImageCycleIds.push(asset.id);
+    this._customImageSourceUrl = source;
+    this._customImageVariants = { bwr: variants.bwr, bwry: variants.bwry };
+    this._customImageRendererVersion = this._importedImageRendererVersion();
+    this._customImageDataUrl = this._paletteImageSrc({ source, variants: this._customImageVariants });
+    this._customImageName = String(name || "Vlastní obrázek");
+    this._displayTemplateConfig ||= {};
+    this._displayTemplateConfig.custom_image_data = this._customImageDataUrl;
+    this._displayTemplateConfig.custom_image_source = this._customImageSourceUrl;
+    this._displayTemplateConfig.custom_image_variants = structuredClone(this._customImageVariants);
+    this._displayTemplateConfig.custom_image_renderer_version = this._customImageRendererVersion;
+    this._displayTemplateConfig.custom_image_name = this._customImageName;
+    const address = String(this._selectedDeviceAddress || "").toUpperCase();
+    if (address) {
+      this._deviceDrafts ||= {};
+      const draft = this._deviceDrafts[address] || {};
+      draft.template_config ||= {};
+      draft.template_config.custom_image_data = this._customImageDataUrl;
+      draft.template_config.custom_image_source = this._customImageSourceUrl;
+      draft.template_config.custom_image_variants = structuredClone(this._customImageVariants);
+      draft.template_config.custom_image_renderer_version = this._customImageRendererVersion;
+      draft.template_config.custom_image_name = this._customImageName;
+      this._deviceDrafts[address] = draft;
+    }
+    this._scheduleDraftSave();
+    this._render();
+    this._paint();
+    return this._customImageDataUrl;
+  },
+
+  _convertCustomImageTemplateSource(source, name = "Vlastní obrázek") {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        const device = this._device?.();
+        const physical = this._devicePreviewSize?.(device) || { width: 296, height: 128 };
+        const portrait = this._displayTemplateOrientation === "portrait";
+        const width = Math.max(1, Math.round(portrait ? Math.min(physical.width, physical.height) : Math.max(physical.width, physical.height)));
+        const height = Math.max(1, Math.round(portrait ? Math.max(physical.width, physical.height) : Math.min(physical.width, physical.height)));
+        const renderVariant = (paletteKey) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const context = canvas.getContext("2d", { willReadFrequently: true });
+          context.fillStyle = "#fff";
+          context.fillRect(0, 0, width, height);
+          context.imageSmoothingEnabled = true;
+          context.imageSmoothingQuality = "high";
+          const scale = Math.max(width / image.width, height / image.height);
+          const drawWidth = image.width * scale;
+          const drawHeight = image.height * scale;
+          context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+          const pixels = context.getImageData(0, 0, width, height);
+          this._ditherImportedTemplateImageData(pixels, width, height, paletteKey);
+          context.putImageData(pixels, 0, 0);
+          return canvas.toDataURL("image/png");
+        };
+        // Generate each hardware palette directly from the decoded original.
+        // Never quantize an already quantized variant into the other palette.
+        const variants = { bwr: renderVariant("bwr"), bwry: renderVariant("bwry") };
+        resolve(this._storeCustomImageTemplateData(source, variants, name, image.width / Math.max(1, image.height)));
       };
       image.onerror = () => reject(new Error("Obrázek se nepodařilo načíst."));
       image.src = source;
@@ -3988,14 +4259,16 @@ export const devicesMixin = {
     return item;
   },
 
-  _rememberTemplateImageAsset(src, name = "Obrázek", aspect = 1) {
+  _rememberTemplateImageAsset(source, variants, name = "Obrázek", aspect = 1) {
     this._templateImageLibrary ||= [];
-    const existing = this._templateImageLibrary.find((asset) => asset.src === src);
+    const existing = this._templateImageLibrary.find((asset) => (asset.source || asset.src) === source);
     if (existing) return existing;
     const asset = {
       id: `template-library-image-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`,
       name: String(name || "Obrázek"),
-      src,
+      source,
+      variants: { bwr: variants.bwr, bwry: variants.bwry },
+      src: this._paletteImageSrc({ source, variants }),
       aspect: Math.max(.05, Number(aspect || 1)),
       created_at: new Date().toISOString(),
     };
@@ -4004,11 +4277,12 @@ export const devicesMixin = {
   },
 
   _insertTemplateLibraryImage(asset, position = null) {
-    if (!asset?.src) return null;
+    const src = this._paletteImageSrc(asset);
+    if (!src) return null;
     this._templateEditorElements ||= [];
     this._pushTemplateHistory();
     const aspect = Math.max(.05, Number(asset.aspect || 1));
-    const item = this._normalizeTemplateEditorElement({ id: `template-image-${Date.now()}-${this._templateEditorElements.length}`, type: "image", label: asset.name || "Obrázek", src: asset.src });
+    const item = this._normalizeTemplateEditorElement({ id: `template-image-${Date.now()}-${this._templateEditorElements.length}`, type: "image", label: asset.name || "Obrázek", src, source: asset.source || asset.src, variants: structuredClone(asset.variants || {}) });
     item.w = Math.min(55, Math.max(18, aspect >= 1 ? 38 : 26));
     item.h = Math.min(55, Math.max(14, item.w / Math.max(.3, aspect)));
     this._fitTemplateElementVisualAspect(item, aspect);
@@ -4029,17 +4303,23 @@ export const devicesMixin = {
       const image = new Image();
       image.onload = () => {
         const scale = Math.min(1, 240 / Math.max(image.width, image.height));
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.max(1, Math.round(image.width * scale));
-        canvas.height = Math.max(1, Math.round(image.height * scale));
-        const context = canvas.getContext("2d", { willReadFrequently: true });
-        context.imageSmoothingEnabled = false;
-        context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
-        this._ditherImportedTemplateImageData(pixels, canvas.width, canvas.height);
-        context.putImageData(pixels, 0, 0);
-        const aspect = canvas.width / Math.max(1, canvas.height);
-        const asset = this._rememberTemplateImageAsset(canvas.toDataURL("image/png"), file.name || "Obrázek", aspect);
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+        const renderVariant = (paletteKey) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const context = canvas.getContext("2d", { willReadFrequently: true });
+          context.imageSmoothingEnabled = false;
+          context.drawImage(image, 0, 0, width, height);
+          const pixels = context.getImageData(0, 0, width, height);
+          this._ditherImportedTemplateImageData(pixels, width, height, paletteKey);
+          context.putImageData(pixels, 0, 0);
+          return canvas.toDataURL("image/png");
+        };
+        const variants = { bwr: renderVariant("bwr"), bwry: renderVariant("bwry") };
+        const aspect = width / Math.max(1, height);
+        const asset = this._rememberTemplateImageAsset(reader.result, variants, file.name || "Obrázek", aspect);
         this._templateElementPaletteCategory = "";
         this._insertTemplateLibraryImage(asset, position);
         this._saveDisplayTemplateDraft?.().catch(() => {});
@@ -4239,7 +4519,7 @@ export const devicesMixin = {
       const selected = item.id === this._selectedTemplateEditorElementId;
       const style = `left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;transform:rotate(${item.rotation}deg);--element-color:${item.color};--element-fill:${item.fill};--element-stroke:${item.stroke};--element-stroke-width:${item.strokeWidth}px;--element-radius:${item.radius}px;--element-font-size:${item.fontSize}px;--element-font-weight:${item.fontWeight};--element-font-family:${item.fontFamily};--element-font-style:${item.fontStyle};--element-text-decoration:${item.textDecoration};--element-text-outline-width:${item.textOutlineWidth}px;--element-text-outline-color:${item.textOutlineColor};--element-text-border-width:${item.textBorderWidth}px;--element-text-border-color:${item.textBorderColor};--element-overlay-opacity:${item.overlayOpacity}%;--element-text-align:${item.textAlign};--element-value:${Math.max(0, Math.min(100, item.value))}%`;
       let content = "";
-      if (item.type === "image") content = `<img src="${item.src}" alt="${this._escape(item.label)}">`;
+      if (item.type === "image") content = `<img src="${this._escape(this._paletteImageSrc(item))}" alt="${this._escape(item.label)}">`;
       else if (["text", "button"].includes(item.type)) content = `<span>${this._escape(item.text || item.label)}</span>`;
       else if (item.type === "icon") content = `<ha-icon icon="mdi:${this._escape(item.icon || "star")}"></ha-icon>`;
       else if (item.type === "qr") content = this._renderTemplateQrVisual(item);

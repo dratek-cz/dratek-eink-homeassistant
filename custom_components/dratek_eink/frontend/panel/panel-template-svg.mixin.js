@@ -382,12 +382,22 @@ export const templateSvgMixin = {
   // The catalog tile is a fixed box, so the panel letterboxes inside it rather
   // than stretching to fill it. A blank template stays blank here as well.
   _templateSvgThumbnail(template, width, height) {
+    const cacheKey = `${template?.id || "blank"}:${Math.round(width)}x${Math.round(height)}:${this._displayPaletteKey?.() || "bwr"}`;
+    this._templateThumbnailMarkupCache ||= new Map();
+    const cached = this._templateThumbnailMarkupCache.get(cacheKey);
+    if (cached) return cached;
     const markup = this._templateSvgPreviewMarkup(template, width, height);
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"`
+    const thumbnail = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"`
       + ` viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">`
       + `<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>`
       + markup
       + `</svg>`;
+    const rows = template ? this._templateSvgRows(this._templateBaseDefinition(template)) : [];
+    if (template?.id !== "custom_image" && !template?.user_created && !this._templateIconNames(rows).some((name) => !ICON_GEOMETRY.has(name))) {
+      this._templateThumbnailMarkupCache.set(cacheKey, thumbnail);
+      if (this._templateThumbnailMarkupCache.size > 96) this._templateThumbnailMarkupCache.delete(this._templateThumbnailMarkupCache.keys().next().value);
+    }
+    return thumbnail;
   },
 
   // --------------------------------------------------------------- layout ---
@@ -926,7 +936,7 @@ export const templateSvgMixin = {
     const width = Math.max(1, Math.round(box.fullW));
     const height = Math.max(1, Math.round(box.h));
     return `<image x="0" y="0" width="${width}" height="${height}" href="${this._escape(source)}"`
-      + ` preserveAspectRatio="none" image-rendering="pixelated"></image>`;
+      + ` preserveAspectRatio="none" image-rendering="auto"></image>`;
   },
 
   // Tiles of equal weight. A list ranks what it stacks; a grid says these readings

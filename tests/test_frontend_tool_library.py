@@ -42,6 +42,29 @@ class FrontendToolLibraryTests(unittest.TestCase):
         for widget in ("chart", "bar_gauge", "pie", "slider", "gauge", "status"):
             self.assertIn(f'toolButton("{widget}"', self.source)
 
+    def test_custom_image_studio_has_gallery_navigation_and_real_slideshow(self):
+        self.assertIn('class="custom-image-studio"', self.source)
+        self.assertIn('data-custom-image-download', self.source)
+        self.assertIn('data-custom-image-studio-upload', self.source)
+        self.assertIn('data-custom-image-gallery-focus', self.source)
+        self.assertIn('data-custom-image-cycle-enabled', self.source)
+        self.assertIn('data-custom-image-cycle-minutes', self.source)
+        self.assertIn('data-custom-image-save', self.source)
+        self.assertIn('image_cycle: cycleImages', self.source)
+        self.assertIn('image_cycle_interval_seconds: intervalSeconds', self.source)
+        self.assertIn('if (template?.id === "custom_image") return this._renderCustomImageStudio(device);', self.source)
+
+    def test_custom_image_preview_zooms_and_pans_without_repainting(self):
+        self.assertIn('imageDropzone.addEventListener("wheel"', self.source)
+        self.assertIn('imageDropzone.addEventListener("pointerdown"', self.source)
+        self.assertIn('"--template-preview-zoom"', self.source)
+        wheel_start = self.source.index('imageDropzone.addEventListener("wheel"')
+        wheel_end = self.source.index('}, { passive: false });', wheel_start)
+        wheel_handler = self.source[wheel_start:wheel_end]
+        self.assertNotIn("this._render()", wheel_handler)
+        self.assertNotIn("this._paint()", wheel_handler)
+        self.assertNotIn("_renderCustomImageTemplateForDevice", wheel_handler)
+
     def test_entity_widgets_are_manual_only(self):
         start = self.source.rindex("  _automaticTextBindings()")
         end = self.source.index("  _canonicalRenderObjects()", start)
@@ -419,7 +442,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('this._templateImageLibrary = [];', self.source)
         self.assertIn('image_library: structuredClone(this._templateImageLibrary || [])', self.source)
         self.assertIn('Array.isArray(config.image_library)', self.source)
-        self.assertIn('_rememberTemplateImageAsset(src, name = "Obrázek", aspect = 1)', self.source)
+        self.assertIn('_rememberTemplateImageAsset(source, variants, name = "Obrázek", aspect = 1)', self.source)
         self.assertIn('_insertTemplateLibraryImage(asset, position = null)', self.source)
         self.assertIn('data-template-library-image="${this._escape(asset.id)}"', self.source)
         self.assertIn('data-template-library-remove="${this._escape(asset.id)}"', self.source)
@@ -479,12 +502,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("matrix: 4", self.source)
         self.assertIn("const foregroundCount = Math.round(density * matrix * matrix);", self.source)
         self.assertIn('id: "custom_image"', self.source)
-        self.assertIn("_ditherImportedTemplateImageData(pixels, width, height)", self.source)
+        self.assertIn("_ditherImportedTemplateImageData(pixels, width, height, paletteKey)", self.source)
         self.assertIn("Oranžová vzniká střídáním červených a žlutých pixelů", self.source)
         self.assertIn("data-custom-image-template-upload", self.source)
         self.assertIn("data-custom-image-template-default", self.source)
         self.assertIn('_frontendAssetUrl("images/parrot-source.png")', self.source)
-        self.assertIn('preserveAspectRatio="none" image-rendering="pixelated"', self.source)
+        self.assertIn('preserveAspectRatio="none" image-rendering="auto"', self.source)
         self.assertIn('const customImage = () => this._customImageDataUrl || this._frontendAssetUrl("images/parrot-dithered.png")', self.source)
         self.assertNotIn("_customImageNativeRaster", self.source)
         self.assertNotIn("custom_image_original", self.source)
@@ -612,11 +635,20 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('class="template-preview-controls"', self.source)
         self.assertIn('aria-label="Orientace displeje"', self.source)
         self.assertNotIn('aria-label="Orientace vybrané šablony"', self.source)
-        self.assertIn('aria-label="Přiblížení náhledu"', self.source)
-        self.assertIn('data-template-preview-zoom="out"', self.source)
-        self.assertIn('data-template-preview-zoom="reset"', self.source)
-        self.assertIn('data-template-preview-zoom="in"', self.source)
+        self.assertNotIn('data-template-preview-zoom="out"', self.source)
+        self.assertNotIn('data-template-preview-zoom="reset"', self.source)
+        self.assertNotIn('data-template-preview-zoom="in"', self.source)
+        self.assertIn('data-template-designer-viewport-canvas', self.source)
+        self.assertIn('designerViewport.addEventListener("wheel"', self.source)
+        self.assertIn('designerViewport.addEventListener("pointerdown"', self.source)
+        self.assertIn('Kolečko zoom · tažením posun', self.source)
         self.assertIn("this._displayTemplatePreviewZoom = 1;", self.source)
+        self.assertIn('designerViewport.style.setProperty("--template-preview-zoom"', self.source)
+        self.assertIn("zoom:var(--template-preview-zoom,1)", self.source)
+        self.assertIn("transform:none;zoom:var(--template-preview-zoom,1)", self.source)
+        dither_key = self.source[self.source.index("const ditherKey = autoFit"):]
+        dither_key = dither_key[:dither_key.index("})) : \"\";")]
+        self.assertNotIn("Math.round(previewZoom * 100)", dither_key)
         self.assertIn("height:540px;min-height:540px", self.source)
         self.assertNotIn("Nastavte fyzickou orientaci celého displeje.", self.source)
         self.assertNotIn("Formát vybrané šablony", self.source)
@@ -677,7 +709,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         # panel, on a landscape one, while the preview on screen looked right.
         self.assertNotIn("_rasterizeDisplayTemplatePreview", self.source)
         self.assertNotIn("template-export-preview-body", self.source)
-        self.assertIn("return this._rasterizeDisplayTemplateSvg(", self.source)
+        self.assertIn("return await this._rasterizeDisplayTemplateSvg(", self.source)
         self.assertIn("_collectTemplateOverlayBoxes() {", self.source)
         self.assertIn("_paintTemplateOverlays(context, overlays, width, height) {", self.source)
         self.assertIn("if (paintOverlay) paintOverlay(context, width, height);", self.source)
@@ -1018,7 +1050,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".properties-panel .text-font-row", self.source)
 
     def test_device_cards_scale_an_already_quantized_native_canvas(self):
-        self.assertIn("ctx.imageSmoothingEnabled = false;", self.source)
+        self.assertIn("ctx.imageSmoothingEnabled = true;", self.source)
+        self.assertIn('ctx.imageSmoothingQuality = "high";', self.source)
         self.assertIn(
             "context.drawImage(image, 0, 0, target.width, target.height);",
             self.source,
@@ -1032,6 +1065,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("device-preview-designer-svg{display:block", self.source)
         self.assertIn("calc(100cqh * var(--frame-ratio,2.15))", self.source)
         self.assertIn(".display-preview-slot .device-preview-designer-copy{box-shadow:none;filter:none}", self.source)
+        self.assertIn("canvas[data-device-preview],.display-template-dropzone", self.source)
+        self.assertIn("{image-rendering:auto!important}", self.source)
 
     def test_portrait_orientation_rotates_the_complete_physical_frame(self):
         self.assertIn('--designer-frame-rotation:${portraitLayout ? "90deg" : "0deg"}', self.source)
@@ -1062,6 +1097,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("preview_updated_at: local.preview_updated_at", self.source)
         self.assertIn("this._devicePreviewImages.set(address, { key, image })", self.source)
         self.assertIn('canvas[data-device-preview]', self.source)
+        self.assertIn("const currentCanvases = [...this.shadowRoot.querySelectorAll", self.source)
+        self.assertIn("currentCanvases.forEach((currentCanvas) => draw(currentCanvas, image));", self.source)
         self.assertIn("serverPreviewAt >= localPreviewAt", self.source)
         self.assertIn("previousActive.has(job.id) && job.status === \"succeeded\"", self.source)
         self.assertIn("await this._loadDevicePreviewDrafts(this._result.devices)", self.source)
@@ -1429,19 +1466,117 @@ class FrontendToolLibraryTests(unittest.TestCase):
             colours,
             {"255,255,255", "0,0,0", "220,20,12", "244,196,0"},
         )
-        self.assertIn("const redScore = red - Math.max(green, blue);", self.source)
-        self.assertIn("const luminance = (38 * red + 75 * green + 15 * blue) >> 7;", self.source)
-        self.assertIn("green < red * 0.68 && blue < red * 0.72", self.source)
         self.assertIn("context.imageSmoothingEnabled = false;", self.source)
-        self.assertIn("const yellowRatio = Math.max(0, Math.min(1, (green - 28) / 168));", self.source)
-        self.assertIn("const coolColour = hue >= 67 && hue <= 265 && saturation >= 0.22;", self.source)
+        self.assertIn("Keep the natural v0.1.292 colour mapping", self.source)
+        self.assertIn("(source[0] - color[0]) ** 2", self.source)
+        self.assertIn('? [[255, 255, 255], [0, 0, 0], [220, 20, 12], [244, 196, 0]]', self.source)
+        self.assertIn(': [[255, 255, 255], [0, 0, 0], [220, 20, 12]];', self.source)
         self.assertNotIn("const palette = [[255, 255, 255], [10, 10, 10], [227, 27, 27]]", self.source)
+
+    def test_green_import_uses_optical_three_colour_mix(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is not available")
+        module_url = (PANEL_MODULES / "panel-devices.mixin.js").as_uri()
+        script = f"""
+          import {{ devicesMixin }} from {json.dumps(module_url)};
+          const convert = (supportsYellow) => {{
+            const width = 32, height = 16;
+            const data = new Uint8ClampedArray(width * height * 4);
+            for (let i = 0; i < data.length; i += 4) {{
+              data[i] = 24; data[i + 1] = 190; data[i + 2] = 45; data[i + 3] = 255;
+            }}
+            const context = {{
+              _displaySupportsYellow: () => supportsYellow,
+              _device: () => ({{}}),
+            }};
+            devicesMixin._ditherImportedTemplateImageData.call(context, {{ data }}, width, height);
+            return [...new Set(Array.from({{ length: width * height }}, (_, p) =>
+              `${{data[p * 4]}},${{data[p * 4 + 1]}},${{data[p * 4 + 2]}}`
+            ))].sort();
+          }};
+          console.log(JSON.stringify({{ bwry: convert(true), bwr: convert(false) }}));
+        """
+        result = subprocess.run(
+            [node, "--input-type=module", "-e", script],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode:
+            self.fail(result.stderr)
+        colours = json.loads(result.stdout)
+        self.assertLessEqual(set(colours["bwry"]), {"0,0,0", "255,255,255", "244,196,0"})
+        self.assertIn("0,0,0", colours["bwry"])
+        self.assertIn("244,196,0", colours["bwry"])
+        self.assertLessEqual(set(colours["bwr"]), {"0,0,0", "255,255,255", "220,20,12"})
+        self.assertNotIn("220,20,12", colours["bwry"])
+        self.assertIn("220,20,12", colours["bwr"])
+        self.assertIn("const original = new Uint8ClampedArray(pixels.data);", self.source)
+        self.assertIn("const redDensity = saturation * 0.45", self.source)
+        self.assertIn("All physical inks participate at every pixel", self.source)
+
+    def test_imported_images_keep_separate_bwr_and_bwry_renders(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is not available")
+        module_url = (PANEL_MODULES / "panel-devices.mixin.js").as_uri()
+        script = f"""
+          import {{ devicesMixin }} from {json.dumps(module_url)};
+          const context = {{
+            _displaySupportsYellow: (device) => device?.palette === "bwry",
+            _displayPaletteKey: devicesMixin._displayPaletteKey,
+          }};
+          const image = {{
+            source: "data:image/png;base64,ORIGINAL",
+            src: "data:image/png;base64,LEGACY",
+            variants: {{
+              bwr: "data:image/png;base64,BWR",
+              bwry: "data:image/png;base64,BWRY",
+            }},
+          }};
+          const bwr = devicesMixin._paletteImageSrc.call(context, image, {{ palette: "bwr" }});
+          const bwry = devicesMixin._paletteImageSrc.call(context, image, {{ palette: "bwry" }});
+          console.log(JSON.stringify({{ bwr, bwry, source: image.source }}));
+        """
+        result = subprocess.run(
+            [node, "--input-type=module", "-e", script],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode:
+            self.fail(result.stderr)
+        selected = json.loads(result.stdout)
+        self.assertEqual("data:image/png;base64,BWR", selected["bwr"])
+        self.assertEqual("data:image/png;base64,BWRY", selected["bwry"])
+        self.assertEqual("data:image/png;base64,ORIGINAL", selected["source"])
+        self.assertIn('const variants = { bwr: renderVariant("bwr"), bwry: renderVariant("bwry") };', self.source)
+        self.assertIn("custom_image_source: this._customImageSourceUrl || \"\"", self.source)
+        self.assertIn("custom_image_variants: structuredClone(this._customImageVariants || {})", self.source)
+        self.assertIn('return "bwr-optical-floyd-3";', self.source)
+        self.assertIn("const localContrast = (sourceLuminance - localAverage) * 0.55;", self.source)
+        self.assertIn("(sourceLuminance - 0.42) * 1.10 - 0.015 + localContrast", self.source)
+        self.assertIn("custom_image_renderer_version: this._customImageRendererVersion || \"\"", self.source)
+        self.assertIn("this._customImageRendererVersion !== this._importedImageRendererVersion()", self.source)
+        self.assertIn("this._convertCustomImageTemplateSource(source, name)", self.source)
+        self.assertIn("_renderCustomImageTemplateForDevice(source, device = this._device())", self.source)
+        self.assertIn("? await this._renderCustomImageTemplateForDevice(this._customImageSourceUrl, device)", self.source)
+        self.assertIn("const targetCustomImage = this._paletteImageSrc({", self.source)
+        self.assertIn("}, device);", self.source)
+        self.assertIn("this._customImageDataUrl = previousCustomImage;", self.source)
 
     def test_template_placement_uses_the_page_teal_accent(self):
         self.assertIn(".template-space-dialog-icon{background:rgba(0,155,155,.11);color:var(--dratek-teal-dark,#007c7c)}", self.source)
         self.assertIn(".template-placement-slot.is-incoming{outline-color:var(--dratek-teal,#009b9b)}", self.source)
         self.assertIn(".display-template-drop-zone.is-target{background:rgba(0,155,155,.2);border-color:var(--dratek-teal,#009b9b)", self.source)
         self.assertIn(".display-template-surface.is-element-drag-over{outline-color:var(--dratek-teal,#009b9b)!important}", self.source)
+
+    def test_dithered_ui_previews_downsample_cleanly_at_device_aspect(self):
+        self.assertIn('style="aspect-ratio:${customPreviewWidth}/${customPreviewHeight}"', self.source)
+        self.assertIn("const customPreviewSize = this._devicePreviewSize", self.source)
+        self.assertIn(".display-template-dropzone .template-dithered-preview", self.source)
+        self.assertIn(".display-template-tile-preview .user-template-captured-preview", self.source)
+        self.assertIn("{image-rendering:auto!important}", self.source)
+        self.assertIn('preserveAspectRatio="none" image-rendering="auto"', self.source)
 
     def test_template_studio_has_undo_redo_and_keyboard_editing(self):
         self.assertIn('data-template-history="undo"', self.source)
@@ -1503,6 +1638,14 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('class="user-template-captured-preview"', self.source)
         self.assertIn('else if (item.type === "qr") content = this._renderTemplateQrVisual(item);', self.source)
         self.assertIn('else if (item.type === "barcode") content = this._renderTemplateBarcodeVisual(item);', self.source)
+
+    def test_builtin_template_catalog_previews_are_lazy_and_cached(self):
+        self.assertIn('data-template-catalog-preview=', self.source)
+        self.assertIn('_bindLazyTemplateCatalogPreviews()', self.source)
+        self.assertIn('new IntersectionObserver', self.source)
+        self.assertIn('rootMargin: "320px 0px"', self.source)
+        self.assertIn('this._templateThumbnailMarkupCache ||= new Map();', self.source)
+        self.assertIn('template-catalog-preview-skeleton', self.source)
 
     def test_chart_editor_exposes_data_range_and_exact_geometry(self):
         inspector = (PANEL_MODULES / "panel-inspector.mixin.js").read_text(encoding="utf-8")

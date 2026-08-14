@@ -2,6 +2,20 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.294] - 2026-08-14
+
+### Přidáno a vylepšeno
+- Přibylo samostatné Obrázkové studio s importem více souborů, stažením, galerií a výběrem aktivního snímku.
+- Galerie umí vybrat až 12 obrázků a automaticky je střídat na fyzickém displeji v intervalu 1 až 60 minut.
+- BWR a BWRY varianty se vykreslují samostatně z původního zdroje a nepoužívají již výsledek jiné palety.
+- Tříbarevný převod fotografie používá jemnější optické míchání červených, černých a bílých pixelů pro zachování stínů a hloubky.
+
+### Opraveno
+- Přiblížení a posun náhledu probíhá pouze pomocí CSS nad hotovým obrazem, takže nemění bitmapu ani znovu nespouští dithering.
+- Stará tlačítka zoomu byla odstraněna z levého náhledu i Designeru; ovládání zajišťuje kolečko myši a tažení levým tlačítkem.
+- Katalog šablon již nevykresluje všechny náhledy současně. Viditelné miniatury se načítají postupně a hotové SVG se ukládá do cache.
+- Prázdná karta vlastního obrázku zobrazuje jasnou výzvu k přidání obrázku místo bílé nebo nedokončené plochy.
+
 ## [0.1.292] - 2026-08-13
 
 ### Přidáno a vylepšeno

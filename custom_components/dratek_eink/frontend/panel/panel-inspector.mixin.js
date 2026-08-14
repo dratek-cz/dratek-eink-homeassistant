@@ -1,8 +1,39 @@
 export const inspectorMixin = {
 
+  _bindLazyTemplateCatalogPreviews() {
+    this._templateCatalogPreviewObserver?.disconnect?.();
+    this._templateCatalogPreviewObserver = null;
+    const nodes = [...this.shadowRoot.querySelectorAll("[data-template-catalog-preview]")];
+    if (!nodes.length) return;
+    const templates = this._displayTemplateCards();
+    const hydrate = (node) => {
+      if (!node?.isConnected || node.dataset.templatePreviewReady === "true") return;
+      const template = templates.find((item) => item.id === node.dataset.templateCatalogPreview);
+      if (!template) return;
+      const orientation = node.dataset.templatePreviewOrientation === "portrait" ? "portrait" : "landscape";
+      const width = Math.max(1, Number(node.dataset.templatePreviewWidth) || 250);
+      const height = Math.max(1, Number(node.dataset.templatePreviewHeight) || 128);
+      node.innerHTML = this._renderDisplayTemplateCatalogPreview(template, orientation, { width, height });
+      node.dataset.templatePreviewReady = "true";
+      node.classList.add("is-ready");
+    };
+    if (typeof IntersectionObserver !== "function") {
+      nodes.slice(0, 8).forEach(hydrate);
+      return;
+    }
+    this._templateCatalogPreviewObserver = new IntersectionObserver((entries, observer) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        hydrate(entry.target);
+        observer.unobserve(entry.target);
+      });
+    }, { root: null, rootMargin: "320px 0px", threshold: 0.01 });
+    nodes.forEach((node) => this._templateCatalogPreviewObserver.observe(node));
+  },
 
   _bind() {
     this._bindAutomationEvents?.();
+    this._bindLazyTemplateCatalogPreviews();
     this.shadowRoot.querySelector("#scan")?.addEventListener("click", () => this._scan());
     this.shadowRoot.querySelector("#resetDevicesView")?.addEventListener("click", () => {
       this._deviceSearchQuery = "";
@@ -299,6 +330,11 @@ export const inspectorMixin = {
       const openTemplateSettings = () => {
         const templateId = bar.dataset.displayTemplateConfigure || "";
         if (!templateId) return;
+        if (templateId === "custom_image") {
+          this._templateSettingsDialogOpen = false;
+          openTemplateDesigner(templateId);
+          return;
+        }
         this._templateEditMenuId = "";
         this._templateSettingsDialogOpen = true;
         this._templateSettingsDialogMode = "variables";
@@ -568,6 +604,11 @@ export const inspectorMixin = {
         const templateId = button.dataset.displayTemplateId || "";
         const choice = button.dataset.displayTemplateEditChoice || "designer";
         this._templateEditMenuId = "";
+        if (templateId === "custom_image") {
+          this._templateSettingsDialogOpen = false;
+          openTemplateDesigner(templateId);
+          return;
+        }
         if (choice === "variables") {
           this._templateSettingsDialogOpen = true;
           this._templateSettingsDialogMode = "variables";
@@ -718,15 +759,81 @@ export const inspectorMixin = {
       this._render();
       this._paint();
     }));
-    this.shadowRoot.querySelectorAll("[data-template-preview-zoom]").forEach((button) => button.addEventListener("click", () => {
-      const action = button.dataset.templatePreviewZoom;
-      const current = Math.max(0.5, Math.min(1.8, Number(this._displayTemplatePreviewZoom || 1)));
-      this._displayTemplatePreviewZoom = action === "reset"
-        ? 1
-        : Math.max(0.5, Math.min(1.8, Math.round((current + (action === "in" ? 0.1 : -0.1)) * 10) / 10));
-      this._render();
-      this._paint();
-    }));
+    const designerViewport = this.shadowRoot.querySelector("[data-template-designer-viewport-canvas]");
+    if (designerViewport) {
+      const applyDesignerViewport = () => {
+        designerViewport.style.setProperty("--template-preview-zoom", String(this._displayTemplatePreviewZoom || 1));
+        designerViewport.style.setProperty("--template-designer-pan-x", `${this._templateDesignerPan?.x || 0}px`);
+        designerViewport.style.setProperty("--template-designer-pan-y", `${this._templateDesignerPan?.y || 0}px`);
+      };
+      applyDesignerViewport();
+      designerViewport.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        const current = Math.max(0.5, Math.min(3, Number(this._displayTemplatePreviewZoom || 1)));
+        this._displayTemplatePreviewZoom = Math.max(0.5, Math.min(3, Math.round((current + (event.deltaY < 0 ? 0.1 : -0.1)) * 10) / 10));
+        applyDesignerViewport();
+      }, { passive: false });
+      let designerPan = null;
+      designerViewport.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || event.target.closest("button,input,select,a,[data-template-editable-part],[data-template-editor-element]")) return;
+        event.preventDefault();
+        designerPan = { x: event.clientX, y: event.clientY, left: this._templateDesignerPan?.x || 0, top: this._templateDesignerPan?.y || 0 };
+        designerViewport.setPointerCapture?.(event.pointerId);
+        designerViewport.classList.add("is-panning");
+      });
+      designerViewport.addEventListener("pointermove", (event) => {
+        if (!designerPan) return;
+        this._templateDesignerPan = { x: designerPan.left + event.clientX - designerPan.x, y: designerPan.top + event.clientY - designerPan.y };
+        applyDesignerViewport();
+      });
+      const stopDesignerPan = () => { designerPan = null; designerViewport.classList.remove("is-panning"); };
+      designerViewport.addEventListener("pointerup", stopDesignerPan);
+      designerViewport.addEventListener("pointercancel", stopDesignerPan);
+      designerViewport.addEventListener("dblclick", () => {
+        this._displayTemplatePreviewZoom = 1;
+        this._templateDesignerPan = { x: 0, y: 0 };
+        applyDesignerViewport();
+      });
+    }
+    const imageDropzone = this.shadowRoot.querySelector(".display-template-dropzone.is-image-navigation");
+    if (imageDropzone) {
+      const applyImageViewport = () => {
+        imageDropzone.style.setProperty("--template-preview-pan-x", `${this._customImageViewportPan?.x || 0}px`);
+        imageDropzone.style.setProperty("--template-preview-pan-y", `${this._customImageViewportPan?.y || 0}px`);
+        imageDropzone.querySelector(".template-physical-preview")?.style.setProperty(
+          "--template-preview-zoom",
+          String(this._displayTemplatePreviewZoom || 1),
+        );
+      };
+      applyImageViewport();
+      imageDropzone.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        const current = Math.max(0.5, Math.min(3, Number(this._displayTemplatePreviewZoom || 1)));
+        this._displayTemplatePreviewZoom = Math.max(0.5, Math.min(3, Math.round((current + (event.deltaY < 0 ? 0.1 : -0.1)) * 10) / 10));
+        applyImageViewport();
+      }, { passive: false });
+      let pan = null;
+      imageDropzone.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || event.target.closest("button,input,select,a")) return;
+        event.preventDefault();
+        pan = { x: event.clientX, y: event.clientY, left: this._customImageViewportPan?.x || 0, top: this._customImageViewportPan?.y || 0 };
+        imageDropzone.setPointerCapture?.(event.pointerId);
+        imageDropzone.classList.add("is-panning");
+      });
+      imageDropzone.addEventListener("pointermove", (event) => {
+        if (!pan) return;
+        this._customImageViewportPan = { x: pan.left + event.clientX - pan.x, y: pan.top + event.clientY - pan.y };
+        applyImageViewport();
+      });
+      const stopPan = () => { pan = null; imageDropzone.classList.remove("is-panning"); };
+      imageDropzone.addEventListener("pointerup", stopPan);
+      imageDropzone.addEventListener("pointercancel", stopPan);
+      imageDropzone.addEventListener("dblclick", () => {
+        this._displayTemplatePreviewZoom = 1;
+        this._customImageViewportPan = { x: 0, y: 0 };
+        applyImageViewport();
+      });
+    }
     this.shadowRoot.querySelectorAll("[data-template-viewport-menu]").forEach((button) => button.addEventListener("click", (event) => {
       event.stopPropagation();
       this._templateViewportMenuOpen = !this._templateViewportMenuOpen;
@@ -1591,6 +1698,115 @@ export const inspectorMixin = {
       if (file) this._importCustomImageTemplate(file);
       event.target.value = "";
     });
+    this.shadowRoot.querySelector("[data-custom-image-studio-upload]")?.addEventListener("click", () => {
+      this.shadowRoot.querySelector("#customImageStudioFile")?.click();
+    });
+    this.shadowRoot.querySelector("#customImageStudioFile")?.addEventListener("change", async (event) => {
+      for (const file of [...(event.target.files || [])]) await this._importCustomImageTemplate(file);
+      event.target.value = "";
+    });
+    this.shadowRoot.querySelector("[data-custom-image-save]")?.addEventListener("click", async () => {
+      try {
+        await this._saveDisplayTemplateDraft();
+        this._templateSaveResult = { ok: true, message: "Galerie a nastavení střídání byly uloženy pro tento displej." };
+      } catch (err) {
+        this._templateSaveResult = { ok: false, message: `Uložení galerie selhalo: ${this._message(err)}` };
+      }
+      this._render();
+      this._paint();
+    });
+    this.shadowRoot.querySelector("[data-custom-image-download]")?.addEventListener("click", () => {
+      const active = this._activeCustomImageAsset();
+      const source = active ? this._paletteImageSrc(active) : this._customImageDataUrl;
+      if (!source) return;
+      const anchor = document.createElement("a");
+      anchor.href = source;
+      anchor.download = String(active?.name || this._customImageName || "dratek-eink.png").replace(/\.[^.]+$/, "") + "-eink.png";
+      anchor.click();
+    });
+    this.shadowRoot.querySelector("[data-custom-image-gallery-focus]")?.addEventListener("click", () => {
+      this.shadowRoot.querySelector("[data-custom-image-gallery]")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    this.shadowRoot.querySelectorAll("[data-custom-image-select]").forEach((button) => button.addEventListener("click", () => {
+      const asset = (this._templateImageLibrary || []).find((item) => item.id === button.dataset.customImageSelect);
+      if (!asset) return;
+      this._customImageActiveId = asset.id;
+      this._customImageSourceUrl = asset.source || asset.src;
+      this._customImageVariants = structuredClone(asset.variants || {});
+      this._customImageDataUrl = this._paletteImageSrc(asset);
+      this._customImageName = asset.name || "Obrázek";
+      this._render();
+      this._paint();
+      this._saveDisplayTemplateDraft?.().catch(() => {});
+    }));
+    this.shadowRoot.querySelectorAll("[data-custom-image-cycle]").forEach((input) => input.addEventListener("change", () => {
+      const id = input.dataset.customImageCycle;
+      const ids = new Set(this._customImageCycleIds || []);
+      if (input.checked && ids.size < 12) ids.add(id);
+      else ids.delete(id);
+      this._customImageCycleIds = [...ids];
+      if (this._customImageCycleIds.length < 2) this._customImageCycleEnabled = false;
+      this._render();
+      this._paint();
+      this._saveDisplayTemplateDraft?.().catch(() => {});
+    }));
+    this.shadowRoot.querySelector("[data-custom-image-cycle-enabled]")?.addEventListener("change", (event) => {
+      this._customImageCycleEnabled = event.target.checked && (this._customImageCycleIds || []).length > 1;
+      this._render();
+      this._paint();
+      this._saveDisplayTemplateDraft?.().catch(() => {});
+    });
+    this.shadowRoot.querySelector("[data-custom-image-cycle-minutes]")?.addEventListener("change", (event) => {
+      this._customImageCycleMinutes = Math.max(1, Math.min(1440, Number(event.target.value) || 10));
+      this._saveDisplayTemplateDraft?.().catch(() => {});
+    });
+    this.shadowRoot.querySelectorAll("[data-custom-image-remove]").forEach((button) => button.addEventListener("click", () => {
+      const id = button.dataset.customImageRemove;
+      this._templateImageLibrary = (this._templateImageLibrary || []).filter((asset) => asset.id !== id);
+      this._customImageCycleIds = (this._customImageCycleIds || []).filter((assetId) => assetId !== id);
+      if (this._customImageActiveId === id) {
+        const next = this._templateImageLibrary[0];
+        this._customImageActiveId = next?.id || "";
+        this._customImageSourceUrl = next?.source || "";
+        this._customImageVariants = structuredClone(next?.variants || {});
+        this._customImageDataUrl = next ? this._paletteImageSrc(next) : "";
+        this._customImageName = next?.name || "";
+      }
+      if (this._customImageCycleIds.length < 2) this._customImageCycleEnabled = false;
+      this._render();
+      this._paint();
+      this._saveDisplayTemplateDraft?.().catch(() => {});
+    }));
+    const imageStage = this.shadowRoot.querySelector("[data-custom-image-stage]");
+    if (imageStage) {
+      const image = imageStage.querySelector("img");
+      const applyStageTransform = () => {
+        image?.style.setProperty("--image-zoom", String(this._customImageStudioZoom || 1));
+        image?.style.setProperty("--image-pan-x", `${this._customImageViewportPan?.x || 0}px`);
+        image?.style.setProperty("--image-pan-y", `${this._customImageViewportPan?.y || 0}px`);
+      };
+      applyStageTransform();
+      imageStage.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        this._customImageStudioZoom = Math.max(0.5, Math.min(4, Math.round(((this._customImageStudioZoom || 1) + (event.deltaY < 0 ? 0.1 : -0.1)) * 10) / 10));
+        applyStageTransform();
+      }, { passive: false });
+      let stagePan = null;
+      imageStage.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        stagePan = { x: event.clientX, y: event.clientY, left: this._customImageViewportPan?.x || 0, top: this._customImageViewportPan?.y || 0 };
+        imageStage.setPointerCapture?.(event.pointerId);
+        imageStage.classList.add("is-panning");
+      });
+      imageStage.addEventListener("pointermove", (event) => {
+        if (!stagePan) return;
+        this._customImageViewportPan = { x: stagePan.left + event.clientX - stagePan.x, y: stagePan.top + event.clientY - stagePan.y };
+        applyStageTransform();
+      });
+      const stopStagePan = () => { stagePan = null; imageStage.classList.remove("is-panning"); };
+      imageStage.addEventListener("pointerup", stopStagePan);
+      imageStage.addEventListener("pointercancel", stopStagePan);
+    }
     [
       { id: "mrOptPrecipitation", key: "meteoradar_show_precipitation" },
       { id: "mrOptDotted", key: "meteoradar_dotted_light" },

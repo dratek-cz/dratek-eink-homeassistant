@@ -4,6 +4,15 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.294
+
+- **Samostatné vykreslení pro BWR a BWRY** – fotografie se vždy znovu převádí přímo pro paletu cílového displeje; tříbarevný a čtyřbarevný výsledek se už nepřevádějí jeden z druhého.
+- **Přirozenější fotografie na tříbarevném e-paperu** – nové optické míchání pixelů zachovává světla, stíny a prostorový dojem bez přepálených červených ploch.
+- **Obrázkové studio a galerie** – vlastní obrázek má samostatnou obrazovku pro přidávání, stažení, výběr a odstranění uložených snímků.
+- **Automatické střídání obrázků** – lze vybrat až 12 snímků a nastavit jejich skutečné intervalové střídání na displeji od 1 do 60 minut.
+- **Zoom bez poškození náhledu** – kolečko myši přibližuje a levé tlačítko posouvá hotový obraz bez nové kvantizace nebo překreslení canvasu; stará tlačítka zoomu byla odstraněna.
+- **Rychlejší katalog šablon** – miniatury se načítají pouze podle viditelnosti, hotové náhledy se ukládají do cache a prázdná obrazová karta má srozumitelný stav pro přidání obrázku.
+
 ## Novinky ve verzi 0.1.293
 
 - **Věrnější barvy na BWRY displejích** – oranžová se skládá z pravidelně střídaných červených a žlutých pixelů; zelené a modré plochy fotografie se už chybně nemění na velké žlutočervené oblasti.

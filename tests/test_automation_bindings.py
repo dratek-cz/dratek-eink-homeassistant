@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import ast
+import base64
 import importlib.util
+import io
 import json
 from pathlib import Path
 import asyncio
@@ -93,6 +95,12 @@ def _load_automation_module():
 
 
 automation = _load_automation_module()
+
+
+def _solid_png_data_url(color: tuple[int, int, int]) -> str:
+    buffer = io.BytesIO()
+    Image.new("RGB", (2, 2), color).save(buffer, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
 class _State:
@@ -1571,6 +1579,27 @@ class GraphicBindingResolutionTests(unittest.TestCase):
 
 
 class SplitLayoutAutomationTests(unittest.TestCase):
+    def test_image_cycle_selects_a_pre_rendered_frame_for_the_interval(self):
+        manager = automation.EntityAutoUpdateManager.__new__(automation.EntityAutoUpdateManager)
+
+        async def executor(function, *args):
+            return function(*args)
+
+        manager.hass = types.SimpleNamespace(async_add_executor_job=executor)
+        red = _solid_png_data_url((255, 0, 0))
+        black = _solid_png_data_url((0, 0, 0))
+        original_time = automation.time.time
+        try:
+            automation.time.time = lambda: 600
+            image = asyncio.run(manager.async_render_preview("AA", {
+                "image_cycle": [red, black],
+                "image_cycle_interval_seconds": 600,
+            }))
+        finally:
+            automation.time.time = original_time
+
+        self.assertEqual((0, 0, 0), image.convert("RGB").getpixel((0, 0)))
+
     def test_single_layout_single_template_returns_false(self):
         config = {"layout": "single", "template_ids": ["weather"], "bindings": [{"id": "template-weather-temp-0"}]}
         self.assertFalse(automation.EntityAutoUpdateManager._is_split_or_multi_template_config(config))

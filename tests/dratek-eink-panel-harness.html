@@ -224,6 +224,7 @@
     const uploadedAddress = new URLSearchParams(window.location.search).get("uploaded") || "";
     const settingsAddress = new URLSearchParams(window.location.search).get("settings") || "";
     const settingsView = new URLSearchParams(window.location.search).get("settingsView") || "templates";
+    const settingsTemplate = new URLSearchParams(window.location.search).get("template") || "";
     const initialTab = new URLSearchParams(window.location.search).get("tab") || "";
     const demoQueue = new URLSearchParams(window.location.search).get("queue") === "demo";
     const drafts = {
@@ -463,6 +464,14 @@
     if (settingsAddress && devices.some((device) => device.address === settingsAddress)) {
       panel._selectedDeviceAddress = settingsAddress;
       panel._restoreDisplayTemplateConfig(drafts[String(settingsAddress).toUpperCase()]?.template_config);
+      if (settingsTemplate) {
+        const address = String(settingsAddress).toUpperCase();
+        panel._displayTemplateAssignments ||= {};
+        panel._displayTemplateAssignments[address] = [settingsTemplate];
+        panel._selectedDisplayTemplateId = settingsTemplate;
+        panel._selectedDisplayTemplateSecondaryId = "";
+        if (settingsTemplate === "custom_image") await panel._useBundledCustomImageTemplate(true);
+      }
       panel._displaySettingsView = settingsView === "designer" ? "designer" : "templates";
       panel._activeTab = "display-settings";
       panel._render();

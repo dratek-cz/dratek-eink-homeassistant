@@ -38,8 +38,11 @@ class TemplateSendGeometryTests(unittest.TestCase):
                 self.assertNotIn(fragment, self.devices)
 
     def test_the_send_path_uses_the_renderer(self) -> None:
-        self.assertIn("_renderCurrentDisplayTemplateImage(device = this._device()) {", self.devices)
-        self.assertIn("return this._rasterizeDisplayTemplateSvg(", self.devices)
+        self.assertIn(
+            '_renderCurrentDisplayTemplateImage(device = this._device(), customSourceOverride = "") {',
+            self.devices,
+        )
+        self.assertIn("return await this._rasterizeDisplayTemplateSvg(", self.devices)
         # and the remembered thumbnail is that same image, not a second rendering
         self.assertIn(
             "const image = await this._renderCurrentDisplayTemplateImage(device);",

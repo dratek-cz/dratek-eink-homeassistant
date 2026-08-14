@@ -595,7 +595,11 @@ class EntityAutoUpdateManager:
         refresh_task = getattr(self, "_refresh_tasks", {}).pop(normalized, None)
         if refresh_task is not None and not refresh_task.done():
             refresh_task.cancel()
-        if isinstance(config, dict) and config.get("enabled") and config.get("bindings"):
+        if (
+            isinstance(config, dict)
+            and config.get("enabled")
+            and (config.get("bindings") or config.get("image_cycle"))
+        ):
             updated = dict(config)
             updated["enabled"] = True
             updated["refresh_interval_seconds"] = self._refresh_interval(updated)
@@ -1004,6 +1008,18 @@ class EntityAutoUpdateManager:
         config: dict[str, Any],
     ) -> Any:
         """Render the exact image used by automatic entity refreshes."""
+        cycle = [
+            str(image)
+            for image in config.get("image_cycle", [])
+            if str(image).startswith("data:image/")
+        ]
+        if cycle:
+            try:
+                interval = max(60, int(config.get("image_cycle_interval_seconds") or 600))
+            except (TypeError, ValueError):
+                interval = 600
+            selected = cycle[int(time.time() // interval) % len(cycle)]
+            return await self.hass.async_add_executor_job(self._decode_base_image, selected)
         bindings = [
             binding
             for binding in config.get("bindings", [])
