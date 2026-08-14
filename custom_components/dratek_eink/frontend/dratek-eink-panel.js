@@ -1,22 +1,22 @@
 import { storageMixin } from "./panel/panel-storage.mixin.js";
 import { queueMixin } from "./panel/panel-queue.mixin.js?v=queue-pinned-2";
 import { automationsMixin } from "./panel/panel-automations.mixin.js?v=writing-highlight-2";
-import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=usb-fields-4";
-import { devicesMixin } from "./panel/panel-devices.mixin.js?v=0.1.295";
-import { projectsMixin } from "./panel/panel-projects.mixin.js?v=0.1.295";
+import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=left-pan-1";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=cycle-preview-1";
+import { projectsMixin } from "./panel/panel-projects.mixin.js?v=0.1.296";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
 import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-3";
 import { templatesMixin } from "./panel/panel-templates.mixin.js?v=readable-chart-type-2";
 import { variablesMixin } from "./panel/panel-variables.mixin.js?v=readable-chart-type-2";
 import { previewMixin } from "./panel/panel-preview.mixin.js?v=device-preview-quality-1";
-import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=0.1.295";
+import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=cycle-preview-1";
 import { i18nMixin } from "./panel/panel-i18n.mixin.js";
-import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=0.1.295";
+import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=cycle-preview-1";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js?v=templates-4c-1";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
-import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=0.1.295";
+import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=cycle-preview-1";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.295";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.296";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -60,6 +60,8 @@ class DratekEinkPanel extends HTMLElement {
     this._customImageCycleIds = [];
     this._customImageCycleEnabled = false;
     this._customImageCycleMinutes = 10;
+    this._customImagePreviewNow = Date.now();
+    this._customImageCyclePreviewTimer = null;
     this._customImageStudioTab = "gallery";
     this._customImageStudioZoom = 1;
     this._customImageViewportPan = { x: 0, y: 0 };
@@ -297,6 +299,7 @@ class DratekEinkPanel extends HTMLElement {
     window.clearTimeout(this._queuePollTimer);
     window.clearTimeout(this._deviceStatusPollTimer);
     window.clearTimeout(this._gatewayStatusPollTimer);
+    window.clearTimeout(this._customImageCyclePreviewTimer);
     if (this._gwmapPanMove) window.removeEventListener("mousemove", this._gwmapPanMove);
     if (this._gwmapPanEnd) window.removeEventListener("mouseup", this._gwmapPanEnd);
     // A draft save is debounced by 700 ms. Leaving the panel inside that window

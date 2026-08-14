@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.296
+
+- **Správně otočené čtyřbarevné displeje** – hotový obraz pro všechny BWRY panely se před fyzickým zápisem otočí o 180° bez změny náhledu nebo tříbarevných variant.
+- **Funkční automatické cyklování** – obrázkový cyklus vytvoří automatický zápis i bez navázané HA entity a střídá vybrané snímky v nastaveném intervalu.
+- **Stejný obrázek ve všech náhledech** – hlavní stránka, nastavení displeje i editor ukazují současně totožný snímek aktivního cyklu.
+- **Přehlednější automatické zápisy** – cyklus je zřetelně označený a zobrazuje počet zařazených obrázků.
+- **Přirozené ovládání mapy spojení** – mapu lze posouvat tažením levým tlačítkem bez nechtěného otevření zařízení.
+
 ## Novinky ve verzi 0.1.295
 
 - **Správná orientace 296×128 BWRY** – čtyřbarevná varianta je při každém nastavení otočení vždy přesně o 180° proti stejné tříbarevné PE29 variantě.

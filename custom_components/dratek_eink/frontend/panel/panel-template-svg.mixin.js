@@ -1315,7 +1315,11 @@ export const templateSvgMixin = {
     const day = (index) => this._templateForecastDay(template, index);
     const event = (index) => this._templateCalendarEntry(template, index);
     const option = (name) => this._templateOptionActive(template, name);
-    const customImage = () => this._customImageDataUrl || this._frontendAssetUrl("images/parrot-dithered.png");
+    const customImage = () => {
+      const active = this._activeCustomImageAsset?.();
+      return (active ? this._paletteImageSrc?.(active) : this._customImageDataUrl)
+        || this._frontendAssetUrl("images/parrot-dithered.png");
+    };
     const helpers = { v, series, ratio, day, event, option, customImage };
     return Object.fromEntries(
       DISPLAY_TEMPLATES.map((entry) => [entry.catalog.id, () => entry.design(helpers)]),

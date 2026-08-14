@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.295";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.296";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js";
 
 export const devicesMixin = {
@@ -1827,7 +1827,8 @@ export const devicesMixin = {
 
   _renderCustomImageStudio(device) {
     const assets = this._templateImageLibrary || [];
-    const active = assets.find((asset) => asset.id === this._customImageActiveId)
+    const active = (this._customImageCycleEnabled ? this._activeCustomImageAsset() : null)
+      || assets.find((asset) => asset.id === this._customImageActiveId)
       || this._activeCustomImageAsset()
       || null;
     const activePreview = active ? this._paletteImageSrc(active, device) : this._customImageDataUrl;
@@ -2205,9 +2206,13 @@ export const devicesMixin = {
     const customPreviewShort = Math.min(customPreviewSize.width, customPreviewSize.height);
     const customPreviewWidth = this._displayTemplateOrientation === "portrait" ? customPreviewShort : customPreviewLong;
     const customPreviewHeight = this._displayTemplateOrientation === "portrait" ? customPreviewLong : customPreviewShort;
+    const customPreviewAsset = this._activeCustomImageAsset?.();
+    const customPreviewSource = customPreviewAsset
+      ? this._paletteImageSrc(customPreviewAsset, this._device?.())
+      : this._customImageDataUrl;
     const customImageWidget = isCustomImageTemplate ? `<div class="custom-image-template-widget">
       <div class="custom-image-template-preview" style="aspect-ratio:${customPreviewWidth}/${customPreviewHeight}">
-        <img src="${this._escape(this._customImageDataUrl || this._frontendAssetUrl("images/parrot-dithered.png"))}" alt="Stínovaný náhled vlastního obrázku">
+        <img src="${this._escape(customPreviewSource || this._frontendAssetUrl("images/parrot-dithered.png"))}" alt="Stínovaný náhled vlastního obrázku">
       </div>
       <input id="customImageTemplateFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
       <button type="button" class="primary-action" data-custom-image-template-upload><ha-icon icon="mdi:image-plus"></ha-icon> Vybrat barevný obrázek</button>
@@ -2423,16 +2428,34 @@ export const devicesMixin = {
   // a portrait tag and 51 px, a sixth of the panel, on a landscape one, while the
   // preview on screen looked correct. Building the SVG directly has no DOM to
   // lose: what the renderer lays out is what the panel gets, to the pixel.
-  _activeCustomImageAsset(now = Date.now()) {
+  _customImageCycleAssets() {
     const assets = this._templateImageLibrary || [];
-    const selected = (this._customImageCycleIds || [])
+    return (this._customImageCycleIds || [])
       .map((id) => assets.find((asset) => asset.id === id))
       .filter(Boolean);
+  },
+
+  _activeCustomImageAsset(now = this._customImagePreviewNow || Date.now()) {
+    const assets = this._templateImageLibrary || [];
+    const selected = this._customImageCycleAssets();
     if (this._customImageCycleEnabled && selected.length > 1) {
       const interval = Math.max(1, Number(this._customImageCycleMinutes) || 10) * 60 * 1000;
       return selected[Math.floor(now / interval) % selected.length];
     }
     return assets.find((asset) => asset.id === this._customImageActiveId) || selected[0] || null;
+  },
+
+  _scheduleCustomImageCyclePreview(now = Date.now()) {
+    window.clearTimeout(this._customImageCyclePreviewTimer);
+    this._customImageCyclePreviewTimer = null;
+    if (!this._customImageCycleEnabled || this._customImageCycleAssets().length < 2) return;
+    const interval = Math.max(1, Number(this._customImageCycleMinutes) || 10) * 60 * 1000;
+    const delay = Math.max(50, interval - (now % interval) + 25);
+    this._customImageCyclePreviewTimer = window.setTimeout(() => {
+      this._customImageCyclePreviewTimer = null;
+      this._render();
+      this._paint();
+    }, delay);
   },
 
   async _renderCurrentDisplayTemplateImage(device = this._device(), customSourceOverride = "") {
@@ -2446,7 +2469,7 @@ export const devicesMixin = {
     // Rebuild from the untouched source for every physical render. Cached BWR
     // and BWRY thumbnails are UI accelerators only; they are never an input to
     // the bitmap sent to a display.
-    const activeAsset = customSourceOverride ? null : this._activeCustomImageAsset();
+    const activeAsset = customSourceOverride ? null : this._activeCustomImageAsset(Date.now());
     const activeSource = customSourceOverride || activeAsset?.source || this._customImageSourceUrl;
     const activeVariants = activeAsset?.variants || this._customImageVariants;
     const targetCustomImage = usesCustomImage && activeSource

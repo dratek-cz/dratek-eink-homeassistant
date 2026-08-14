@@ -1784,6 +1784,8 @@ export const inspectorMixin = {
     });
     this.shadowRoot.querySelector("[data-custom-image-cycle-minutes]")?.addEventListener("change", (event) => {
       this._customImageCycleMinutes = Math.max(1, Math.min(1440, Number(event.target.value) || 10));
+      this._render();
+      this._paint();
       this._saveDisplayTemplateDraft?.().catch(() => {});
     });
     this.shadowRoot.querySelectorAll("[data-custom-image-remove]").forEach((button) => button.addEventListener("click", () => {

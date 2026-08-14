@@ -162,15 +162,16 @@ class BwrClassificationTests(unittest.TestCase):
         self.assertEqual((255, 255, 255), render.quantize_bwr_preview(image).getpixel((0, 0)))
         self.assertEqual((244, 196, 0), render.quantize_bwr_preview(image, True).getpixel((0, 0)))
 
-    def test_sdk_type_46_uses_the_vendor_clockwise_bitmap_mapping(self):
+    def test_sdk_type_46_sent_bitmap_has_the_four_colour_mounting_correction(self):
         image = Image.new("RGB", (296, 128), "white")
         image.putpixel((0, 0), (0, 0, 0))
         prepared = render.prepare_image_for_display(46, image)
         self.assertEqual((128, 296), prepared.size)
-        # Pillow's -90 degrees maps the source top-left to output top-right.
-        self.assertEqual((0, 0, 0), prepared.getpixel((127, 0)))
+        # The vendor quarter turn maps top-left to top-right; the final common
+        # BWRY mounting correction then moves it to the bottom-left.
+        self.assertEqual((0, 0, 0), prepared.getpixel((0, 295)))
 
-    def test_sdk_type_46_is_always_180_degrees_opposite_to_three_colour_pe29(self):
+    def test_sdk_type_46_matches_three_colour_pe29_after_mounting_correction(self):
         for transform in (None, "rotate_cw", "rotate_ccw", "rotate_180", "flip_lr", "flip_tb"):
             with self.subTest(transform=transform):
                 image = Image.new("RGB", (296, 128), "white")
@@ -178,9 +179,30 @@ class BwrClassificationTests(unittest.TestCase):
                 bw = render.prepare_image_for_display(43, image, transform=transform)
                 bwry = render.prepare_image_for_display(46, image, transform=transform)
                 self.assertEqual(
-                    list(bw.rotate(180).getdata()),
+                    list(bw.getdata()),
                     list(bwry.getdata()),
                 )
+
+    def test_every_bwry_model_applies_the_final_mounting_correction(self):
+        original = render._finalize_bwry_orientation
+        corrected_sizes = []
+
+        def record(image):
+            corrected_sizes.append(image.size)
+            return original(image)
+
+        render._finalize_bwry_orientation = record
+        try:
+            for sdk_type in sorted(render.BWRY_CODES):
+                width, height = render.display_size(sdk_type)
+                render.prepare_image_for_display(
+                    sdk_type,
+                    Image.new("RGB", (width, height), "white"),
+                )
+        finally:
+            render._finalize_bwry_orientation = original
+
+        self.assertEqual(len(render.BWRY_CODES), len(corrected_sizes))
 
     def test_sdk_type_299_uses_inverted_first_plane_and_vertical_flip(self):
         image = Image.new("RGB", (800, 480), "white")

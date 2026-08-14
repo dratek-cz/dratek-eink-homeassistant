@@ -42,6 +42,15 @@ class AutomationManagementUiTests(unittest.TestCase):
         self.assertNotIn('"base_image":', method)
         self.assertNotIn('"svg_template":', method)
 
+    def test_image_cycles_are_identified_in_the_automation_overview(self) -> None:
+        backend = (COMPONENT / "automation.py").read_text(encoding="utf-8")
+        frontend = (FRONTEND / "panel" / "panel-automations.mixin.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"image_cycle_count":', backend)
+        self.assertIn("automation.image_cycle_count", frontend)
+        self.assertIn("Obrázkový cyklus", frontend)
+
 
 if __name__ == "__main__":
     unittest.main()

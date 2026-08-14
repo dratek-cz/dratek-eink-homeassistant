@@ -1896,6 +1896,11 @@ BWRY_CODES = {46, 78, 142, 270, 302, 310, 318, 558, 654, 686, 2670, 2702}
 BWR_800X480_CODES = {299, 315}
 
 
+def _finalize_bwry_orientation(image: Image.Image) -> Image.Image:
+    """Rotate the completed four-colour hardware framebuffer into panel orientation."""
+    return image.rotate(180, expand=False)
+
+
 def expected_buffer_size(sdk_type: int) -> tuple[int, int]:
     """Get the physical hardware pixel buffer dimensions (width, height) expected by display IC."""
     code = int(sdk_type)
@@ -1938,10 +1943,9 @@ def prepare_image_for_display(
         if image.size != (native_w, native_h):
             image = image.resize((native_w, native_h), Image.Resampling.LANCZOS)
 
-        # The 296x128 four-colour Picksmart controller is physically mounted
-        # upside down relative to the otherwise identical three-colour PE29
-        # panels. Keep its baseline exactly 180 degrees opposite for every
-        # transform choice, not only for the default orientation.
+        # The 296x128 controller first needs its vendor-specific quarter turn.
+        # The common BWRY mounting correction is applied to the completed
+        # framebuffer below, just like it is for every other four-colour model.
         if code == BWRY_296X128_CODE:
             angle = 90 if transform in ("rotate_ccw", "rotate_180") else -90
             image = image.rotate(angle, expand=True)
@@ -1951,7 +1955,7 @@ def prepare_image_for_display(
                 image = image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
             if image.size != (target_w, target_h):
                 image = image.resize((target_w, target_h), Image.Resampling.LANCZOS)
-            return image
+            return _finalize_bwry_orientation(image)
 
         if transform == "rotate_180":
             image = image.rotate(180, expand=True)
@@ -1979,7 +1983,7 @@ def prepare_image_for_display(
 
         if image.size != (target_w, target_h):
             image = image.resize((target_w, target_h), Image.Resampling.LANCZOS)
-        return image
+        return _finalize_bwry_orientation(image)
 
     is_portrait = (
         orientation == "portrait"

@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.295";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.296";
 
 export const renderUiMixin = {
 
@@ -16,6 +16,8 @@ export const renderUiMixin = {
   },
 
   _render() {
+    this._customImagePreviewNow = Date.now();
+    this._scheduleCustomImageCyclePreview?.(this._customImagePreviewNow);
     const result = this._result || { scanner_count: 0, ble_count: 0, devices: [], ble_devices: [], debug: [] };
     const topologyGroups = this._activeTab === "topology" ? this._topologyGroups(result.devices) : [];
     const topologyGatewayCount = topologyGroups.filter((group) => group.path?.type === "gateway").length;

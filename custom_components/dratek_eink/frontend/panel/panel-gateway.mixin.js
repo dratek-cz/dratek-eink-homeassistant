@@ -860,7 +860,7 @@ export const gatewayMixin = {
         <span><i class="gwmap-legend-dot is-local"></i>Bluetooth Home Assistantu</span>
         <span><i class="gwmap-legend-line is-faded"></i>Displej byl nalezen</span>
         <span><i class="gwmap-legend-line is-active"></i>Právě obsluhuje</span>
-        <span class="gwmap-legend-hint"><ha-icon icon="mdi:mouse-move-vertical"></ha-icon>Kolečko = zoom, pravé tlačítko = posun</span>
+        <span class="gwmap-legend-hint"><ha-icon icon="mdi:mouse-move-vertical"></ha-icon>Kolečko = zoom, levé tlačítko = posun</span>
         ${focus ? `<button class="gwmap-legend-clear" data-map-focus-device="">Zrušit zvýraznění</button>` : ""}
       </div>
     </div>`;
@@ -897,7 +897,6 @@ export const gatewayMixin = {
       view.y = before.y - localY * view.scale;
       applyView();
     }, { passive: false });
-    svg.addEventListener("contextmenu", (event) => event.preventDefault());
     svg.addEventListener("dblclick", () => {
       view.scale = 1;
       view.x = 0;
@@ -905,8 +904,9 @@ export const gatewayMixin = {
       applyView();
     });
     let panState = null;
+    let suppressClick = false;
     svg.addEventListener("mousedown", (event) => {
-      if (event.button !== 2) return;
+      if (event.button !== 0) return;
       event.preventDefault();
       const start = svgPoint(event);
       panState = { startX: start.x, startY: start.y, originX: view.x, originY: view.y };
@@ -915,6 +915,7 @@ export const gatewayMixin = {
     this._gwmapPanMove = (event) => {
       if (!panState) return;
       const current = svgPoint(event);
+      if (Math.hypot(current.x - panState.startX, current.y - panState.startY) > 2) suppressClick = true;
       view.x = panState.originX + (current.x - panState.startX);
       view.y = panState.originY + (current.y - panState.startY);
       applyView();
@@ -923,7 +924,13 @@ export const gatewayMixin = {
       if (!panState) return;
       panState = null;
       svg.classList.remove("is-panning");
+      window.setTimeout(() => { suppressClick = false; }, 0);
     };
+    svg.addEventListener("click", (event) => {
+      if (!suppressClick) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
     window.addEventListener("mousemove", this._gwmapPanMove);
     window.addEventListener("mouseup", this._gwmapPanEnd);
   },

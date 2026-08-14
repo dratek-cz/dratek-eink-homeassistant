@@ -91,6 +91,7 @@ export const automationsMixin = {
       const name = device?.display_name || device?.name || "eInk displej";
       const entities = Array.isArray(automation.entity_ids) ? automation.entity_ids : [];
       const bindings = Math.max(entities.length, Number(automation.binding_count || 0));
+      const cycleImages = Math.max(0, Number(automation.image_cycle_count || 0));
       const templates = Array.isArray(automation.template_ids) ? automation.template_ids.length : 0;
       const route = automation.transport_name
         || (automation.route_type === "gateway" ? "DRATEK eInk gateway" : "Home Assistant Bluetooth");
@@ -116,9 +117,9 @@ export const automationsMixin = {
         </section>
         <div class="automation-facts">
           <span><span class="automation-fact-icon"><ha-icon icon="mdi:${viaGateway ? "router-wireless" : "bluetooth"}"></ha-icon></span><span><small>Trasa zápisu</small><strong>${this._escape(route)}</strong></span></span>
-          <span><span class="automation-fact-icon"><ha-icon icon="mdi:database-sync-outline"></ha-icon></span><span><small>Obsah záznamu</small><strong>${bindings} ${bindings === 1 ? "datová vazba" : "datových vazeb"}${templates ? ` · ${templates} ${templates === 1 ? "šablona" : "šablony"}` : ""}</strong></span></span>
+          <span><span class="automation-fact-icon"><ha-icon icon="mdi:${cycleImages ? "image-multiple-outline" : "database-sync-outline"}"></ha-icon></span><span><small>Obsah záznamu</small><strong>${cycleImages ? `${cycleImages} ${cycleImages === 1 ? "obrázek" : cycleImages < 5 ? "obrázky" : "obrázků"} v cyklu` : `${bindings} ${bindings === 1 ? "datová vazba" : "datových vazeb"}`}${templates ? ` · ${templates} ${templates === 1 ? "šablona" : "šablony"}` : ""}</strong></span></span>
         </div>
-        <section class="automation-entities"><header><span><ha-icon icon="mdi:link-variant"></ha-icon>Napojené entity</span><b>${bindings}</b></header><div>${entities.length ? entities.map((entityId) => `<code><i></i>${this._escape(entityId)}</code>`).join("") : `<span class="automation-no-entities"><ha-icon icon="mdi:vector-combine"></ha-icon>Interní nebo složené datové vazby</span>`}</div></section>
+        <section class="automation-entities"><header><span><ha-icon icon="mdi:${cycleImages ? "image-sync-outline" : "link-variant"}"></ha-icon>${cycleImages ? "Obrázkový cyklus" : "Napojené entity"}</span><b>${cycleImages || bindings}</b></header><div>${cycleImages ? `<span class="automation-no-entities"><ha-icon icon="mdi:image-multiple-outline"></ha-icon>Pravidelné střídání předrenderovaných obrázků</span>` : entities.length ? entities.map((entityId) => `<code><i></i>${this._escape(entityId)}</code>`).join("") : `<span class="automation-no-entities"><ha-icon icon="mdi:vector-combine"></ha-icon>Interní nebo složené datové vazby</span>`}</div></section>
         <footer class="automation-card-actions">${this._automationIntervalSelect(automation)}${this._automationTriggerSelect(automation)}<button type="button" class="automation-delete" title="Smazat automatický zápis" data-automation-delete="${this._escape(automation.address)}" ${busy ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon><span>Smazat zápis</span></button></footer>
       </article>`;
     }).join("");

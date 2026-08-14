@@ -13,6 +13,7 @@ import sys
 import time
 import types
 import unittest
+import uuid
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -324,6 +325,55 @@ class AutomationBindingTests(unittest.TestCase):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
         }
         self.assertIn("async_set_config", activate_calls)
+
+    def test_image_cycle_without_entity_bindings_is_prepared_for_activation(self):
+        prepare_function = find_top_level_function("_install_entity_automation")
+        isolated_module = ast.Module(body=[prepare_function], type_ignores=[])
+        ast.fix_missing_locations(isolated_module)
+
+        class Manager:
+            pass
+
+        manager = Manager()
+        cleared = []
+
+        async def clear_previous(_hass, address):
+            cleared.append(address)
+
+        namespace = {
+            "Any": object,
+            "HomeAssistant": object,
+            "DOMAIN": "dratek_eink",
+            "PENDING_AUTOMATIONS_KEY": "pending_entity_automations",
+            "uuid": uuid,
+            "get_entity_auto_update_manager": lambda _hass: manager,
+            "_clear_previous_entity_automation": clear_previous,
+        }
+        exec(compile(isolated_module, "ws_shared.py", "exec"), namespace)
+
+        class Hass:
+            data = {}
+
+        config = {
+            "enabled": True,
+            "bindings": [],
+            "image_cycle": ["data:image/png;base64,ONE", "data:image/png;base64,TWO"],
+            "image_cycle_interval_seconds": 600,
+        }
+        prepared = asyncio.run(
+            namespace["_install_entity_automation"](
+                Hass(), "ff:ff:92:81:46:32", config
+            )
+        )
+
+        self.assertIsNotNone(prepared)
+        self.assertEqual(config["image_cycle"], prepared["image_cycle"])
+        self.assertTrue(prepared["installation_id"])
+        self.assertEqual([], cleared)
+        self.assertIs(
+            prepared,
+            Hass.data["dratek_eink"]["pending_entity_automations"]["FF:FF:92:81:46:32"],
+        )
 
     def test_failed_old_upload_does_not_clear_newer_automation(self):
         address = "FF:FF:92:81:46:32"

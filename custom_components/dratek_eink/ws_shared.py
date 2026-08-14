@@ -41,12 +41,17 @@ async def _install_entity_automation(
 ) -> dict[str, Any] | None:
     """Prepare bindings, but keep them inactive until the image is confirmed written."""
     config = dict(automation) if isinstance(automation, dict) else None
-    if (
+    has_bindings = bool(
         config
-        and config.get("enabled") is True
         and isinstance(config.get("bindings"), list)
         and config["bindings"]
-    ):
+    )
+    has_image_cycle = bool(
+        config
+        and isinstance(config.get("image_cycle"), list)
+        and config["image_cycle"]
+    )
+    if config and config.get("enabled") is True and (has_bindings or has_image_cycle):
         # Identifies this exact queued design. If an older transfer fails after a
         # newer one was queued, its rollback must not delete the newer bindings.
         config["installation_id"] = uuid.uuid4().hex

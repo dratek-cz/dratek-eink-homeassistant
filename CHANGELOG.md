@@ -2,6 +2,18 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.296] - 2026-08-14
+
+### Přidáno a vylepšeno
+- Zapnuté cyklování vlastních obrázků vytváří automatický zápis i bez vazeb na entity Home Assistantu.
+- Všechny náhledy jednoho displeje ukazují při cyklování ve stejný okamžik stejný obrázek a mění jej přesně podle nastaveného intervalu.
+- Přehled automatických zápisů označuje obrázkový cyklus a uvádí počet vybraných snímků.
+
+### Opraveno
+- Finální obraz odesílaný do všech čtyřbarevných BWRY displejů se fyzicky otáčí o 180°; náhledy a tříbarevné displeje zůstávají beze změny.
+- Mapu spojení lze posouvat tažením levým tlačítkem myši a tažení omylem neotevře detail zařízení.
+- Náhledy cyklu používají stejný snímek na hlavní stránce, v nastavení displeje i v editoru šablony.
+
 ## [0.1.295] - 2026-08-14
 
 ### Přidáno a vylepšeno

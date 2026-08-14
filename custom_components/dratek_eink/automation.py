@@ -673,6 +673,9 @@ class EntityAutoUpdateManager:
                     "refresh_interval_seconds": self._refresh_interval(config),
                     "refresh_trigger_mode": self._refresh_trigger_mode(config),
                     "binding_count": len(bindings) if isinstance(bindings, list) else 0,
+                    "image_cycle_count": len(config.get("image_cycle", []))
+                    if isinstance(config.get("image_cycle"), list)
+                    else 0,
                     "entity_ids": sorted(entity_ids),
                     "template_ids": [
                         str(template_id)

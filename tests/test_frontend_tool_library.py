@@ -64,6 +64,43 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('image_cycle: cycleImages', self.source)
         self.assertIn('image_cycle_interval_seconds: intervalSeconds', self.source)
         self.assertIn('if (template?.id === "custom_image") return this._renderCustomImageStudio(device);', self.source)
+        self.assertIn("this._scheduleCustomImageCyclePreview?.(this._customImagePreviewNow)", self.source)
+        self.assertIn("const active = this._activeCustomImageAsset?.()", self.source)
+
+    def test_custom_image_cycle_uses_one_shared_preview_frame(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is not available")
+        module_url = (PANEL_MODULES / "panel-devices.mixin.js").as_uri()
+        script = f"""
+          import {{ devicesMixin }} from {json.dumps(module_url)};
+          const context = {{
+            _templateImageLibrary: [
+              {{ id: "one" }}, {{ id: "two" }}, {{ id: "three" }},
+            ],
+            _customImageCycleIds: ["one", "two", "three"],
+            _customImageCycleEnabled: true,
+            _customImageCycleMinutes: 10,
+            _customImagePreviewNow: 600000,
+            _customImageCycleAssets: devicesMixin._customImageCycleAssets,
+          }};
+          const first = devicesMixin._activeCustomImageAsset.call(context);
+          const sameFrame = devicesMixin._activeCustomImageAsset.call(context);
+          context._customImagePreviewNow = 1200000;
+          const nextFrame = devicesMixin._activeCustomImageAsset.call(context);
+          console.log(JSON.stringify({{ first: first.id, same: sameFrame.id, next: nextFrame.id }}));
+        """
+        result = subprocess.run(
+            [node, "--input-type=module", "-e", script],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode:
+            self.fail(result.stderr)
+        selected = json.loads(result.stdout)
+        self.assertEqual({"first": "two", "same": "two", "next": "three"}, selected)
+        self.assertIn("interval - (now % interval) + 25", self.source)
+        self.assertIn("this._activeCustomImageAsset(Date.now())", self.source)
 
     def test_custom_image_preview_zooms_and_pans_without_repainting(self):
         self.assertIn('imageDropzone.addEventListener("wheel"', self.source)
@@ -240,6 +277,16 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn('class="board-option-cart"', self.source)
         self.assertNotIn("board.shop", self.source)
         self.assertNotIn("mdi:cart-outline", self.source)
+
+    def test_connection_map_pans_with_the_left_mouse_button(self):
+        start = self.source.index("  _bindGatewayMapViewport(svg)")
+        end = self.source.index("  _renderDiscoveredGateways()", start)
+        viewport_binding = self.source[start:end]
+        self.assertIn("if (event.button !== 0) return;", viewport_binding)
+        self.assertNotIn("if (event.button !== 2) return;", viewport_binding)
+        self.assertNotIn('addEventListener("contextmenu"', viewport_binding)
+        self.assertIn("levé tlačítko = posun", self.source)
+        self.assertIn("event.stopImmediatePropagation()", viewport_binding)
 
     def test_gateway_usb_and_board_picker_use_the_simplified_controls(self):
         self.assertIn('class="gateway-port-form gateway-form-fields"', self.source)
@@ -519,7 +566,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("data-custom-image-template-default", self.source)
         self.assertIn('_frontendAssetUrl("images/parrot-source.png")', self.source)
         self.assertIn('preserveAspectRatio="none" image-rendering="auto"', self.source)
-        self.assertIn('const customImage = () => this._customImageDataUrl || this._frontendAssetUrl("images/parrot-dithered.png")', self.source)
+        self.assertIn("const active = this._activeCustomImageAsset?.();", self.source)
+        self.assertIn("active ? this._paletteImageSrc?.(active) : this._customImageDataUrl", self.source)
         self.assertNotIn("_customImageNativeRaster", self.source)
         self.assertNotIn("custom_image_original", self.source)
         self.assertIn('template?.id === "custom_image" || template?.base_template_id === "custom_image"', self.source)
