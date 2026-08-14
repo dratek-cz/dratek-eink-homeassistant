@@ -176,6 +176,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
     def test_custom_image_preview_zooms_and_pans_without_repainting(self):
         self.assertIn('imageDropzone.addEventListener("wheel"', self.source)
         self.assertIn('imageDropzone.addEventListener("pointerdown"', self.source)
+        self.assertIn('querySelector(".display-template-dropzone.has-template")', self.source)
+        self.assertIn("Math.min(16", self.source)
+        self.assertIn('classList.toggle("is-pixel-zoom", zoom >= 2)', self.source)
+        self.assertIn("data-template-preview-zoom-value", self.source)
         self.assertIn('"--template-preview-zoom"', self.source)
         wheel_start = self.source.index('imageDropzone.addEventListener("wheel"')
         wheel_end = self.source.index('}, { passive: false });', wheel_start)
@@ -592,8 +596,9 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('${this._displaySettingsView === "templates" ? this._renderDisplayTemplatesSection(device) : ""}', self.source)
         self.assertNotIn('return this._renderDisplayTemplatesPage(device)', self.source)
         self.assertIn('class="display-template-grid"', self.source)
-        # 29 templates including five calibration cards and a custom photo card.
-        self.assertEqual(self.source.count('number: "'), 29)
+        # 24 production templates including the custom photo card. Hardware
+        # colour calibration targets must not leak into the user catalog.
+        self.assertEqual(self.source.count('number: "'), 24)
 
         self.assertIn("variables: [", self.source)
         # A promotion is a decision rather than a reading, so a price tag carries a
@@ -603,33 +608,14 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("_templateOptionActive(template, option) {", self.source)
         self.assertIn('data-template-option="${this._escape(`${template.id}:${option}`)}"', self.source)
         self.assertIn("_blockPriceTag(row, box) {", self.source)
-        self.assertIn('id: "shading_test"', self.source)
-        self.assertIn("_blockDither(row, box) {", self.source)
-        self.assertIn(
-            'patternUnits="userSpaceOnUse" width="${matrix}" height="${matrix}"',
-            self.source,
-        )
-        self.assertIn('{ ink: "red", base: "yellow", density: 0.5 }', self.source)
-        shading_source = (PANEL_MODULES / "templates" / "shading_test.js").read_text(encoding="utf-8")
-        design_source = shading_source[shading_source.index("design:"):]
-        self.assertNotIn("label:", design_source)
-        self.assertNotIn("title:", design_source)
-        self.assertIn("pixelPerfect: true", design_source)
         for template_id in (
+            "shading_test",
             "shading_light_test",
             "shading_dark_test",
             "shading_warm_test",
             "shading_complete_test",
         ):
-            self.assertIn(f'id: "{template_id}"', self.source)
-        complete_source = (
-            PANEL_MODULES / "templates" / "shading_complete_test.js"
-        ).read_text(encoding="utf-8")
-        self.assertIn("const LEVELS = Array.from({ length: 17 }", complete_source)
-        self.assertIn("columns: 17", complete_source)
-        self.assertNotIn("label:", complete_source[complete_source.index("design:"):])
-        self.assertIn("matrix: 4", self.source)
-        self.assertIn("const foregroundCount = Math.round(density * matrix * matrix);", self.source)
+            self.assertNotIn(f'id: "{template_id}"', self.source)
         self.assertIn('id: "custom_image"', self.source)
         self.assertIn("_ditherImportedTemplateImageData(pixels, width, height, paletteKey)", self.source)
         self.assertIn("Oranžová vzniká střídáním červených a žlutých pixelů", self.source)
@@ -651,11 +637,6 @@ class FrontendToolLibraryTests(unittest.TestCase):
         catalog = template_index[template_index.index("export const DISPLAY_TEMPLATES = ["):]
         featured = [
             "customImage,",
-            "shadingTest,",
-            "shadingLightTest,",
-            "shadingDarkTest,",
-            "shadingWarmTest,",
-            "shadingCompleteTest,",
             "weather,",
         ]
         positions = [catalog.index(item) for item in featured]
@@ -997,6 +978,15 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".app-header{position:sticky", self.source)
         self.assertIn("z-index:40;top:0", self.source)
         self.assertNotIn('data-tab="custom"', self.source)
+
+    def test_list_density_is_a_vertically_centered_single_row(self):
+        self.assertIn("grid-template-rows:38px!important", self.source)
+        self.assertIn("max-height:38px!important", self.source)
+        self.assertIn("align-items:center!important", self.source)
+        self.assertIn(".display-grid.density-list .display-tile-identity>span{display:none!important}", self.source)
+        self.assertIn(".display-grid.density-list .display-battery-item .battery-segments{width:25px!important", self.source)
+        self.assertIn(".display-grid.density-list .display-settings-button span", self.source)
+        self.assertIn("<span>Upravit displej</span>", self.source)
 
     def test_header_uses_the_combined_brand_image_without_duplicate_heading(self):
         self.assertIn("dratek-eink-header.png", self.source)

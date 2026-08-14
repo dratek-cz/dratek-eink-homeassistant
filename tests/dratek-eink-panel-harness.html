@@ -257,8 +257,8 @@
     };
     const userTemplates = [];
     const automations = [
-      { address:"FF:FF:92:81:46:32", refresh_interval_seconds:300, refresh_trigger_mode:"both", binding_count:2, entity_ids:["sensor.time","sensor.spot_prices"], route_type:"gateway", gateway_id:"gateway-workshop", transport_name:"Gateway dílna" },
-      { address:"FF:FF:93:10:22:41", refresh_interval_seconds:1800, refresh_trigger_mode:"interval_only", binding_count:1, entity_ids:["binary_sensor.dvere_dilna"], route_type:"local", gateway_id:"", transport_name:"Home Assistant Bluetooth" },
+      { address:"FF:FF:92:81:46:32", enabled:true, refresh_interval_seconds:300, refresh_trigger_mode:"both", binding_count:2, entity_ids:["sensor.time","sensor.spot_prices"], route_type:"gateway", gateway_id:"gateway-workshop", transport_name:"Gateway dílna" },
+      { address:"FF:FF:93:10:22:41", enabled:true, refresh_interval_seconds:1800, refresh_trigger_mode:"interval_only", binding_count:1, entity_ids:["binary_sensor.dvere_dilna"], route_type:"local", gateway_id:"", transport_name:"Home Assistant Bluetooth" },
     ];
 
     const panel = document.querySelector("#panel");
@@ -375,6 +375,11 @@
         if (type === "dratek_eink/automations/update_interval") {
           const automation = automations.find((item) => item.address === msg.address);
           if (automation) automation.refresh_interval_seconds = msg.refresh_interval_seconds;
+          return { ok:!!automation };
+        }
+        if (type === "dratek_eink/automations/update_enabled") {
+          const automation = automations.find((item) => item.address === msg.address);
+          if (automation) automation.enabled = !!msg.enabled;
           return { ok:!!automation };
         }
         if (type === "dratek_eink/automations/delete") {

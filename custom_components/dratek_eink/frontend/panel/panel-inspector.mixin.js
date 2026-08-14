@@ -768,8 +768,9 @@ export const inspectorMixin = {
       applyDesignerViewport();
       designerViewport.addEventListener("wheel", (event) => {
         event.preventDefault();
-        const current = Math.max(0.5, Math.min(3, Number(this._displayTemplatePreviewZoom || 1)));
-        this._displayTemplatePreviewZoom = Math.max(0.5, Math.min(3, Math.round((current + (event.deltaY < 0 ? 0.1 : -0.1)) * 10) / 10));
+        const current = Math.max(0.5, Math.min(16, Number(this._displayTemplatePreviewZoom || 1)));
+        const factor = event.deltaY < 0 ? 1.22 : 1 / 1.22;
+        this._displayTemplatePreviewZoom = Math.max(0.5, Math.min(16, Math.round(current * factor * 100) / 100));
         applyDesignerViewport();
       }, { passive: false });
       let designerPan = null;
@@ -794,34 +795,39 @@ export const inspectorMixin = {
         applyDesignerViewport();
       });
     }
-    const imageDropzone = this.shadowRoot.querySelector(".display-template-dropzone.is-image-navigation");
+    const imageDropzone = this.shadowRoot.querySelector(".display-template-dropzone.has-template");
     if (imageDropzone) {
       const applyImageViewport = () => {
-        imageDropzone.style.setProperty("--template-preview-pan-x", `${this._customImageViewportPan?.x || 0}px`);
-        imageDropzone.style.setProperty("--template-preview-pan-y", `${this._customImageViewportPan?.y || 0}px`);
+        const zoom = Math.max(0.5, Math.min(16, Number(this._displayTemplatePreviewZoom || 1)));
+        imageDropzone.style.setProperty("--template-preview-pan-x", `${this._displayTemplateViewportPan?.x || 0}px`);
+        imageDropzone.style.setProperty("--template-preview-pan-y", `${this._displayTemplateViewportPan?.y || 0}px`);
         imageDropzone.querySelector(".template-physical-preview")?.style.setProperty(
           "--template-preview-zoom",
-          String(this._displayTemplatePreviewZoom || 1),
+          String(zoom),
         );
+        imageDropzone.classList.toggle("is-pixel-zoom", zoom >= 2);
+        const value = this.shadowRoot.querySelector("[data-template-preview-zoom-value]");
+        if (value) value.textContent = `${Math.round(zoom * 100)} %`;
       };
       applyImageViewport();
       imageDropzone.addEventListener("wheel", (event) => {
         event.preventDefault();
-        const current = Math.max(0.5, Math.min(3, Number(this._displayTemplatePreviewZoom || 1)));
-        this._displayTemplatePreviewZoom = Math.max(0.5, Math.min(3, Math.round((current + (event.deltaY < 0 ? 0.1 : -0.1)) * 10) / 10));
+        const current = Math.max(0.5, Math.min(16, Number(this._displayTemplatePreviewZoom || 1)));
+        const factor = event.deltaY < 0 ? 1.22 : 1 / 1.22;
+        this._displayTemplatePreviewZoom = Math.max(0.5, Math.min(16, Math.round(current * factor * 100) / 100));
         applyImageViewport();
       }, { passive: false });
       let pan = null;
       imageDropzone.addEventListener("pointerdown", (event) => {
         if (event.button !== 0 || event.target.closest("button,input,select,a")) return;
         event.preventDefault();
-        pan = { x: event.clientX, y: event.clientY, left: this._customImageViewportPan?.x || 0, top: this._customImageViewportPan?.y || 0 };
+        pan = { x: event.clientX, y: event.clientY, left: this._displayTemplateViewportPan?.x || 0, top: this._displayTemplateViewportPan?.y || 0 };
         imageDropzone.setPointerCapture?.(event.pointerId);
         imageDropzone.classList.add("is-panning");
       });
       imageDropzone.addEventListener("pointermove", (event) => {
         if (!pan) return;
-        this._customImageViewportPan = { x: pan.left + event.clientX - pan.x, y: pan.top + event.clientY - pan.y };
+        this._displayTemplateViewportPan = { x: pan.left + event.clientX - pan.x, y: pan.top + event.clientY - pan.y };
         applyImageViewport();
       });
       const stopPan = () => { pan = null; imageDropzone.classList.remove("is-panning"); };
@@ -829,7 +835,7 @@ export const inspectorMixin = {
       imageDropzone.addEventListener("pointercancel", stopPan);
       imageDropzone.addEventListener("dblclick", () => {
         this._displayTemplatePreviewZoom = 1;
-        this._customImageViewportPan = { x: 0, y: 0 };
+        this._displayTemplateViewportPan = { x: 0, y: 0 };
         applyImageViewport();
       });
     }
@@ -1860,14 +1866,20 @@ export const inspectorMixin = {
     if (imageStage) {
       const image = imageStage.querySelector("img");
       const applyStageTransform = () => {
-        image?.style.setProperty("--image-zoom", String(this._customImageStudioZoom || 1));
+        const zoom = Math.max(0.5, Math.min(16, Number(this._customImageStudioZoom || 1)));
+        image?.style.setProperty("--image-zoom", String(zoom));
         image?.style.setProperty("--image-pan-x", `${this._customImageViewportPan?.x || 0}px`);
         image?.style.setProperty("--image-pan-y", `${this._customImageViewportPan?.y || 0}px`);
+        imageStage.classList.toggle("is-pixel-zoom", zoom >= 2);
+        const value = this.shadowRoot.querySelector("[data-image-stage-zoom-value]");
+        if (value) value.textContent = `${Math.round(zoom * 100)} %`;
       };
       applyStageTransform();
       imageStage.addEventListener("wheel", (event) => {
         event.preventDefault();
-        this._customImageStudioZoom = Math.max(0.5, Math.min(4, Math.round(((this._customImageStudioZoom || 1) + (event.deltaY < 0 ? 0.1 : -0.1)) * 10) / 10));
+        const current = Math.max(0.5, Math.min(16, Number(this._customImageStudioZoom || 1)));
+        const factor = event.deltaY < 0 ? 1.22 : 1 / 1.22;
+        this._customImageStudioZoom = Math.max(0.5, Math.min(16, Math.round(current * factor * 100) / 100));
         applyStageTransform();
       }, { passive: false });
       let stagePan = null;

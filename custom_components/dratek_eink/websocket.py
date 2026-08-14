@@ -18,6 +18,7 @@ from .ws_custom_elements import (
 from .ws_automations import (
     websocket_delete_automation,
     websocket_list_automations,
+    websocket_update_automation_enabled,
     websocket_update_automation_interval,
     websocket_update_automation_trigger_mode,
 )
@@ -80,6 +81,7 @@ INTENTIONALLY_UNREGISTERED = frozenset()
 
 COMMANDS = (
     websocket_list_automations,
+    websocket_update_automation_enabled,
     websocket_update_automation_interval,
     websocket_update_automation_trigger_mode,
     websocket_delete_automation,

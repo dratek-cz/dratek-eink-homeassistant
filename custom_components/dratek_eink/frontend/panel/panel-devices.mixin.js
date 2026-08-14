@@ -1,5 +1,5 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.297";
-import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.298";
+import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=catalog-no-color-tests-1";
 
 export const devicesMixin = {
 
@@ -19,11 +19,9 @@ export const devicesMixin = {
       const presenceChanged = this._devicePresenceSignature(this._result) !== this._devicePresenceSignature(nextResult);
       const statusChanged = this._deviceStatusSignature(this._result) !== this._deviceStatusSignature(nextResult);
       this._result = nextResult;
-      if (!background || changed || presenceChanged || statusChanged) {
-        this._renderKeepingSearchFocus();
-        this._loadDevicePreviewDrafts(this._result.devices || []).then(() => {
-          this._renderKeepingSearchFocus();
-        });
+      if (changed) await this._loadDevicePreviewDrafts(this._result.devices || []);
+      if (background && (changed || presenceChanged || statusChanged)) {
+        this._pendingDeviceBackgroundRender = true;
       }
       const found = (this._result?.devices || []).some((device) => device.address === this._selectedDeviceAddress);
       if (!found) this._selectedDeviceAddress = "";
@@ -33,9 +31,14 @@ export const devicesMixin = {
     } finally {
       this._scanInProgress = false;
       if (!background) this._loading = false;
-      if (!background || this._deviceStatusSignature(this._result) !== this._lastRenderedDeviceSignature) {
-        this._lastRenderedDeviceSignature = this._deviceStatusSignature(this._result);
+      const signature = this._deviceStatusSignature(this._result);
+      const shouldRender = !background || signature !== this._lastRenderedDeviceSignature || this._pendingDeviceBackgroundRender;
+      if (shouldRender && (!background || this._backgroundUiCanRender?.() !== false)) {
+        this._pendingDeviceBackgroundRender = false;
+        this._lastRenderedDeviceSignature = signature;
         this._renderKeepingSearchFocus();
+      } else if (shouldRender) {
+        this._pendingDeviceBackgroundRender = true;
       }
     }
   },
@@ -498,7 +501,7 @@ export const devicesMixin = {
               <span>AKCE / SLEVA</span>
             </button>
           ` : ""}
-          <button class="display-settings-button" data-device-settings="${this._escape(device.address)}"><ha-icon icon="mdi:cog-outline"></ha-icon>Upravit displej</button>
+          <button class="display-settings-button" data-device-settings="${this._escape(device.address)}"><ha-icon icon="mdi:cog-outline"></ha-icon><span>Upravit displej</span></button>
         </div>
       </article>`;
     }).join("")}</div>
@@ -1064,7 +1067,7 @@ export const devicesMixin = {
     const layout = largeDisplay
       ? this._displayTemplateLayoutDefinition(this._displayTemplateLargeLayout).id
       : "single";
-    const previewZoom = Math.max(0.5, Math.min(1.8, Number(this._displayTemplatePreviewZoom || 1)));
+    const previewZoom = Math.max(0.5, Math.min(16, Number(this._displayTemplatePreviewZoom || 1)));
     const imageNavigation = assignedTemplates.includes("custom_image");
     return `<section class="display-templates-inline">
       <div class="display-template-workspace">
@@ -1104,7 +1107,7 @@ export const devicesMixin = {
             ${largeDisplay ? this._renderDisplayTemplateDropZones(layout, orientation) : ""}
           </div>
           <div class="display-template-drop-controls">
-            ${imageNavigation ? `<span class="template-preview-mouse-hint"><ha-icon icon="mdi:mouse"></ha-icon>Kolečko: přiblížení · levé tlačítko: posun</span>` : `<span></span>`}
+            ${primaryTemplate ? `<span class="template-preview-mouse-hint"><ha-icon icon="mdi:mouse"></ha-icon>Kolečko: zoom až na pixely · levé tlačítko: posun · <b data-template-preview-zoom-value>${Math.round(previewZoom * 100)} %</b></span>` : `<span></span>`}
             <div class="display-template-orientation" role="group" aria-label="Orientace displeje">
               <button type="button" class="${orientation === "portrait" ? "is-active" : ""}" data-template-orientation="portrait" title="Na výšku"><ha-icon icon="mdi:phone-rotate-portrait"></ha-icon></button>
               <button type="button" class="${orientation === "landscape" ? "is-active" : ""}" data-template-orientation="landscape" title="Na šířku"><ha-icon icon="mdi:phone-rotate-landscape"></ha-icon></button>
@@ -1862,7 +1865,7 @@ export const devicesMixin = {
           <div class="custom-image-stage" data-custom-image-stage>
             ${activePreview ? `<div class="custom-image-stage-screen" style="aspect-ratio:${stageWidth}/${stageHeight}"><img class="fit-${fitMode}" src="${this._escape(activePreview)}" alt="Aktivní obrázek ${this._escape(active?.name || this._customImageName || "")}"></div>` : `<div class="custom-image-stage-empty"><ha-icon icon="mdi:image-plus-outline"></ha-icon><strong>Přidejte první obrázek</strong></div>`}
           </div>
-          <footer><span><ha-icon icon="mdi:gesture-tap-hold"></ha-icon>Kolečkem přiblížíte, levým tlačítkem posunete</span><strong>${this._escape(active?.name || this._customImageName || "Bez obrázku")}</strong></footer>
+          <footer><span><ha-icon icon="mdi:gesture-tap-hold"></ha-icon>Kolečkem až na pixely, levým tlačítkem posun · <b data-image-stage-zoom-value>${Math.round(Math.max(0.5, Math.min(16, Number(this._customImageStudioZoom || 1))) * 100)} %</b></span><strong>${this._escape(active?.name || this._customImageName || "Bez obrázku")}</strong></footer>
         </main>
         <aside class="card custom-image-gallery" data-custom-image-gallery>
           <header><span><small>Knihovna pro tento displej</small><strong>Galerie obrázků</strong></span><b>${selected.size}/12 ve slideshow</b></header>
@@ -1900,7 +1903,7 @@ export const devicesMixin = {
     const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
     const selectedSize = "large";
     const activeTemplate = template;
-    const previewZoom = Math.max(0.5, Math.min(1.8, Number(this._displayTemplatePreviewZoom || 1)));
+    const previewZoom = Math.max(0.5, Math.min(16, Number(this._displayTemplatePreviewZoom || 1)));
     const viewport = ["narrow", "wide", "large", "large-portrait"].includes(this._templateDesignerViewport)
       ? this._templateDesignerViewport
       : "wide";
@@ -3623,7 +3626,7 @@ export const devicesMixin = {
       const outerHeight = orientation === "portrait" ? frameWidth : frameHeight;
       const frameRadius = Math.max(4, Math.min(28, Math.round(Math.min(frameWidth, frameHeight) * 0.06)));
       const physicalCode = device.physical_code || "00.00.00.00";
-      const previewZoom = Math.max(0.5, Math.min(1.8, Number(this._displayTemplatePreviewZoom || 1)));
+      const previewZoom = Math.max(0.5, Math.min(16, Number(this._displayTemplatePreviewZoom || 1)));
       const layoutDefinition = this._displayTemplateLayoutDefinition(layout);
       const layoutTransposed = sourceHeight > sourceWidth;
       const layoutColumns = layoutTransposed ? layoutDefinition.rows : layoutDefinition.columns;

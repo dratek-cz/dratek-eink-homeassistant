@@ -1,22 +1,22 @@
 import { storageMixin } from "./panel/panel-storage.mixin.js";
-import { queueMixin } from "./panel/panel-queue.mixin.js?v=queue-pinned-2";
-import { automationsMixin } from "./panel/panel-automations.mixin.js?v=writing-highlight-2";
-import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=left-pan-1";
-import { devicesMixin } from "./panel/panel-devices.mixin.js?v=image-fit-delete-1";
-import { projectsMixin } from "./panel/panel-projects.mixin.js?v=0.1.297";
+import { queueMixin } from "./panel/panel-queue.mixin.js?v=no-background-flicker-1";
+import { automationsMixin } from "./panel/panel-automations.mixin.js?v=automation-power-1";
+import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=no-background-flicker-1";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=no-background-flicker-1";
+import { projectsMixin } from "./panel/panel-projects.mixin.js?v=0.1.298";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
 import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-3";
 import { templatesMixin } from "./panel/panel-templates.mixin.js?v=readable-chart-type-2";
 import { variablesMixin } from "./panel/panel-variables.mixin.js?v=readable-chart-type-2";
 import { previewMixin } from "./panel/panel-preview.mixin.js?v=device-preview-quality-1";
-import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=image-fit-delete-1";
+import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=automation-power-1";
 import { i18nMixin } from "./panel/panel-i18n.mixin.js";
-import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=image-fit-delete-1";
+import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=pixel-zoom-1";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js?v=templates-4c-1";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
-import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=meteoradar-intensity-1";
+import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=catalog-no-color-tests-1";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.297";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.298";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -95,6 +95,7 @@ class DratekEinkPanel extends HTMLElement {
       secondary: "small",
     };
     this._displayTemplatePreviewZoom = 1;
+    this._displayTemplateViewportPan = { x: 0, y: 0 };
     this._templateDesignerPan = { x: 0, y: 0 };
     this._templateDesignerViewport = "wide";
     this._templateCanvasDrag = null;
@@ -275,6 +276,7 @@ class DratekEinkPanel extends HTMLElement {
     }
     this._render();
     this._paint();
+    this._lastRenderedDeviceSignature = this._deviceStatusSignature?.(this._result) || "";
     this._scheduleDeviceStatusPoll(1000);
     this._scheduleGatewayStatusPoll?.(1500);
   }
@@ -331,6 +333,7 @@ class DratekEinkPanel extends HTMLElement {
       this._rendered = true;
       this._render();
       this._paint();
+      this._lastRenderedDeviceSignature = this._deviceStatusSignature?.(this._result) || "";
       this._loadQueue(false);
       this._scheduleDeviceStatusPoll(1000);
       this._scheduleGatewayStatusPoll?.(1500);
@@ -342,6 +345,17 @@ class DratekEinkPanel extends HTMLElement {
         });
       }
     } else if (this._refreshTemplateEntityElements?.() || templateLiveDataChanged) {
+      if (this._backgroundUiCanRender?.() !== false) {
+        this._render();
+        this._paint();
+      } else {
+        // Model values are already updated. Keep the current dialog, menu or
+        // focused field alive and repaint only the stable canvas underneath.
+        this._pendingLiveDataBackgroundRender = true;
+        this._paint();
+      }
+    } else if (this._pendingLiveDataBackgroundRender && this._backgroundUiCanRender?.() !== false) {
+      this._pendingLiveDataBackgroundRender = false;
       this._render();
       this._paint();
     }

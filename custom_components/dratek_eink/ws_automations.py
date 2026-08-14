@@ -75,6 +75,29 @@ async def websocket_update_automation_trigger_mode(
 
 @websocket_api.websocket_command(
     {
+        "type": "dratek_eink/automations/update_enabled",
+        "address": str,
+        "enabled": bool,
+    }
+)
+@websocket_api.async_response
+async def websocket_update_automation_enabled(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    manager = get_entity_auto_update_manager(hass)
+    await manager.async_initialize()
+    address = msg["address"].upper()
+    if address not in manager._configs:
+        connection.send_error(msg["id"], "not_found", "Automation was not found.")
+        return
+    await manager.async_set_enabled(address, msg["enabled"])
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command(
+    {
         "type": "dratek_eink/automations/delete",
         "address": str,
     }

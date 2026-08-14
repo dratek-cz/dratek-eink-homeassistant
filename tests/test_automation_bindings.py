@@ -178,12 +178,80 @@ class AutomationBindingTests(unittest.TestCase):
         self.assertEqual(1, len(summaries))
         self.assertEqual(address, summaries[0]["address"])
         self.assertEqual(300, summaries[0]["refresh_interval_seconds"])
+        self.assertTrue(summaries[0]["enabled"])
         self.assertEqual(
             ["sensor.humidity", "sensor.temperature"],
             summaries[0]["entity_ids"],
         )
         self.assertNotIn("base_image", summaries[0])
         self.assertNotIn("svg_template", summaries[0])
+
+    def test_pausing_automation_persists_config_and_stops_scheduling(self):
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager._initialized = True
+        manager._configs = {
+            address: {
+                "enabled": True,
+                "bindings": [{"type": "text", "entity_id": "sensor.time"}],
+            }
+        }
+        manager._last_refresh_at = {address: 123.0}
+        manager._pending_refreshes = {address}
+        timer_cancelled = []
+        manager._timers = {address: lambda: timer_cancelled.append(address)}
+        manager._store = _Store()
+        listener_updates = []
+        interval_updates = []
+        manager._refresh_listener = lambda: listener_updates.append(True)
+        manager._sync_interval_timer = lambda value: interval_updates.append(value)
+
+        asyncio.run(manager.async_set_enabled(address.lower(), False))
+
+        self.assertFalse(manager._configs[address]["enabled"])
+        self.assertNotIn(address, manager._pending_refreshes)
+        self.assertNotIn(address, manager._last_refresh_at)
+        self.assertEqual([address], timer_cancelled)
+        self.assertEqual(False, manager._store.saved["configs"][address]["enabled"])
+        self.assertEqual([True], listener_updates)
+        self.assertEqual([address], interval_updates)
+
+        scheduled = []
+        manager._pending_refreshes = set()
+        manager.hass = types.SimpleNamespace()
+        manager._refresh_tasks = {}
+        manager._timers = {}
+        manager._schedule_refresh(address)
+        scheduled.extend(manager._pending_refreshes)
+        self.assertEqual([], scheduled)
+
+    def test_resuming_automation_starts_a_fresh_interval(self):
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager._initialized = True
+        manager._configs = {
+            address: {
+                "enabled": False,
+                "bindings": [{"type": "text", "entity_id": "sensor.time"}],
+            }
+        }
+        manager._last_refresh_at = {}
+        manager._pending_refreshes = set()
+        manager._timers = {}
+        manager._store = _Store()
+        manager._refresh_listener = lambda: None
+        manager._sync_interval_timer = lambda _address: None
+
+        before = time.monotonic()
+        asyncio.run(manager.async_set_enabled(address, True))
+
+        self.assertTrue(manager._configs[address]["enabled"])
+        self.assertGreaterEqual(manager._last_refresh_at[address], before)
+        self.assertTrue(manager._store.saved["configs"][address]["enabled"])
 
     def test_skipped_refresh_does_not_requeue_itself(self):
         address = "FF:FF:92:81:46:32"

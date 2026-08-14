@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.298
+
+- **Pozastavení automatických aktualizací** – každá karta má skutečný přepínač ON/OFF; vypnutí zastaví časovač i reakce na entity, ale zachová šablonu, interval a vazby i po restartu Home Assistantu.
+- **Stabilní stránka bez problikávání** – pravidelné načítání stavů už nepřekresluje celé rozhraní, nemaže na okamžik ikony a nezavírá otevřená okna, nabídky ani rozbalené podrobnosti.
+- **Kompaktnější přehledy** – seznam displejů a karty automatických zápisů zabírají méně místa a nechávají hlavní stav, náhled, interval a důležité akce v jednom přehledném řádku.
+- **Zoom náhledu až na jednotlivé pixely** – kolečko myši přibližuje náhled displeje i obrázkové studio až na 1600 %, levé tlačítko obraz posouvá a při vysokém zvětšení se zachová ostrá fyzická pixelová mřížka.
+- **Čistší katalog šablon** – technické vizuální testy barev byly odstraněny z nabídky a načítání šablon zůstává zaměřené na skutečně použitelné návrhy.
+
 ## Novinky ve verzi 0.1.297
 
 - **Automatické zápisy opravdu běží podle časovače** – každý displej má vlastní přesný interval, po jeho uplynutí se šablona znovu vykreslí a odešle bez čekání na změnu entity.

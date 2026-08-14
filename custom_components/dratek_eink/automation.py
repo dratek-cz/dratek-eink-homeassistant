@@ -524,13 +524,15 @@ class EntityAutoUpdateManager:
         self._configs = {
             str(address).upper(): dict(config)
             for address, config in (configs or {}).items()
-            if isinstance(config, dict) and config.get("enabled")
+            if isinstance(config, dict)
+            and (config.get("bindings") or config.get("image_cycle"))
         }
         self._initialized = True
         self._refresh_listener()
         initialized_at = time.monotonic()
-        for address in self._configs:
-            self._last_refresh_at.setdefault(address, initialized_at)
+        for address, config in self._configs.items():
+            if self._automation_enabled(config):
+                self._last_refresh_at.setdefault(address, initialized_at)
             self._sync_interval_timer(address)
         if self._refresh_tick_unsubscribe is None:
             self._refresh_tick_unsubscribe = async_track_time_interval(
@@ -573,6 +575,8 @@ class EntityAutoUpdateManager:
         for address, config in self._configs.items():
             if self._refresh_trigger_mode(config) == "change_only":
                 continue
+            if not self._automation_enabled(config):
+                continue
             interval = self._refresh_interval(config)
             if now - self._last_refresh_at.get(address, 0.0) >= interval:
                 self._schedule_refresh(address)
@@ -590,6 +594,11 @@ class EntityAutoUpdateManager:
         mode = str(config.get("refresh_trigger_mode") or DEFAULT_REFRESH_TRIGGER_MODE)
         return mode if mode in VALID_REFRESH_TRIGGER_MODES else DEFAULT_REFRESH_TRIGGER_MODE
 
+    @staticmethod
+    def _automation_enabled(config: dict[str, Any]) -> bool:
+        """Treat legacy configurations without the flag as active."""
+        return config.get("enabled") is not False
+
     def _sync_interval_timer(self, address: str) -> None:
         """Arm one exact per-display interval; the global tick is only a fallback."""
         timers = getattr(self, "_interval_timers", None)
@@ -601,6 +610,7 @@ class EntityAutoUpdateManager:
         config = self._configs.get(address)
         if (
             not config
+            or not self._automation_enabled(config)
             or self._refresh_trigger_mode(config) == "change_only"
             or getattr(self, "hass", None) is None
         ):
@@ -610,7 +620,8 @@ class EntityAutoUpdateManager:
         @callback
         def _run(_now: Any) -> None:
             timers.pop(address, None)
-            if address not in self._configs:
+            config = self._configs.get(address)
+            if not config or not self._automation_enabled(config):
                 return
             self._schedule_refresh(address)
             self._sync_interval_timer(address)
@@ -638,18 +649,18 @@ class EntityAutoUpdateManager:
             refresh_task.cancel()
         if (
             isinstance(config, dict)
-            and config.get("enabled")
             and (config.get("bindings") or config.get("image_cycle"))
         ):
             updated = dict(config)
-            updated["enabled"] = True
+            updated["enabled"] = self._automation_enabled(updated)
             updated["refresh_interval_seconds"] = self._refresh_interval(updated)
             updated["refresh_trigger_mode"] = self._refresh_trigger_mode(updated)
             self._configs[normalized] = updated
             # The transfer that activates this config has just written the
             # current frame. Start its interval from that confirmed write,
             # instead of treating a missing timestamp as immediately overdue.
-            self._last_refresh_at[normalized] = time.monotonic()
+            if updated["enabled"]:
+                self._last_refresh_at[normalized] = time.monotonic()
         await self._store.async_save({"configs": self._configs})
         self._refresh_listener()
         self._sync_interval_timer(normalized)
@@ -675,7 +686,8 @@ class EntityAutoUpdateManager:
         """Reconcile values that may have changed while a design was uploading."""
         await self.async_initialize()
         normalized = address.upper()
-        if normalized in self._configs:
+        config = self._configs.get(normalized)
+        if config and self._automation_enabled(config):
             self._schedule_refresh(normalized)
 
     async def async_set_refresh_interval(self, address: str, seconds: Any) -> None:
@@ -717,6 +729,7 @@ class EntityAutoUpdateManager:
             result.append(
                 {
                     "address": address,
+                    "enabled": self._automation_enabled(config),
                     "refresh_interval_seconds": self._refresh_interval(config),
                     "refresh_trigger_mode": self._refresh_trigger_mode(config),
                     "binding_count": len(bindings) if isinstance(bindings, list) else 0,
@@ -754,6 +767,33 @@ class EntityAutoUpdateManager:
         # nothing extra is needed for "change_only". Switching into or out of
         # "interval_only" does need this: it changes which entities this
         # display's bindings should ever be able to trigger a refresh through.
+        self._refresh_listener()
+        self._sync_interval_timer(normalized)
+
+    async def async_set_enabled(self, address: str, enabled: Any) -> None:
+        """Pause or resume a stored automatic display update in place."""
+        await self.async_initialize()
+        normalized = address.upper()
+        config = self._configs.get(normalized)
+        if not config:
+            return
+        resolved = bool(enabled)
+        if self._automation_enabled(config) == resolved:
+            return
+        updated = dict(config)
+        updated["enabled"] = resolved
+        self._configs[normalized] = updated
+        if resolved:
+            # A resumed automation starts a fresh interval instead of firing an
+            # overdue write immediately after the user switches it on.
+            self._last_refresh_at[normalized] = time.monotonic()
+        else:
+            self._last_refresh_at.pop(normalized, None)
+            self._pending_refreshes.discard(normalized)
+            cancel_timer = self._timers.pop(normalized, None)
+            if callable(cancel_timer):
+                cancel_timer()
+        await self._store.async_save({"configs": self._configs})
         self._refresh_listener()
         self._sync_interval_timer(normalized)
 
@@ -831,6 +871,7 @@ class EntityAutoUpdateManager:
             entity_id
             for config in self._configs.values()
             if self._refresh_trigger_mode(config) != "interval_only"
+            if self._automation_enabled(config)
             for binding in config.get("bindings", [])
             if isinstance(binding, dict)
             for entity_id, _attribute in _binding_sources(binding)
@@ -1174,6 +1215,8 @@ class EntityAutoUpdateManager:
         for address, config in self._configs.items():
             if self._refresh_trigger_mode(config) == "interval_only":
                 continue
+            if not self._automation_enabled(config):
+                continue
             sources = {
                 (source_entity_id, attribute)
                 for binding in config.get("bindings", [])
@@ -1188,6 +1231,9 @@ class EntityAutoUpdateManager:
 
     @callback
     def _schedule_refresh(self, address: str) -> None:
+        config = self._configs.get(address)
+        if not config or not self._automation_enabled(config):
+            return
         self._pending_refreshes.add(address)
         active_task = self._refresh_tasks.get(address)
         if active_task is not None and not active_task.done():
@@ -1210,7 +1256,7 @@ class EntityAutoUpdateManager:
             while address in self._pending_refreshes:
                 self._pending_refreshes.discard(address)
                 config = self._configs.get(address)
-                if not config:
+                if not config or not self._automation_enabled(config):
                     return
                 interval = self._refresh_interval(config)
                 wait_seconds = max(
@@ -1219,6 +1265,9 @@ class EntityAutoUpdateManager:
                 )
                 if wait_seconds:
                     await asyncio.sleep(wait_seconds)
+                config = self._configs.get(address)
+                if not config or not self._automation_enabled(config):
+                    return
                 # Values are read only after the wait. Changes that arrived
                 # during the interval are therefore already part of this image.
                 self._pending_refreshes.discard(address)
@@ -1321,7 +1370,7 @@ class EntityAutoUpdateManager:
 
     async def _async_refresh(self, address: str) -> dict[str, Any] | None:
         config = self._configs.get(address)
-        if not config:
+        if not config or not self._automation_enabled(config):
             return None
         image = await self.async_render_preview(address, config)
         route_type = config.get("route_type", "local")

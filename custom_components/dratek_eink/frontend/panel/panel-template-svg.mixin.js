@@ -16,7 +16,7 @@
 // are identical by construction.
 
 import qrcode from "../qrcode-generator.js";
-import { DISPLAY_TEMPLATES } from "./templates/index.js";
+import { DISPLAY_TEMPLATES } from "./templates/index.js?v=catalog-no-color-tests-1";
 
 const RED = "#e31b1b";
 const BLACK = "#000000";

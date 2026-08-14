@@ -77,6 +77,7 @@ export const automationsMixin = {
       0,
     );
     const gatewayCount = automations.filter((item) => item.route_type === "gateway").length;
+    const activeCount = automations.filter((item) => item.enabled !== false).length;
     const stat = (icon, value, label, cls = "") => `<div class="stat-tile ${cls} ${Number(value || 0) ? "" : "is-zero"}"><span class="stat-tile-icon"><ha-icon icon="${icon}"></ha-icon></span><span class="stat-tile-copy"><strong>${value || 0}</strong><small>${label}</small></span></div>`;
     const status = this._automationsError
       ? `<div class="automation-notice bad"><ha-icon icon="mdi:alert-circle-outline"></ha-icon>${this._escape(this._automationsError)}</div>`
@@ -103,29 +104,35 @@ export const automationsMixin = {
           : "mdi:sync";
       const busy = this._automationBusyAddress === automation.address;
       const writing = writingAddresses.has(String(automation.address || "").toUpperCase());
-      return `<article class="automation-card ${busy ? "is-busy" : ""} ${writing ? "is-writing" : ""}">
+      const enabled = automation.enabled !== false;
+      return `<article class="automation-card ${busy ? "is-busy" : ""} ${writing ? "is-writing" : ""} ${enabled ? "" : "is-paused"}">
         <span class="automation-card-accent"></span>
         ${busy ? `<span class="automation-card-working"><ha-icon class="spin" icon="mdi:loading"></ha-icon>Ukládám změnu</span>` : ""}
         <header class="automation-card-head">
-          <span class="automation-device-icon"><span>${String(index + 1).padStart(2, "0")}</span><ha-icon icon="mdi:monitor-dashboard"></ha-icon></span>
-          <div class="automation-card-title"><span class="automation-card-kicker">Automatický zápis</span><strong>${this._escape(name)}</strong><small>${this._escape(automation.address)}</small></div>
-          ${writing ? `<span class="automation-live is-writing"><ha-icon icon="mdi:progress-upload"></ha-icon>Právě zapisuje</span>` : `<span class="automation-live"><i></i>Aktivní</span>`}
+          <div class="automation-card-title"><span class="automation-card-kicker">Automatický zápis ${String(index + 1).padStart(2, "0")}</span><strong>${this._escape(name)}</strong><small>${this._escape(automation.address)}</small></div>
+          <span class="automation-head-state">${writing ? `<span class="automation-live is-writing"><ha-icon icon="mdi:progress-upload"></ha-icon>Právě zapisuje</span>` : ""}<button type="button" class="automation-power ${enabled ? "is-on" : "is-off"}" data-automation-enabled="${this._escape(automation.address)}" data-automation-next-enabled="${enabled ? "0" : "1"}" aria-pressed="${enabled ? "true" : "false"}" title="${enabled ? "Pozastavit automatické aktualizace" : "Zapnout automatické aktualizace"}" ${busy ? "disabled" : ""}><ha-icon icon="mdi:${enabled ? "toggle-switch" : "toggle-switch-off-outline"}"></ha-icon><span>${enabled ? "ON" : "OFF"}</span></button></span>
         </header>
-        <section class="automation-schedule">
-          <span class="automation-schedule-icon"><ha-icon icon="mdi:calendar-sync-outline"></ha-icon></span>
-          <span class="automation-schedule-copy"><small>Pravidelná obnova</small><strong>Každých ${this._escape(this._automationIntervalLabel(automation))}</strong><span><ha-icon icon="${triggerIcon}"></ha-icon>${this._escape(this._automationTriggerLabel(automation.refresh_trigger_mode))}</span></span>
+        <section class="automation-card-overview">
+          <div class="automation-display-preview">${device ? this._renderDevicePreview(device, "mini") : `<span class="automation-preview-missing"><ha-icon icon="mdi:monitor-off"></ha-icon></span>`}</div>
+          <span class="automation-schedule-copy"><small>Nastavený interval</small><strong>Každých ${this._escape(this._automationIntervalLabel(automation))}</strong><span><ha-icon icon="${enabled ? triggerIcon : "mdi:pause-circle-outline"}"></ha-icon>${enabled ? this._escape(this._automationTriggerLabel(automation.refresh_trigger_mode)) : "Aktualizace je pozastavená"}</span></span>
         </section>
-        <div class="automation-facts">
-          <span><span class="automation-fact-icon"><ha-icon icon="mdi:${viaGateway ? "router-wireless" : "bluetooth"}"></ha-icon></span><span><small>Trasa zápisu</small><strong>${this._escape(route)}</strong></span></span>
-          <span><span class="automation-fact-icon"><ha-icon icon="mdi:${cycleImages ? "image-multiple-outline" : "database-sync-outline"}"></ha-icon></span><span><small>Obsah záznamu</small><strong>${cycleImages ? `${cycleImages} ${cycleImages === 1 ? "obrázek" : cycleImages < 5 ? "obrázky" : "obrázků"} v cyklu` : `${bindings} ${bindings === 1 ? "datová vazba" : "datových vazeb"}`}${templates ? ` · ${templates} ${templates === 1 ? "šablona" : "šablony"}` : ""}</strong></span></span>
-        </div>
-        <section class="automation-entities"><header><span><ha-icon icon="mdi:${cycleImages ? "image-sync-outline" : "link-variant"}"></ha-icon>${cycleImages ? "Obrázkový cyklus" : "Napojené entity"}</span><b>${cycleImages || bindings}</b></header><div>${cycleImages ? `<span class="automation-no-entities"><ha-icon icon="mdi:image-multiple-outline"></ha-icon>Pravidelné střídání předrenderovaných obrázků</span>` : entities.length ? entities.map((entityId) => `<code><i></i>${this._escape(entityId)}</code>`).join("") : `<span class="automation-no-entities"><ha-icon icon="mdi:vector-combine"></ha-icon>Interní nebo složené datové vazby</span>`}</div></section>
-        <footer class="automation-card-actions">${this._automationIntervalSelect(automation)}${this._automationTriggerSelect(automation)}<button type="button" class="automation-delete" title="Smazat automatický zápis" data-automation-delete="${this._escape(automation.address)}" ${busy ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon><span>Smazat zápis</span></button></footer>
+        <footer class="automation-card-actions">${this._automationIntervalSelect(automation)}<button type="button" class="automation-delete" title="Smazat automatický zápis" data-automation-delete="${this._escape(automation.address)}" ${busy ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon><span>Smazat zápis</span></button></footer>
+        <details class="automation-entity-details">
+          <summary><span><ha-icon icon="mdi:${cycleImages ? "image-sync-outline" : "database-sync-outline"}"></ha-icon>${cycleImages ? "Obrázky v cyklu" : "Aktualizované entity"}</span><b>${cycleImages || bindings}</b><ha-icon class="automation-details-chevron" icon="mdi:chevron-down"></ha-icon></summary>
+          <div class="automation-details-body">
+            <div class="automation-entities">${cycleImages ? `<span class="automation-no-entities"><ha-icon icon="mdi:image-multiple-outline"></ha-icon>Pravidelné střídání předrenderovaných obrázků</span>` : entities.length ? entities.map((entityId) => `<code><i></i>${this._escape(entityId)}</code>`).join("") : `<span class="automation-no-entities"><ha-icon icon="mdi:vector-combine"></ha-icon>Interní nebo složené datové vazby</span>`}</div>
+            <div class="automation-detail-facts">
+              <span><small>Trasa zápisu</small><strong><ha-icon icon="mdi:${viaGateway ? "router-wireless" : "bluetooth"}"></ha-icon>${this._escape(route)}</strong></span>
+              <span><small>Obsah záznamu</small><strong>${cycleImages ? `${cycleImages} ${cycleImages === 1 ? "obrázek" : cycleImages < 5 ? "obrázky" : "obrázků"} v cyklu` : `${bindings} ${bindings === 1 ? "datová vazba" : "datových vazeb"}`}${templates ? ` · ${templates} ${templates === 1 ? "šablona" : "šablony"}` : ""}</strong></span>
+            </div>
+            ${this._automationTriggerSelect(automation)}
+          </div>
+        </details>
       </article>`;
     }).join("");
     return `<div class="automations-page">
       <div class="stat-tiles" aria-label="Souhrn automatických zápisů">
-        ${stat("mdi:calendar-sync", automations.length, automations.length === 1 ? "Aktivní zápis" : "Aktivní zápisy", "is-good")}
+        ${stat("mdi:calendar-sync", activeCount, activeCount === 1 ? "Aktivní zápis" : "Aktivní zápisy", "is-good")}
         ${stat("mdi:database-sync-outline", entityCount, entityCount === 1 ? "Datová vazba" : "Datové vazby")}
         ${stat("mdi:router-wireless", gatewayCount, "Přes gateway", "is-warn")}
       </div>
@@ -135,6 +142,32 @@ export const automationsMixin = {
   },
 
   _bindAutomationEvents() {
+    this.shadowRoot.querySelectorAll("[data-automation-enabled]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const address = button.dataset.automationEnabled;
+        const enabled = button.dataset.automationNextEnabled === "1";
+        this._automationBusyAddress = address;
+        this._automationsError = "";
+        this._automationsResult = "";
+        this._render(); this._paint();
+        try {
+          await this._hass.callWS({
+            type: "dratek_eink/automations/update_enabled",
+            address,
+            enabled,
+          });
+          this._automationsResult = enabled
+            ? "Automatické aktualizace byly zapnuty."
+            : "Automatické aktualizace byly pozastaveny.";
+          await this._loadAutomations(false);
+        } catch (err) {
+          this._automationsError = this._message(err);
+        } finally {
+          this._automationBusyAddress = "";
+          this._render(); this._paint();
+        }
+      });
+    });
     this.shadowRoot.querySelectorAll("[data-automation-interval]").forEach((select) => {
       select.addEventListener("change", async () => {
         const address = select.dataset.automationInterval;

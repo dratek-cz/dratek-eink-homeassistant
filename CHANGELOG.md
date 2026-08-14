@@ -2,6 +2,18 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.298] - 2026-08-14
+
+### Přidáno a vylepšeno
+- Automatické zápisy mají uložený přepínač ON/OFF, který je lze pozastavit bez smazání konfigurace a po zapnutí začne nový celý interval.
+- Náhled displeje a obrázkové studio podporují plynulý zoom kolečkem až na 1600 %, posun levým tlačítkem a ostré zobrazení jednotlivých pixelů.
+- Hlavní seznam displejů a karty automatických zápisů používají kompaktnější rozvržení s náhledem a hlavními akcemi stále viditelnými.
+
+### Opraveno
+- Pravidelné načítání stavů už zbytečně nepřekresluje celou stránku, neproblikává a nezavírá otevřená modální okna, nabídky ani rozbalené části.
+- Pozastavené automatické zápisy nespouští intervalový časovač ani změna entity, ale zůstanou bezpečně uložené i po restartu Home Assistantu.
+- Technické barevné testovací šablony byly odstraněny z katalogu i distribučního balíčku.
+
 ## [0.1.297] - 2026-08-14
 
 ### Přidáno a vylepšeno

@@ -76,12 +76,21 @@ export const gatewayMixin = {
     try {
       const result = await this._hass.callWS({ type: "dratek_eink/gateways/list" });
       const gateways = result.gateways || [];
-      const before = JSON.stringify(this._gateways || []);
-      const after = JSON.stringify(gateways);
+      const stable = (value) => JSON.stringify(value, (key, item) =>
+        /^(?:last_seen|last_check|checked_at|updated_at|timestamp)$/.test(key) ? undefined : item
+      );
+      const before = stable(this._gateways || []);
+      const after = stable(gateways);
       this._gateways = gateways;
-      if (before !== after) {
-        this._render();
-        this._paint();
+      const visible = ["gateways", "topology"].includes(this._activeTab);
+      if (visible && (before !== after || this._pendingGatewayBackgroundRender)) {
+        if (this._backgroundUiCanRender?.() !== false) {
+          this._pendingGatewayBackgroundRender = false;
+          this._render();
+          this._paint();
+        } else {
+          this._pendingGatewayBackgroundRender = true;
+        }
       }
     } catch (_err) {
       // Keep the last known cards and routes visible. The backend monitor will

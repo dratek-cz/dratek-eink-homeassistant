@@ -48,10 +48,33 @@ const FILTER_KEYS = {
 
 export const queueMixin = {
 
+  _queueRenderSignature(queue = this._queue) {
+    return JSON.stringify({
+      queued: Number(queue?.queued || 0),
+      writing: Number(queue?.writing || 0),
+      succeeded: Number(queue?.succeeded || 0),
+      failed: Number(queue?.failed || 0),
+      error: queue?.error || "",
+      jobs: (queue?.jobs || []).map((job) => ({
+        id: job.id,
+        address: job.address,
+        status: job.status,
+        operation: job.operation,
+        transport_name: job.transport_name,
+        transport_type: job.transport_type,
+        created_at: job.created_at,
+        started_at: job.started_at,
+        finished_at: job.finished_at,
+        error: job.error,
+        log: job.log,
+      })),
+    });
+  },
 
-  async _loadQueue(render = true) {
+  async _loadQueue(render = true, onlyWhenChanged = false) {
     if (!this._hass) return;
     window.clearTimeout(this._queuePollTimer);
+    const previousSignature = this._queueRenderSignature();
     const previousActive = new Set(
       (this._queue?.jobs || [])
         .filter((job) => ["queued", "writing"].includes(job.status))
@@ -71,13 +94,19 @@ export const queueMixin = {
         error: this._message(err),
       };
     }
-    if (render) {
-      this._renderQueueKeepingFocus();
+    const queueChanged = previousSignature !== this._queueRenderSignature();
+    if (render && (!onlyWhenChanged || queueChanged || this._pendingQueueBackgroundRender)) {
+      if (!onlyWhenChanged || this._backgroundUiCanRender?.() !== false) {
+        this._pendingQueueBackgroundRender = false;
+        this._renderQueueKeepingFocus();
+      } else {
+        this._pendingQueueBackgroundRender = true;
+      }
     }
     if (Number(this._queue?.queued || 0) + Number(this._queue?.writing || 0) > 0 || this._activeTab === "automations") {
       this._queuePollTimer = window.setTimeout(() => {
         const visible = ["queue", "devices", "topology", "gateways", "automations"].includes(this._activeTab);
-        this._loadQueue(visible);
+        this._loadQueue(visible, true);
       }, 1000);
     }
   },

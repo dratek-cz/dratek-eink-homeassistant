@@ -23,12 +23,13 @@ class AutomationManagementUiTests(unittest.TestCase):
         ]
         self.assertEqual(positions, sorted(positions))
 
-    def test_frontend_calls_list_update_and_delete_commands(self) -> None:
+    def test_frontend_calls_list_update_pause_and_delete_commands(self) -> None:
         source = (FRONTEND / "panel" / "panel-automations.mixin.js").read_text(
             encoding="utf-8"
         )
         for command in (
             "dratek_eink/automations/list",
+            "dratek_eink/automations/update_enabled",
             "dratek_eink/automations/update_interval",
             "dratek_eink/automations/delete",
         ):
@@ -49,7 +50,27 @@ class AutomationManagementUiTests(unittest.TestCase):
         )
         self.assertIn('"image_cycle_count":', backend)
         self.assertIn("automation.image_cycle_count", frontend)
-        self.assertIn("Obrázkový cyklus", frontend)
+        self.assertIn("Obrázky v cyklu", frontend)
+
+    def test_cards_prioritize_preview_interval_delete_and_expandable_entities(self) -> None:
+        frontend = (FRONTEND / "panel" / "panel-automations.mixin.js").read_text(
+            encoding="utf-8"
+        )
+        styles = (FRONTEND / "panel" / "panel-render-ui.mixin.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('this._renderDevicePreview(device, "mini")', frontend)
+        self.assertIn('class="automation-card-overview"', frontend)
+        self.assertIn('class="automation-entity-details"', frontend)
+        self.assertIn("Aktualizované entity", frontend)
+        self.assertIn("data-automation-interval", frontend)
+        self.assertIn("data-automation-delete", frontend)
+        self.assertIn("data-automation-enabled", frontend)
+        self.assertIn("Pozastavit automatické aktualizace", frontend)
+        self.assertIn("Zapnout automatické aktualizace", frontend)
+        self.assertIn(".automation-entity-details[open]", styles)
+        self.assertIn(".automation-power.is-on", styles)
+        self.assertIn(".automation-card.is-paused", styles)
 
 
 if __name__ == "__main__":

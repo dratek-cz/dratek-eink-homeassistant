@@ -27,20 +27,10 @@ import { template as birthdays } from "./birthdays.js";
 import { template as server } from "./server.js";
 import { template as garden } from "./garden.js";
 import { template as price } from "./price.js";
-import { template as shadingTest } from "./shading_test.js";
-import { template as shadingLightTest } from "./shading_light_test.js";
-import { template as shadingDarkTest } from "./shading_dark_test.js";
-import { template as shadingWarmTest } from "./shading_warm_test.js";
-import { template as shadingCompleteTest } from "./shading_complete_test.js";
 import { template as customImage } from "./custom_image.js";
 
 export const DISPLAY_TEMPLATES = [
   customImage,
-  shadingTest,
-  shadingLightTest,
-  shadingDarkTest,
-  shadingWarmTest,
-  shadingCompleteTest,
   weather,
   radar,
   czSpotPrices,
