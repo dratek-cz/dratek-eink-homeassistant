@@ -1582,6 +1582,25 @@ def _replace_svg_element_by_id(document: str, element_id: str, replacement: str)
     return pattern.sub(lambda _match: replacement, document, count=1)
 
 
+def _replace_svg_group_by_id(document: str, element_id: str, replacement: str) -> str:
+    """Replace one tagged SVG group, including any groups nested inside it."""
+    opening = re.search(
+        r'<g\b[^>]*\bid="' + re.escape(element_id) + r'"[^>]*>', document
+    )
+    if opening is None:
+        return document
+    depth = 0
+    for tag in re.finditer(r"<g\b[^>]*>|</g\s*>", document[opening.start():]):
+        if tag.group(0).startswith("</"):
+            depth -= 1
+            if depth == 0:
+                end = opening.start() + tag.end()
+                return document[:opening.start()] + replacement + document[end:]
+        else:
+            depth += 1
+    return document
+
+
 def _replace_svg_image_href_by_id(document: str, element_id: str, data_url: str) -> str:
     """Swap the `href` of one `<image id="...">` element for a fresh data: URL.
 
@@ -1724,6 +1743,16 @@ def render_entity_bound_template_image(
             # No fresh snapshot: leave the <image> exactly as captured rather
             # than dropping it, so a transient fetch failure still ships the
             # last-known map instead of a blank slot.
+            continue
+        if _svg_graphic_binding(binding) and element_id and f'id="{element_id}"' in document:
+            # The captured SVG already contains the graph from the last manual
+            # send. Replace that whole tagged group with live geometry; drawing
+            # a new transparent graph over the old one leaves stale bars behind
+            # and can look as if the graph never refreshed.
+            value = values.get(element_id, str(binding.get("fallback", "")))
+            document = _replace_svg_group_by_id(
+                document, element_id, _svg_graphic_slot(binding, value)
+            )
             continue
         if not (_is_text_binding(binding) and binding.get("svg") and element_id):
             remaining.append(binding)

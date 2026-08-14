@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.299
+
+- **Spotové ceny se aktualizují spolehlivě** – sériové vazby uložené v atributech entity (např. České spotové ceny elektřiny) se obnoví i tehdy, když se změní jen zítřejší ceny nebo jiné atributy, ne hlavní stav senzoru.
+- **Graf bez duchů starých hodnot** – při automatické aktualizaci se graf v šabloně nahradí celý najednou, takže pod novými sloupci nebo čárami nezůstávají staré.
+- **Zoom náhledu se vejde do rámečku** – vysoké přiblížení náhledu šablony a obrázkového studia už nepřetéká mimo displej.
+
 ## Novinky ve verzi 0.1.298
 
 - **Pozastavení automatických aktualizací** – každá karta má skutečný přepínač ON/OFF; vypnutí zastaví časovač i reakce na entity, ale zachová šablonu, interval a vazby i po restartu Home Assistantu.

@@ -207,6 +207,40 @@ class BoundTemplateImageTests(unittest.TestCase):
             render.render_entity_bound_template_image("<svg></svg>", [_slot()], {"slot1": "x"})
         )
 
+    def test_tagged_series_replaces_the_stale_graph_before_rasterizing(self) -> None:
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80">'
+            '<rect width="200" height="80" fill="#fff"/>'
+            '<g id="chart" data-stale="yes"><g><rect x="1" y="1" width="4" height="4"/></g></g>'
+            '</svg>'
+        )
+        binding = {
+            "id": "chart", "type": "series", "chartType": "bar",
+            "x": 20, "y": 10, "w": 160, "h": 60,
+            "labels": [], "highlight": -1, "fallback": "[]",
+        }
+        captured = {}
+        original_available = render.svg_render.render_available
+        original_rasterize = render.svg_render.rasterize_svg
+        render.svg_render.render_available = lambda: True
+
+        def rasterize(document, width, height, **_kwargs):
+            captured["document"] = document
+            return Image.new("RGBA", (width, height), (255, 255, 255, 255))
+
+        render.svg_render.rasterize_svg = rasterize
+        try:
+            result = render.render_entity_bound_template_image(
+                svg, [binding], {"chart": "[1,3,2]"}
+            )
+        finally:
+            render.svg_render.render_available = original_available
+            render.svg_render.rasterize_svg = original_rasterize
+
+        self.assertIsNotNone(result)
+        self.assertNotIn('data-stale="yes"', captured["document"])
+        self.assertIn("<rect", captured["document"])
+
 
 class AutomaticRefreshRendererTests(unittest.TestCase):
     """render_automatic_refresh_image picks the closest path to a manual send."""

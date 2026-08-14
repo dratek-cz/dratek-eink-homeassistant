@@ -755,8 +755,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('Kolečko zoom · tažením posun', self.source)
         self.assertIn("this._displayTemplatePreviewZoom = 1;", self.source)
         self.assertIn('designerViewport.style.setProperty("--template-preview-zoom"', self.source)
-        self.assertIn("zoom:var(--template-preview-zoom,1)", self.source)
-        self.assertIn("transform:none;zoom:var(--template-preview-zoom,1)", self.source)
+        self.assertNotIn("zoom:var(--template-preview-zoom,1)", self.source)
+        self.assertIn("scale(var(--template-preview-zoom,1))", self.source)
+        self.assertIn(".display-template-dropzone.is-image-navigation .device-preview-fit{transform:translate(var(--template-preview-pan-x,0px),var(--template-preview-pan-y,0px)) scale(var(--template-preview-zoom,1))}", self.source)
+        self.assertIn("will-change:transform", self.source)
         dither_key = self.source[self.source.index("const ditherKey = autoFit"):]
         dither_key = dither_key[:dither_key.index("})) : \"\";")]
         self.assertNotIn("Math.round(previewZoom * 100)", dither_key)

@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.299] - 2026-08-14
+
+### Opraveno
+- České spotové ceny (a další sériové vazby uložené v atributech entity, například zítřejší ceny) se teď obnoví i tehdy, když se nezmění hlavní stav entity, ale jen její atributy; rozpoznává se i více názvů atributů se sérií cen.
+- Graf v šabloně se při automatické aktualizaci nahradí celý najednou, takže staré sloupce nebo čáry nezůstávají viditelné pod novými.
+- Zoom náhledu šablony a obrázkového studia při velkém přiblížení nepřetéká mimo rámeček displeje.
+
 ## [0.1.298] - 2026-08-14
 
 ### Přidáno a vylepšeno

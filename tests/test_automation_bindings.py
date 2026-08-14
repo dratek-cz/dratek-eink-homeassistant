@@ -622,6 +622,34 @@ class AutomationBindingTests(unittest.TestCase):
 
         self.assertEqual(["FF:FF:92:81:46:32"], scheduled)
 
+    def test_series_attribute_change_schedules_bound_display(self):
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager._configs = {
+            address: {
+                "bindings": [
+                    {
+                        "type": "series",
+                        "entity_id": "sensor.spot_price",
+                    }
+                ]
+            }
+        }
+        scheduled = []
+        manager._schedule_refresh = scheduled.append
+
+        manager._handle_state_change(
+            _Event(
+                "sensor.spot_price",
+                _State("1.42", **{"2026-08-14T10:00:00+02:00": 1.2}),
+                _State("1.42", **{"2026-08-14T10:00:00+02:00": 1.8}),
+            )
+        )
+
+        self.assertEqual([address], scheduled)
+
     def test_refresh_tick_schedules_every_configured_display_regardless_of_entity_state(self):
         # camera.meteoradar's state never meaningfully changes between RainViewer
         # frames, so a camera-bound display must refresh from the periodic tick
@@ -1132,6 +1160,18 @@ class AutomationBindingTests(unittest.TestCase):
                     )
                 }
             )
+        )
+        manager._chart_series = {}
+        bindings = [{"id": "chart", "type": "series", "entity_id": "sensor.spot_price", "maxPoints": 96, "fallback": "[]"}]
+
+        values = manager._current_binding_values("FF:FF:92:81:46:32", bindings)
+
+        self.assertEqual("[1.1,1.3,1.2]", values["chart"])
+
+    def test_series_binding_reads_today_prices_attribute(self):
+        manager = automation.EntityAutoUpdateManager.__new__(automation.EntityAutoUpdateManager)
+        manager.hass = types.SimpleNamespace(
+            states=_States({"sensor.spot_price": _State("1.42", today_prices=[1.1, 1.3, 1.2])})
         )
         manager._chart_series = {}
         bindings = [{"id": "chart", "type": "series", "entity_id": "sensor.spot_price", "maxPoints": 96, "fallback": "[]"}]

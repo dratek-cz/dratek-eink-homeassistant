@@ -1017,7 +1017,7 @@ async def _async_geocode_address(
         async with session.get(
             url,
             timeout=HTTP_TIMEOUT_SECONDS,
-            headers={"User-Agent": "DRATEK-eInk-HomeAssistant/0.1.298"},
+            headers={"User-Agent": "DRATEK-eInk-HomeAssistant/0.1.299"},
         ) as response:
             if response.status != 200:
                 raise RuntimeError(f"Nominatim HTTP {response.status}")

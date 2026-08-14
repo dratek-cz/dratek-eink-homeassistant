@@ -70,6 +70,7 @@ REFRESH_TICK_SECONDS = MIN_REFRESH_INTERVAL_SECONDS
 #   cadence instead of redrawing on every update.
 VALID_REFRESH_TRIGGER_MODES = {"both", "change_only", "interval_only"}
 DEFAULT_REFRESH_TRIGGER_MODE = "both"
+ALL_ATTRIBUTES_SOURCE = "__dratek_all_attributes__"
 
 
 
@@ -80,6 +81,11 @@ def _binding_sources(binding: dict[str, Any]) -> set[tuple[str, str]]:
     entity_id = str(binding.get("entity_id") or "")
     if entity_id:
         sources.add((entity_id, str(binding.get("entity_attribute") or "")))
+        # A series such as Czech spot prices is commonly stored entirely in
+        # timestamp-keyed attributes.  Its scalar state can stay unchanged
+        # while tomorrow's prices (and therefore the graph) change.
+        if binding.get("type") == "series":
+            sources.add((entity_id, ALL_ATTRIBUTES_SOURCE))
     if binding.get("type") != "layered":
         return sources
     for layer in binding.get("layers", []):
@@ -174,6 +180,8 @@ def _update_binding_from_custom_element(
 def _source_value(state: Any, attribute: str) -> Any:
     if state is None:
         return None
+    if attribute == ALL_ATTRIBUTES_SOURCE:
+        return state.attributes
     return state.attributes.get(attribute) if attribute else state.state
 
 
@@ -378,6 +386,10 @@ def _series_numbers(state: Any, max_points: int) -> list[float]:
         ordered = sorted(timestamp_prices, key=lambda item: item[0])
         return [float(value) for _key, value in ordered][-max_points:]
     for candidate in (
+        attributes.get("today_prices"),
+        attributes.get("today"),
+        attributes.get("raw_today"),
+        attributes.get("current_day"),
         attributes.get("values"),
         attributes.get("prices"),
         attributes.get("data"),
