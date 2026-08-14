@@ -99,6 +99,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     from .automation import get_entity_auto_update_manager
     auto_update = get_entity_auto_update_manager(hass)
+    # async_unload_entry stops the manager. A config-entry reload does not run
+    # async_setup again, so explicitly re-arm persisted automation timers here.
+    await auto_update.async_initialize()
 
     if "gateway_monitor_unsubscribe" not in hass.data[DOMAIN]:
         from .gateway import async_refresh_all_gateways

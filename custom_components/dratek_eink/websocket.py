@@ -50,6 +50,7 @@ from .ws_gateways import (
 )
 from .ws_projects import (
     websocket_delete_project,
+    websocket_delete_device_draft_image,
     websocket_delete_user_template,
     websocket_list_device_drafts,
     websocket_list_projects,
@@ -95,6 +96,7 @@ COMMANDS = (
     websocket_load_device_draft,
     websocket_list_device_drafts,
     websocket_save_device_draft,
+    websocket_delete_device_draft_image,
     websocket_list_user_templates,
     websocket_save_user_template,
     websocket_delete_user_template,

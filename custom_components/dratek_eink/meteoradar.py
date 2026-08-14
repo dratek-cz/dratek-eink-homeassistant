@@ -58,6 +58,7 @@ SNOW = 1
 # and avoids turning nearly every measurable drizzle cell into "heavy" rain.
 PRECIPITATION_ALPHA_THRESHOLD = 192
 PRECIPITATION_COLOR = (220, 20, 12)
+PRECIPITATION_YELLOW = (244, 196, 0)
 BORDER_COLOR = (0, 0, 0)
 INDEX_RECHECK_INTERVAL_SECONDS = 60
 HTTP_TIMEOUT_SECONDS = 15
@@ -646,7 +647,9 @@ def _draw_home_marker(
 
 
 def _generate_precipitation_pattern(
-    size: tuple[int, int], *, dense: bool
+    size: tuple[int, int], *, dense: bool,
+    ink: tuple[int, int, int] = PRECIPITATION_COLOR,
+    background: tuple[int, int, int] = (255, 255, 255),
 ) -> Image.Image:
     """Create an e-ink-safe rain texture that survives the final downscale.
 
@@ -658,13 +661,13 @@ def _generate_precipitation_pattern(
     scale = max(1, math.ceil(max(size) / MAX_NATIVE_DIMENSION))
     period = (7 if dense else 10) * scale
     stroke = max(1, (2 if dense else 1) * scale)
-    pattern = Image.new("RGB", size, "white")
+    pattern = Image.new("RGB", size, background)
     draw = ImageDraw.Draw(pattern)
     if dense:
         for offset in range(-size[1], size[0] + size[1], period):
             draw.line(
                 ((offset, size[1]), (offset + size[1], 0)),
-                fill=PRECIPITATION_COLOR,
+                fill=ink,
                 width=stroke,
             )
     else:
@@ -674,7 +677,7 @@ def _generate_precipitation_pattern(
             for x in range(period // 2 + row_offset, size[0], period):
                 draw.ellipse(
                     (x - radius, y - radius, x + radius, y + radius),
-                    fill=PRECIPITATION_COLOR,
+                    fill=ink,
                 )
     return pattern
 
@@ -720,11 +723,18 @@ def _paint_precipitation(
     heavy_mask = ImageChops.logical_and(opaque, ImageChops.invert(blue_over_red))
 
     output.paste(
-        _generate_precipitation_pattern(composite.size, dense=False),
+        _generate_precipitation_pattern(
+            composite.size, dense=False, ink=PRECIPITATION_YELLOW
+        ),
         mask=ImageChops.logical_and(area_mask, light_mask),
     )
     output.paste(
-        _generate_precipitation_pattern(composite.size, dense=True),
+        _generate_precipitation_pattern(
+            composite.size,
+            dense=True,
+            ink=PRECIPITATION_COLOR,
+            background=PRECIPITATION_YELLOW,
+        ),
         mask=ImageChops.logical_and(area_mask, moderate_mask),
     )
     output.paste(
@@ -1007,7 +1017,7 @@ async def _async_geocode_address(
         async with session.get(
             url,
             timeout=HTTP_TIMEOUT_SECONDS,
-            headers={"User-Agent": "DRATEK-eInk-HomeAssistant/0.1.296"},
+            headers={"User-Agent": "DRATEK-eInk-HomeAssistant/0.1.297"},
         ) as response:
             if response.status != 200:
                 raise RuntimeError(f"Nominatim HTTP {response.status}")

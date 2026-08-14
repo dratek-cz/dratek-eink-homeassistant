@@ -247,7 +247,14 @@ class TransferQueue:
         """Return strongest free acceptable route, or queue on the strongest."""
         ranked = sorted(
             (route for route in routes if str(route.get("id") or "")),
-            key=lambda route: self._route_rssi(route),
+            # Match the connection map: a gateway that received the display in
+            # the current scan beats a retained/missed route even when that
+            # route has an older, numerically stronger RSSI. RSSI only decides
+            # between routes with the same freshness.
+            key=lambda route: (
+                not bool(route.get("temporarily_unseen")),
+                self._route_rssi(route),
+            ),
             reverse=True,
         )
         if not ranked:

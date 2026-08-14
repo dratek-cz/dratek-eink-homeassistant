@@ -35,6 +35,7 @@ METEORADAR_CAMERA_ENTITY_ID = "camera.meteoradar"
         vol.Optional("dotted_light"): bool,
         vol.Optional("show_wind"): bool,
         vol.Optional("location_address"): str,
+        vol.Optional("preserve_yellow"): bool,
     }
 )
 @websocket_api.async_response
@@ -60,6 +61,7 @@ async def websocket_render_meteoradar(
         dotted_light=dotted_light,
         show_wind=show_wind,
         location_address=location_address,
+        preserve_yellow=bool(msg.get("preserve_yellow", False)),
     )
     if data_url is None:
         connection.send_error(msg["id"], "meteoradar_unavailable", "Radarová mapa není momentálně dostupná.")

@@ -412,6 +412,41 @@ class TransferQueueRetryTests(unittest.IsolatedAsyncioTestCase):
         release.set()
         await asyncio.gather(*hass.tasks)
 
+    async def test_fresh_route_beats_retained_route_with_stronger_old_rssi(self):
+        hass = FakeHass()
+        queue = queue_module.TransferQueue(hass)
+        queue._loaded = True
+        selected = []
+
+        async def save_history():
+            return None
+
+        queue._save_history = save_history
+
+        def factory(route):
+            async def runner(_add_log):
+                selected.append(route["id"])
+                return {"ok": True}
+
+            return runner
+
+        await queue.async_submit_gateway_routes(
+            routes=[
+                {"id": "fresh", "name": "Fresh", "rssi": -63},
+                {
+                    "id": "retained",
+                    "name": "Retained",
+                    "rssi": -38,
+                    "temporarily_unseen": True,
+                },
+            ],
+            address="AA:BB:CC:DD:EE:01",
+            operation="design",
+            runner_factory=factory,
+        )
+
+        self.assertEqual(["fresh"], selected)
+
     async def test_weak_alternative_waits_for_the_strong_gateway(self):
         hass = FakeHass()
         queue = queue_module.TransferQueue(hass)

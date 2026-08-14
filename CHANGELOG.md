@@ -2,6 +2,19 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.297] - 2026-08-14
+
+### Přidáno a vylepšeno
+- Automatické zápisy používají přesný samostatný časovač pro každý displej a po intervalu skutečně spustí nové vykreslení i přenos.
+- Galerie obrázků nabízí režimy Vyplnit, Přizpůsobit a Roztáhnout a přepočítává všechny uložené snímky pro fyzické rozlišení displeje.
+- Meteoradar na čtyřbarevných BWRY panelech zachovává žlutou a rozlišuje slabou, střední a silnou intenzitu srážek třemi eInk vzory.
+
+### Opraveno
+- Automatický i ruční výběr trasy upřednostní gateway, která displej vidí v aktuálním skenu, před starou zachovanou trasou se silnějším historickým RSSI.
+- Ručně uzamčená gateway se ukládá odděleně od poslední automaticky zvolené trasy, takže automatický režim nezůstane omylem připnutý ke gatewayi.
+- Smazání obrázku z galerie odstraní jeho zdroj, barevné varianty i položku automatického cyklu z backendového úložiště.
+- Automatická aktualizace Meteoradaru zachová mapové informace, popisky a legendu místo samotného rámečku se srážkami.
+
 ## [0.1.296] - 2026-08-14
 
 ### Přidáno a vylepšeno

@@ -57,6 +57,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('data-meteoradar-home-address', self.source)
         self.assertIn('meteoradar_home_address: this._meteoradarHomeAddress || ""', self.source)
         self.assertIn('location_address: this._meteoradarHomeAddress', self.source)
+        self.assertIn('preserve_yellow: preserveYellow', self.source)
+        self.assertIn('this._svgText("STŘED"', self.source)
         self.assertIn('this._meteoradarImageCache = null', self.source)
         self.assertIn('data-custom-image-cycle-enabled', self.source)
         self.assertIn('data-custom-image-cycle-minutes', self.source)
@@ -101,6 +103,75 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertEqual({"first": "two", "same": "two", "next": "three"}, selected)
         self.assertIn("interval - (now % interval) + 25", self.source)
         self.assertIn("this._activeCustomImageAsset(Date.now())", self.source)
+
+    def test_custom_image_fit_modes_use_exact_display_geometry(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is not available")
+        module_url = (PANEL_MODULES / "panel-devices.mixin.js").as_uri()
+        script = f"""
+          import {{ devicesMixin }} from {json.dumps(module_url)};
+          const image = {{ width: 100, height: 100 }};
+          const render = (mode) => {{
+            const calls = [];
+            const context = {{ drawImage: (...args) => calls.push(args.slice(1)) }};
+            devicesMixin._drawCustomImageFitted.call(
+              {{ _customImageFitMode: mode }}, context, image, 200, 100
+            );
+            return calls[0];
+          }};
+          console.log(JSON.stringify({{
+            cover: render("cover"),
+            contain: render("contain"),
+            stretch: render("stretch"),
+          }}));
+        """
+        result = subprocess.run(
+            [node, "--input-type=module", "-e", script],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode:
+            self.fail(result.stderr)
+        geometry = json.loads(result.stdout)
+        self.assertEqual([0, -50, 200, 200], geometry["cover"])
+        self.assertEqual([50, 0, 100, 100], geometry["contain"])
+        self.assertEqual([0, 0, 200, 100], geometry["stretch"])
+        self.assertIn('data-custom-image-fit-mode', self.source)
+        self.assertIn('type: "dratek_eink/device_drafts/delete_image"', self.source)
+        self.assertIn('image_cycle_ids: assets.map((asset) => asset.id)', self.source)
+
+    def test_display_automation_preserves_connection_map_route_mode(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is not available")
+        module_url = (PANEL_MODULES / "panel-devices.mixin.js").as_uri()
+        script = f"""
+          import {{ devicesMixin }} from {json.dumps(module_url)};
+          const automatic = devicesMixin._displayAutomationRouting(
+            {{ gateway_selection: "auto", selected_gateway_id: "" }}, "gateway-one"
+          );
+          const locked = devicesMixin._displayAutomationRouting(
+            {{ gateway_selection: "manual", selected_gateway_id: "gateway-two" }}, "gateway-two"
+          );
+          const local = devicesMixin._displayAutomationRouting(
+            {{ gateway_selection: "manual", selected_gateway_id: "local" }}, ""
+          );
+          console.log(JSON.stringify({{ automatic, locked, local }}));
+        """
+        result = subprocess.run(
+            [node, "--input-type=module", "-e", script],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode:
+            self.fail(result.stderr)
+        routing = json.loads(result.stdout)
+        self.assertEqual("auto", routing["automatic"]["gateway_selection"])
+        self.assertEqual("", routing["automatic"]["manual_gateway_id"])
+        self.assertEqual("manual", routing["locked"]["gateway_selection"])
+        self.assertEqual("gateway-two", routing["locked"]["manual_gateway_id"])
+        self.assertEqual("local", routing["local"]["manual_gateway_id"])
 
     def test_custom_image_preview_zooms_and_pans_without_repainting(self):
         self.assertIn('imageDropzone.addEventListener("wheel"', self.source)

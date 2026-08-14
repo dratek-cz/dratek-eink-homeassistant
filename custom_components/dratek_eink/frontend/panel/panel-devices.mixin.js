@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.296";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.297";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js";
 
 export const devicesMixin = {
@@ -1495,6 +1495,9 @@ export const devicesMixin = {
       custom_image_cycle_ids: [...(this._customImageCycleIds || [])],
       custom_image_cycle_enabled: this._customImageCycleEnabled === true,
       custom_image_cycle_minutes: Math.max(1, Math.min(1440, Number(this._customImageCycleMinutes) || 10)),
+      custom_image_fit_mode: ["cover", "contain", "stretch"].includes(this._customImageFitMode)
+        ? this._customImageFitMode
+        : "cover",
     };
   },
 
@@ -1534,6 +1537,9 @@ export const devicesMixin = {
       : [];
     this._customImageCycleEnabled = config?.custom_image_cycle_enabled === true;
     this._customImageCycleMinutes = Math.max(1, Math.min(1440, Number(config?.custom_image_cycle_minutes) || 10));
+    this._customImageFitMode = ["cover", "contain", "stretch"].includes(config?.custom_image_fit_mode)
+      ? config.custom_image_fit_mode
+      : "cover";
     if (hasStoredOriginal && this._customImageRendererVersion !== this._importedImageRendererVersion()) {
       const source = this._customImageSourceUrl;
       const name = this._customImageName;
@@ -1566,6 +1572,7 @@ export const devicesMixin = {
       this._customImageCycleIds = [];
       this._customImageCycleEnabled = false;
       this._customImageCycleMinutes = 10;
+      this._customImageFitMode = "cover";
       this._displayTemplateLargeLayout = "single";
       this._selectedTemplatePart = "";
       return;
@@ -1827,6 +1834,11 @@ export const devicesMixin = {
 
   _renderCustomImageStudio(device) {
     const assets = this._templateImageLibrary || [];
+    const physical = this._devicePreviewSize(device) || { width: 296, height: 128 };
+    const portrait = this._displayTemplateOrientation === "portrait";
+    const stageWidth = portrait ? Math.min(physical.width, physical.height) : Math.max(physical.width, physical.height);
+    const stageHeight = portrait ? Math.max(physical.width, physical.height) : Math.min(physical.width, physical.height);
+    const fitMode = ["cover", "contain", "stretch"].includes(this._customImageFitMode) ? this._customImageFitMode : "cover";
     const active = (this._customImageCycleEnabled ? this._activeCustomImageAsset() : null)
       || assets.find((asset) => asset.id === this._customImageActiveId)
       || this._activeCustomImageAsset()
@@ -1848,7 +1860,7 @@ export const devicesMixin = {
       <div class="custom-image-studio-layout">
         <main class="card custom-image-stage-card">
           <div class="custom-image-stage" data-custom-image-stage>
-            ${activePreview ? `<img src="${this._escape(activePreview)}" alt="Aktivní obrázek ${this._escape(active?.name || this._customImageName || "")}">` : `<div class="custom-image-stage-empty"><ha-icon icon="mdi:image-plus-outline"></ha-icon><strong>Přidejte první obrázek</strong></div>`}
+            ${activePreview ? `<div class="custom-image-stage-screen" style="aspect-ratio:${stageWidth}/${stageHeight}"><img class="fit-${fitMode}" src="${this._escape(activePreview)}" alt="Aktivní obrázek ${this._escape(active?.name || this._customImageName || "")}"></div>` : `<div class="custom-image-stage-empty"><ha-icon icon="mdi:image-plus-outline"></ha-icon><strong>Přidejte první obrázek</strong></div>`}
           </div>
           <footer><span><ha-icon icon="mdi:gesture-tap-hold"></ha-icon>Kolečkem přiblížíte, levým tlačítkem posunete</span><strong>${this._escape(active?.name || this._customImageName || "Bez obrázku")}</strong></footer>
         </main>
@@ -1860,6 +1872,11 @@ export const devicesMixin = {
             <button type="button" class="custom-image-gallery-remove" data-custom-image-remove="${this._escape(asset.id)}" title="Odstranit obrázek" aria-label="Odstranit ${this._escape(asset.name || "obrázek")}"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>
           </article>`).join("") : `<div class="custom-image-gallery-empty"><ha-icon icon="mdi:image-multiple-outline"></ha-icon><p>Galerie je prázdná. Přidejte PNG, JPEG nebo WebP.</p></div>`}</div>
           <section class="custom-image-cycle-settings">
+            <label><span>Přizpůsobení displeji</span><select data-custom-image-fit-mode>
+              <option value="cover" ${this._customImageFitMode === "cover" ? "selected" : ""}>Vyplnit celou plochu</option>
+              <option value="contain" ${this._customImageFitMode === "contain" ? "selected" : ""}>Zobrazit celý obrázek</option>
+              <option value="stretch" ${this._customImageFitMode === "stretch" ? "selected" : ""}>Roztáhnout na displej</option>
+            </select></label>
             <label class="custom-image-cycle-switch"><input type="checkbox" data-custom-image-cycle-enabled ${this._customImageCycleEnabled ? "checked" : ""} ${selected.size < 2 ? "disabled" : ""}><span><i></i><strong>Automaticky střídat vybrané obrázky</strong></span></label>
             <label><span>Interval změny</span><select data-custom-image-cycle-minutes ${this._customImageCycleEnabled ? "" : "disabled"}>${[[1,"1 minuta"],[5,"5 minut"],[10,"10 minut"],[15,"15 minut"],[30,"30 minut"],[60,"1 hodina"]].map(([value,label]) => `<option value="${value}" ${cycleMinutes === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
             <p><ha-icon icon="mdi:information-outline"></ha-icon>Po odeslání displej přejde na intervalové aktualizace a střídá až 12 vybraných snímků.</p>
@@ -3176,6 +3193,7 @@ export const devicesMixin = {
 
   async _displayTemplateEntityAutomation(image, device, gatewayId = "") {
     const request = this._currentDisplayTemplateSvgRequest(device);
+    const routing = this._displayAutomationRouting(device, gatewayId);
     const usesCustomImage = request?.templates?.some((template) =>
       template?.id === "custom_image" || template?.base_template_id === "custom_image"
     );
@@ -3193,6 +3211,7 @@ export const devicesMixin = {
         enabled: true,
         base_image: image,
         image_cycle: cycleImages,
+        image_cycle_ids: assets.map((asset) => asset.id),
         image_cycle_interval_seconds: intervalSeconds,
         bindings: [],
         layout: request?.layout || "single",
@@ -3203,11 +3222,7 @@ export const devicesMixin = {
         transform: this._displayTransform || "rotate_cw",
         refresh_interval_seconds: intervalSeconds,
         refresh_trigger_mode: "interval_only",
-        gateway_selection: "manual",
-        manual_gateway_id: gatewayId || "local",
-        route_type: gatewayId ? "gateway" : "local",
-        gateway_id: gatewayId,
-        transport_name: gatewayId ? "DRATEK eInk gateway" : "Home Assistant Bluetooth",
+        ...routing,
       };
     }
     const size = this._devicePreviewSize(device);
@@ -3360,11 +3375,22 @@ export const devicesMixin = {
       refresh_trigger_mode: ["both", "change_only", "interval_only"].includes(this._refreshTriggerMode)
         ? this._refreshTriggerMode
         : "both",
-      gateway_selection: "manual",
-      manual_gateway_id: gatewayId || "local",
-      route_type: gatewayId ? "gateway" : "local",
-      gateway_id: gatewayId,
-      transport_name: gatewayId ? "DRATEK eInk gateway" : "Home Assistant Bluetooth",
+      ...routing,
+    };
+  },
+
+  _displayAutomationRouting(device, gatewayId = "") {
+    const activeGatewayId = String(gatewayId || "");
+    const manuallyLocked = device?.gateway_selection === "manual";
+    const manualRoute = manuallyLocked
+      ? String(device?.selected_gateway_id || (activeGatewayId ? activeGatewayId : "local"))
+      : "";
+    return {
+      gateway_selection: manuallyLocked ? "manual" : "auto",
+      manual_gateway_id: manualRoute,
+      route_type: activeGatewayId ? "gateway" : "local",
+      gateway_id: activeGatewayId,
+      transport_name: activeGatewayId ? "DRATEK eInk gateway" : "Home Assistant Bluetooth",
     };
   },
 
@@ -4231,10 +4257,7 @@ export const devicesMixin = {
         context.fillRect(0, 0, width, height);
         context.imageSmoothingEnabled = true;
         context.imageSmoothingQuality = "high";
-        const scale = Math.max(width / image.width, height / image.height);
-        const drawWidth = image.width * scale;
-        const drawHeight = image.height * scale;
-        context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+        this._drawCustomImageFitted(context, image, width, height);
         const pixels = context.getImageData(0, 0, width, height);
         this._ditherImportedTemplateImageData(pixels, width, height, this._displayPaletteKey(device));
         context.putImageData(pixels, 0, 0);
@@ -4243,6 +4266,22 @@ export const devicesMixin = {
       image.onerror = () => reject(new Error("Obrázek se nepodařilo načíst."));
       image.src = source;
     });
+  },
+
+  _drawCustomImageFitted(context, image, width, height) {
+    const mode = ["cover", "contain", "stretch"].includes(this._customImageFitMode)
+      ? this._customImageFitMode
+      : "cover";
+    if (mode === "stretch") {
+      context.drawImage(image, 0, 0, width, height);
+      return;
+    }
+    const scale = mode === "contain"
+      ? Math.min(width / image.width, height / image.height)
+      : Math.max(width / image.width, height / image.height);
+    const drawWidth = image.width * scale;
+    const drawHeight = image.height * scale;
+    context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
   },
 
   _storeCustomImageTemplateData(source, variants, name, aspect = 1) {
@@ -4297,10 +4336,7 @@ export const devicesMixin = {
           context.fillRect(0, 0, width, height);
           context.imageSmoothingEnabled = true;
           context.imageSmoothingQuality = "high";
-          const scale = Math.max(width / image.width, height / image.height);
-          const drawWidth = image.width * scale;
-          const drawHeight = image.height * scale;
-          context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+          this._drawCustomImageFitted(context, image, width, height);
           const pixels = context.getImageData(0, 0, width, height);
           this._ditherImportedTemplateImageData(pixels, width, height, paletteKey);
           context.putImageData(pixels, 0, 0);
@@ -4369,7 +4405,12 @@ export const devicesMixin = {
   _rememberTemplateImageAsset(source, variants, name = "Obrázek", aspect = 1) {
     this._templateImageLibrary ||= [];
     const existing = this._templateImageLibrary.find((asset) => (asset.source || asset.src) === source);
-    if (existing) return existing;
+    if (existing) {
+      existing.variants = { bwr: variants.bwr, bwry: variants.bwry };
+      existing.src = this._paletteImageSrc({ source, variants });
+      existing.fit_mode = this._customImageFitMode || "cover";
+      return existing;
+    }
     const asset = {
       id: `template-library-image-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`,
       name: String(name || "Obrázek"),
@@ -4378,6 +4419,7 @@ export const devicesMixin = {
       src: this._paletteImageSrc({ source, variants }),
       aspect: Math.max(.05, Number(aspect || 1)),
       created_at: new Date().toISOString(),
+      fit_mode: this._customImageFitMode || "cover",
     };
     this._templateImageLibrary = [asset, ...this._templateImageLibrary].slice(0, 30);
     return asset;

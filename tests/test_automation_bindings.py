@@ -30,6 +30,10 @@ async def _async_none(*_args, **_kwargs):
     return None
 
 
+async def _async_gateway_preferences(hass, *_args, **_kwargs):
+    return dict(getattr(hass, "gateway_preferences", {}))
+
+
 def _load_automation_module():
     package = types.ModuleType(PACKAGE)
     package.__path__ = [str(COMPONENT)]
@@ -70,8 +74,12 @@ def _load_automation_module():
             "async_scan_gateway": lambda *_args, **_kwargs: None,
             "async_send_gateway_payload": lambda *_args, **_kwargs: None,
         },
+        "gateway_preferences": {
+            "async_load_gateway_preferences": _async_gateway_preferences,
+        },
         "queue": {"get_transfer_queue": lambda _hass: None},
         "render": {
+            "BWRY_CODES": {46, 78, 142, 270, 302, 310, 318, 558, 654, 686, 2670, 2702},
             "prepare_image_for_display": lambda _sdk, image, *_args: image,
             "render_automatic_refresh_image": lambda *_args, **_kwargs: None,
             "async_render_camera_binding_data_url": _async_none,
@@ -340,14 +348,19 @@ class AutomationBindingTests(unittest.TestCase):
         async def clear_previous(_hass, address):
             cleared.append(address)
 
+        async def load_project_data(_hass):
+            return {"device_gateway_preferences": {}}
+
         namespace = {
             "Any": object,
             "HomeAssistant": object,
             "DOMAIN": "dratek_eink",
+            "LOCAL_ROUTE_ID": "local",
             "PENDING_AUTOMATIONS_KEY": "pending_entity_automations",
             "uuid": uuid,
             "get_entity_auto_update_manager": lambda _hass: manager,
             "_clear_previous_entity_automation": clear_previous,
+            "_load_project_data": load_project_data,
         }
         exec(compile(isolated_module, "ws_shared.py", "exec"), namespace)
 
@@ -368,6 +381,8 @@ class AutomationBindingTests(unittest.TestCase):
 
         self.assertIsNotNone(prepared)
         self.assertEqual(config["image_cycle"], prepared["image_cycle"])
+        self.assertEqual("auto", prepared["gateway_selection"])
+        self.assertNotIn("manual_gateway_id", prepared)
         self.assertTrue(prepared["installation_id"])
         self.assertEqual([], cleared)
         self.assertIs(
@@ -416,6 +431,54 @@ class AutomationBindingTests(unittest.TestCase):
         self.assertNotIn(address, manager._pending_refreshes)
         self.assertNotIn(address, manager._timers)
         self.assertEqual([address], timer_cancelled)
+        self.assertEqual({"configs": {}}, manager._store.saved)
+
+    def test_deleting_gallery_image_removes_its_persisted_cycle_payload(self):
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager._initialized = True
+        manager._configs = {
+            address: {
+                "enabled": True,
+                "bindings": [],
+                "image_cycle_ids": ["one", "two", "three"],
+                "image_cycle": ["IMAGE_ONE", "IMAGE_TWO", "IMAGE_THREE"],
+            }
+        }
+        manager._last_refresh_at = {address: 123.0}
+        manager._store = _Store()
+        manager._refresh_listener = lambda: None
+
+        asyncio.run(manager.async_remove_image_cycle_asset(address.lower(), "two"))
+
+        saved = manager._store.saved["configs"][address]
+        self.assertEqual(["one", "three"], saved["image_cycle_ids"])
+        self.assertEqual(["IMAGE_ONE", "IMAGE_THREE"], saved["image_cycle"])
+
+    def test_deleting_last_gallery_image_removes_empty_cycle_automation(self):
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager._initialized = True
+        manager._configs = {
+            address: {
+                "enabled": True,
+                "bindings": [],
+                "image_cycle_ids": ["only"],
+                "image_cycle": ["IMAGE_ONLY"],
+            }
+        }
+        manager._last_refresh_at = {address: 123.0}
+        manager._store = _Store()
+        manager._refresh_listener = lambda: None
+
+        asyncio.run(manager.async_remove_image_cycle_asset(address, "only"))
+
+        self.assertNotIn(address, manager._configs)
+        self.assertNotIn(address, manager._last_refresh_at)
         self.assertEqual({"configs": {}}, manager._store.saved)
 
     def test_time_condition_supports_daytime_and_overnight_intervals(self):
@@ -551,6 +614,44 @@ class AutomationBindingTests(unittest.TestCase):
         manager._handle_refresh_tick(None)
 
         self.assertEqual(["AA:AA:11:22:33:44"], scheduled)
+
+    def test_image_cycle_gets_its_own_exact_interval_timer(self):
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager.hass = object()
+        manager._configs = {
+            address: {
+                "refresh_interval_seconds": 600,
+                "refresh_trigger_mode": "interval_only",
+                "bindings": [],
+                "image_cycle": ["ONE", "TWO"],
+            }
+        }
+        manager._interval_timers = {}
+        scheduled = []
+        manager._schedule_refresh = scheduled.append
+        callbacks = []
+        cancelled = []
+
+        def fake_call_later(_hass, seconds, callback):
+            callbacks.append((seconds, callback))
+            return lambda: cancelled.append(True)
+
+        original = automation.async_call_later
+        automation.async_call_later = fake_call_later
+        try:
+            manager._sync_interval_timer(address)
+            self.assertEqual(600, callbacks[0][0])
+            callbacks[0][1](None)
+        finally:
+            automation.async_call_later = original
+
+        self.assertEqual([address], scheduled)
+        self.assertEqual(2, len(callbacks))
+        self.assertEqual(600, callbacks[1][0])
+        self.assertEqual([], cancelled)
 
     def test_refresh_trigger_mode_defaults_to_both_and_rejects_invalid_values(self):
         trigger_mode = automation.EntityAutoUpdateManager._refresh_trigger_mode
@@ -799,7 +900,7 @@ class AutomationBindingTests(unittest.TestCase):
         async def fake_camera_render(
             _hass, entity_id, width, height, country="cz",
             show_precipitation=True, dotted_light=True, show_wind=False,
-            location_address="",
+            location_address="", preserve_yellow=False,
         ):
             captured["entity_id"] = entity_id
             captured["country"] = country
@@ -807,6 +908,7 @@ class AutomationBindingTests(unittest.TestCase):
             captured["dotted_light"] = dotted_light
             captured["show_wind"] = show_wind
             captured["location_address"] = location_address
+            captured["preserve_yellow"] = preserve_yellow
             return "data:image/png;base64,AA=="
 
         original = automation.async_render_camera_binding_data_url
@@ -818,6 +920,7 @@ class AutomationBindingTests(unittest.TestCase):
                     {
                         "base_image": "",
                         "svg_template": "",
+                        "sdk_type": 46,
                         "bindings": [
                             {
                                 "id": "radar",
@@ -843,6 +946,7 @@ class AutomationBindingTests(unittest.TestCase):
         self.assertTrue(captured["show_precipitation"])
         self.assertFalse(captured["dotted_light"])
         self.assertTrue(captured["show_wind"])
+        self.assertTrue(captured["preserve_yellow"])
         self.assertEqual("Václavské náměstí 1, Praha", captured["location_address"])
 
     def test_ratio_binding_computes_live_percent_with_its_divisor(self):
@@ -1173,7 +1277,10 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
         async def executor(function, *args):
             return function(*args)
 
-        manager.hass = types.SimpleNamespace(async_add_executor_job=executor)
+        manager.hass = types.SimpleNamespace(
+            async_add_executor_job=executor,
+            gateway_preferences={address: "local"},
+        )
         manager._configs = {
             address: {
                 "route_type": "local",
@@ -1315,10 +1422,65 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
                     "id": "office",
                     "name": "Gateway kancelář",
                     "rssi": -51.0,
+                    "temporarily_unseen": True,
                 }
             ],
             routes,
         )
+
+    async def test_fresh_gateway_outranks_stronger_retained_gateway_like_connection_map(self):
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager.hass = types.SimpleNamespace(
+            data={
+                "dratek_eink.discovery_cache": {
+                    address: {
+                        "last_seen_at": time.time(),
+                        "paths": [
+                            {
+                                "type": "gateway",
+                                "id": "old-strong",
+                                "name": "Stará silnější gateway",
+                                "rssi": -35,
+                            }
+                        ],
+                    }
+                }
+            }
+        )
+        manager._gateway_route_cache = {}
+        manager._gateway_route_cache_at = 0.0
+        manager._gateway_route_lock = asyncio.Lock()
+
+        async def load_gateways(_hass):
+            return [
+                {"id": "fresh", "name": "Aktuální gateway"},
+                {"id": "old-strong", "name": "Stará silnější gateway"},
+            ]
+
+        async def scan_gateway(_hass, gateway_id, _seconds):
+            devices = (
+                [{"address": address, "rssi": -62}]
+                if gateway_id == "fresh"
+                else []
+            )
+            return {"ok": True, "devices": devices}
+
+        original_load = automation.async_load_gateways
+        original_scan = automation.async_scan_gateway
+        automation.async_load_gateways = load_gateways
+        automation.async_scan_gateway = scan_gateway
+        try:
+            routes = await manager._async_gateway_routes(address)
+        finally:
+            automation.async_load_gateways = original_load
+            automation.async_scan_gateway = original_scan
+
+        self.assertEqual(["fresh", "old-strong"], [route["id"] for route in routes])
+        self.assertFalse(routes[0].get("temporarily_unseen", False))
+        self.assertTrue(routes[1]["temporarily_unseen"])
 
     async def test_automatic_refresh_uses_the_fresh_strongest_gateway(self):
         address = "FF:FF:92:81:46:32"
@@ -1388,7 +1550,10 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
         async def executor(function, *args):
             return function(*args)
 
-        manager.hass = types.SimpleNamespace(async_add_executor_job=executor)
+        manager.hass = types.SimpleNamespace(
+            async_add_executor_job=executor,
+            gateway_preferences={address: "workshop"},
+        )
         manager._configs = {
             address: {
                 "gateway_selection": "manual",

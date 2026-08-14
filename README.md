@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.297
+
+- **Automatické zápisy opravdu běží podle časovače** – každý displej má vlastní přesný interval, po jeho uplynutí se šablona znovu vykreslí a odešle bez čekání na změnu entity.
+- **Správná gateway podle aktuální mapy spojení** – při automatickém i ručním zápisu dostane přednost gateway, která displej zachytila v posledním skenu; stará silnější trasa slouží jen jako záloha.
+- **Trvalé mazání obrázků z galerie** – odstraněním snímku se smažou i jeho uložená data, barevné varianty a vazba v automatickém cyklu.
+- **Automatické vyplnění displeje obrázkem** – galerie nabízí režimy Vyplnit, Přizpůsobit a Roztáhnout a při změně přepočítá obrázky přímo pro rozlišení cílového panelu.
+- **Čitelný Meteoradar po každé aktualizaci** – informační vrstva už po obnovení nezmizí a intenzita srážek používá pro BWRY jemné žluté, žluto-červené a červené stínování včetně legendy Slabé / Střed / Silné.
+
 ## Novinky ve verzi 0.1.296
 
 - **Správně otočené čtyřbarevné displeje** – hotový obraz pro všechny BWRY panely se před fyzickým zápisem otočí o 180° bez změny náhledu nebo tříbarevných variant.

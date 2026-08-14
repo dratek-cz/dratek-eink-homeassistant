@@ -25,6 +25,7 @@ WEBSOCKET_SOURCE = websocket_source()
 AUTOMATION_SOURCE = (COMPONENT / "automation.py").read_text(encoding="utf-8")
 STORAGE_SOURCE = (COMPONENT / "project_storage.py").read_text(encoding="utf-8")
 SHARED_SOURCE = (COMPONENT / "ws_shared.py").read_text(encoding="utf-8")
+PREFERENCES_SOURCE = (COMPONENT / "gateway_preferences.py").read_text(encoding="utf-8")
 PANEL_SOURCE = (
     COMPONENT / "frontend" / "panel" / "panel-gateway.mixin.js"
 ).read_text(encoding="utf-8")
@@ -86,10 +87,11 @@ class LocalRouteLockTests(unittest.TestCase):
 
     def test_gateway_lock_has_a_dedicated_restart_safe_store(self) -> None:
         self.assertIn(
-            'GATEWAY_PREFERENCES_STORE_KEY = "dratek_eink.gateway_preferences"',
-            SHARED_SOURCE,
+            'STORE_KEY = "dratek_eink.gateway_preferences"',
+            PREFERENCES_SOURCE,
         )
-        self.assertIn("await _gateway_preferences_store(hass).async_load()", SHARED_SOURCE)
+        self.assertIn("await _store(hass).async_load()", PREFERENCES_SOURCE)
+        self.assertIn("async_load_gateway_preferences", AUTOMATION_SOURCE)
         self.assertIn("await _save_gateway_preferences(", WEBSOCKET_SOURCE)
 
 

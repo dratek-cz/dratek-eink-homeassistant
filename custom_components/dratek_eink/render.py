@@ -1604,6 +1604,7 @@ async def async_render_camera_binding_data_url(
     dotted_light: bool = True,
     show_wind: bool = False,
     location_address: str = "",
+    preserve_yellow: bool = False,
 ) -> str | None:
     """Fetch a camera entity's current snapshot, fit and quantise it for the panel."""
     from homeassistant.components.camera import async_get_image
@@ -1627,7 +1628,7 @@ async def async_render_camera_binding_data_url(
             except Exception:
                 return None
             fitted = fit_to_size(source, width, height)
-            quantized = quantize_bwr_preview(fitted)
+            quantized = quantize_bwr_preview(fitted, preserve_yellow)
             buffer = io.BytesIO()
             quantized.save(buffer, format="PNG")
             return buffer.getvalue()
@@ -1649,7 +1650,19 @@ async def async_render_camera_binding_data_url(
         if radar_img is not None:
             def _prepare_radar() -> bytes:
                 fitted = fit_to_size(radar_img, width, height)
-                quantized = quantize_bwr_preview(fitted)
+                if not preserve_yellow:
+                    rgb = fitted.convert("RGB")
+                    red_band, green_band, blue_band = rgb.split()
+                    yellow_mask = ImageChops.logical_and(
+                        ImageChops.logical_and(
+                            red_band.point(lambda value: 255 if value >= 161 else 0, mode="1"),
+                            green_band.point(lambda value: 255 if value >= 128 else 0, mode="1"),
+                        ),
+                        blue_band.point(lambda value: 255 if value < 96 else 0, mode="1"),
+                    )
+                    rgb.paste(BWR_RED, mask=yellow_mask)
+                    fitted = rgb
+                quantized = quantize_bwr_preview(fitted, preserve_yellow)
                 buffer = io.BytesIO()
                 quantized.save(buffer, format="PNG")
                 return buffer.getvalue()
@@ -1852,12 +1865,23 @@ def render_automatic_refresh_image(
     and finally to plain PIL compositing, so a refresh always produces a
     complete image rather than erroring out.
     """
-    if clean_background:
+    # Camera images sit below informational foreground layers in the captured
+    # template. Replacing the href in the complete SVG preserves that z-order;
+    # pasting a camera over clean_background would cover Meteoradar's legend.
+    has_camera = any(
+        isinstance(binding, dict) and binding.get("type") == "camera"
+        for binding in bindings
+    )
+    if clean_background and not (has_camera and svg_template):
         image = render_entity_bound_clean_background_image(clean_background, bindings, values, True)
         if image is not None:
             return image
     if svg_template:
         image = render_entity_bound_template_image(svg_template, bindings, values, True)
+        if image is not None:
+            return image
+    if clean_background:
+        image = render_entity_bound_clean_background_image(clean_background, bindings, values, True)
         if image is not None:
             return image
     if svg_render.render_available() and any(

@@ -253,3 +253,63 @@ async def websocket_save_device_draft(
         )
     preview = await async_display_preview(hass, address)
     connection.send_result(msg["id"], {"draft": {**draft, **(preview or {})}})
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/device_drafts/delete_image",
+        "address": str,
+        "image_id": str,
+    }
+)
+@websocket_api.async_response
+async def websocket_delete_device_draft_image(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Permanently remove one embedded gallery image and all of its variants."""
+    address = _normalize_address(msg["address"])
+    image_id = str(msg["image_id"] or "").strip()
+    await get_entity_auto_update_manager(hass).async_remove_image_cycle_asset(
+        address, image_id
+    )
+    data = await _load_project_data(hass)
+    draft = data["device_drafts"].get(address)
+    if not isinstance(draft, dict):
+        connection.send_result(msg["id"], {"ok": True, "deleted": False})
+        return
+    template_config = draft.get("template_config")
+    if not isinstance(template_config, dict):
+        connection.send_result(msg["id"], {"ok": True, "deleted": False})
+        return
+    library = [item for item in template_config.get("image_library", []) if isinstance(item, dict)]
+    removed = next((item for item in library if str(item.get("id") or "") == image_id), None)
+    if removed is None:
+        connection.send_result(msg["id"], {"ok": True, "deleted": False})
+        return
+    remaining = [item for item in library if str(item.get("id") or "") != image_id]
+    template_config["image_library"] = remaining
+    cycle_ids = [str(value) for value in template_config.get("custom_image_cycle_ids", [])]
+    template_config["custom_image_cycle_ids"] = [value for value in cycle_ids if value != image_id]
+    if len(template_config["custom_image_cycle_ids"]) < 2:
+        template_config["custom_image_cycle_enabled"] = False
+    if str(template_config.get("custom_image_active_id") or "") == image_id:
+        replacement = remaining[0] if remaining else {}
+        template_config["custom_image_active_id"] = str(replacement.get("id") or "")
+        template_config["custom_image_source"] = str(replacement.get("source") or "")
+        template_config["custom_image_variants"] = dict(replacement.get("variants") or {})
+        template_config["custom_image_data"] = str(
+            (replacement.get("variants") or {}).get("bwr")
+            or replacement.get("src")
+            or ""
+        )
+        template_config["custom_image_name"] = str(replacement.get("name") or "")
+    draft["template_config"] = template_config
+    draft["updated_at"] = int(time.time())
+    data["device_drafts"][address] = draft
+    await _project_store(hass).async_save(data)
+    connection.send_result(
+        msg["id"],
+        {"ok": True, "deleted": True, "template_config": template_config},
+    )

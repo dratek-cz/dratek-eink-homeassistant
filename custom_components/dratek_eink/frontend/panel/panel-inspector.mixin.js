@@ -1753,7 +1753,7 @@ export const inspectorMixin = {
     this.shadowRoot.querySelector("[data-custom-image-gallery-focus]")?.addEventListener("click", () => {
       this.shadowRoot.querySelector("[data-custom-image-gallery]")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-    this.shadowRoot.querySelectorAll("[data-custom-image-select]").forEach((button) => button.addEventListener("click", () => {
+    this.shadowRoot.querySelectorAll("[data-custom-image-select]").forEach((button) => button.addEventListener("click", async () => {
       const asset = (this._templateImageLibrary || []).find((item) => item.id === button.dataset.customImageSelect);
       if (!asset) return;
       this._customImageActiveId = asset.id;
@@ -1763,7 +1763,15 @@ export const inspectorMixin = {
       this._customImageName = asset.name || "Obrázek";
       this._render();
       this._paint();
-      this._saveDisplayTemplateDraft?.().catch(() => {});
+      try {
+        if (asset.fit_mode !== this._customImageFitMode && (asset.source || asset.src)) {
+          await this._convertCustomImageTemplateSource(asset.source || asset.src, asset.name || "Obrázek");
+        }
+        await this._saveDisplayTemplateDraft?.();
+      } catch (error) {
+        this._templateSaveResult = { ok: false, message: `Přizpůsobení obrázku selhalo: ${this._message(error)}` };
+        this._render();
+      }
     }));
     this.shadowRoot.querySelectorAll("[data-custom-image-cycle]").forEach((input) => input.addEventListener("change", () => {
       const id = input.dataset.customImageCycle;
@@ -1788,22 +1796,65 @@ export const inspectorMixin = {
       this._paint();
       this._saveDisplayTemplateDraft?.().catch(() => {});
     });
-    this.shadowRoot.querySelectorAll("[data-custom-image-remove]").forEach((button) => button.addEventListener("click", () => {
-      const id = button.dataset.customImageRemove;
-      this._templateImageLibrary = (this._templateImageLibrary || []).filter((asset) => asset.id !== id);
-      this._customImageCycleIds = (this._customImageCycleIds || []).filter((assetId) => assetId !== id);
-      if (this._customImageActiveId === id) {
-        const next = this._templateImageLibrary[0];
-        this._customImageActiveId = next?.id || "";
-        this._customImageSourceUrl = next?.source || "";
-        this._customImageVariants = structuredClone(next?.variants || {});
-        this._customImageDataUrl = next ? this._paletteImageSrc(next) : "";
-        this._customImageName = next?.name || "";
+    this.shadowRoot.querySelector("[data-custom-image-fit-mode]")?.addEventListener("change", async (event) => {
+      this._customImageFitMode = ["cover", "contain", "stretch"].includes(event.target.value)
+        ? event.target.value
+        : "cover";
+      const activeId = this._customImageActiveId;
+      const assets = [...(this._templateImageLibrary || [])];
+      try {
+        for (const asset of assets) {
+          if (asset?.source || asset?.src) {
+            await this._convertCustomImageTemplateSource(asset.source || asset.src, asset.name || "Obrázek");
+          }
+        }
+        const active = (this._templateImageLibrary || []).find((asset) => asset.id === activeId)
+          || this._activeCustomImageAsset();
+        if (active) {
+          this._customImageActiveId = active.id;
+          this._customImageSourceUrl = active.source || active.src;
+          this._customImageVariants = structuredClone(active.variants || {});
+          this._customImageDataUrl = this._paletteImageSrc(active);
+          this._customImageName = active.name || "Obrázek";
+        }
+        await this._saveDisplayTemplateDraft?.();
+        this._templateSaveResult = { ok: true, message: "Všechny obrázky byly znovu přizpůsobeny rozměrům displeje." };
+      } catch (error) {
+        this._templateSaveResult = { ok: false, message: `Přizpůsobení obrázku selhalo: ${this._message(error)}` };
       }
-      if (this._customImageCycleIds.length < 2) this._customImageCycleEnabled = false;
       this._render();
       this._paint();
-      this._saveDisplayTemplateDraft?.().catch(() => {});
+    });
+    this.shadowRoot.querySelectorAll("[data-custom-image-remove]").forEach((button) => button.addEventListener("click", async () => {
+      const id = button.dataset.customImageRemove;
+      const address = String(this._selectedDeviceAddress || "").toUpperCase();
+      button.disabled = true;
+      try {
+        if (address && this._hass) {
+          await this._hass.callWS({
+            type: "dratek_eink/device_drafts/delete_image",
+            address,
+            image_id: id,
+          });
+        }
+        this._templateImageLibrary = (this._templateImageLibrary || []).filter((asset) => asset.id !== id);
+        this._customImageCycleIds = (this._customImageCycleIds || []).filter((assetId) => assetId !== id);
+        if (this._customImageActiveId === id) {
+          const next = this._templateImageLibrary[0];
+          this._customImageActiveId = next?.id || "";
+          this._customImageSourceUrl = next?.source || "";
+          this._customImageVariants = structuredClone(next?.variants || {});
+          this._customImageDataUrl = next ? this._paletteImageSrc(next) : "";
+          this._customImageName = next?.name || "";
+        }
+        if (this._customImageCycleIds.length < 2) this._customImageCycleEnabled = false;
+        await this._saveDisplayTemplateDraft?.();
+        this._templateSaveResult = { ok: true, message: "Obrázek i jeho uložená data byly trvale odstraněny." };
+      } catch (error) {
+        this._templateSaveResult = { ok: false, message: `Smazání obrázku selhalo: ${this._message(error)}` };
+      }
+      this._render();
+      this._paint();
     }));
     const imageStage = this.shadowRoot.querySelector("[data-custom-image-stage]");
     if (imageStage) {

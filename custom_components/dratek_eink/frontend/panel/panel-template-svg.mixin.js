@@ -196,8 +196,9 @@ export const templateSvgMixin = {
     const dottedLight = this._displayTemplateConfig?.meteoradar_dotted_light !== false;
     const showWind = this._displayTemplateConfig?.meteoradar_show_wind === true;
     const locationAddress = this._meteoradarHomeAddress || this._displayTemplateConfig?.meteoradar_home_address || "";
+    const preserveYellow = this._displaySupportsYellow?.() === true;
 
-    const key = `${Math.round(width)}x${Math.round(height)}_${country}_p${showPrecipitation}_d${dottedLight}_w${showWind}_h${locationAddress}`;
+    const key = `${Math.round(width)}x${Math.round(height)}_${country}_p${showPrecipitation}_d${dottedLight}_w${showWind}_h${locationAddress}_y${preserveYellow}`;
     const cached = this._meteoradarImageCache;
     const age = cached ? Date.now() - cached.fetchedAt : Infinity;
     const ttl = cached?.dataUrl ? METEORADAR_CACHE_MS : METEORADAR_RETRY_MS;
@@ -213,6 +214,7 @@ export const templateSvgMixin = {
         dotted_light: dottedLight,
         show_wind: showWind,
         location_address: locationAddress,
+        preserve_yellow: preserveYellow,
       });
       if (!result?.ok || !result?.image) {
         this._meteoradarImageCache = { key, dataUrl: "", fetchedAt: Date.now(), error: "Server nevrátil obrázek." };
@@ -1243,13 +1245,15 @@ export const templateSvgMixin = {
       const legendW = Math.max(70, Math.min(128, w * 0.3));
       const legendX = x + w - legendW - Math.max(3, w * 0.012);
       const legendY = box.y + Math.max(3, box.h * 0.012);
-      const half = legendW / 2;
+      const third = legendW / 3;
       return `<image x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}"`
         + ` preserveAspectRatio="xMidYMid meet" href="${cached.dataUrl}"></image>`
-        + `<g aria-label="Intenzita srážek"><rect x="${legendX.toFixed(2)}" y="${legendY.toFixed(2)}" width="${half.toFixed(2)}" height="${legendH.toFixed(2)}" fill="${this._templateInk("yellow")}"></rect>`
-        + `<rect x="${(legendX + half).toFixed(2)}" y="${legendY.toFixed(2)}" width="${half.toFixed(2)}" height="${legendH.toFixed(2)}" fill="${RED}"></rect>`
-        + this._svgText("SLABÉ", legendX + half / 2, legendY + legendH / 2, Math.max(6, legendH * 0.42), { color: BLACK, bold: true, maxWidth: half * 0.9 })
-        + this._svgText("SILNÉ", legendX + half * 1.5, legendY + legendH / 2, Math.max(6, legendH * 0.42), { color: "#ffffff", bold: true, maxWidth: half * 0.9 })
+        + `<g aria-label="Intenzita srážek"><rect x="${legendX.toFixed(2)}" y="${legendY.toFixed(2)}" width="${third.toFixed(2)}" height="${legendH.toFixed(2)}" fill="#ffffff" stroke="${BLACK}" stroke-width="0.7"></rect>`
+        + `<rect x="${(legendX + third).toFixed(2)}" y="${legendY.toFixed(2)}" width="${third.toFixed(2)}" height="${legendH.toFixed(2)}" fill="${this._templateInk("yellow")}"></rect>`
+        + `<rect x="${(legendX + third * 2).toFixed(2)}" y="${legendY.toFixed(2)}" width="${third.toFixed(2)}" height="${legendH.toFixed(2)}" fill="${RED}"></rect>`
+        + this._svgText("SLABÉ", legendX + third / 2, legendY + legendH / 2, Math.max(5.5, legendH * 0.36), { color: BLACK, bold: true, maxWidth: third * 0.9 })
+        + this._svgText("STŘED", legendX + third * 1.5, legendY + legendH / 2, Math.max(5.5, legendH * 0.36), { color: BLACK, bold: true, maxWidth: third * 0.9 })
+        + this._svgText("SILNÉ", legendX + third * 2.5, legendY + legendH / 2, Math.max(5.5, legendH * 0.36), { color: "#ffffff", bold: true, maxWidth: third * 0.9 })
         + `</g>`;
     }
     const label = cached?.error

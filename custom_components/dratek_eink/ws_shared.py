@@ -9,15 +9,17 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .automation import get_entity_auto_update_manager
-from .const import DISCOVERY_CACHE_KEY, DISCOVERY_GRACE_SECONDS, DOMAIN
+from .const import DISCOVERY_CACHE_KEY, DISCOVERY_GRACE_SECONDS, DOMAIN, LOCAL_ROUTE_ID
+from .gateway_preferences import (
+    async_load_gateway_preferences,
+    async_save_gateway_preferences,
+    normalize_gateway_preferences,
+)
 from .project_storage import normalize_project_data
 
 PROJECT_STORE_KEY = "dratek_eink.projects"
 PROJECT_STORE_VERSION = 1
-GATEWAY_PREFERENCES_STORE_KEY = "dratek_eink.gateway_preferences"
-GATEWAY_PREFERENCES_STORE_VERSION = 1
 PROJECT_STORE_DATA_KEY = "project_store"
-GATEWAY_PREFERENCES_STORE_DATA_KEY = "gateway_preferences_store"
 PROJECT_DATA_CACHE_KEY = "project_data_cache"
 PENDING_AUTOMATIONS_KEY = "pending_entity_automations"
 
@@ -52,6 +54,26 @@ async def _install_entity_automation(
         and config["image_cycle"]
     )
     if config and config.get("enabled") is True and (has_bindings or has_image_cycle):
+        # The connection map is the source of truth for manual route locks.
+        # Older/cached frontends used to label the currently preferred automatic
+        # gateway as a manual choice in every automation payload, pinning later
+        # refreshes to a gateway the map no longer selected.
+        project_data = await _load_project_data(hass)
+        saved_route = str(
+            project_data.get("device_gateway_preferences", {}).get(address.upper())
+            or ""
+        )
+        if saved_route:
+            config["gateway_selection"] = "manual"
+            config["manual_gateway_id"] = saved_route
+            config["route_type"] = (
+                "local" if saved_route == LOCAL_ROUTE_ID else "gateway"
+            )
+            config["gateway_id"] = "" if saved_route == LOCAL_ROUTE_ID else saved_route
+        else:
+            config["gateway_selection"] = "auto"
+            config.pop("manual_gateway_id", None)
+
         # Identifies this exact queued design. If an older transfer fails after a
         # newer one was queued, its rollback must not delete the newer bindings.
         config["installation_id"] = uuid.uuid4().hex
@@ -149,36 +171,14 @@ def _project_store(hass: HomeAssistant) -> Store:
     return store
 
 
-def _gateway_preferences_store(hass: HomeAssistant) -> Store:
-    domain_data = hass.data.setdefault(DOMAIN, {})
-    store = domain_data.get(GATEWAY_PREFERENCES_STORE_DATA_KEY)
-    if store is None:
-        store = Store(
-            hass,
-            GATEWAY_PREFERENCES_STORE_VERSION,
-            GATEWAY_PREFERENCES_STORE_KEY,
-        )
-        domain_data[GATEWAY_PREFERENCES_STORE_DATA_KEY] = store
-    return store
-
-
 def _normalize_gateway_preferences(value: Any) -> dict[str, str]:
-    source = value.get("preferences") if isinstance(value, dict) else None
-    if not isinstance(source, dict):
-        return {}
-    return {
-        _normalize_address(address): str(gateway_id).strip()
-        for address, gateway_id in source.items()
-        if _normalize_address(address) and str(gateway_id or "").strip()
-    }
+    return normalize_gateway_preferences(value)
 
 
 async def _save_gateway_preferences(
     hass: HomeAssistant, preferences: dict[str, Any]
 ) -> dict[str, str]:
-    normalized = _normalize_gateway_preferences({"preferences": preferences})
-    await _gateway_preferences_store(hass).async_save({"preferences": normalized})
-    return normalized
+    return await async_save_gateway_preferences(hass, preferences)
 
 
 async def _load_project_data(hass: HomeAssistant) -> dict[str, Any]:
@@ -187,9 +187,7 @@ async def _load_project_data(hass: HomeAssistant) -> dict[str, Any]:
     if isinstance(cached, dict):
         return cached
     normalized = normalize_project_data(await _project_store(hass).async_load())
-    persisted_preferences = _normalize_gateway_preferences(
-        await _gateway_preferences_store(hass).async_load()
-    )
+    persisted_preferences = await async_load_gateway_preferences(hass)
     if persisted_preferences:
         normalized["device_gateway_preferences"].update(persisted_preferences)
     elif normalized["device_gateway_preferences"]:

@@ -247,6 +247,31 @@ class AutomaticRefreshRendererTests(unittest.TestCase):
         ).convert("RGB")
         self.assertEqual(image.getpixel((10, 10)), (0, 0, 0))
 
+    def test_camera_refresh_prefers_complete_svg_so_foreground_information_survives(self) -> None:
+        calls = []
+        original_template = render.render_entity_bound_template_image
+        original_clean = render.render_entity_bound_clean_background_image
+        render.render_entity_bound_template_image = lambda *_args, **_kwargs: (
+            calls.append("template") or Image.new("RGB", (20, 10), (220, 20, 12))
+        )
+        render.render_entity_bound_clean_background_image = lambda *_args, **_kwargs: (
+            calls.append("clean") or Image.new("RGB", (20, 10), (0, 0, 0))
+        )
+        try:
+            image = render.render_automatic_refresh_image(
+                _solid_png_data_url((20, 10), (255, 255, 255)),
+                '<svg width="20" height="10"></svg>',
+                _solid_png_data_url((20, 10), (255, 255, 255)),
+                [{"id": "radar", "type": "camera"}],
+                {"radar": _solid_png_data_url((20, 10), (0, 0, 0))},
+            )
+        finally:
+            render.render_entity_bound_template_image = original_template
+            render.render_entity_bound_clean_background_image = original_clean
+
+        self.assertEqual(["template"], calls)
+        self.assertEqual((220, 20, 12), image.getpixel((0, 0)))
+
     @unittest.skipUnless(svg_render.render_available(), "SVG rasteriser not installed")
     def test_empty_clean_background_is_purely_additive(self) -> None:
         # An automation saved before this tier existed has no clean_background

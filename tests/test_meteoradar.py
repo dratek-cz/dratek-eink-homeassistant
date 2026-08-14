@@ -213,8 +213,14 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         image = self._compose((0, 100, 200, 80))
         cx, cy = image.width // 2, image.height // 2
         patch = [image.getpixel((x, y)) for y in range(cy - 15, cy + 16) for x in range(cx - 15, cx + 16)]
-        self.assertIn(meteoradar.PRECIPITATION_COLOR, patch)
+        self.assertIn(meteoradar.PRECIPITATION_YELLOW, patch)
         self.assertIn((255, 255, 255), patch)
+
+    def test_moderate_precipitation_mixes_yellow_and_red(self) -> None:
+        image = self._compose((0, 100, 200, 220))
+        colors = set(image.getdata())
+        self.assertIn(meteoradar.PRECIPITATION_YELLOW, colors)
+        self.assertIn(meteoradar.PRECIPITATION_COLOR, colors)
 
     def test_moderate_precipitation_uses_a_denser_hatch_than_light_rain(self) -> None:
         light = self._compose((0, 100, 200, 80))

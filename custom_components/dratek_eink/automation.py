@@ -29,8 +29,10 @@ from .const import (
     PARTIAL_UPDATE_CONFIRMED_SDK_TYPES,
 )
 from .gateway import async_gateway_status, async_load_gateways, async_scan_gateway, async_send_gateway_payload
+from .gateway_preferences import async_load_gateway_preferences
 from .queue import get_transfer_queue
 from .render import (
+    BWRY_CODES,
     async_render_camera_binding_data_url,
     prepare_image_for_display,
     render_automatic_refresh_image,
@@ -503,6 +505,7 @@ class EntityAutoUpdateManager:
         self._configs: dict[str, dict[str, Any]] = {}
         self._unsubscribe = None
         self._timers: dict[str, Any] = {}
+        self._interval_timers: dict[str, Any] = {}
         self._refresh_tasks: dict[str, Any] = {}
         self._pending_refreshes: set[str] = set()
         self._last_refresh_at: dict[str, float] = {}
@@ -525,6 +528,10 @@ class EntityAutoUpdateManager:
         }
         self._initialized = True
         self._refresh_listener()
+        initialized_at = time.monotonic()
+        for address in self._configs:
+            self._last_refresh_at.setdefault(address, initialized_at)
+            self._sync_interval_timer(address)
         if self._refresh_tick_unsubscribe is None:
             self._refresh_tick_unsubscribe = async_track_time_interval(
                 self.hass,
@@ -546,11 +553,18 @@ class EntityAutoUpdateManager:
             except Exception:
                 pass
         self._timers.clear()
+        for timer in list(getattr(self, "_interval_timers", {}).values()):
+            try:
+                timer()
+            except Exception:
+                pass
+        getattr(self, "_interval_timers", {}).clear()
         for task in list(self._refresh_tasks.values()):
             if not task.done():
                 task.cancel()
         self._refresh_tasks.clear()
         self._pending_refreshes.clear()
+        self._last_refresh_at.clear()
         self._initialized = False
 
     @callback
@@ -575,6 +589,33 @@ class EntityAutoUpdateManager:
     def _refresh_trigger_mode(config: dict[str, Any]) -> str:
         mode = str(config.get("refresh_trigger_mode") or DEFAULT_REFRESH_TRIGGER_MODE)
         return mode if mode in VALID_REFRESH_TRIGGER_MODES else DEFAULT_REFRESH_TRIGGER_MODE
+
+    def _sync_interval_timer(self, address: str) -> None:
+        """Arm one exact per-display interval; the global tick is only a fallback."""
+        timers = getattr(self, "_interval_timers", None)
+        if timers is None:
+            timers = self._interval_timers = {}
+        cancel = timers.pop(address, None)
+        if callable(cancel):
+            cancel()
+        config = self._configs.get(address)
+        if (
+            not config
+            or self._refresh_trigger_mode(config) == "change_only"
+            or getattr(self, "hass", None) is None
+        ):
+            return
+        interval = self._refresh_interval(config)
+
+        @callback
+        def _run(_now: Any) -> None:
+            timers.pop(address, None)
+            if address not in self._configs:
+                return
+            self._schedule_refresh(address)
+            self._sync_interval_timer(address)
+
+        timers[address] = async_call_later(self.hass, interval, _run)
 
     async def async_set_config(self, address: str, config: dict[str, Any] | None) -> None:
         await self.async_initialize()
@@ -605,8 +646,13 @@ class EntityAutoUpdateManager:
             updated["refresh_interval_seconds"] = self._refresh_interval(updated)
             updated["refresh_trigger_mode"] = self._refresh_trigger_mode(updated)
             self._configs[normalized] = updated
+            # The transfer that activates this config has just written the
+            # current frame. Start its interval from that confirmed write,
+            # instead of treating a missing timestamp as immediately overdue.
+            self._last_refresh_at[normalized] = time.monotonic()
         await self._store.async_save({"configs": self._configs})
         self._refresh_listener()
+        self._sync_interval_timer(normalized)
 
     async def async_clear_config_if_matches(
         self,
@@ -646,6 +692,7 @@ class EntityAutoUpdateManager:
         updated["refresh_interval_seconds"] = interval
         self._configs[normalized] = updated
         await self._store.async_save({"configs": self._configs})
+        self._sync_interval_timer(normalized)
 
     async def async_list_configs(self) -> list[dict[str, Any]]:
         """Return lightweight metadata for the automation management UI.
@@ -708,6 +755,7 @@ class EntityAutoUpdateManager:
         # "interval_only" does need this: it changes which entities this
         # display's bindings should ever be able to trigger a refresh through.
         self._refresh_listener()
+        self._sync_interval_timer(normalized)
 
     async def async_set_gateway_preference(
         self,
@@ -741,6 +789,30 @@ class EntityAutoUpdateManager:
         self._configs[normalized] = updated
         self._gateway_route_cache_at = 0.0
         await self._store.async_save({"configs": self._configs})
+
+    async def async_remove_image_cycle_asset(self, address: str, image_id: str) -> None:
+        """Remove a deleted gallery asset from the persisted automatic cycle."""
+        await self.async_initialize()
+        normalized = address.upper()
+        config = self._configs.get(normalized)
+        if not config:
+            return
+        ids = [str(value) for value in config.get("image_cycle_ids", [])]
+        if image_id not in ids:
+            return
+        images = list(config.get("image_cycle", []))
+        kept = [index for index, value in enumerate(ids) if value != image_id]
+        updated = dict(config)
+        updated["image_cycle_ids"] = [ids[index] for index in kept]
+        updated["image_cycle"] = [images[index] for index in kept if index < len(images)]
+        if not updated["image_cycle"] and not updated.get("bindings"):
+            self._configs.pop(normalized, None)
+            self._last_refresh_at.pop(normalized, None)
+        else:
+            self._configs[normalized] = updated
+        await self._store.async_save({"configs": self._configs})
+        self._refresh_listener()
+        self._sync_interval_timer(normalized)
 
     async def async_custom_element_changed(
         self,
@@ -1046,6 +1118,7 @@ class EntityAutoUpdateManager:
                 dotted_light=bool(binding.get("dotted_light", True)),
                 show_wind=bool(binding.get("show_wind", False)),
                 location_address=str(binding.get("location_address") or ""),
+                preserve_yellow=int(config.get("sdk_type") or 0) in BWRY_CODES,
             )
             if data_url:
                 values[str(binding.get("id"))] = data_url
@@ -1254,8 +1327,12 @@ class EntityAutoUpdateManager:
         route_type = config.get("route_type", "local")
         gateway_id = str(config.get("gateway_id") or "")
         transport_name = str(config.get("transport_name") or "")
-        gateway_selection = str(config.get("gateway_selection") or "auto")
-        manual_route = str(config.get("manual_gateway_id") or "")
+        # Read the route lock itself, not the historical route snapshot stored
+        # with the design. This also repairs automations created by older
+        # frontends that accidentally marked an automatic gateway as manual.
+        gateway_preferences = await async_load_gateway_preferences(self.hass)
+        manual_route = str(gateway_preferences.get(address.upper()) or "")
+        gateway_selection = "manual" if manual_route else "auto"
         gateway_routes: list[dict[str, Any]] = []
         if gateway_selection == "manual" and manual_route == LOCAL_ROUTE_ID:
             route_type = "local"
@@ -1528,12 +1605,24 @@ class EntityAutoUpdateManager:
                                 or "DRATEK eInk gateway"
                             ),
                             "rssi": rssi,
+                            # This route was not present in the just-finished
+                            # short scan. Keep it as a fallback, but never let
+                            # an old strong RSSI outrank a gateway that hears
+                            # the display right now (the connection map uses
+                            # the same freshness-first rule).
+                            "temporarily_unseen": True,
                         }
                     )
                     live_ids.add(gateway_id)
 
             for device_routes in routes.values():
-                device_routes.sort(key=lambda route: float(route["rssi"]), reverse=True)
+                device_routes.sort(
+                    key=lambda route: (
+                        not bool(route.get("temporarily_unseen")),
+                        float(route["rssi"]),
+                    ),
+                    reverse=True,
+                )
 
             self._gateway_route_cache = routes
             self._gateway_route_cache_at = time.monotonic()
