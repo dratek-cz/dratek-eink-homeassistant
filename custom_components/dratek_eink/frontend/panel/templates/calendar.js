@@ -42,10 +42,11 @@ export const template = {
     // 1. NEJMENŠÍ CENOVKY (např. 212x104, 196x96):
     if (area <= 26000) {
       return [
-        { text: `${todayStr} · Svátek: ${namedayVal}`, h: 0.18, size: 0.12, bold: true },
-        { rule: true, h: 0.04 },
-        { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, group: "event-0", h: 0.38 },
-        { datebox: { day: event(1).day, month: event(1).month, lines: [event(1).title, event(1).detail] }, group: "event-1", h: 0.38 },
+        { text: todayStr, h: 0.15, size: 0.10, bold: true },
+        { rule: true, h: 0.03 },
+        { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, group: "event-0", h: 0.54 },
+        { flex: true },
+        { footer: [{ label: "SVÁTEK MÁ", value: namedayVal }], h: 0.26 },
       ];
     }
 
@@ -53,28 +54,25 @@ export const template = {
     if (area >= 110000) {
       const isWide = w / h >= 1.35;
       if (isWide && w >= 600) {
-        // Dvoubary / Dvousloupcové rozvržení až pro 10 až 20 událostí!
-        // Spočítáme počet řádků na sloupec (např. při 480px výšce je cca 5-8 řádků na sloupec = 10-16 událostí)
-        const rowsPerCol = h >= 600 ? 10 : h >= 450 ? 7 : h >= 350 ? 5 : 4;
-        const totalEvents = rowsPerCol * 2;
-        const rowHeight = 0.88 / rowsPerCol;
+        // Dvou-sloupcové rozvržení pro velké panely
+        const rowsPerCol = h >= 600 ? 9 : h >= 450 ? 6 : h >= 350 ? 5 : 4;
+        const rowHeight = 0.74 / rowsPerCol;
 
         const rows = [
           { split: [
-            { label: "DNES JE", value: todayStr },
-            { label: "SVÁTEK MÁ", value: namedayVal, color: "red" },
+            { icon: "calendar-month-outline", label: "DNES JE", value: todayStr },
+            { icon: "clock-outline", label: "PŘEHLED UDÁLOSTÍ", value: `${rowsPerCol * 2} NEJBLIŽŠÍCH` },
           ], h: 0.10 },
           { rule: true, h: 0.02 },
         ];
 
-        // 2 sloupce událostí vedle sebe
+        // Sloupce událostí
         for (let r = 0; r < rowsPerCol; r++) {
           const idxLeft = r;
           const idxRight = r + rowsPerCol;
           const leftEv = event(idxLeft);
           const rightEv = event(idxRight);
 
-          // Na každém řádku máme buď 2 události (vlevo i vpravo)
           rows.push({
             datebox: {
               day: leftEv.day,
@@ -86,16 +84,25 @@ export const template = {
             h: rowHeight,
           });
         }
+
+        rows.push({ flex: true });
+        rows.push({
+          footer: [
+            { icon: "cake-variant-outline", label: "DNES MÁ SVÁTEK", value: namedayVal },
+            { icon: "calendar-star", label: "NEJBLIŽŠÍ UDÁLOST", value: event(0).title || "Žádná" },
+          ],
+          h: 0.12,
+        });
         return rows;
       }
 
       // Velký displej s 1 sloupcem (např. 400x300, 480x800 na výšku)
-      const count = h >= 650 ? 8 : h >= 450 ? 6 : h >= 350 ? 4 : 3;
-      const eventH = 0.86 / count;
+      const count = h >= 650 ? 7 : h >= 450 ? 5 : h >= 350 ? 4 : 3;
+      const eventH = 0.74 / count;
       const rows = [
         { split: [
-          { label: "DNES JE", value: todayStr },
-          { label: "SVÁTEK MÁ", value: namedayVal, color: "red" },
+          { icon: "calendar-month-outline", label: "DNES JE", value: todayStr },
+          { icon: "clock-outline", label: "KALENDÁŘ", value: "PLÁN DNÍ" },
         ], h: 0.10 },
         { rule: true, h: 0.02 },
       ];
@@ -107,16 +114,21 @@ export const template = {
           h: eventH,
         });
       }
+      rows.push({ flex: true });
+      rows.push({
+        footer: [{ icon: "cake-variant-outline", label: "DNES MÁ SVÁTEK", value: namedayVal }],
+        h: 0.12,
+      });
       return rows;
     }
 
     // 3. STŘEDNÍ A STANDARDNÍ ŠTÍTKY (296x128, 250x122, 240x416, 210x480):
     const isTall = h >= 250;
     const count = isTall ? 4 : 2;
-    const eventH = isTall ? 0.20 : 0.40;
+    const eventH = isTall ? 0.18 : 0.32;
 
     const rows = [
-      { text: `${todayStr} · Svátek: ${namedayVal}`, h: isTall ? 0.08 : 0.12, size: isTall ? 0.05 : 0.07, bold: true },
+      { text: todayStr, h: isTall ? 0.07 : 0.09, size: isTall ? 0.045 : 0.06, bold: true },
       { rule: true, h: 0.02 },
     ];
     for (let i = 0; i < count; i++) {
@@ -127,6 +139,11 @@ export const template = {
         h: eventH,
       });
     }
+    rows.push({ flex: true });
+    rows.push({
+      footer: [{ icon: "cake-variant-outline", label: "SVÁTEK MÁ", value: namedayVal }],
+      h: isTall ? 0.11 : 0.16,
+    });
     return rows;
   },
 };
