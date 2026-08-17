@@ -75,17 +75,11 @@ export const template = {
       { label: "MIN", value: v(2, "0,86 Kč") },
       { label: "MAX", value: v(3, "2,74 Kč") },
     ];
-    // The red "today's range" band used to be exclusive to the roomy tier -
-    // dropped everywhere else for space. It is now a fixture on every size
-    // instead: _stackTemplateBlocks already shrinks the rows above it
-    // proportionally when the footer's fixed height doesn't fit, so adding it
-    // unconditionally degrades gracefully down to the smallest price tag
-    // rather than needing a bespoke layout per tier. The icon and the taller
-    // h (was 0.13) make its label/value read bigger and bolder - both derive
-    // straight from the footer's own height in _layoutTemplateFooter.
+    // The red "today's range" band matches standard footer height across templates,
+    // without redundant icons for maximum legibility.
     const rangeFooter = () => ({
-      footer: [{ icon: "arrow-up-down", label: "DNES ROZPĚTÍ", value: `${v(2, "0,86 Kč")}–${v(3, "2,74 Kč")}` }],
-      h: 0.16,
+      footer: [{ label: "DNES ROZPĚTÍ", value: `${v(2, "0,86 Kč")}–${v(3, "2,74 Kč")}` }],
+      h: 0.12,
     });
     // The current price used to be hard-coded red regardless of whether it was
     // actually the day's cheapest or most expensive interval - a glance at a
