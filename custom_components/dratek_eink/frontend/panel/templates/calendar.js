@@ -6,72 +6,127 @@ export const template = {
     category: "information",
     title: "Kalendář",
     variables: [
-      ["calendar", "První událost"],
-      ["calendar-multiple", "Druhá událost"],
-      ["cake-variant-outline", "Svátek"],
+      ["calendar", "Kalendář s událostmi"],
+      ["clock-outline", "Dnešní datum a den"],
+      ["cake-variant-outline", "Dnes má svátek"],
     ],
   },
   prepared: true,
   setup: {
-    summary: "Dvě nejbližší události z kalendáře nahoře, svátek dole - na rozdíl od Data a Času se svátek nedoplňuje automaticky, potřebuje vlastní zdroj (viz poznámka).",
+    summary: "Nahoře dnešní datum, den v týdnu a svátek, pod tím přehledný seznam nadcházejících událostí. Na velkých displejích se automaticky uspořádá do dvou sloupců až s 20 událostmi.",
     integrations: [
-      { name: "Místní kalendář", domain: "calendar", core: true, why: "Kalendář přímo v Home Assistantu, bez cloudu a bez účtu - nejrychlejší způsob, jak šablonu vyzkoušet, i jak si založit čistě lokální kalendář na svátky." },
-      { name: "Google Calendar", domain: "calendar", core: true, why: "Napojení na Google účet; události se načtou automaticky, žádné ruční zadávání." },
+      { name: "Místní kalendář", domain: "calendar", core: true, why: "Kalendář přímo v Home Assistantu, bez cloudu a bez účtu." },
+      { name: "Google Calendar", domain: "calendar", core: true, why: "Napojení na Google účet; události se načtou automaticky." },
       { name: "CalDAV", domain: "calendar", core: true, why: "Pro Nextcloud, iCloud a další servery podporující CalDAV protokol." },
     ],
     steps: [
-      "Přidejte některou kalendářovou integraci v Nastavení → Zařízení a služby.",
-      "Přetáhněte šablonu na displej; entita calendar.* se najde sama u obou událostí.",
-      "Události se čtou službou calendar.get_events na 21 dní dopředu - pokud v tomto okně nic není, dlaždice zůstane prázdná.",
-      "U údaje Svátek v Nastavit vyberte entitu, která jmeniny poskytuje (viz poznámka) - bez toho zůstane jen ukázkové jméno.",
+      "Přidejte kalendářovou integraci v Nastavení → Zařízení a služby.",
+      "Přetáhněte šablonu na displej; kalendářová entita calendar.* se přiřadí automaticky.",
+      "Dnešní den a datum se doplňují automaticky ze systému.",
+      "U údaje „Dnes má svátek“ v Nastavit vyberte entitu poskytující jmeniny (nebo nechte výchozí).",
     ],
-    note: "Home Assistant nemá vestavěný seznam českých svátků (jmenin) - narozdíl od Data a Času, které si šablona doplní sama z hodin systému, potřebuje Svátek vlastní zdroj: buď šablonový senzor postavený na knihovně jmenin/svátků, nebo samostatný kalendář se svátky jako celodenními událostmi (podobně jako u šablony Narozeniny).",
+    note: "Události se čtou službou calendar.get_events na 21 dní dopředu. Aktuální/nejbližší událost je vždy vizuálně zvýrazněna červeným záhlavím data.",
   },
   design: ({ v, event, width, height }) => {
     const w = width || 296;
     const h = height || 128;
     const area = w * h;
 
-    // 1. Nejmenší cenovky (např. 212x104, 196x96):
-    // 1 událost s velkým rámečkem data a spodní lištou pro svátek
+    // České názvy dnů v týdnu a měsíců
+    const now = new Date();
+    const weekdays = ["Neděle", "Pondělí", "Úterý", "Středa", "Čtvrtek", "Pátek", "Sobota"];
+    const months = ["ledna", "února", "března", "dubna", "května", "června", "července", "srpna", "září", "října", "listopadu", "prosince"];
+    const todayStr = `${weekdays[now.getDay()]} ${now.getDate()}. ${months[now.getMonth()]}`;
+    const namedayVal = v(2, "Jana");
+
+    // 1. NEJMENŠÍ CENOVKY (např. 212x104, 196x96):
     if (area <= 26000) {
       return [
-        { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, group: "event-0", h: 0.68 },
-        { flex: true },
-        { footer: [{ label: "SVÁTEK", value: v(2, "Jana") }], h: 0.24 },
+        { text: `${todayStr} · Svátek: ${namedayVal}`, h: 0.18, size: 0.12, bold: true },
+        { rule: true, h: 0.04 },
+        { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, group: "event-0", h: 0.38 },
+        { datebox: { day: event(1).day, month: event(1).month, lines: [event(1).title, event(1).detail] }, group: "event-1", h: 0.38 },
       ];
     }
 
-    // 2. Velké displeje a dashboardy (400x300, 640x384, 800x480, 960x640+):
-    // Karty událostí si zachovávají rozumnou výšku jako na menším displeji,
-    // ale podle dostupné výšky přibývají další události (3 až 4 události)
+    // 2. VELKÉ DISPLEJE A DASHBOARDY (400x300, 640x384, 800x480, 960x640, 1360x480):
     if (area >= 110000) {
-      const eventCount = h >= 450 ? 4 : h >= 320 ? 3 : 2;
-      const eventHeight = eventCount === 4 ? 0.18 : eventCount === 3 ? 0.23 : 0.32;
+      const isWide = w / h >= 1.35;
+      if (isWide && w >= 600) {
+        // Dvoubary / Dvousloupcové rozvržení až pro 10 až 20 událostí!
+        // Spočítáme počet řádků na sloupec (např. při 480px výšce je cca 5-8 řádků na sloupec = 10-16 událostí)
+        const rowsPerCol = h >= 600 ? 10 : h >= 450 ? 7 : h >= 350 ? 5 : 4;
+        const totalEvents = rowsPerCol * 2;
+        const rowHeight = 0.88 / rowsPerCol;
 
-      return [
-        { text: "Kalendář", h: 0.06, size: 0.042, bold: true },
+        const rows = [
+          { split: [
+            { label: "DNES JE", value: todayStr },
+            { label: "SVÁTEK MÁ", value: namedayVal, color: "red" },
+          ], h: 0.10 },
+          { rule: true, h: 0.02 },
+        ];
+
+        // 2 sloupce událostí vedle sebe
+        for (let r = 0; r < rowsPerCol; r++) {
+          const idxLeft = r;
+          const idxRight = r + rowsPerCol;
+          const leftEv = event(idxLeft);
+          const rightEv = event(idxRight);
+
+          // Na každém řádku máme buď 2 události (vlevo i vpravo)
+          rows.push({
+            datebox: {
+              day: leftEv.day,
+              month: leftEv.month,
+              color: idxLeft === 0 ? "red" : "black",
+              lines: [leftEv.title, leftEv.detail],
+            },
+            group: `event-${idxLeft}`,
+            h: rowHeight,
+          });
+        }
+        return rows;
+      }
+
+      // Velký displej s 1 sloupcem (např. 400x300, 480x800 na výšku)
+      const count = h >= 650 ? 8 : h >= 450 ? 6 : h >= 350 ? 4 : 3;
+      const eventH = 0.86 / count;
+      const rows = [
+        { split: [
+          { label: "DNES JE", value: todayStr },
+          { label: "SVÁTEK MÁ", value: namedayVal, color: "red" },
+        ], h: 0.10 },
         { rule: true, h: 0.02 },
-        { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, group: "event-0", h: eventHeight },
-        { datebox: { day: event(1).day, month: event(1).month, lines: [event(1).title, event(1).detail] }, group: "event-1", h: eventHeight },
-        ...(eventCount >= 3 ? [{ datebox: { day: event(2).day, month: event(2).month, lines: [event(2).title, event(2).detail] }, group: "event-2", h: eventHeight }] : []),
-        ...(eventCount >= 4 ? [{ datebox: { day: event(3).day, month: event(3).month, lines: [event(3).title, event(3).detail] }, group: "event-3", h: eventHeight }] : []),
-        { flex: true },
-        { footer: [{ icon: "cake-variant-outline", label: "SVÁTEK MÁ", value: v(2, "Jana") }], h: 0.10 },
       ];
+      for (let i = 0; i < count; i++) {
+        const ev = event(i);
+        rows.push({
+          datebox: { day: ev.day, month: ev.month, color: i === 0 ? "red" : "black", lines: [ev.title, ev.detail] },
+          group: `event-${i}`,
+          h: eventH,
+        });
+      }
+      return rows;
     }
 
-    // 3. Střední a standardní štítky (296x128, 250x122, 240x416, 210x480):
-    // Na výšku orientované panely pojmou 3 události, standardní 296x128 má 2 události
-    const isTall = h >= 300;
-    return [
-      { text: "Kalendář", h: isTall ? 0.06 : 0.075, size: isTall ? 0.04 : 0.05, bold: true },
+    // 3. STŘEDNÍ A STANDARDNÍ ŠTÍTKY (296x128, 250x122, 240x416, 210x480):
+    const isTall = h >= 250;
+    const count = isTall ? 4 : 2;
+    const eventH = isTall ? 0.20 : 0.40;
+
+    const rows = [
+      { text: `${todayStr} · Svátek: ${namedayVal}`, h: isTall ? 0.08 : 0.12, size: isTall ? 0.05 : 0.07, bold: true },
       { rule: true, h: 0.02 },
-      { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, group: "event-0", h: isTall ? 0.24 : 0.35 },
-      { datebox: { day: event(1).day, month: event(1).month, lines: [event(1).title, event(1).detail] }, group: "event-1", h: isTall ? 0.24 : 0.35 },
-      ...(isTall ? [{ datebox: { day: event(2).day, month: event(2).month, lines: [event(2).title, event(2).detail] }, group: "event-2", h: 0.24 }] : []),
-      { flex: true },
-      { footer: [{ label: "SVÁTEK MÁ", value: v(2, "Jana") }], h: isTall ? 0.10 : 0.14 },
     ];
+    for (let i = 0; i < count; i++) {
+      const ev = event(i);
+      rows.push({
+        datebox: { day: ev.day, month: ev.month, color: i === 0 ? "red" : "black", lines: [ev.title, ev.detail] },
+        group: `event-${i}`,
+        h: eventH,
+      });
+    }
+    return rows;
   },
 };

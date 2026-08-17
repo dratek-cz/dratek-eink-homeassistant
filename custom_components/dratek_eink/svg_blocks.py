@@ -657,6 +657,32 @@ def block_strip(cells: list[dict[str, Any]], box: dict[str, float], preserve_yel
     return "".join(parts)
 
 
+def block_split(halves: list[dict[str, Any]], box: dict[str, float]) -> str:
+    """Port of `_blockSplit` - two readings of equal standing divided down the middle."""
+    cell_width = box["w"] / (len(halves) or 1)
+    parts: list[str] = []
+    for index, half in enumerate(halves):
+        cx = box["x"] + cell_width * (index + 0.5)
+        if index > 0:
+            parts.append(hairline(box["x"] + cell_width * index, box["y"] + box["h"] * 0.08, 1, box["h"] * 0.84))
+        y = box["y"] + box["h"] * 0.2
+        val_size = max(9.5, min(box["h"] * 0.32, cell_width * 0.34))
+        lbl_size = max(8.5, min(box["h"] * 0.18, cell_width * 0.22))
+        parts.append(
+            svg_text(
+                half.get("value"), cx, y, val_size,
+                bold=True, color=ink(half.get("color")), max_width=cell_width * 0.92,
+            )
+        )
+        parts.append(
+            svg_text(
+                half.get("label"), cx, y + box["h"] * 0.24, lbl_size,
+                max_width=cell_width * 0.92,
+            )
+        )
+    return "".join(parts)
+
+
 def block_datebox(date: dict[str, Any], box: dict[str, float]) -> str:
     """Port of `_blockDatebox` - a boxed date beside its entries."""
     side = min(box["h"] * 0.92, box["w"] * 0.3)
