@@ -75,7 +75,7 @@ async def _async_submit_routed_transfer(
         and manual_route != LOCAL_ROUTE_ID
     ):
         route = {"id": manual_route, "name": "DRATEK eInk gateway", "rssi": None}
-        return await queue.async_submit(
+        result = await queue.async_submit(
             resource=f"gateway:{manual_route}",
             transport_type="gateway",
             transport_name=str(route["name"]),
@@ -84,16 +84,24 @@ async def _async_submit_routed_transfer(
             runner=gateway_runner_factory(route),
             wait_for_completion=wait_for_completion,
         )
-    if gateway_selection != "manual":
-        routes = await manager._async_gateway_routes(address)
-        if routes:
-            return await queue.async_submit_gateway_routes(
-                routes=routes,
-                address=address,
-                operation=operation,
-                runner_factory=gateway_runner_factory,
-                wait_for_completion=wait_for_completion,
-            )
+        if result and result.get("ok") is not False:
+            return result
+        _LOGGER.warning(
+            "[%s] Pinned gateway %s failed or is offline (%s); falling back to other active gateways / local Bluetooth.",
+            address, manual_route, result.get("error") if result else "unreachable"
+        )
+
+    routes = await manager._async_gateway_routes(address)
+    if routes:
+        result = await queue.async_submit_gateway_routes(
+            routes=routes,
+            address=address,
+            operation=operation,
+            runner_factory=gateway_runner_factory,
+            wait_for_completion=wait_for_completion,
+        )
+        if result and result.get("ok") is not False:
+            return result
     return await queue.async_submit(
         resource="local",
         transport_type="local",

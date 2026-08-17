@@ -1538,26 +1538,30 @@ class EntityAutoUpdateManager:
                 return run_gateway
 
             if gateway_selection != "manual" and gateway_routes:
-                return await queue.async_submit_gateway_routes(
+                result = await queue.async_submit_gateway_routes(
                     routes=gateway_routes,
                     address=address,
                     operation="entity_update",
                     runner_factory=gateway_runner_factory,
                 )
-
-            manual_gateway_route = {
-                "id": gateway_id,
-                "name": transport_name or "DRATEK eInk gateway",
-                "rssi": None,
-            }
-            return await queue.async_submit(
-                resource=f"gateway:{gateway_id}",
-                transport_type="gateway",
-                transport_name=transport_name or "DRATEK eInk gateway",
-                address=address,
-                operation="entity_update",
-                runner=gateway_runner_factory(manual_gateway_route),
-            )
+                if result and result.get("ok") is not False:
+                    return result
+            else:
+                manual_gateway_route = {
+                    "id": gateway_id,
+                    "name": transport_name or "DRATEK eInk gateway",
+                    "rssi": None,
+                }
+                result = await queue.async_submit(
+                    resource=f"gateway:{gateway_id}",
+                    transport_type="gateway",
+                    transport_name=transport_name or "DRATEK eInk gateway",
+                    address=address,
+                    operation="entity_update",
+                    runner=gateway_runner_factory(manual_gateway_route),
+                )
+                if result and result.get("ok") is not False:
+                    return result
 
         async def run_local(add_log):
             add_log("Automatic entity update via Home Assistant Bluetooth.")

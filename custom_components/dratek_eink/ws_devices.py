@@ -431,7 +431,14 @@ async def websocket_scan(
         else:
             device["gateway_selection"] = "auto"
             device["selected_gateway_id"] = ""
-            device["preferred_path"] = gateway_paths[0] if gateway_paths else device["paths"][0]
+            active_paths = [p for p in device["paths"] if not p.get("temporarily_unseen")]
+            if active_paths:
+                active_gateways = [p for p in active_paths if p.get("type") == "gateway"]
+                device["preferred_path"] = active_gateways[0] if active_gateways else active_paths[0]
+            elif gateway_paths:
+                device["preferred_path"] = gateway_paths[0]
+            else:
+                device["preferred_path"] = device["paths"][0]
         device["rssi"] = device["preferred_path"].get("rssi")
         device["display_name"] = str(device_names.get(address, ""))
 
