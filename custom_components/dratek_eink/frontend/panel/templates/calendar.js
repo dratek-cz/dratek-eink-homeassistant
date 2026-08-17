@@ -45,11 +45,11 @@ export const template = {
         { split: [
           { label: weekdays[now.getDay()].toUpperCase(), value: `${now.getDate()}. ${months[now.getMonth()]}` },
           { label: "SVÁTEK", value: namedayVal, color: "red" },
-        ], h: 0.22 },
-        { rule: true, h: 0.03 },
-        { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, group: "event-0", h: 0.50 },
+        ], banner: true, color: "black", h: 0.24 },
+        { rule: true, h: 0.02 },
+        { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, group: "event-0", h: 0.54 },
         { flex: true },
-        { footer: [{ label: "DNES MÁ SVÁTEK", value: namedayVal }], h: 0.24 },
+        { footer: [{ label: "SVÁTEK MÁ", value: namedayVal }], h: 0.16 },
       ];
     }
 
@@ -60,14 +60,14 @@ export const template = {
         // Skutečné 2 sloupce událostí vedle sebe (až 10-18 událostí celkem!)
         const rowsPerCol = h >= 600 ? 9 : h >= 450 ? 6 : h >= 350 ? 5 : 4;
         const totalEvents = rowsPerCol * 2;
-        const rowHeight = 0.74 / rowsPerCol;
+        const rowHeight = 0.77 / rowsPerCol;
 
         const rows = [
           { split: [
             { icon: "calendar-today", label: "DNEŠNÍ DEN", value: todayStr },
             { icon: "cake-variant-outline", label: "DNES MÁ SVÁTEK", value: namedayVal, color: "red" },
-            { icon: "clock-outline", label: "PŘEHLED KALENDÁŘE", value: `${totalEvents} NADCHÁZEJÍCÍCH` },
-          ], h: 0.11 },
+            { icon: "clock-outline", label: "PŘEHLED KALENDÁŘE", value: `${totalEvents} UDÁLOSTÍ` },
+          ], banner: true, color: "black", h: 0.13 },
           { rule: true, h: 0.02 },
         ];
 
@@ -109,19 +109,19 @@ export const template = {
             { icon: "cake-variant-outline", label: "DNES MÁ SVÁTEK", value: namedayVal },
             { icon: "calendar-star", label: "NEJBLIŽŠÍ UDÁLOST", value: event(0).title || "Žádná" },
           ],
-          h: 0.12,
+          h: 0.075,
         });
         return rows;
       }
 
       // Velký displej s 1 sloupcem (např. 400x300, 480x800 na výšku)
       const count = h >= 650 ? 7 : h >= 450 ? 5 : h >= 350 ? 4 : 3;
-      const eventH = 0.74 / count;
+      const eventH = 0.77 / count;
       const rows = [
         { split: [
           { icon: "calendar-today", label: "DNEŠNÍ DEN", value: todayStr },
           { icon: "cake-variant-outline", label: "SVÁTEK MÁ", value: namedayVal, color: "red" },
-        ], h: 0.11 },
+        ], banner: true, color: "black", h: 0.13 },
         { rule: true, h: 0.02 },
       ];
       for (let i = 0; i < count; i++) {
@@ -135,7 +135,7 @@ export const template = {
       rows.push({ flex: true });
       rows.push({
         footer: [{ icon: "cake-variant-outline", label: "DNES MÁ SVÁTEK", value: namedayVal }],
-        h: 0.12,
+        h: 0.075,
       });
       return rows;
     }
@@ -143,13 +143,13 @@ export const template = {
     // 3. STŘEDNÍ A STANDARDNÍ ŠTÍTKY (296x128, 250x122, 240x416, 210x480):
     const isTall = h >= 250;
     const count = isTall ? 4 : 2;
-    const eventH = isTall ? 0.18 : 0.32;
+    const eventH = isTall ? 0.19 : 0.34;
 
     const rows = [
       { split: [
         { label: weekdays[now.getDay()].toUpperCase(), value: `${now.getDate()}. ${months[now.getMonth()]}` },
         { label: "SVÁTEK MÁ", value: namedayVal, color: "red" },
-      ], h: isTall ? 0.10 : 0.14 },
+      ], banner: true, color: "black", h: isTall ? 0.12 : 0.18 },
       { rule: true, h: 0.02 },
     ];
     for (let i = 0; i < count; i++) {
@@ -163,7 +163,7 @@ export const template = {
     rows.push({ flex: true });
     rows.push({
       footer: [{ icon: "cake-variant-outline", label: "SVÁTEK MÁ", value: namedayVal }],
-      h: isTall ? 0.11 : 0.16,
+      h: isTall ? 0.08 : 0.11,
     });
     return rows;
   },

@@ -657,39 +657,47 @@ def block_strip(cells: list[dict[str, Any]], box: dict[str, float], preserve_yel
     return "".join(parts)
 
 
-def block_split(halves: list[dict[str, Any]], box: dict[str, float]) -> str:
-    """Port of `_blockSplit` - two readings of equal standing divided down the middle."""
+def block_split(halves: list[dict[str, Any]], box: dict[str, float], banner: bool = False, color: str = "black") -> str:
+    """Port of `_blockSplit` - two or three readings of equal standing divided down the middle."""
     cell_width = box["w"] / (len(halves) or 1)
     parts: list[str] = []
+    if banner:
+        fill = RED if color == "red" else "#ffffff" if color == "white" else BLACK
+        parts.append(f'<rect x="{box["x"]:.2f}" y="{box["y"]:.2f}" width="{box["w"]:.2f}" height="{box["h"]:.2f}" rx="3" fill="{fill}"></rect>')
     for index, half in enumerate(halves):
         cx = box["x"] + cell_width * (index + 0.5)
         if index > 0:
-            parts.append(hairline(box["x"] + cell_width * index, box["y"] + box["h"] * 0.08, 1, box["h"] * 0.84))
+            div_color = "#ffffff" if banner else BLACK
+            parts.append(hairline(box["x"] + cell_width * index, box["y"] + box["h"] * 0.12, 1, box["h"] * 0.76, div_color))
         has_icon = bool(half.get("icon"))
-        label_y = box["y"] + box["h"] * (0.16 if has_icon else 0.26)
-        val_y = box["y"] + box["h"] * (0.82 if has_icon else 0.72)
-        label_size = max(8.5, min(box["h"] * 0.22, cell_width * 0.22))
-        val_size = max(10.0, min(box["h"] * (0.26 if has_icon else 0.36), cell_width * 0.36))
+        label_y = box["y"] + box["h"] * (0.22 if has_icon else 0.28)
+        val_y = box["y"] + box["h"] * (0.76 if has_icon else 0.72)
+        label_size = max(9.0, min(box["h"] * 0.24, cell_width * 0.24))
+        val_size = max(12.0, min(box["h"] * 0.44, cell_width * 0.42))
+
+        default_text_color = "#ffffff" if banner else BLACK
+        label_color = "#ffcccc" if banner and half.get("color") == "red" else "#e0e0e0" if banner else BLACK
+        val_color = ink(half.get("color")) if half.get("color") else default_text_color
 
         if half.get("label"):
             parts.append(
                 svg_text(
                     half.get("label"), cx, label_y, label_size,
-                    max_width=cell_width * 0.92,
+                    bold=True, color=label_color, max_width=cell_width * 0.92,
                 )
             )
         if half.get("icon"):
             parts.append(
                 svg_icon(
                     str(half.get("icon")), cx, box["y"] + box["h"] * 0.48,
-                    min(box["h"] * 0.32, cell_width * 0.40), ink(half.get("color")),
+                    min(box["h"] * 0.28, cell_width * 0.35), val_color,
                 )
             )
         if half.get("value"):
             parts.append(
                 svg_text(
                     half.get("value"), cx, val_y, val_size,
-                    bold=True, color=ink(half.get("color")), max_width=cell_width * 0.92,
+                    bold=True, color=val_color, max_width=cell_width * 0.92,
                 )
             )
     return "".join(parts)

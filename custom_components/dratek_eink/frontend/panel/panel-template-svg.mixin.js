@@ -1485,23 +1485,35 @@ export const templateSvgMixin = {
     const halves = row.split;
     const cellWidth = box.w / (halves.length || 1);
     const parts = [];
+    const isBanner = row.banner || row.card;
+    if (isBanner) {
+      const fill = row.color === "red" ? RED : row.color === "white" ? "#ffffff" : BLACK;
+      parts.push(`<rect x="${box.x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${box.w.toFixed(2)}" height="${box.h.toFixed(2)}" rx="3" fill="${fill}"></rect>`);
+    }
     halves.forEach((half, index) => {
       const cx = box.x + cellWidth * (index + 0.5);
-      if (index > 0) parts.push(this._svgHairline(box.x + cellWidth * index, box.y + box.h * 0.08, 1, box.h * 0.84));
+      if (index > 0) {
+        const divColor = isBanner ? "#ffffff" : BLACK;
+        parts.push(this._svgHairline(box.x + cellWidth * index, box.y + box.h * 0.12, 1, box.h * 0.76, divColor));
+      }
       const hasIcon = Boolean(half.icon);
-      const labelY = box.y + box.h * (hasIcon ? 0.16 : 0.26);
-      const valY = box.y + box.h * (hasIcon ? 0.82 : 0.72);
-      const labelSize = Math.max(8.5, Math.min(box.h * 0.22, cellWidth * 0.22));
-      const valSize = Math.max(10, Math.min(box.h * (hasIcon ? 0.26 : 0.36), cellWidth * 0.36));
+      const labelY = box.y + box.h * (hasIcon ? 0.22 : 0.28);
+      const valY = box.y + box.h * (hasIcon ? 0.76 : 0.72);
+      const labelSize = Math.max(9, Math.min(box.h * 0.24, cellWidth * 0.24));
+      const valSize = Math.max(12, Math.min(box.h * 0.44, cellWidth * 0.42));
+
+      const defaultTextColor = isBanner ? "#ffffff" : BLACK;
+      const labelColor = isBanner ? (half.color === "red" ? "#ffcccc" : "#e0e0e0") : BLACK;
+      const valColor = half.color ? this._templateInk(half.color) : defaultTextColor;
 
       if (half.label) {
-        parts.push(this._svgText(half.label, cx, labelY, labelSize, { bold: false, color: BLACK, maxWidth: cellWidth * 0.92 }));
+        parts.push(this._svgText(half.label, cx, labelY, labelSize, { bold: true, color: labelColor, maxWidth: cellWidth * 0.92 }));
       }
       if (half.icon) {
-        parts.push(this._svgIcon(half.icon, cx, box.y + box.h * 0.48, Math.min(box.h * 0.32, cellWidth * 0.40), this._templateInk(half.color)));
+        parts.push(this._svgIcon(half.icon, cx, box.y + box.h * 0.48, Math.min(box.h * 0.28, cellWidth * 0.35), valColor));
       }
       if (half.value) {
-        parts.push(this._svgText(half.value, cx, valY, valSize, { bold: true, color: this._templateInk(half.color), maxWidth: cellWidth * 0.92 }));
+        parts.push(this._svgText(half.value, cx, valY, valSize, { bold: true, color: valColor, maxWidth: cellWidth * 0.92 }));
       }
     });
     return parts.join("");
