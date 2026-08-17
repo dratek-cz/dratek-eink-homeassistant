@@ -4,6 +4,16 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.301
+
+- **Šablona Kalendář** – zprovozněna šablona pro zobrazení dvou nejbližších událostí z lokálního, Google nebo CalDAV kalendáře s velkým červeným rámečkem data a spodním řádkem pro jmeniny / svátek.
+- **Spolehlivý přímý Bluetooth přenos do velkých displejů** – zápis z Home Assistantu do panelů 800×480 a větších používá časovaný proud a nečeká na potvrzení každého z 419 bloků, což zkracuje přenos z 17 minut na pár sekund.
+- **Bezchybné dokončení zápisu** – přenos se neoznačí jako selhaný, pokud displej po přijetí 100 % dat nestihne poslat volitelný paket `05 08`.
+
+## Novinky ve verzi 0.1.300
+
+- **Kompletní přepracování Meteoradaru** – radarová mapa s podporou čtyřbarevných panelů BWRY, zobrazením domova a spolehlivým umisťováním více šablon na velkých displejích.
+
 ## Novinky ve verzi 0.1.299
 
 - **Spotové ceny se aktualizují spolehlivě** – sériové vazby uložené v atributech entity (např. České spotové ceny elektřiny) se obnoví i tehdy, když se změní jen zítřejší ceny nebo jiné atributy, ne hlavní stav senzoru.
