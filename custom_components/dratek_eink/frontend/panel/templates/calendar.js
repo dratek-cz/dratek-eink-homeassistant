@@ -54,19 +54,20 @@ export const template = {
     if (area >= 110000) {
       const isWide = w / h >= 1.35;
       if (isWide && w >= 600) {
-        // Dvou-sloupcové rozvržení pro velké panely
+        // Skutečné 2 sloupce událostí vedle sebe (až 10-18 událostí celkem!)
         const rowsPerCol = h >= 600 ? 9 : h >= 450 ? 6 : h >= 350 ? 5 : 4;
+        const totalEvents = rowsPerCol * 2;
         const rowHeight = 0.74 / rowsPerCol;
 
         const rows = [
           { split: [
             { icon: "calendar-month-outline", label: "DNES JE", value: todayStr },
-            { icon: "clock-outline", label: "PŘEHLED UDÁLOSTÍ", value: `${rowsPerCol * 2} NEJBLIŽŠÍCH` },
+            { icon: "clock-outline", label: "PŘEHLED UDÁLOSTÍ", value: `${totalEvents} NADCHÁZEJÍCÍCH` },
           ], h: 0.10 },
           { rule: true, h: 0.02 },
         ];
 
-        // Sloupce událostí
+        // Každý řádek obsahuje 2 události vedle sebe (levý a pravý sloupec)
         for (let r = 0; r < rowsPerCol; r++) {
           const idxLeft = r;
           const idxRight = r + rowsPerCol;
@@ -74,13 +75,26 @@ export const template = {
           const rightEv = event(idxRight);
 
           rows.push({
-            datebox: {
-              day: leftEv.day,
-              month: leftEv.month,
-              color: idxLeft === 0 ? "red" : "black",
-              lines: [leftEv.title, leftEv.detail],
-            },
-            group: `event-${idxLeft}`,
+            splitDates: [
+              {
+                datebox: {
+                  day: leftEv.day,
+                  month: leftEv.month,
+                  color: idxLeft === 0 ? "red" : "black",
+                  lines: [leftEv.title, leftEv.detail],
+                },
+                group: `event-${idxLeft}`,
+              },
+              {
+                datebox: {
+                  day: rightEv.day,
+                  month: rightEv.month,
+                  color: "black",
+                  lines: [rightEv.title, rightEv.detail],
+                },
+                group: `event-${idxRight}`,
+              },
+            ],
             h: rowHeight,
           });
         }

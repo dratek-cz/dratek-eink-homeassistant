@@ -683,6 +683,19 @@ def block_split(halves: list[dict[str, Any]], box: dict[str, float]) -> str:
     return "".join(parts)
 
 
+def block_split_dates(dates: list[dict[str, Any]], box: dict[str, float]) -> str:
+    """Port of `_blockSplitDates` - multiple dateboxes side by side in one row."""
+    cell_width = box["w"] / max(1, len(dates))
+    parts: list[str] = []
+    for index, item in enumerate(dates):
+        cell_box = {"x": box["x"] + cell_width * index, "y": box["y"], "w": cell_width, "h": box["h"]}
+        if index > 0:
+            parts.append(hairline(box["x"] + cell_width * index, box["y"] + box["h"] * 0.08, 1, box["h"] * 0.84))
+        if item and item.get("datebox"):
+            parts.append(block_datebox(item["datebox"], cell_box))
+    return "".join(parts)
+
+
 def block_datebox(date: dict[str, Any], box: dict[str, float]) -> str:
     """Port of `_blockDatebox` - a boxed date beside its entries."""
     side = min(box["h"] * 0.92, box["w"] * 0.3)

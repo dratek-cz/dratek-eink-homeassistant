@@ -970,6 +970,7 @@ export const templateSvgMixin = {
     if (row.checklist) return this._blockChecklist(row, box);
     if (row.strip) return this._blockStrip(row, box);
     if (row.split) return this._blockSplit(row, box);
+    if (row.splitDates) return this._blockSplitDates(row, box);
     if (row.spark) return this._blockSpark(row, box);
     if (row.datebox) return this._blockDatebox(row, box);
     if (row.board) return this._blockBoard(row, box);
@@ -1494,6 +1495,21 @@ export const templateSvgMixin = {
       }
       parts.push(this._svgText(half.value, cx, y, Math.max(9.5, Math.min(box.h * (half.icon ? 0.24 : 0.32), cellWidth * 0.34)), { bold: true, color: this._templateInk(half.color), maxWidth: cellWidth * 0.92 }));
       parts.push(this._svgText(half.label, cx, y + box.h * 0.24, Math.max(8.5, Math.min(box.h * 0.18, cellWidth * 0.22)), { maxWidth: cellWidth * 0.92 }));
+    });
+    return parts.join("");
+  },
+
+  _blockSplitDates(row, box) {
+    const dates = row.splitDates || [];
+    const cellWidth = box.w / Math.max(1, dates.length);
+    const parts = [];
+    dates.forEach((item, index) => {
+      const cellBox = { x: box.x + cellWidth * index, y: box.y, w: cellWidth, h: box.h, fullX: box.fullX, fullW: box.fullW };
+      if (index > 0) parts.push(this._svgHairline(box.x + cellWidth * index, box.y + box.h * 0.08, 1, box.h * 0.84));
+      if (item && item.datebox) {
+        const itemMarkup = this._blockDatebox(item, cellBox);
+        parts.push(item.group && itemMarkup ? `<g data-template-block="${this._escape(item.group)}">${itemMarkup}</g>` : itemMarkup);
+      }
     });
     return parts.join("");
   },
