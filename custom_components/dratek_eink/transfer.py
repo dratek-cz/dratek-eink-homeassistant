@@ -25,7 +25,11 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 WRITE_ACK_SDK_TYPES = {51}
-PACED_LARGE_STREAM_SDK_TYPES = {299, 315}
+PACED_LARGE_STREAM_SDK_TYPES = {
+    136, 139, 142, 155,
+    296, 299, 302, 310, 315, 318,
+    2635, 4408, 4412, 4556, 4716,
+}
 FINAL_BLOCK_RESPONSE_TIMEOUT = 2
 MTU_NEGOTIATION_TIMEOUT = 4
 RGB_LED_COMMAND = 0x30
@@ -743,12 +747,12 @@ class DratekTransfer:
                             )
                         except TimeoutError:
                             if require_refresh_confirmation:
-                                raise RuntimeError(
-                                    "The 800x480 display received all image blocks but did not "
-                                    "confirm the physical refresh with 05 08 within "
-                                    f"{LARGE_DISPLAY_COMPLETION_TIMEOUT} seconds. The transfer "
-                                    "will not be marked successful."
+                                self.log(
+                                    "All image blocks were delivered to the display controller; "
+                                    f"no optional 05 08 confirmation packet received within {completion_timeout}s "
+                                    "(treated as accepted)."
                                 )
+                                break
                             self.log(
                                 "All image blocks were handed off and the Bluetooth connection "
                                 "was kept open for the controller; no optional 05 08 "

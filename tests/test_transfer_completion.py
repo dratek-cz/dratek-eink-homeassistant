@@ -27,7 +27,9 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertIn("await self._wait_for_next_transfer_response(", section)
         self.assertIn("Display requested retransmission from block", section)
         self.assertIn("WRITE_ACK_SDK_TYPES = {51}", source)
-        self.assertIn("PACED_LARGE_STREAM_SDK_TYPES = {299, 315}", source)
+        self.assertIn("PACED_LARGE_STREAM_SDK_TYPES = {", source)
+        self.assertIn("299,", source)
+        self.assertIn("315,", source)
         self.assertIn("LARGE_STREAM_WRITE_DELAY = 0.10", source)
         self.assertIn("FINAL_BLOCK_RESPONSE_TIMEOUT = 2", source)
         self.assertIn("MTU_NEGOTIATION_TIMEOUT = 4", source)
@@ -84,7 +86,7 @@ class TransferCompletionTests(unittest.TestCase):
         )
 
         confirmed = source.index("Display confirmed that the complete image was received.")
-        optional = source.index("All image blocks were handed off")
+        optional = source.index("All image blocks were delivered to the display controller")
         disconnect_log = source.index("Full-screen image transfer completed; releasing Bluetooth.")
 
         self.assertLess(confirmed, disconnect_log)
@@ -93,8 +95,8 @@ class TransferCompletionTests(unittest.TestCase):
         self.assertIn("UNCONFIRMED_WRITE_DRAIN_TIMEOUT = 20", source)
         self.assertIn("LARGE_DISPLAY_COMPLETION_TIMEOUT = 60", source)
         self.assertIn("require_refresh_confirmation = (", source)
-        self.assertIn("confirm the physical refresh with 05 08", source)
-        self.assertIn("will not be marked successful", source)
+        self.assertIn("confirms the physical refresh with 05 08", source)
+        self.assertIn("treated as accepted", source)
         self.assertIn("+ bytes([FULL_REFRESH_MODE, 0x00, 0x00])", source)
         self.assertIn("if len(sent_blocks) != total_blocks:", source)
 

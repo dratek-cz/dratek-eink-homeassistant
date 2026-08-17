@@ -22,7 +22,7 @@ import { template as czSpotPrices } from "./cz_spot_prices.js";
 // import { template as living } from "./nenastaveno/living.js";
 // import { template as presence } from "./nenastaveno/presence.js";
 // import { template as wifi } from "./nenastaveno/wifi.js";
-// import { template as calendar } from "./nenastaveno/calendar.js";
+import { template as calendar } from "./calendar.js";
 // import { template as security } from "./nenastaveno/security.js";
 // import { template as transport } from "./nenastaveno/transport.js";
 // import { template as shopping } from "./nenastaveno/shopping.js";
@@ -40,14 +40,7 @@ export const DISPLAY_TEMPLATES = [
   weather,
   radar,
   czSpotPrices,
-  // home,
-  // waste,
-  // solar,
-  // washer,
-  // living,
-  // presence,
-  // wifi,
-  // calendar,
+  calendar,
   // security,
   // transport,
   // shopping,

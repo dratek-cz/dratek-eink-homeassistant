@@ -2,6 +2,20 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.301] - 2026-08-17
+
+### Přidáno a vylepšeno
+- Šablona **Kalendář** byla zkontrolována a zařazena do katalogu šablon s podporou načítání událostí z lokálního i externího kalendáře Home Assistantu (služba `calendar.get_events`) a polem pro svátek/jmeniny.
+- Přímý Bluetooth přenos z Home Assistantu do velkých displejů (800×480 a větších) byl rozšířen o všechny podporované modely (SDK 296, 299, 302, 310, 315, 318, 4408, 4412 a další), takže používá rychlý stream bez zbytečného čekání na potvrzení každého jednotlivého bloku.
+
+### Opraveno
+- Přímý zápis do velkého displeje z HA již neselže s chybou při absenci volitelného dokončovacího paketu `05 08`, pokud byla úspěšně doručena všechna obrazová data (chování sjednoceno s ESP32 Gateway).
+
+## [0.1.300] - 2026-08-15
+
+### Přidáno a vylepšeno
+- Kompletní přepracování Meteoradaru a spolehlivé umisťování vícenásobných šablon.
+
 ## [0.1.299] - 2026-08-14
 
 ### Opraveno
