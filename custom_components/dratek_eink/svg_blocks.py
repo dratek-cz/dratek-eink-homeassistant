@@ -665,21 +665,33 @@ def block_split(halves: list[dict[str, Any]], box: dict[str, float]) -> str:
         cx = box["x"] + cell_width * (index + 0.5)
         if index > 0:
             parts.append(hairline(box["x"] + cell_width * index, box["y"] + box["h"] * 0.08, 1, box["h"] * 0.84))
-        y = box["y"] + box["h"] * 0.2
-        val_size = max(9.5, min(box["h"] * 0.32, cell_width * 0.34))
-        lbl_size = max(8.5, min(box["h"] * 0.18, cell_width * 0.22))
-        parts.append(
-            svg_text(
-                half.get("value"), cx, y, val_size,
-                bold=True, color=ink(half.get("color")), max_width=cell_width * 0.92,
+        has_icon = bool(half.get("icon"))
+        label_y = box["y"] + box["h"] * (0.16 if has_icon else 0.26)
+        val_y = box["y"] + box["h"] * (0.82 if has_icon else 0.72)
+        label_size = max(8.5, min(box["h"] * 0.22, cell_width * 0.22))
+        val_size = max(10.0, min(box["h"] * (0.26 if has_icon else 0.36), cell_width * 0.36))
+
+        if half.get("label"):
+            parts.append(
+                svg_text(
+                    half.get("label"), cx, label_y, label_size,
+                    max_width=cell_width * 0.92,
+                )
             )
-        )
-        parts.append(
-            svg_text(
-                half.get("label"), cx, y + box["h"] * 0.24, lbl_size,
-                max_width=cell_width * 0.92,
+        if half.get("icon"):
+            parts.append(
+                svg_icon(
+                    str(half.get("icon")), cx, box["y"] + box["h"] * 0.48,
+                    min(box["h"] * 0.32, cell_width * 0.40), ink(half.get("color")),
+                )
             )
-        )
+        if half.get("value"):
+            parts.append(
+                svg_text(
+                    half.get("value"), cx, val_y, val_size,
+                    bold=True, color=ink(half.get("color")), max_width=cell_width * 0.92,
+                )
+            )
     return "".join(parts)
 
 

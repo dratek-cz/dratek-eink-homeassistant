@@ -42,11 +42,14 @@ export const template = {
     // 1. NEJMENŠÍ CENOVKY (např. 212x104, 196x96):
     if (area <= 26000) {
       return [
-        { text: todayStr, h: 0.15, size: 0.10, bold: true },
+        { split: [
+          { label: weekdays[now.getDay()].toUpperCase(), value: `${now.getDate()}. ${months[now.getMonth()]}` },
+          { label: "SVÁTEK", value: namedayVal, color: "red" },
+        ], h: 0.22 },
         { rule: true, h: 0.03 },
-        { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, group: "event-0", h: 0.54 },
+        { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, group: "event-0", h: 0.50 },
         { flex: true },
-        { footer: [{ label: "SVÁTEK MÁ", value: namedayVal }], h: 0.26 },
+        { footer: [{ label: "DNES MÁ SVÁTEK", value: namedayVal }], h: 0.24 },
       ];
     }
 
@@ -61,9 +64,10 @@ export const template = {
 
         const rows = [
           { split: [
-            { icon: "calendar-month-outline", label: "DNES JE", value: todayStr },
-            { icon: "clock-outline", label: "PŘEHLED UDÁLOSTÍ", value: `${totalEvents} NADCHÁZEJÍCÍCH` },
-          ], h: 0.10 },
+            { icon: "calendar-today", label: "DNEŠNÍ DEN", value: todayStr },
+            { icon: "cake-variant-outline", label: "DNES MÁ SVÁTEK", value: namedayVal, color: "red" },
+            { icon: "clock-outline", label: "PŘEHLED KALENDÁŘE", value: `${totalEvents} NADCHÁZEJÍCÍCH` },
+          ], h: 0.11 },
           { rule: true, h: 0.02 },
         ];
 
@@ -115,9 +119,9 @@ export const template = {
       const eventH = 0.74 / count;
       const rows = [
         { split: [
-          { icon: "calendar-month-outline", label: "DNES JE", value: todayStr },
-          { icon: "clock-outline", label: "KALENDÁŘ", value: "PLÁN DNÍ" },
-        ], h: 0.10 },
+          { icon: "calendar-today", label: "DNEŠNÍ DEN", value: todayStr },
+          { icon: "cake-variant-outline", label: "SVÁTEK MÁ", value: namedayVal, color: "red" },
+        ], h: 0.11 },
         { rule: true, h: 0.02 },
       ];
       for (let i = 0; i < count; i++) {
@@ -142,7 +146,10 @@ export const template = {
     const eventH = isTall ? 0.18 : 0.32;
 
     const rows = [
-      { text: todayStr, h: isTall ? 0.07 : 0.09, size: isTall ? 0.045 : 0.06, bold: true },
+      { split: [
+        { label: weekdays[now.getDay()].toUpperCase(), value: `${now.getDate()}. ${months[now.getMonth()]}` },
+        { label: "SVÁTEK MÁ", value: namedayVal, color: "red" },
+      ], h: isTall ? 0.10 : 0.14 },
       { rule: true, h: 0.02 },
     ];
     for (let i = 0; i < count; i++) {

@@ -1488,13 +1488,21 @@ export const templateSvgMixin = {
     halves.forEach((half, index) => {
       const cx = box.x + cellWidth * (index + 0.5);
       if (index > 0) parts.push(this._svgHairline(box.x + cellWidth * index, box.y + box.h * 0.08, 1, box.h * 0.84));
-      let y = box.y + box.h * 0.2;
-      if (half.icon) {
-        parts.push(this._svgIcon(half.icon, cx, box.y + box.h * 0.22, Math.min(box.h * 0.34, cellWidth * 0.44), this._templateInk(half.color)));
-        y = box.y + box.h * 0.56;
+      const hasIcon = Boolean(half.icon);
+      const labelY = box.y + box.h * (hasIcon ? 0.16 : 0.26);
+      const valY = box.y + box.h * (hasIcon ? 0.82 : 0.72);
+      const labelSize = Math.max(8.5, Math.min(box.h * 0.22, cellWidth * 0.22));
+      const valSize = Math.max(10, Math.min(box.h * (hasIcon ? 0.26 : 0.36), cellWidth * 0.36));
+
+      if (half.label) {
+        parts.push(this._svgText(half.label, cx, labelY, labelSize, { bold: false, color: BLACK, maxWidth: cellWidth * 0.92 }));
       }
-      parts.push(this._svgText(half.value, cx, y, Math.max(9.5, Math.min(box.h * (half.icon ? 0.24 : 0.32), cellWidth * 0.34)), { bold: true, color: this._templateInk(half.color), maxWidth: cellWidth * 0.92 }));
-      parts.push(this._svgText(half.label, cx, y + box.h * 0.24, Math.max(8.5, Math.min(box.h * 0.18, cellWidth * 0.22)), { maxWidth: cellWidth * 0.92 }));
+      if (half.icon) {
+        parts.push(this._svgIcon(half.icon, cx, box.y + box.h * 0.48, Math.min(box.h * 0.32, cellWidth * 0.40), this._templateInk(half.color)));
+      }
+      if (half.value) {
+        parts.push(this._svgText(half.value, cx, valY, valSize, { bold: true, color: this._templateInk(half.color), maxWidth: cellWidth * 0.92 }));
+      }
     });
     return parts.join("");
   },
