@@ -657,26 +657,28 @@ def block_strip(cells: list[dict[str, Any]], box: dict[str, float], preserve_yel
     return "".join(parts)
 
 
-def block_split(halves: list[dict[str, Any]], box: dict[str, float], banner: bool = False, color: str = "black") -> str:
+def block_split(halves: list[dict[str, Any]], box: dict[str, float], banner: bool = False, color: str = "white") -> str:
     """Port of `_blockSplit` - two or three readings of equal standing divided down the middle."""
     cell_width = box["w"] / (len(halves) or 1)
     parts: list[str] = []
     if banner:
-        fill = RED if color == "red" else "#ffffff" if color == "white" else BLACK
-        parts.append(f'<rect x="{box["x"]:.2f}" y="{box["y"]:.2f}" width="{box["w"]:.2f}" height="{box["h"]:.2f}" rx="3" fill="{fill}"></rect>')
+        fill = RED if color == "red" else "#ffffff"
+        stroke = "none" if color == "red" else BLACK
+        parts.append(f'<rect x="{box["x"]:.2f}" y="{box["y"]:.2f}" width="{box["w"]:.2f}" height="{box["h"]:.2f}" rx="4" fill="{fill}" stroke="{stroke}" stroke-width="1.2"></rect>')
     for index, half in enumerate(halves):
         cx = box["x"] + cell_width * (index + 0.5)
         if index > 0:
-            div_color = "#ffffff" if banner else BLACK
+            div_color = "#ffffff" if (banner and color == "red") else BLACK
             parts.append(hairline(box["x"] + cell_width * index, box["y"] + box["h"] * 0.12, 1, box["h"] * 0.76, div_color))
         has_icon = bool(half.get("icon"))
         label_y = box["y"] + box["h"] * (0.22 if has_icon else 0.28)
         val_y = box["y"] + box["h"] * (0.76 if has_icon else 0.72)
-        label_size = max(9.0, min(box["h"] * 0.24, cell_width * 0.24))
+        label_size = max(9.0, min(box["h"] * 0.22, cell_width * 0.22))
         val_size = max(12.0, min(box["h"] * 0.44, cell_width * 0.42))
 
-        default_text_color = "#ffffff" if banner else BLACK
-        label_color = "#ffcccc" if banner and half.get("color") == "red" else "#e0e0e0" if banner else BLACK
+        is_red_banner = banner and color == "red"
+        default_text_color = "#ffffff" if is_red_banner else BLACK
+        label_color = "#ffcccc" if is_red_banner and half.get("color") == "red" else "#e0e0e0" if is_red_banner else BLACK
         val_color = ink(half.get("color")) if half.get("color") else default_text_color
 
         if half.get("label"):

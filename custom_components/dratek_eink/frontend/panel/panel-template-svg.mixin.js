@@ -1487,23 +1487,25 @@ export const templateSvgMixin = {
     const parts = [];
     const isBanner = row.banner || row.card;
     if (isBanner) {
-      const fill = row.color === "red" ? RED : row.color === "white" ? "#ffffff" : BLACK;
-      parts.push(`<rect x="${box.x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${box.w.toFixed(2)}" height="${box.h.toFixed(2)}" rx="3" fill="${fill}"></rect>`);
+      const fill = row.color === "red" ? RED : "#ffffff";
+      const stroke = row.color === "red" ? "none" : BLACK;
+      parts.push(`<rect x="${box.x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${box.w.toFixed(2)}" height="${box.h.toFixed(2)}" rx="4" fill="${fill}" stroke="${stroke}" stroke-width="1.2"></rect>`);
     }
     halves.forEach((half, index) => {
       const cx = box.x + cellWidth * (index + 0.5);
       if (index > 0) {
-        const divColor = isBanner ? "#ffffff" : BLACK;
+        const divColor = (isBanner && row.color === "red") ? "#ffffff" : BLACK;
         parts.push(this._svgHairline(box.x + cellWidth * index, box.y + box.h * 0.12, 1, box.h * 0.76, divColor));
       }
       const hasIcon = Boolean(half.icon);
       const labelY = box.y + box.h * (hasIcon ? 0.22 : 0.28);
       const valY = box.y + box.h * (hasIcon ? 0.76 : 0.72);
-      const labelSize = Math.max(9, Math.min(box.h * 0.24, cellWidth * 0.24));
+      const labelSize = Math.max(9, Math.min(box.h * 0.22, cellWidth * 0.22));
       const valSize = Math.max(12, Math.min(box.h * 0.44, cellWidth * 0.42));
 
-      const defaultTextColor = isBanner ? "#ffffff" : BLACK;
-      const labelColor = isBanner ? (half.color === "red" ? "#ffcccc" : "#e0e0e0") : BLACK;
+      const isRedBanner = isBanner && row.color === "red";
+      const defaultTextColor = isRedBanner ? "#ffffff" : BLACK;
+      const labelColor = isRedBanner ? (half.color === "red" ? "#ffcccc" : "#e0e0e0") : BLACK;
       const valColor = half.color ? this._templateInk(half.color) : defaultTextColor;
 
       if (half.label) {
