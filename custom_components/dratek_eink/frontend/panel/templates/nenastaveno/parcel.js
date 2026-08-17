@@ -26,17 +26,23 @@ export const template = {
     ],
     note: "Čtyři kolečka Převzato/Depo/Rozvoz/Doručeno pod textem jsou pevná grafika - první tři vždy vypadají hotová a poslední vždy nedokončené, bez ohledu na skutečný stav zásilky. Jen prostřední popisek (výchozí \"Rozvoz\") lze přepsat na aktuální krok textem, samotné odškrtnutí se nemění.",
   },
-  design: ({ v }) => [
-    { icon: "package-variant-closed", h: 0.15 },
-    { text: v(0, "Na cestě"), h: 0.1, size: 0.07, bold: true, color: "red" },
-    { text: v(1, "RR 458 921 730 CZ"), h: 0.07, size: 0.04 },
-    { steps: [
-      { label: "Převzato", done: true },
-      { label: "Depo", done: true },
-      { label: v(2, "Rozvoz"), done: true, color: "red" },
-      { label: "Doručeno" },
-    ], orientation: "horizontal", h: 0.3 },
-    { flex: true },
-    { footer: [{ label: "DORUČENÍ", value: v(3, "13:00–15:00") }], h: 0.14 },
-  ],
+  design: ({ v, width, height }) => {
+    // See home.js for why sqrt(area) rather than width alone.
+    const area = width && height ? width * height : 296 * 128;
+    const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
+    const lerp = (from, to) => from + (to - from) * t;
+    return [
+      { icon: "package-variant-closed", h: lerp(0.15, 0.12) },
+      { text: v(0, "Na cestě"), h: lerp(0.1, 0.09), size: 0.07, bold: true, color: "red" },
+      { text: v(1, "RR 458 921 730 CZ"), h: lerp(0.07, 0.05), size: 0.04 },
+      { steps: [
+        { label: "Převzato", done: true },
+        { label: "Depo", done: true },
+        { label: v(2, "Rozvoz"), done: true, color: "red" },
+        { label: "Doručeno" },
+      ], orientation: "horizontal", h: lerp(0.3, 0.36) },
+      { flex: true },
+      { footer: [{ label: "DORUČENÍ", value: v(3, "13:00–15:00") }], h: lerp(0.14, 0.08) },
+    ];
+  },
 };

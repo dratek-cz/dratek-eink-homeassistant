@@ -209,12 +209,16 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         colors = set(list(image.getdata()))
         self.assertTrue(colors <= {(255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.BORDER_COLOR})
 
-    def test_light_precipitation_renders_dotted_pattern(self) -> None:
+    def test_light_precipitation_renders_solid_yellow(self) -> None:
+        # Light rain reads as its own intensity by colour alone - a sparse
+        # dot pattern on white used to fade into pale noise once a zoom-6 map
+        # was reduced to a small display (see _generate_precipitation_
+        # checkerboard's docstring), and implied "barely raining" for a pixel
+        # the mask had already decided was raining. Flat yellow, no white.
         image = self._compose((0, 100, 200, 80))
         cx, cy = image.width // 2, image.height // 2
         patch = [image.getpixel((x, y)) for y in range(cy - 15, cy + 16) for x in range(cx - 15, cx + 16)]
-        self.assertIn(meteoradar.PRECIPITATION_YELLOW, patch)
-        self.assertIn((255, 255, 255), patch)
+        self.assertTrue(all(pixel == meteoradar.PRECIPITATION_YELLOW for pixel in patch), set(patch))
 
     def test_moderate_precipitation_mixes_yellow_and_red(self) -> None:
         image = self._compose((0, 100, 200, 220))
@@ -222,7 +226,23 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         self.assertIn(meteoradar.PRECIPITATION_YELLOW, colors)
         self.assertIn(meteoradar.PRECIPITATION_COLOR, colors)
 
-    def test_moderate_precipitation_uses_a_denser_hatch_than_light_rain(self) -> None:
+    def test_moderate_precipitation_uses_a_checkerboard_not_a_hatch(self) -> None:
+        # Axis-aligned square blocks, not diagonal lines: a diagonal stroke
+        # draws thin at any one point along its own length, which is exactly
+        # what let the old dotted "light rain" pattern fade to noise on
+        # downscale. Sampling along one fixed row should see genuine runs of
+        # each colour (a block width), not an alternating diagonal streak.
+        moderate = self._compose((0, 100, 200, 220))
+        cx, cy = moderate.width // 2, moderate.height // 2
+        row = [moderate.getpixel((x, cy)) for x in range(cx - 30, cx + 31)]
+        longest_run = 1
+        current_run = 1
+        for previous, pixel in zip(row, row[1:]):
+            current_run = current_run + 1 if pixel == previous else 1
+            longest_run = max(longest_run, current_run)
+        self.assertGreater(longest_run, 2)
+
+    def test_moderate_precipitation_has_more_red_than_light_rain(self) -> None:
         light = self._compose((0, 100, 200, 80))
         moderate = self._compose((0, 100, 200, 220))
         cx, cy = light.width // 2, light.height // 2
@@ -250,7 +270,7 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         unavailable = self._compose((0, 0, 0, 0), show_wind=True)
         self.assertEqual(list(unavailable.getdata()), list(plain.getdata()))
 
-    def test_home_location_draws_a_small_eink_safe_house_marker(self) -> None:
+    def test_home_location_draws_a_small_eink_safe_dot_marker(self) -> None:
         plain = self._compose((0, 0, 0, 0))
         marked = self._compose((0, 0, 0, 0), home_location=(0.0, 0.0))
         self.assertGreater(
@@ -261,13 +281,15 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
             (255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.BORDER_COLOR,
         })
 
-    def test_address_geocoding_and_marker_are_wired_into_the_live_renderer(self) -> None:
+    def test_home_marker_is_sourced_from_ha_own_configured_location(self) -> None:
+        # No address field any more - the dot always comes straight from
+        # Home Assistant's own configured home location, not a geocoded
+        # user-entered address (there is no network call to make it wait on).
         source = (COMPONENT / "meteoradar.py").read_text(encoding="utf-8")
-        websocket = (COMPONENT / "ws_meteoradar.py").read_text(encoding="utf-8")
-        self.assertIn("NOMINATIM_SEARCH_URL", source)
-        self.assertIn("location_address: str = \"\"", source)
-        self.assertIn("home_location=home_location", source)
-        self.assertIn('vol.Optional("location_address"): str', websocket)
+        self.assertIn("home_location = (hass.config.longitude, hass.config.latitude)", source)
+        self.assertNotIn("location_address", source)
+        self.assertNotIn("NOMINATIM", source)
+        self.assertNotIn("geocod", source.lower())
 
     def test_no_text_badge_is_baked_into_the_radar_image(self) -> None:
         source = (COMPONENT / "meteoradar.py").read_text(encoding="utf-8")

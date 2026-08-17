@@ -256,6 +256,18 @@
       },
     };
     const userTemplates = [];
+    // Mirrors display_preview.py: the real backend keeps "what was last
+    // actually written to this display" in its own store, separate from the
+    // editable draft, and re-merges it into every device_drafts/save and
+    // device_drafts/list response (ws_projects.py websocket_save_device_draft /
+    // websocket_list_device_drafts). Without this mock doing the same merge,
+    // the very next draft autosave - which a tab switch triggers - overwrites
+    // the frontend's local echo of a just-sent preview with a draft object
+    // that never carried a preview_image field to begin with.
+    const sentPreviews = {};
+    // upload_id -> array of base64 chunks, reassembled on commit_design_upload
+    // the same way the real backend's transfer.py accumulates them.
+    const uploadChunks = {};
     const automations = [
       { address:"FF:FF:92:81:46:32", enabled:true, refresh_interval_seconds:300, refresh_trigger_mode:"both", binding_count:2, entity_ids:["sensor.time","sensor.spot_prices"], route_type:"gateway", gateway_id:"gateway-workshop", transport_name:"Gateway dílna" },
       { address:"FF:FF:93:10:22:41", enabled:true, refresh_interval_seconds:1800, refresh_trigger_mode:"interval_only", binding_count:1, entity_ids:["binary_sensor.dvere_dilna"], route_type:"local", gateway_id:"", transport_name:"Home Assistant Bluetooth" },
@@ -353,14 +365,41 @@
             bindingCount:msg.automation?.bindings?.length || 0,
             entities:(msg.automation?.bindings || []).map((binding) => binding.entity_id),
           }));
+          const address = String(msg.address || "").toUpperCase();
+          let image = msg.image || "";
+          if (!image && msg.upload_id && uploadChunks[msg.upload_id]) {
+            image = `data:image/png;base64,${uploadChunks[msg.upload_id].join("")}`;
+          }
+          if (address && image) {
+            sentPreviews[address] = {
+              preview_image: image,
+              preview_updated_at: Date.now(),
+              preview_orientation: msg.orientation === "portrait" ? "portrait" : "landscape",
+              sent_template_ids: Array.isArray(msg.template_ids) ? msg.template_ids : [],
+            };
+          }
+          if (msg.upload_id) delete uploadChunks[msg.upload_id];
         }
         const { type } = msg;
         if (type === "dratek_eink/scan") return { ok:true, devices };
-        if (type === "dratek_eink/device_drafts/list") return { drafts };
-        if (type === "dratek_eink/device_drafts/load") return { draft:drafts[String(msg.address || "").toUpperCase()] || null };
+        if (type === "dratek_eink/upload_design_chunk") {
+          (uploadChunks[msg.upload_id] ||= [])[msg.index] = msg.data || "";
+          return { ok:true };
+        }
+        if (type === "dratek_eink/device_drafts/list") {
+          return { drafts: Object.fromEntries(Object.entries(drafts).map(([address, draft]) =>
+            [address, { ...draft, ...(sentPreviews[address] || {}) }]
+          )) };
+        }
+        if (type === "dratek_eink/device_drafts/load") {
+          const address = String(msg.address || "").toUpperCase();
+          const draft = drafts[address];
+          return { draft: draft ? { ...draft, ...(sentPreviews[address] || {}) } : (sentPreviews[address] || null) };
+        }
         if (type === "dratek_eink/device_drafts/save") {
-          drafts[String(msg.address || "").toUpperCase()] = msg.draft;
-          return { draft:msg.draft };
+          const address = String(msg.address || "").toUpperCase();
+          drafts[address] = msg.draft;
+          return { draft: { ...msg.draft, ...(sentPreviews[address] || {}) } };
         }
         if (type === "dratek_eink/user_templates/list") return { templates:userTemplates };
         if (type === "dratek_eink/user_templates/save") {
@@ -450,7 +489,9 @@
           // meteoradar.py renders in production.
           const width = Math.max(1, Math.round(msg.width || 250));
           const height = Math.max(1, Math.round(msg.height || 128));
-          const homeMarker = msg.location_address ? `<g data-harness-home-marker transform="translate(${width * 0.68} ${height * 0.42})"><path d="M-10 0L0-9L10 0V10H-10Z" fill="#d71912" stroke="#000" stroke-width="2"/><rect x="-2" y="4" width="4" height="6" fill="#fff" stroke="#000"/></g>` : "";
+          // Real renders always draw the home dot now (sourced from HA's own
+          // configured location, meteoradar.py), so the harness mock does too.
+          const homeMarker = `<circle data-harness-home-marker cx="${width * 0.68}" cy="${height * 0.42}" r="6" fill="#d71912" stroke="#000" stroke-width="2"/>`;
           const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">`
             + `<rect width="${width}" height="${height}" fill="#ffffff" stroke="#000000" stroke-width="2"/>`
             + `<circle cx="${width * 0.4}" cy="${height * 0.5}" r="${Math.min(width, height) * 0.18}" fill="#d71912"/>`

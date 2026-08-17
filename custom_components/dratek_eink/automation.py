@@ -590,7 +590,23 @@ class EntityAutoUpdateManager:
             if not self._automation_enabled(config):
                 continue
             interval = self._refresh_interval(config)
-            if now - self._last_refresh_at.get(address, 0.0) >= interval:
+            overdue = now - self._last_refresh_at.get(address, 0.0)
+            if overdue >= interval:
+                # This 30s fallback tick exists precisely so a broken per-display
+                # timer chain self-heals within about a minute. Only ever seeing
+                # it catch something *this* late (multiple intervals overdue)
+                # means the fallback itself went quiet for a while too - most
+                # likely the whole event loop was starved (e.g. a Home Assistant
+                # Core/Supervisor update running in the background), not a bug
+                # in this integration's own scheduling. Logged so that story is
+                # visible next time instead of the display just going silent
+                # with nothing anywhere to explain why.
+                if overdue >= interval * 2:
+                    _LOGGER.warning(
+                        "[%s] Automatic refresh is %.0fs overdue (interval %ds) - "
+                        "the periodic fallback tick just caught it now.",
+                        address, overdue, interval,
+                    )
                 self._schedule_refresh(address)
 
     @staticmethod
@@ -985,6 +1001,25 @@ class EntityAutoUpdateManager:
             if value is not None and value != "" and str(value).lower() not in {"unavailable", "unknown"}:
                 return f"{prefix}{_format_czech_number(value)} {unit}{suffix}"
 
+        # weather.js's detail strip (humidity/wind/pressure) reads these off
+        # the same weather.* entity as temperature/condition above - none of
+        # them are the entity's own `state` (that stays the condition word),
+        # so each needs its own attribute read the way temperature does.
+        if domain == "weather" and kind == "humidity":
+            value = state.attributes.get("humidity")
+            if value is not None and value != "" and str(value).lower() not in {"unavailable", "unknown"}:
+                return f"{prefix}{_format_czech_number(value)} %{suffix}"
+        if domain == "weather" and kind == "wind_speed":
+            value = state.attributes.get("wind_speed")
+            unit = str(state.attributes.get("wind_speed_unit") or "km/h")
+            if value is not None and value != "" and str(value).lower() not in {"unavailable", "unknown"}:
+                return f"{prefix}{_format_czech_number(value)} {unit}{suffix}"
+        if domain == "weather" and kind == "pressure":
+            value = state.attributes.get("pressure")
+            unit = str(state.attributes.get("pressure_unit") or "hPa")
+            if value is not None and value != "" and str(value).lower() not in {"unavailable", "unknown"}:
+                return f"{prefix}{_format_czech_number(value)} {unit}{suffix}"
+
         if value is None or str(value).strip().lower() in {"unavailable", "unknown"}:
             return fallback
 
@@ -1170,7 +1205,6 @@ class EntityAutoUpdateManager:
                 show_precipitation=bool(binding.get("show_precipitation", True)),
                 dotted_light=bool(binding.get("dotted_light", True)),
                 show_wind=bool(binding.get("show_wind", False)),
-                location_address=str(binding.get("location_address") or ""),
                 preserve_yellow=int(config.get("sdk_type") or 0) in BWRY_CODES,
             )
             if data_url:

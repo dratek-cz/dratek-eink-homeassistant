@@ -37,16 +37,22 @@ export const template = {
     ],
     note: "Popisek VĚTRÁNÍ dole je pevný text \"Není třeba\" - nevyhodnocuje skutečné hodnoty, je to jen štítek pod seznamem.",
   },
-  design: ({ v, ratio }) => [
-    { text: "Kvalita vzduchu", h: 0.07, size: 0.046, bold: true },
-    { dial: { percent: ratio(0, 21) / 2, value: v(0, "42"), caption: "AQI", min: "0", max: "200" }, group: "ratio", h: 0.35 },
-    { rule: true, h: 0.02 },
-    { list: [
-      { icon: "molecule-co2", label: "CO₂", value: v(1, "612 ppm") },
-      { icon: "blur", label: "PM2.5", value: v(2, "8 µg") },
-      { icon: "water-percent", label: "Vlhkost", value: v(3, "46 %") },
-    ], h: 0.42 },
-    { flex: true },
-    { footer: [{ label: "VĚTRÁNÍ", value: "Není třeba" }], h: 0.13 },
-  ],
+  design: ({ v, ratio, width, height }) => {
+    // See home.js for why sqrt(area) rather than width alone.
+    const area = width && height ? width * height : 296 * 128;
+    const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
+    const lerp = (from, to) => from + (to - from) * t;
+    return [
+      { text: "Kvalita vzduchu", h: lerp(0.07, 0.045), size: 0.046, bold: true },
+      { dial: { percent: ratio(0, 21) / 2, value: v(0, "42"), caption: "AQI", min: "0", max: "200" }, group: "ratio", h: lerp(0.35, 0.4) },
+      { rule: true, h: 0.02 },
+      { list: [
+        { icon: "molecule-co2", label: "CO₂", value: v(1, "612 ppm") },
+        { icon: "blur", label: "PM2.5", value: v(2, "8 µg") },
+        { icon: "water-percent", label: "Vlhkost", value: v(3, "46 %") },
+      ], h: lerp(0.42, 0.46) },
+      { flex: true },
+      { footer: [{ label: "VĚTRÁNÍ", value: "Není třeba" }], h: lerp(0.13, 0.07) },
+    ];
+  },
 };

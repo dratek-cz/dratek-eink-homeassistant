@@ -749,7 +749,19 @@ export const devicesMixin = {
     const short = Math.min(size.width, size.height);
     const previewWidth = orientation === "landscape" ? long : short;
     const previewHeight = orientation === "landscape" ? short : long;
-    const layoutDefinition = this._displayTemplateLayoutDefinition(this._displayTemplateLargeLayout);
+    // A "single" layout with its one slot already occupied no longer opens
+    // this dialog at all - hasTemplateSlotConflict in panel-inspector.mixin.js
+    // treats "single" as a plain replace regardless of occupancy, and the
+    // drag/drop path assigns straight into slot-0 without ever going through
+    // _pendingDisplayTemplateConflict. This stand-in is kept only as a defensive
+    // fallback in case something else sets that state for a "single" layout in
+    // the future; it swaps in the two-up split so the picker would have a real
+    // second destination instead of a lone "Celý displej" that would just
+    // replace what's already there.
+    const dialogLayoutId = assigned.length && this._displayTemplateLargeLayout === "single"
+      ? "side-by-side"
+      : this._displayTemplateLargeLayout;
+    const layoutDefinition = this._displayTemplateLayoutDefinition(dialogLayoutId);
     const slots = this._displayTemplateLayoutSlots(layoutDefinition.id, previewWidth, previewHeight);
     const options = slots.map((slot, index) => {
       const current = templates.find((item) => item.id === assigned[index]);
@@ -1003,9 +1015,11 @@ export const devicesMixin = {
     if (template?.id === "blank") {
       return `<span class="template-catalog-empty-preview"><ha-icon icon="mdi:plus"></ha-icon><small>Nová šablona</small></span>`;
     }
-    if (template?.id === "custom_image" && !this._customImageDataUrl) {
-      return `<span class="template-catalog-empty-preview is-image"><ha-icon icon="mdi:image-plus-outline"></ha-icon><small>Přidat obrázek</small></span>`;
-    }
+    // No "add a photo" empty state here: the card should read as a working
+    // sample from the very first render, not an unfinished form field. The
+    // bundled parrot (customImage()'s own fallback in _templateSvgSpecs) fills
+    // this same lazy-preview slot until a real photo replaces it - the card
+    // never has to know which of the two it is currently drawing.
     return `<span class="template-catalog-lazy-preview" data-template-catalog-preview="${this._escape(template?.id || "")}" data-template-preview-orientation="${orientation}" data-template-preview-width="${width}" data-template-preview-height="${height}"><span class="template-catalog-preview-skeleton"><i></i><i></i><i></i></span></span>`;
   },
 
@@ -1041,8 +1055,6 @@ export const devicesMixin = {
     const previewAspect = this._displayTemplateOrientation === "landscape"
       ? `${Math.max(size.width, size.height)}/${Math.min(size.width, size.height)}`
       : `${Math.min(size.width, size.height)}/${Math.max(size.width, size.height)}`;
-    const battery = this._batteryInfo(device);
-    const rssi = Number(device.rssi);
     const editing = this._editingDeviceAddress === device.address;
     const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
     const assignedTemplates = this._assignedDisplayTemplates(device);
@@ -1084,20 +1096,7 @@ export const devicesMixin = {
                 <span class="display-template-device-info-address">${this._escape(device.address)}</span>
               </div>
             </div>
-            <div class="display-template-device-info-stats">
-              <div class="display-template-device-info-stat" title="Baterie${Number.isFinite(battery.percent) ? ` ${battery.percent} %` : ""}${Number.isFinite(battery.voltage) ? ` · ${this._formatBatteryVoltage(battery.voltage)}` : ""}">
-                ${this._renderBatterySegments(battery.percent)}
-                <div class="display-template-device-info-stat-copy"><small>Baterie</small><strong class="health-value battery-value level-${this._batteryLevel(battery.percent)}">${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></div>
-              </div>
-              <div class="display-template-device-info-stat" title="Síla signálu${Number.isFinite(rssi) ? ` ${rssi} dBm` : ""}">
-                ${this._renderSignalBars(rssi)}
-                <div class="display-template-device-info-stat-copy"><small>Signál</small><strong class="health-value signal-value level-${this._signalLevel(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>
-              </div>
-              <div class="display-template-device-info-stat" title="Rozlišení displeje">
-                <ha-icon icon="mdi:aspect-ratio"></ha-icon>
-                <div class="display-template-device-info-stat-copy"><small>Rozlišení</small><strong>${size.width} × ${size.height}</strong></div>
-              </div>
-            </div>
+            ${this._renderDisplayTemplateRefreshSettings(device)}
           </div>
           ${largeDisplay ? this._renderDisplayTemplateLayoutControls(layout, orientation) : ""}
           <div class="display-template-dropzone ${assignedTemplates.length ? "has-template" : ""} ${imageNavigation ? "is-image-navigation" : ""}" data-display-template-dropzone tabindex="0" aria-label="Přetáhněte sem šablonu">
@@ -1138,6 +1137,9 @@ export const devicesMixin = {
             const userCreated = !!template.user_created;
             const customImageCard = template.id === "custom_image";
             const configStatus = this._templateBindingStatus(template);
+            const customImageActiveAsset = customImageCard ? this._activeCustomImageAsset() : null;
+            const customImageActiveSrc = customImageCard ? (customImageActiveAsset ? this._paletteImageSrc(customImageActiveAsset, device) : this._customImageDataUrl) : "";
+            const customImageLibrary = customImageCard ? (this._templateImageLibrary || []) : [];
             if (template.id === "blank") {
               return `<article class="display-template-card display-template-drag-card display-template-blank-card ${onDisplay ? "is-on-display" : ""}" data-display-template-open="blank" aria-label="Vytvořit vlastní šablonu od nuly. Kliknutím otevřete designer.">
                 <header class="display-template-tile-header">
@@ -1157,7 +1159,7 @@ export const devicesMixin = {
               <header class="display-template-tile-header">
                 <span class="display-template-kind-icon"><ha-icon icon="mdi:${userCreated ? "palette-outline" : template.kind === "prepared" ? "auto-fix" : "tune-variant"}"></ha-icon></span>
                 <span class="display-template-tile-identity"><strong>${this._escape(template.title)}</strong><small>${userCreated ? "Vytvořeno uživatelem" : template.kind === "prepared" ? "Automatické nastavení" : "Vlastní zdroje dat"}</small></span>
-                ${userCreated ? `<button type="button" class="display-template-delete-btn" data-delete-user-template="${this._escape(template.id)}" title="Smazat uživatelskou šablonu ${this._escape(template.title)}" aria-label="Smazat uživatelskou šablonu ${this._escape(template.title)}"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>` : customImageCard ? `<button type="button" class="display-template-settings-shortcut" data-display-template-configure="custom_image" title="Otevřít obrázkové studio" aria-label="Změnit nebo přidat obrázek"><ha-icon icon="mdi:image-edit-outline"></ha-icon><span>Změnit / přidat</span></button>` : `<button type="button" class="display-template-settings-shortcut" data-display-template-configure="${this._escape(template.id)}" title="Nastavení šablony ${this._escape(template.title)}" aria-label="Nastavení šablony ${this._escape(template.title)}"><ha-icon icon="mdi:tune-variant"></ha-icon><span>Nastavení šablony</span></button>`}
+                ${userCreated ? `<button type="button" class="display-template-delete-btn" data-delete-user-template="${this._escape(template.id)}" title="Smazat uživatelskou šablonu ${this._escape(template.title)}" aria-label="Smazat uživatelskou šablonu ${this._escape(template.title)}"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>` : customImageCard ? `<button type="button" class="display-template-settings-shortcut" data-display-template-configure="custom_image" title="Otevřít obrázkové studio" aria-label="Změnit nebo přidat obrázek"><ha-icon icon="mdi:image-edit-outline"></ha-icon><span>Změnit / přidat</span></button>` : ""}
               </header>
               <div class="display-template-tile-preview is-${orientation}" data-display-template-select="${template.id}" role="button" tabindex="0" aria-label="Vybrat šablonu ${this._escape(template.title)} pro displej">
                 <span class="display-template-preview ${userCreated ? "has-user-template" : ""}" style="aspect-ratio:${previewAspect};min-height:0">${this._renderDisplayTemplateCatalogPreviewSlot(template, orientation, size)}</span>
@@ -1190,8 +1192,8 @@ export const devicesMixin = {
                 </header>
 
                 <div class="card-edit-options">
-                  ${customImageCard ? `<button type="button" class="card-edit-option-btn" data-display-template-edit-choice="download" data-display-template-id="custom_image" ${this._activeCustomImageAsset() || this._customImageDataUrl ? "" : "disabled"}>
-                    <span class="option-icon"><ha-icon icon="mdi:download-outline"></ha-icon></span>
+                  ${customImageCard ? `<button type="button" class="card-edit-option-btn" data-display-template-edit-choice="download" data-display-template-id="custom_image" ${customImageActiveAsset || this._customImageDataUrl ? "" : "disabled"}>
+                    <span class="option-icon ${customImageActiveSrc ? "is-live-preview" : ""}">${customImageActiveSrc ? `<img src="${this._escape(customImageActiveSrc)}" alt="">` : `<ha-icon icon="mdi:download-outline"></ha-icon>`}</span>
                     <div class="option-text">
                       <strong>Stáhnout obrázek</strong>
                       <small>Uložit právě vybranou eInk variantu</small>
@@ -1199,20 +1201,11 @@ export const devicesMixin = {
                     <ha-icon icon="mdi:download" class="option-arrow"></ha-icon>
                   </button>
 
-                  <button type="button" class="card-edit-option-btn" data-display-template-edit-choice="images" data-display-template-id="custom_image">
-                    <span class="option-icon"><ha-icon icon="mdi:image-edit-outline"></ha-icon></span>
+                  <button type="button" class="card-edit-option-btn is-primary-action" data-display-template-edit-choice="images" data-display-template-id="custom_image">
+                    <span class="option-icon ${customImageLibrary.length ? "is-live-preview is-gallery-preview" : customImageActiveSrc ? "is-live-preview" : ""}">${customImageLibrary.length ? `<img src="${this._escape(this._paletteImageSrc(customImageLibrary[0], device))}" alt=""><b>${customImageLibrary.length}</b>` : customImageActiveSrc ? `<img src="${this._escape(customImageActiveSrc)}" alt="">` : `<ha-icon icon="mdi:image-edit-outline"></ha-icon>`}</span>
                     <div class="option-text">
                       <strong>Upravit obrázky</strong>
-                      <small>Otevřít náhled a přidat nebo změnit obrázek</small>
-                    </div>
-                    <ha-icon icon="mdi:chevron-right" class="option-arrow"></ha-icon>
-                  </button>
-
-                  <button type="button" class="card-edit-option-btn" data-display-template-edit-choice="gallery" data-display-template-id="custom_image">
-                    <span class="option-icon"><ha-icon icon="mdi:image-multiple-outline"></ha-icon></span>
-                    <div class="option-text">
-                      <strong>Galerie a střídání</strong>
-                      <small>Vybrat snímky a nastavit automatický cyklus</small>
+                      <small>Náhled, výměna obrázku, galerie a automatické střídání</small>
                     </div>
                     <ha-icon icon="mdi:chevron-right" class="option-arrow"></ha-icon>
                   </button>` : `<button type="button" class="card-edit-option-btn" data-display-template-edit-choice="variables" data-display-template-id="${this._escape(template.id)}">
@@ -1220,12 +1213,13 @@ export const devicesMixin = {
                     <div class="option-text">
                       <strong>Upravit zdroje dat</strong>
                       <small>Napojení hodnot na entity Home Assistantu</small>
+                      ${template.variables.length ? `<span class="option-preview-chips">${template.variables.slice(0, 5).map(([iconName, label]) => `<ha-icon icon="mdi:${iconName}" title="${this._escape(label)}"></ha-icon>`).join("")}${template.variables.length > 5 ? `<em>+${template.variables.length - 5}</em>` : ""}</span>` : ""}
                     </div>
                     <ha-icon icon="mdi:chevron-right" class="option-arrow"></ha-icon>
                   </button>
 
-                  <button type="button" class="card-edit-option-btn" data-display-template-edit-choice="designer" data-display-template-id="${this._escape(template.id)}">
-                    <span class="option-icon"><ha-icon icon="mdi:palette-outline"></ha-icon></span>
+                  <button type="button" class="card-edit-option-btn is-primary-action" data-display-template-edit-choice="designer" data-display-template-id="${this._escape(template.id)}">
+                    <span class="option-icon is-live-preview">${this._renderDisplayTemplateCatalogPreviewSlot(template, orientation, size)}</span>
                     <div class="option-text">
                       <strong>Designer šablon</strong>
                       <small>Rozložení, prvky a vzhled v eInk Studiu</small>
@@ -1238,6 +1232,7 @@ export const devicesMixin = {
                     <div class="option-text">
                       <strong>Exportovat šablonu</strong>
                       <small>Stáhnout šablonu jako .json soubor</small>
+                      <code class="option-filename">${this._escape(template.id)}.json</code>
                     </div>
                     <ha-icon icon="mdi:download" class="option-arrow"></ha-icon>
                   </button>`}
@@ -1263,6 +1258,42 @@ export const devicesMixin = {
         </section>
       </div>
     </section>${settingsTemplate && this._templateSettingsDialogMode === "variables" ? this._renderTemplateSettingsDialog(settingsTemplate, largeDisplay ? "large" : "small", largeDisplay) : ""}${this._renderDisplayTemplateSetupDialog()}`;
+  },
+
+  // Sits inside .display-template-device-info, right below the name row, in
+  // the space the battery/signal/resolution tiles used to occupy - it has no
+  // border or background of its own, just a hairline rule above it, so it
+  // reads as part of that one card instead of a second stacked block.
+  //
+  // The interval/trigger-mode controls used to live in the template designer
+  // itself, but a template can be open for several displays with different
+  // cadences, so that control moved to live exclusively on each automation's
+  // own card (see RefreshControlPlacementTests). That reasoning does not
+  // apply here: this section is scoped to one specific device, exactly like
+  // an automation card is, so reusing _automationIntervalSelect/
+  // _automationTriggerSelect - the very same markup, same data attributes,
+  // same _bindAutomationEvents() handlers - is a second place to reach the
+  // same per-device setting, not a second source of truth for it.
+  _renderDisplayTemplateRefreshSettings(device) {
+    const address = String(device?.address || "").toUpperCase();
+    const automation = (this._automations || []).find((item) => String(item.address || "").toUpperCase() === address);
+    if (!automation) {
+      return `<div class="display-template-refresh-row is-empty">
+        <ha-icon icon="mdi:autorenew"></ha-icon>
+        <span><strong>Automatický zápis</strong><small>Objeví se po prvním odeslání s napojenými hodnotami</small></span>
+      </div>`;
+    }
+    const enabled = automation.enabled !== false;
+    const busy = this._automationBusyAddress === automation.address;
+    return `<div class="display-template-refresh-row">
+      <ha-icon icon="mdi:autorenew"></ha-icon>
+      <span><strong>Automatický zápis</strong><small>${enabled ? "Aktivní" : "Pozastaveno"}</small></span>
+      <button type="button" class="automation-power ${enabled ? "is-on" : "is-off"}" data-automation-enabled="${this._escape(automation.address)}" data-automation-next-enabled="${enabled ? "0" : "1"}" aria-pressed="${enabled ? "true" : "false"}" title="${enabled ? "Pozastavit automatické aktualizace" : "Zapnout automatické aktualizace"}" ${busy ? "disabled" : ""}><ha-icon icon="mdi:${enabled ? "toggle-switch" : "toggle-switch-off-outline"}"></ha-icon><span>${enabled ? "ON" : "OFF"}</span></button>
+      <div class="display-template-refresh-fields">
+        ${this._automationIntervalSelect(automation)}
+        ${this._automationTriggerSelect(automation)}
+      </div>
+    </div>`;
   },
 
   _assignedDisplayTemplates(device = this._device()) {
@@ -1363,10 +1394,15 @@ export const devicesMixin = {
     } else if (Number.isInteger(replaceIndex) && replaceIndex >= 0 && replaceIndex < current.length) {
       next = [...current];
       next[replaceIndex] = templateId;
-    } else if (current.length < Math.max(2, this._displayTemplateLayoutDefinition().capacity)) {
+    } else if (current.length < this._displayTemplateLayoutDefinition().capacity) {
       next = [...current, templateId];
     } else {
-      next = current;
+      // No free slot and no explicit replaceIndex - the layout is already at
+      // capacity (e.g. "single" with its one slot occupied), so the new
+      // template takes the first slot instead of silently growing the
+      // assignment list past what the layout can actually show.
+      next = [...current];
+      next[0] = templateId;
     }
     this._displayTemplateAssignments ||= {};
     this._displayTemplateAssignments[address] = next;
@@ -1485,7 +1521,6 @@ export const devicesMixin = {
       image_library: structuredClone(this._templateImageLibrary || []),
       designer_viewport: this._templateDesignerViewport || "wide",
       meteoradar_country: this._meteoradarCountry || "cz",
-      meteoradar_home_address: this._meteoradarHomeAddress || "",
       meteoradar_show_precipitation: this._displayTemplateConfig?.meteoradar_show_precipitation !== false,
       meteoradar_dotted_light: this._displayTemplateConfig?.meteoradar_dotted_light !== false,
       meteoradar_show_wind: this._displayTemplateConfig?.meteoradar_show_wind === true,
@@ -1509,10 +1544,8 @@ export const devicesMixin = {
     this._templateRedoStack = [];
     this._templatePropertyHistoryKey = "";
     this._meteoradarCountry = config?.meteoradar_country || "cz";
-    this._meteoradarHomeAddress = String(config?.meteoradar_home_address || "");
     this._displayTemplateConfig = {
       meteoradar_country: this._meteoradarCountry,
-      meteoradar_home_address: this._meteoradarHomeAddress,
       meteoradar_show_precipitation: config?.meteoradar_show_precipitation !== false,
       meteoradar_dotted_light: config?.meteoradar_dotted_light !== false,
       meteoradar_show_wind: config?.meteoradar_show_wind === true,
@@ -1812,10 +1845,12 @@ export const devicesMixin = {
     const template = this._displayTemplateCards().find((item) => item.id === "custom_image");
     if (!template) return;
     if (!this._customImageDataUrl) {
-      this._useBundledCustomImageTemplate().catch((error) => {
-        this._templateSendResult = { ok: false, message: this._message(error) };
-        this._render();
-      });
+      this._useBundledCustomImageTemplate()
+        .then(() => { this._render(); this._paint(); })
+        .catch((error) => {
+          this._templateSendResult = { ok: false, message: this._message(error) };
+          this._render();
+        });
     }
     this._rememberActiveTemplateEditorState?.();
     this._prepareDisplayTemplateBindings(template);
@@ -1962,7 +1997,7 @@ export const devicesMixin = {
     const short = Math.min(size.width, size.height);
     const width = orientation === "landscape" ? long : short;
     const height = orientation === "landscape" ? short : long;
-    const rows = this._templateSvgRows(template);
+    const rows = this._templateSvgRows(template, width, height);
     this._requestTemplateIcons(rows);
     this._requestTemplateRadarImage(rows, width, height);
     return { width, height, markup: this._layoutTemplateSvg(rows, width, height), boxes: this._templateVariableCropBoxes(template, width, height) };
@@ -2033,7 +2068,6 @@ export const devicesMixin = {
     const showPrecipitation = config.meteoradar_show_precipitation !== false;
     const dottedLight = config.meteoradar_dotted_light !== false;
     const showWind = config.meteoradar_show_wind === true;
-    const homeAddress = this._meteoradarHomeAddress || config.meteoradar_home_address || "";
 
     return `<div class="interactive-country-map-widget">
       <div class="country-map-header">
@@ -2094,11 +2128,10 @@ export const devicesMixin = {
         </button>`).join("")}
       </div>
 
-      <label class="meteoradar-home-address">
-        <span class="meteoradar-home-address-icon"><ha-icon icon="mdi:home-map-marker"></ha-icon></span>
-        <span class="meteoradar-home-address-copy"><strong>Označit můj domov</strong><small>Zadejte ulici, město a PSČ. Na výsledné mapě se vykreslí malá červená ikona domu.</small></span>
-        <input type="text" data-meteoradar-home-address data-device-address="${this._escape(address)}" value="${this._escape(homeAddress)}" placeholder="Např. Václavské náměstí 1, Praha" autocomplete="street-address">
-      </label>
+      <div class="meteoradar-home-note" style="display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 13px; opacity: 0.85;">
+        <ha-icon icon="mdi:home-map-marker"></ha-icon>
+        <span>Domov se na mapě značí automaticky tečkou podle polohy nastavené v Home Assistantu (Nastavení → Systém → Obecné).</span>
+      </div>
 
       <div class="meteoradar-options-card" style="margin-top: 14px; padding: 12px 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
@@ -2232,7 +2265,7 @@ export const devicesMixin = {
       : this._customImageDataUrl;
     const customImageWidget = isCustomImageTemplate ? `<div class="custom-image-template-widget">
       <div class="custom-image-template-preview" style="aspect-ratio:${customPreviewWidth}/${customPreviewHeight}">
-        <img src="${this._escape(customPreviewSource || this._frontendAssetUrl("images/parrot-dithered.png"))}" alt="Stínovaný náhled vlastního obrázku">
+        <img src="${this._escape(customPreviewSource || this._frontendAssetUrl("images/parrot-source.png"))}" alt="Stínovaný náhled vlastního obrázku">
       </div>
       <input id="customImageTemplateFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
       <button type="button" class="primary-action" data-custom-image-template-upload><ha-icon icon="mdi:image-plus"></ha-icon> Vybrat barevný obrázek</button>
@@ -2423,18 +2456,33 @@ export const devicesMixin = {
     if (!device) return null;
     const cards = this._displayTemplateCards();
     const assigned = this._assignedDisplayTemplates(device);
-    const templates = assigned.map((id) => cards.find((item) => item.id === id)).filter(Boolean);
-    if (!templates.length) return null;
+    // Keep "blank" (and any unresolved id) as an explicit gap instead of
+    // dropping it - _buildDisplayTemplateSvg zips this array against the
+    // layout's slots by index, so compacting it here used to shift every
+    // template after the first blank slot forward onto the wrong position by
+    // the time the image was actually built. The live editor preview never
+    // went through this compaction (it draws straight from
+    // _displayTemplateAssignments), which is why only the physically
+    // sent/rendered image ever landed templates in the wrong spot, not the
+    // editor.
+    const templates = assigned.map((id) => cards.find((item) => item.id === id) || null);
+    const realCount = templates.filter(Boolean).length;
+    if (!realCount) return null;
     const base = this._baseDisplaySize(device);
     const portrait = this._displayTemplateOrientation === "portrait";
     const width = portrait ? Math.min(base.width, base.height) : Math.max(base.width, base.height);
     const height = portrait ? Math.max(base.width, base.height) : Math.min(base.width, base.height);
     const size = this._devicePreviewSize(device);
     const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
-    const layout = largeDisplay && templates.length > 1
+    const layout = largeDisplay && realCount > 1
       ? this._displayTemplateLayoutDefinition(this._displayTemplateLargeLayout).id
       : "single";
-    const visibleTemplates = templates.slice(0, this._displayTemplateLayoutDefinition(layout).capacity);
+    // "single" always means exactly one slot - grab whichever real template
+    // exists regardless of which array position it happens to sit at, the
+    // same as before this kept blank gaps around.
+    const visibleTemplates = layout === "single"
+      ? [templates.find(Boolean)]
+      : templates.slice(0, this._displayTemplateLayoutDefinition(layout).capacity);
     return { templates: visibleTemplates, width, height, layout };
   },
 
@@ -2462,7 +2510,11 @@ export const devicesMixin = {
       const interval = Math.max(1, Number(this._customImageCycleMinutes) || 10) * 60 * 1000;
       return selected[Math.floor(now / interval) % selected.length];
     }
-    return assets.find((asset) => asset.id === this._customImageActiveId) || selected[0] || null;
+    // A single library image the user never explicitly marked "active" or
+    // added to the cycle list is still the only sensible image to show - the
+    // catalog preview otherwise sits on the empty "Přidat obrázek" placeholder
+    // forever despite the gallery already holding a photo.
+    return assets.find((asset) => asset.id === this._customImageActiveId) || selected[0] || assets[0] || null;
   },
 
   _scheduleCustomImageCyclePreview(now = Date.now()) {
@@ -2739,7 +2791,13 @@ export const devicesMixin = {
     if (group === "forecast") {
       const entityId = this._templateEntityForKind(template, ["forecast", "weather"]);
       if (!entityId) return null;
-      return { type: "forecast", entity_id: entityId, days: 4, fallback: "", ...geometry };
+      // weather.js sizes `row.strip` to the panel's own width (design()'s
+      // `dayCount`) rather than always building four cells - capturing that
+      // same length here is what lets an automatic refresh ask
+      // weather.get_forecasts for as many days as this specific panel
+      // actually shows instead of always fetching (and fitting) four.
+      const days = Array.isArray(row.strip) && row.strip.length ? row.strip.length : 4;
+      return { type: "forecast", entity_id: entityId, days, fallback: "", ...geometry };
     }
     const eventMatch = group.match(/^event-(\d+)$/);
     if (eventMatch) {
@@ -3016,6 +3074,7 @@ export const devicesMixin = {
     this._templateAutomationBindingOverrides ||= {};
 
     for (const template of request.templates) {
+      if (!template) continue;
       // A ratio()-driven dial/ring/meter row is fully redrawn by its own
       // "ratio" binding below (fill, label AND the value text together, the
       // same way _blockDial/_blockRing/_blockMeters draw it as one shape) -
@@ -3098,6 +3157,7 @@ export const devicesMixin = {
     const slots = this._displayTemplateLayoutSlots(request.layout, width, height);
     const graphicOccurrences = {};
     request.templates.forEach((template, slotIndex) => {
+      if (!template) return;
       const slot = slots[slotIndex] || slots[0];
       const graphicRows = this._templateGraphicRowBoxes(template, slot.w, slot.h);
       for (const [group, { box, row }] of Object.entries(graphicRows)) {
@@ -3145,7 +3205,6 @@ export const devicesMixin = {
         show_precipitation: this._displayTemplateConfig?.meteoradar_show_precipitation !== false,
         dotted_light: this._displayTemplateConfig?.meteoradar_dotted_light !== false,
         show_wind: this._displayTemplateConfig?.meteoradar_show_wind === true,
-        location_address: this._meteoradarHomeAddress || this._displayTemplateConfig?.meteoradar_home_address || "",
       });
     }
     // currentDocument's tagged nodes are what the backend substitutes fresh
@@ -3218,7 +3277,7 @@ export const devicesMixin = {
         image_cycle_interval_seconds: intervalSeconds,
         bindings: [],
         layout: request?.layout || "single",
-        template_ids: (request?.templates || []).map((template) => template.id),
+        template_ids: (request?.templates || []).filter(Boolean).map((template) => template.id),
         sdk_type: Number(device.sdk_type),
         software_version: Number(device.sw || 0),
         orientation: this._displayTemplateOrientation === "portrait" ? "portrait" : "landscape",
@@ -3369,7 +3428,7 @@ export const devicesMixin = {
       clean_background: prepared.cleanBackground || "",
       bindings,
       layout: request?.layout || "single",
-      template_ids: (request?.templates || []).map((t) => t.id),
+      template_ids: (request?.templates || []).filter(Boolean).map((t) => t.id),
       sdk_type: Number(device.sdk_type),
       software_version: Number(device.sw || 0),
       orientation: landscape ? "landscape" : "portrait",
@@ -4271,10 +4330,8 @@ export const devicesMixin = {
     });
   },
 
-  _drawCustomImageFitted(context, image, width, height) {
-    const mode = ["cover", "contain", "stretch"].includes(this._customImageFitMode)
-      ? this._customImageFitMode
-      : "cover";
+  _drawCustomImageFitted(context, image, width, height, fitMode = this._customImageFitMode) {
+    const mode = ["cover", "contain", "stretch"].includes(fitMode) ? fitMode : "cover";
     if (mode === "stretch") {
       context.drawImage(image, 0, 0, width, height);
       return;
@@ -4285,6 +4342,190 @@ export const devicesMixin = {
     const drawWidth = image.width * scale;
     const drawHeight = image.height * scale;
     context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+  },
+
+  // Rotating the device in settings changes the exact pixel canvas an image is
+  // fitted to. The stored bitmaps are already dithered to the old canvas size,
+  // so without this the panel just stretches or squashes those pixels into the
+  // new frame instead of re-cropping the original photo for it.
+  _renderCustomImageOrientedVariants(source, fitMode, device = this._device()) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        const physical = this._devicePreviewSize?.(device) || { width: 296, height: 128 };
+        const portrait = this._displayTemplateOrientation === "portrait";
+        const width = Math.max(1, Math.round(portrait ? Math.min(physical.width, physical.height) : Math.max(physical.width, physical.height)));
+        const height = Math.max(1, Math.round(portrait ? Math.max(physical.width, physical.height) : Math.min(physical.width, physical.height)));
+        const renderVariant = (paletteKey) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const context = canvas.getContext("2d", { willReadFrequently: true });
+          context.fillStyle = "#fff";
+          context.fillRect(0, 0, width, height);
+          context.imageSmoothingEnabled = true;
+          context.imageSmoothingQuality = "high";
+          this._drawCustomImageFitted(context, image, width, height, fitMode);
+          const pixels = context.getImageData(0, 0, width, height);
+          this._ditherImportedTemplateImageData(pixels, width, height, paletteKey);
+          context.putImageData(pixels, 0, 0);
+          return canvas.toDataURL("image/png");
+        };
+        resolve({ bwr: renderVariant("bwr"), bwry: renderVariant("bwry") });
+      };
+      image.onerror = () => reject(new Error("Obrázek se nepodařilo načíst."));
+      image.src = source;
+    });
+  },
+
+  // ----------------------------------------------- per-slot custom image dither ---
+
+  // The size custom_image_data/variants were dithered at - the same computation
+  // _renderCustomImageTemplateForDevice and _renderCustomImageOrientedVariants
+  // use to pick a canvas. A slot this size is already showing the correct
+  // bitmap; only a smaller slot (one of several templates sharing a large
+  // display) needs its own re-dithered copy.
+  _customImageFullDeviceSize(device = this._device()) {
+    const physical = this._devicePreviewSize?.(device) || { width: 296, height: 128 };
+    const portrait = this._displayTemplateOrientation === "portrait";
+    return {
+      width: Math.max(1, Math.round(portrait ? Math.min(physical.width, physical.height) : Math.max(physical.width, physical.height))),
+      height: Math.max(1, Math.round(portrait ? Math.max(physical.width, physical.height) : Math.min(physical.width, physical.height))),
+    };
+  },
+
+  // null means "row.customImage.src (customImage()'s own result) is already
+  // the correct bitmap for this size, nothing to redo" - the common
+  // single-template case with a real uploaded photo stays exactly as fast as
+  // it was before per-slot dithering existed. A template that was never
+  // customized has no such bitmap at any size - customImage() can only offer
+  // the raw, undithered parrot-source.png as an immediate placeholder (see its
+  // own comment) - so that case always needs a real dither pass, even at the
+  // full device size.
+  _customImageSlotDitherSpec(width, height, device = this._device()) {
+    const active = this._activeCustomImageAsset?.();
+    const customSource = active?.source || this._customImageSourceUrl || "";
+    const hasCustomSource = !!customSource;
+    const source = customSource || this._frontendAssetUrl("images/parrot-source.png");
+    const w = Math.max(1, Math.round(width));
+    const h = Math.max(1, Math.round(height));
+    if (hasCustomSource) {
+      const full = this._customImageFullDeviceSize(device);
+      if (w === full.width && h === full.height) return null;
+    }
+    const paletteKey = this._displayPaletteKey(device);
+    const fitMode = ["cover", "contain", "stretch"].includes(this._customImageFitMode) ? this._customImageFitMode : "cover";
+    return { source, paletteKey, fitMode, w, h, cacheKey: `${paletteKey}:${fitMode}:${w}x${h}:${hasCustomSource ? "u" : "d"}:${source.length}:${source.slice(-40)}` };
+  },
+
+  _customImageSlotDitherEntry(width, height, device = this._device()) {
+    const spec = this._customImageSlotDitherSpec(width, height, device);
+    if (!spec) return "";
+    return this._customImageSlotDitherCache?.get(spec.cacheKey) || "";
+  },
+
+  _renderCustomImageBitmapAtSize(source, fitMode, width, height, paletteKey) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        context.fillStyle = "#fff";
+        context.fillRect(0, 0, width, height);
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = "high";
+        this._drawCustomImageFitted(context, image, width, height, fitMode);
+        const pixels = context.getImageData(0, 0, width, height);
+        this._ditherImportedTemplateImageData(pixels, width, height, paletteKey);
+        context.putImageData(pixels, 0, 0);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      image.onerror = () => reject(new Error("Obrázek se nepodařilo načíst."));
+      image.src = source;
+    });
+  },
+
+  _rememberCustomImageSlotDither(cacheKey, dataUrl) {
+    this._customImageSlotDitherCache ||= new Map();
+    this._customImageSlotDitherCache.set(cacheKey, dataUrl);
+    // A large display's own layouts top out at six slots; a handful of past
+    // sizes (rotations, layout switches) is plenty of history to keep around.
+    if (this._customImageSlotDitherCache.size > 16) {
+      this._customImageSlotDitherCache.delete(this._customImageSlotDitherCache.keys().next().value);
+    }
+  },
+
+  // Non-blocking: the live designer/catalog preview must never stall layout on
+  // a redither, so it draws the full-display bitmap once more (already correct
+  // for most templates, just soft for this one slot) and repaints once the
+  // slot-sized version is ready - the same trade _requestTemplateRadarImage
+  // makes for the meteoradar's live fetch.
+  _requestCustomImageSlotDither(width, height, device = this._device()) {
+    const spec = this._customImageSlotDitherSpec(width, height, device);
+    if (!spec) return;
+    this._customImageSlotDitherCache ||= new Map();
+    if (this._customImageSlotDitherCache.has(spec.cacheKey)) return;
+    this._customImageSlotDitherPending ||= new Set();
+    if (this._customImageSlotDitherPending.has(spec.cacheKey)) return;
+    this._customImageSlotDitherPending.add(spec.cacheKey);
+    this._renderCustomImageBitmapAtSize(spec.source, spec.fitMode, spec.w, spec.h, spec.paletteKey)
+      .then((dataUrl) => {
+        this._rememberCustomImageSlotDither(spec.cacheKey, dataUrl);
+        this._scheduleTemplateIconRepaint?.();
+      })
+      .catch(() => {})
+      .finally(() => this._customImageSlotDitherPending.delete(spec.cacheKey));
+  },
+
+  // Blocking counterpart for a manual send: it must never go out with a slot
+  // image still scaled down from the full-display bitmap, so it waits for the
+  // redither instead of drawing whatever _requestCustomImageSlotDither last
+  // cached - the same distinction _preloadTemplateRadarImage draws against
+  // _requestTemplateRadarImage for the meteoradar frame.
+  async _preloadCustomImageForSlot(rows, width, height, device = this._device()) {
+    if (!rows.some((row) => row.customImage)) return;
+    const spec = this._customImageSlotDitherSpec(width, height, device);
+    if (!spec) return;
+    if (this._customImageSlotDitherCache?.has(spec.cacheKey)) return;
+    const dataUrl = await this._renderCustomImageBitmapAtSize(spec.source, spec.fitMode, spec.w, spec.h, spec.paletteKey);
+    this._rememberCustomImageSlotDither(spec.cacheKey, dataUrl);
+  },
+
+  async _resyncCustomImagesForOrientation(device = this._device()) {
+    const assets = this._templateImageLibrary || [];
+    if (!assets.length) return;
+    await Promise.all(assets.map(async (asset) => {
+      if (!String(asset.source || "").startsWith("data:image/")) return;
+      try {
+        asset.variants = await this._renderCustomImageOrientedVariants(asset.source, asset.fit_mode || "cover", device);
+        asset.src = this._paletteImageSrc({ source: asset.source, variants: asset.variants });
+      } catch (error) {
+        console.warn("DRATEK eInk image orientation refresh failed:", error);
+      }
+    }));
+    const active = this._activeCustomImageAsset?.();
+    if (active?.variants) {
+      this._customImageVariants = { bwr: active.variants.bwr, bwry: active.variants.bwry };
+      this._customImageDataUrl = this._paletteImageSrc(active, device);
+    }
+    this._displayTemplateConfig ||= {};
+    this._displayTemplateConfig.custom_image_data = this._customImageDataUrl;
+    this._displayTemplateConfig.custom_image_variants = structuredClone(this._customImageVariants || {});
+    const address = String(this._selectedDeviceAddress || "").toUpperCase();
+    if (address) {
+      this._deviceDrafts ||= {};
+      const draft = this._deviceDrafts[address] || {};
+      draft.template_config ||= {};
+      draft.template_config.custom_image_data = this._customImageDataUrl;
+      draft.template_config.custom_image_variants = structuredClone(this._customImageVariants || {});
+      draft.template_config.image_library = structuredClone(this._templateImageLibrary || []);
+      this._deviceDrafts[address] = draft;
+    }
+    this._scheduleDraftSave();
+    this._render();
+    this._paint();
   },
 
   _storeCustomImageTemplateData(source, variants, name, aspect = 1) {
@@ -4955,11 +5196,18 @@ export const devicesMixin = {
   // One column of the forecast strip. Falls back to the sample day so the template
   // still reads as a weather template before the service call returns.
   _templateForecastDay(template, index) {
+    // Seven entries, not four: weather.js can now ask for up to a full
+    // week's worth of cells on a wide panel, and a sample day() should look
+    // like real data at every length it might be called with, not fall back
+    // to blank cards past the fourth one.
     const sample = [
       { label: "PÁ", icon: "weather-partly-cloudy", value: "22°" },
       { label: "SO", icon: "weather-sunny", value: "25°" },
       { label: "NE", icon: "weather-rainy", value: "18°" },
       { label: "PO", icon: "weather-cloudy", value: "20°" },
+      { label: "ÚT", icon: "weather-lightning-rainy", value: "17°" },
+      { label: "ST", icon: "weather-snowy", value: "12°" },
+      { label: "ČT", icon: "weather-windy", value: "19°" },
     ][index] || { label: "", icon: "", value: "" };
     const forecast = this._templateForecast(this._templateEntityForKind(template, ["forecast", "weather"]));
     const entry = Array.isArray(forecast) ? forecast[index] : null;
@@ -5067,6 +5315,15 @@ export const devicesMixin = {
     if (weatherState && normalized.includes("teplot")) {
       raw = weatherAttributes.temperature;
       forcedUnit = weatherAttributes.temperature_unit || "°C";
+    } else if (weatherState && kind === "humidity") {
+      raw = weatherAttributes.humidity;
+      forcedUnit = "%";
+    } else if (weatherState && kind === "wind_speed") {
+      raw = weatherAttributes.wind_speed;
+      forcedUnit = weatherAttributes.wind_speed_unit || "km/h";
+    } else if (weatherState && kind === "pressure") {
+      raw = weatherAttributes.pressure;
+      forcedUnit = weatherAttributes.pressure_unit || "hPa";
     } else if (climateState && kind === "temperature") {
       // A climate.* entity's own `state` is its HVAC mode ("heat", "off", ...),
       // never a number - "Cílová teplota" needs the `temperature` attribute
@@ -5196,6 +5453,8 @@ export const devicesMixin = {
     const descriptions = {
       teplota: "Senzor teploty místnosti nebo venkovního prostoru.",
       vlhkost: "Senzor relativní vlhkosti vzduchu nebo půdy.",
+      vítr: "Senzor rychlosti větru.",
+      tlak: "Senzor atmosférického tlaku.",
       signál: "Síla signálu vybraného zařízení.",
       baterie: "Stav baterie zařízení v procentech.",
       cena: "Senzor aktuální ceny nebo tarifu.",
@@ -5246,6 +5505,7 @@ export const devicesMixin = {
     if (has("osob", "přítom")) return "person_status";
     if (has("teplot", "termostat")) return "temperature";
     if (has("vlhkost")) return "humidity";
+    if (has("tlak")) return "pressure";
     // "Úspora CO₂" (solar's cumulative kilograms saved) is a completely
     // different physical quantity from a device_class carbon_dioxide sensor
     // (a live ppm air-quality reading) despite sharing the words "CO₂" - a
@@ -5339,6 +5599,7 @@ export const devicesMixin = {
       transport: { domains: ["sensor"] },
       distance: { domains: ["sensor"], classes: ["distance"] },
       wind_speed: { domains: ["sensor"], classes: ["wind_speed"] },
+      pressure: { domains: ["sensor"], classes: ["atmospheric_pressure", "pressure"] },
       light: { domains: ["light", "switch"] },
       lock: { domains: ["lock"] },
       door: { domains: ["binary_sensor", "cover"], classes: ["door", "garage_door", "opening"] },
@@ -5465,6 +5726,8 @@ export const devicesMixin = {
     const value = String(label || "").toLocaleLowerCase("cs");
     if (value.includes("teplot")) return "22,5 °C";
     if (value.includes("vlhk")) return "46 %";
+    if (value.includes("vítr") || value.includes("vitr")) return "12 km/h";
+    if (value.includes("tlak")) return "1013 hPa";
     if (value.includes("čas") || value.includes("aktual")) return "12:45";
     if (value.includes("datum")) return "23. května";
     if (value.includes("výkon")) return "2,35 kW";

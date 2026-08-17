@@ -40,7 +40,11 @@ TEMPLATES_DIR = (
     / "templates"
 )
 TEMPLATE_FILES = tuple(sorted(
-    path for path in TEMPLATES_DIR.glob("*.js") if path.name not in {"index.js", "shared.js"}
+    # Recursive so files parked under nenastaveno/ (temporarily unwired from
+    # index.js while each is re-verified one at a time) still get their shape
+    # checked - the property this test protects (no two templates look alike)
+    # is about the file's own design, not whether it is registered right now.
+    path for path in TEMPLATES_DIR.glob("**/*.js") if path.name not in {"index.js", "shared.js"}
 ))
 
 TEMPLATE_ID = re.compile(r'id:\s*"(\w+)"')

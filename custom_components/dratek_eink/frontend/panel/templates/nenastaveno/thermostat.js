@@ -25,14 +25,20 @@ export const template = {
       "Další změna je volitelná - vyplňte, jen pokud máte plánovač nebo harmonogram, který příští změnu teploty poskytuje jako čas.",
     ],
   },
-  design: ({ v }) => [
-    { icon: "thermostat", h: 0.15 },
-    { stat: { value: v(0, "21,5"), unit: "°C", caption: "aktuálně" }, h: 0.3 },
-    { split: [
-      { value: v(1, "22 °C"), label: "Cíl" },
-      { value: v(2, "60 %"), label: "Výkon", color: "red" },
-    ], h: 0.4 },
-    { flex: true },
-    { footer: [{ label: "DALŠÍ ZMĚNA", value: v(3, "22:00") }], h: 0.14 },
-  ],
+  design: ({ v, width, height }) => {
+    // See home.js for why sqrt(area) rather than width alone.
+    const area = width && height ? width * height : 296 * 128;
+    const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
+    const lerp = (from, to) => from + (to - from) * t;
+    return [
+      { icon: "thermostat", h: lerp(0.15, 0.12) },
+      { stat: { value: v(0, "21,5"), unit: "°C", caption: "aktuálně" }, h: lerp(0.3, 0.36) },
+      { split: [
+        { value: v(1, "22 °C"), label: "Cíl" },
+        { value: v(2, "60 %"), label: "Výkon", color: "red" },
+      ], h: lerp(0.4, 0.42) },
+      { flex: true },
+      { footer: [{ label: "DALŠÍ ZMĚNA", value: v(3, "22:00") }], h: lerp(0.14, 0.07) },
+    ];
+  },
 };

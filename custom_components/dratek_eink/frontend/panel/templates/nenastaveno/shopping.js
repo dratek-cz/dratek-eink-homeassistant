@@ -31,20 +31,27 @@ export const template = {
     ],
     note: "Seznam na displeji má pevně pět řádků, ale skutečná data z todo.* entity (jednotlivé položky) se na něj automaticky nepřenášejí - žádná todo entita totiž nevrací \"první nevyřízenou položku jako text\" způsobem, který by šlo jednoduše napojit. Živě fungující je jen celkový počet zbývajících položek.",
   },
-  design: ({ v }) => [
-    { text: "Nákupní seznam", h: 0.075, size: 0.048, bold: true },
-    { rule: true, h: 0.02 },
-    // 0.55 left over a fifth of the panel as bare flex before the footer -
-    // checklist rows scale with their own share of box height, so growing
-    // this gives all five lines more room instead of leaving it unused.
-    { checklist: [
-      { label: v(1, "Mléko"), done: true },
-      { label: "Chléb", done: true },
-      { label: v(0, "Jablka") },
-      { label: "Káva" },
-      { label: "Prací gel" },
-    ], marker: "box", strike: true, h: 0.72 },
-    { flex: true },
-    { footer: [{ label: "ZBÝVÁ", value: v(2, "3 položky") }], h: 0.14 },
-  ],
+  design: ({ v, width, height }) => {
+    // See home.js for why sqrt(area) rather than width alone.
+    const area = width && height ? width * height : 296 * 128;
+    const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
+    const lerp = (from, to) => from + (to - from) * t;
+    return [
+      { text: "Nákupní seznam", h: lerp(0.075, 0.05), size: 0.048, bold: true },
+      { rule: true, h: 0.02 },
+      // 0.55 left over a fifth of the panel as bare flex before the footer -
+      // checklist rows scale with their own share of box height, so growing
+      // this gives all five lines more room instead of leaving it unused. The
+      // lerp grows that further still on a genuinely large panel.
+      { checklist: [
+        { label: v(1, "Mléko"), done: true },
+        { label: "Chléb", done: true },
+        { label: v(0, "Jablka") },
+        { label: "Káva" },
+        { label: "Prací gel" },
+      ], marker: "box", strike: true, h: lerp(0.72, 0.78) },
+      { flex: true },
+      { footer: [{ label: "ZBÝVÁ", value: v(2, "3 položky") }], h: lerp(0.14, 0.08) },
+    ];
+  },
 };

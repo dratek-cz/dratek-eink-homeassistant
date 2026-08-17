@@ -27,16 +27,23 @@ export const template = {
     ],
     note: "Home Assistant nemá vestavěný seznam českých svátků (jmenin) - narozdíl od Data a Času, které si šablona doplní sama z hodin systému, potřebuje Svátek vlastní zdroj: buď šablonový senzor postavený na knihovně jmenin/svátků, nebo samostatný kalendář se svátky jako celodenními událostmi (podobně jako u šablony Narozeniny).",
   },
-  design: ({ v, event }) => [
-    { text: "Kalendář", h: 0.075, size: 0.05, bold: true },
-    { rule: true, h: 0.02 },
-    // Two boxes at 0.27 left 22% of the panel as bare flex before the footer -
-    // the date square scales with its own row height (see _blockDatebox), so
-    // growing these gives both entries a bigger, easier-to-read date square
-    // instead of leaving that height unused.
-    { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, group: "event-0", h: 0.34 },
-    { datebox: { day: event(1).day, month: event(1).month, lines: [event(1).title, event(1).detail] }, group: "event-1", h: 0.34 },
-    { flex: true },
-    { footer: [{ label: "SVÁTEK MÁ", value: v(2, "Jana") }], h: 0.14 },
-  ],
+  design: ({ v, event, width, height }) => {
+    // See home.js for why sqrt(area) rather than width alone.
+    const area = width && height ? width * height : 296 * 128;
+    const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
+    const lerp = (from, to) => from + (to - from) * t;
+    return [
+      { text: "Kalendář", h: lerp(0.075, 0.05), size: 0.05, bold: true },
+      { rule: true, h: 0.02 },
+      // Two boxes at 0.27 left 22% of the panel as bare flex before the footer -
+      // the date square scales with its own row height (see _blockDatebox), so
+      // growing these gives both entries a bigger, easier-to-read date square
+      // instead of leaving that height unused. The lerp on top of that grows
+      // both boxes further still on a genuinely large panel.
+      { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, group: "event-0", h: lerp(0.34, 0.38) },
+      { datebox: { day: event(1).day, month: event(1).month, lines: [event(1).title, event(1).detail] }, group: "event-1", h: lerp(0.34, 0.38) },
+      { flex: true },
+      { footer: [{ label: "SVÁTEK MÁ", value: v(2, "Jana") }], h: lerp(0.14, 0.08) },
+    ];
+  },
 };

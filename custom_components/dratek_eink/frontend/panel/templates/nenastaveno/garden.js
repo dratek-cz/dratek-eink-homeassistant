@@ -31,16 +31,22 @@ export const template = {
       "Další zálivka je čas, ne senzor spotřeby vody - napojte ji na časovač (timer) nebo pomocníka typu datum a čas z vaší zavlažovací automatizace.",
     ],
   },
-  design: ({ v, series }) => [
-    { text: v(0, "Záhon rajčat"), h: 0.075, size: 0.048, bold: true },
-    { stat: { value: v(1, "36"), unit: "%", caption: "vlhkost půdy" }, h: 0.26 },
-    { spark: { values: series(1, [62, 58, 55, 49, 47, 43, 40, 38, 36]), caption: "7 dní" }, group: "chart", h: 0.27 },
-    { rule: true, h: 0.02 },
-    { list: [
-      { icon: "weather-sunny", label: "Teplota", value: v(2, "24 °C") },
-      { icon: "weather-windy", label: "Vítr", value: v(3, "8 km/h") },
-    ], h: 0.24 },
-    { flex: true },
-    { footer: [{ label: "ZÁLIVKA", value: v(4, "18:30") }], h: 0.13 },
-  ],
+  design: ({ v, series, width, height }) => {
+    // See home.js for why sqrt(area) rather than width alone.
+    const area = width && height ? width * height : 296 * 128;
+    const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
+    const lerp = (from, to) => from + (to - from) * t;
+    return [
+      { text: v(0, "Záhon rajčat"), h: lerp(0.075, 0.05), size: 0.048, bold: true },
+      { stat: { value: v(1, "36"), unit: "%", caption: "vlhkost půdy" }, h: lerp(0.26, 0.3) },
+      { spark: { values: series(1, [62, 58, 55, 49, 47, 43, 40, 38, 36]), caption: "7 dní" }, group: "chart", h: lerp(0.27, 0.3) },
+      { rule: true, h: 0.02 },
+      { list: [
+        { icon: "weather-sunny", label: "Teplota", value: v(2, "24 °C") },
+        { icon: "weather-windy", label: "Vítr", value: v(3, "8 km/h") },
+      ], h: lerp(0.24, 0.26) },
+      { flex: true },
+      { footer: [{ label: "ZÁLIVKA", value: v(4, "18:30") }], h: lerp(0.13, 0.07) },
+    ];
+  },
 };

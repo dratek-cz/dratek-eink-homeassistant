@@ -1,5 +1,5 @@
 // Everything about the "Odpady" (Waste collection) display template.
-import { helper } from "./shared.js";
+import { helper } from "../shared.js";
 
 export const template = {
   catalog: {
@@ -33,14 +33,20 @@ export const template = {
     ],
     note: "Integrace pro svoz odpadu je vždy vázaná na konkrétní obec nebo firmu - pokud „Nalezeno“ v tomto dialogu nesvítí, nejde o chybu šablony, ale o to, že žádná odpovídající entita zatím v Home Assistantu neexistuje.",
   },
-  design: ({ v }) => [
-    { text: "Odpady", h: 0.085, size: 0.058, bold: true },
-    { rule: true, h: 0.02 },
-    { split: [
-      { icon: "trash-can-outline", value: v(0, "ZÍTRA"), label: "Plast", color: "red" },
-      { icon: "recycle", value: v(1, "za 7 dní"), label: "Papír" },
-    ], h: 0.6 },
-    { flex: true },
-    { footer: [{ label: "NEJBLIŽŠÍ SVOZ", value: v(2, "út 24. 5.") }], h: 0.14 },
-  ],
+  design: ({ v, width, height }) => {
+    // See home.js for why sqrt(area) rather than width alone.
+    const area = width && height ? width * height : 296 * 128;
+    const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
+    const lerp = (from, to) => from + (to - from) * t;
+    return [
+      { text: "Odpady", h: lerp(0.085, 0.06), size: 0.058, bold: true },
+      { rule: true, h: 0.02 },
+      { split: [
+        { icon: "trash-can-outline", value: v(0, "ZÍTRA"), label: "Plast", color: "red" },
+        { icon: "recycle", value: v(1, "za 7 dní"), label: "Papír" },
+      ], h: lerp(0.6, 0.68) },
+      { flex: true },
+      { footer: [{ label: "NEJBLIŽŠÍ SVOZ", value: v(2, "út 24. 5.") }], h: lerp(0.14, 0.08) },
+    ];
+  },
 };

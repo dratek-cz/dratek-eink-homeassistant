@@ -49,17 +49,22 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('data-custom-image-gallery-focus', self.source)
         self.assertIn('data-display-template-edit-choice="download" data-display-template-id="custom_image"', self.source)
         self.assertIn('data-display-template-edit-choice="images" data-display-template-id="custom_image"', self.source)
-        self.assertIn('data-display-template-edit-choice="gallery" data-display-template-id="custom_image"', self.source)
+        # "Upravit obrázky" and the old separate "Galerie a střídání" entry both
+        # opened the same studio view - one scrolled to the gallery section, the
+        # other did not - so they were merged into this single option instead of
+        # offering two menu entries for one destination.
+        self.assertNotIn('data-display-template-edit-choice="gallery" data-display-template-id="custom_image"', self.source)
         self.assertIn('customImageCard ? "Spravovat obrázky" : "Upravit šablonu"', self.source)
         self.assertIn('node?.hasAttribute?.("data-template-editor-back")', self.source)
 
-    def test_meteoradar_accepts_and_persists_a_home_address_marker(self):
-        self.assertIn('data-meteoradar-home-address', self.source)
-        self.assertIn('meteoradar_home_address: this._meteoradarHomeAddress || ""', self.source)
-        self.assertIn('location_address: this._meteoradarHomeAddress', self.source)
+    def test_meteoradar_home_marker_has_no_manual_address_field(self):
+        # The dot marker is sourced automatically from Home Assistant's own
+        # configured home location (meteoradar.py), not a geocoded address -
+        # there is no address input, draft field or websocket param left.
+        self.assertNotIn('data-meteoradar-home-address', self.source)
+        self.assertNotIn('meteoradar_home_address', self.source)
+        self.assertNotIn('location_address', self.source)
         self.assertIn('preserve_yellow: preserveYellow', self.source)
-        self.assertIn('this._svgText("STŘED"', self.source)
-        self.assertIn('this._meteoradarImageCache = null', self.source)
         self.assertIn('data-custom-image-cycle-enabled', self.source)
         self.assertIn('data-custom-image-cycle-minutes', self.source)
         self.assertIn('data-custom-image-save', self.source)
@@ -140,6 +145,37 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('data-custom-image-fit-mode', self.source)
         self.assertIn('type: "dratek_eink/device_drafts/delete_image"', self.source)
         self.assertIn('image_cycle_ids: assets.map((asset) => asset.id)', self.source)
+
+    def test_rotating_the_display_re_fits_every_stored_custom_image(self):
+        # Rotating the device used to leave each image's bitmap dithered to the
+        # old canvas size, so the panel just stretched or squashed those pixels
+        # into the new frame instead of re-cropping the original photo for it.
+        self.assertIn(
+            '_drawCustomImageFitted(context, image, width, height, fitMode = this._customImageFitMode) {',
+            self.source,
+        )
+        self.assertIn(
+            '_renderCustomImageOrientedVariants(source, fitMode, device = this._device())',
+            self.source,
+        )
+        self.assertIn(
+            'async _resyncCustomImagesForOrientation(device = this._device())',
+            self.source,
+        )
+        self.assertIn(
+            'this._drawCustomImageFitted(context, image, width, height, fitMode);',
+            self.source,
+        )
+        self.assertIn(
+            'asset.variants = await this._renderCustomImageOrientedVariants(asset.source, asset.fit_mode || "cover", device);',
+            self.source,
+        )
+        orientation_start = self.source.index('this.shadowRoot.querySelectorAll("[data-template-orientation]")')
+        orientation_end = self.source.index("}));", orientation_start)
+        orientation_handler = self.source[orientation_start:orientation_end]
+        self.assertIn("const previousOrientation = this._displayTemplateOrientation;", orientation_handler)
+        self.assertIn("if (this._displayTemplateOrientation !== previousOrientation) {", orientation_handler)
+        self.assertIn("this._resyncCustomImagesForOrientation?.(device)", orientation_handler)
 
     def test_display_automation_preserves_connection_map_route_mode(self):
         node = shutil.which("node")
@@ -480,17 +516,19 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('class="display-template-device-info ${primaryTemplate ? "is-configurable" : ""}"', self.source)
         self.assertIn('data-display-template-configure="${this._escape(primaryTemplate.id)}"', self.source)
         self.assertIn('class="display-template-device-info-identity"', self.source)
-        self.assertIn('class="display-template-device-info-stats"', self.source)
         # The refresh-interval select was removed from this panel at user
         # request, for consistency with the main devices page cards.
         self.assertNotIn('this._renderRefreshIntervalSelect(device.address, this._refreshIntervalSeconds, "in-header")', self.source)
-        self.assertIn('class="display-template-device-info-stat-copy"><small>Rozlišení</small>', self.source)
         self.assertIn('icon="mdi:tablet-dashboard"', self.source)
-        self.assertIn('class="display-template-device-info-stat"', self.source)
         self.assertIn(".display-template-device-info{display:flex;flex-direction:column", self.source)
-        self.assertIn(".display-template-device-info-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))", self.source)
-        self.assertIn(".display-template-device-info-stat .battery-segments{width:clamp(24px,9cqw,34px)", self.source)
-        self.assertIn(".display-template-device-info-stat .signal-bars{width:clamp(18px,7cqw,26px)", self.source)
+        # The battery/signal/resolution tiles were replaced, at a later explicit
+        # request, by the auto-update row below - same slot, same card, no
+        # border/background of its own so it reads as part of the one info card.
+        self.assertNotIn('class="display-template-device-info-stats"', self.source)
+        self.assertNotIn('class="display-template-device-info-stat"', self.source)
+        self.assertIn('class="display-template-refresh-row', self.source)
+        self.assertIn("this._automationIntervalSelect(automation)", self.source)
+        self.assertIn("this._automationTriggerSelect(automation)", self.source)
         self.assertIn("container-type:inline-size", self.source)
         self.assertNotIn("<header>\n            <span><small>Váš displej</small>", self.source)
         self.assertNotIn('class="display-settings-actions"', self.source)
@@ -622,7 +660,13 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("data-custom-image-template-upload", self.source)
         self.assertIn("data-custom-image-template-default", self.source)
         self.assertIn('_frontendAssetUrl("images/parrot-source.png")', self.source)
-        self.assertIn('preserveAspectRatio="none" image-rendering="auto"', self.source)
+        # A per-slot redither (already sized 1:1) stretches trivially with
+        # "none"; the fallback shown while that redither is still in flight
+        # (dithered for the full device, not this slot) crops instead so a
+        # grid of unevenly-shaped slots doesn't distort it a different amount
+        # per slot - see _blockCustomImage's own comment.
+        self.assertIn('const fit = slotSource ? "none" : "xMidYMid slice";', self.source)
+        self.assertIn('preserveAspectRatio="${fit}" image-rendering="auto"', self.source)
         self.assertIn("const active = this._activeCustomImageAsset?.();", self.source)
         self.assertIn("active ? this._paletteImageSrc?.(active) : this._customImageDataUrl", self.source)
         self.assertNotIn("_customImageNativeRaster", self.source)
@@ -683,8 +727,11 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('"[data-template-canvas-slot]:not(.is-auto-fit):not(.is-full-bleed)"', self.source)
         self.assertIn("_templateSetupRecipes() {", self.source)
         self.assertIn("_renderDisplayTemplateSetupDialog() {", self.source)
-        self.assertIn('class="display-template-settings-shortcut" data-display-template-configure="${this._escape(template.id)}"', self.source)
-        self.assertIn('<span>Nastavení šablony</span>', self.source)
+        # The header shortcut duplicated the "Nastaveno"/"Nenastaveno" status pill
+        # in the card's meta row and the "Upravit zdroje dat" option already inside
+        # the edit menu - removed per an explicit request to declutter the card.
+        self.assertNotIn('class="display-template-settings-shortcut" data-display-template-configure="${this._escape(template.id)}"', self.source)
+        self.assertNotIn('<span>Nastavení šablony</span>', self.source)
         self.assertIn("_hasEntityDomain(domain) {", self.source)
         self.assertNotIn('class="display-template-guide"', self.source)
         self.assertNotIn("_displayTemplateSetupGuide(template)", self.source)
@@ -902,7 +949,33 @@ class FrontendToolLibraryTests(unittest.TestCase):
         # sample data on every installation since.
         self.assertIn('this._hass.callService("weather", "get_forecasts"', self.source)
         self.assertIn('this._hass.callService("calendar", "get_events"', self.source)
-        self.assertIn('{ strip: [day(0), day(1), day(2), day(3)], group: "forecast", h: 0.29 },', self.source)
+        # The forecast strip's day count comes from the panel's own column
+        # width (design()'s dayCount) rather than always building four cells,
+        # so a wide wall panel shows more of the week instead of the same
+        # four days stretched wider - `columnWidth` accounts for the
+        # template splitting into two side-by-side columns on a wide-enough
+        # panel, where the strip only ever renders into roughly half of it.
+        self.assertIn("const twoColumn = width && height && width / height >= 1.35;", self.source)
+        self.assertIn("const columnWidth = twoColumn ? width / 2 : width;", self.source)
+        self.assertIn("const dayCount = !columnWidth ? 4", self.source)
+        self.assertIn("      : columnWidth < 100 ? 3", self.source)
+        self.assertIn("      : columnWidth < 150 ? 4", self.source)
+        self.assertIn("      : columnWidth < 200 ? 5", self.source)
+        self.assertIn("      : columnWidth < 250 ? 6", self.source)
+        self.assertIn("      : 7;", self.source)
+        # The icon, temperature and forecast rows also grow on a wide-but-not-
+        # taller panel (row heights are fractions of panel height, so width
+        # alone used to leave them unchanged) by borrowing height from the
+        # footer and date line instead.
+        self.assertIn("const t = columnWidth ? Math.max(0, Math.min(1, (columnWidth - 150) / (700 - 150))) : 0;", self.source)
+        self.assertIn('{ strip: Array.from({ length: dayCount }, (_, i) => day(i)), group: "forecast", h: lerp(0.29, 0.375) },', self.source)
+        # A wide wall panel has height left over past a full week of forecast
+        # cards; these cells fill it with more of what the same weather.*
+        # entity already carries instead of leaving it blank, arriving one at
+        # a time as columnWidth grows rather than all three at once.
+        self.assertIn('if (columnWidth >= 260) detailCells.push({ icon: "water-percent", label: "VLHKOST", value: v(5, "46 %") });', self.source)
+        self.assertIn('if (columnWidth >= 380) detailCells.push({ icon: "fan", label: "VÍTR", value: v(6, "12 km/h") });', self.source)
+        self.assertIn('if (columnWidth >= 500) detailCells.push({ icon: "gauge", label: "TLAK", value: v(7, "1013 hPa") });', self.source)
         # The thumbnail a tile remembers is the image the panel was actually given,
         # not a second rendering of its own.
         self.assertIn("const image = await this._renderCurrentDisplayTemplateImage(device);", self.source)
@@ -1483,7 +1556,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
     def test_czech_spot_price_template_autobinds_and_has_setup_guide(self):
         self.assertIn('id: "cz_spot_prices"', self.source)
         self.assertIn('title: "České spotové ceny"', self.source)
-        self.assertIn('design: ({ v, series }) => {', self.source)
+        self.assertIn('design: ({ v, series, width, height }) => {', self.source)
         self.assertIn('https://github.com/rnovacek/homeassistant_cz_energy_spot_prices', self.source)
         self.assertIn('"sensor.aktualni_spotova_cena_elektriny"', self.source)
         self.assertIn('"Aktuální spotová cena elektřiny"', self.source)
@@ -1698,7 +1771,13 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".display-template-dropzone .template-dithered-preview", self.source)
         self.assertIn(".display-template-tile-preview .user-template-captured-preview", self.source)
         self.assertIn("{image-rendering:auto!important}", self.source)
-        self.assertIn('preserveAspectRatio="none" image-rendering="auto"', self.source)
+        # A per-slot redither (already sized 1:1) stretches trivially with
+        # "none"; the fallback shown while that redither is still in flight
+        # (dithered for the full device, not this slot) crops instead so a
+        # grid of unevenly-shaped slots doesn't distort it a different amount
+        # per slot - see _blockCustomImage's own comment.
+        self.assertIn('const fit = slotSource ? "none" : "xMidYMid slice";', self.source)
+        self.assertIn('preserveAspectRatio="${fit}" image-rendering="auto"', self.source)
 
     def test_template_studio_has_undo_redo_and_keyboard_editing(self):
         self.assertIn('data-template-history="undo"', self.source)
@@ -1799,8 +1878,6 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('row.color = "yellow"', self.source)
         self.assertIn('footer.color = "red"', self.source)
         self.assertIn('return this._fourColorTemplateRows(rows);', self.source)
-        self.assertIn('this._templateInk("yellow")', self.source)
-        self.assertIn('aria-label="Intenzita srážek"', self.source)
 
 
 if __name__ == "__main__":

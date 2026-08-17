@@ -25,19 +25,25 @@ export const template = {
     ],
     note: "Ikony Napouštění/Praní/Máchání/Odstřeďování/Hotovo pod nadpisem jsou pevná grafika téhle šablony - nesledují skutečnou fázi cyklu, tu nese jen textový Program a čas.",
   },
-  design: ({ v }) => [
-    { text: "Pračka", h: 0.075, size: 0.055, bold: true },
-    { text: v(0, "Bavlna 60°"), h: 0.09, size: 0.062, bold: true, color: "red" },
-    { rule: true, h: 0.02 },
-    { steps: [
-      { label: "Napouštění", done: true },
-      { label: "Praní", done: true },
-      { label: "Máchání", done: true, color: "red" },
-      { label: "Odstřeďování" },
-      { label: "Hotovo" },
-    ], h: 0.4 },
-    { stat: { value: v(1, "01:15"), caption: "zbývá" }, h: 0.2 },
-    { flex: true },
-    { footer: [{ label: "SKONČÍ V", value: v(2, "14:30") }], h: 0.13 },
-  ],
+  design: ({ v, width, height }) => {
+    // See home.js for why sqrt(area) rather than width alone.
+    const area = width && height ? width * height : 296 * 128;
+    const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
+    const lerp = (from, to) => from + (to - from) * t;
+    return [
+      { text: "Pračka", h: lerp(0.075, 0.05), size: 0.055, bold: true },
+      { text: v(0, "Bavlna 60°"), h: lerp(0.09, 0.07), size: 0.062, bold: true, color: "red" },
+      { rule: true, h: 0.02 },
+      { steps: [
+        { label: "Napouštění", done: true },
+        { label: "Praní", done: true },
+        { label: "Máchání", done: true, color: "red" },
+        { label: "Odstřeďování" },
+        { label: "Hotovo" },
+      ], h: lerp(0.4, 0.44) },
+      { stat: { value: v(1, "01:15"), caption: "zbývá" }, h: lerp(0.2, 0.24) },
+      { flex: true },
+      { footer: [{ label: "SKONČÍ V", value: v(2, "14:30") }], h: lerp(0.13, 0.07) },
+    ];
+  },
 };

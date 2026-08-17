@@ -74,6 +74,179 @@ const ICON_GEOMETRY = new Map();
 const ICON_REQUESTS = new Map();
 let TEMPLATE_ICONS_WARMED = false;
 
+// Dithered weather-icon PNGs, keyed by "name:size:supportsYellow:night" -
+// shared module-wide for the same reason ICON_GEOMETRY is: switching
+// templates in the designer should draw from a warm cache, not re-rasterise
+// and re-dither the same handful of condition icons on every visit.
+const WEATHER_ICON_IMAGE_CACHE = new Map();
+const WEATHER_ICON_IMAGE_REQUESTS = new Map();
+
+// In-place Floyd-Steinberg error diffusion against an arbitrary small
+// palette. Pixels below the alpha threshold are treated as fully
+// transparent output (the icon's true silhouette); everything else is
+// flattened onto white before its error is computed, since a colour cannot
+// be diffused sensibly while still partially transparent.
+// Only the achromatic parts (the cloud, rain, snow, the wind swoosh - all
+// black) go through error diffusion at all. The sun/moon/lightning-bolt
+// tint fills flat ink instead: it is meant to read as one bold, solid
+// colour, not a shaded tone - the moon being a paler yellow than the sun in
+// Home Assistant's own artwork is a *difference between two icons*, not
+// something to represent as a lighter shade of the same icon the way the
+// cloud's two grey tones are, so it skips the halftone treatment entirely.
+// Which treatment a pixel gets is decided by its own saturation (read
+// before any error is added, so drifting error can never itself flip a
+// pixel from one family to the other): plain Euclidean RGB distance puts a
+// *mid*-grey numerically closer to a red like (227,27,27) than to either
+// black or white (red's high red channel and low green/blue land it nearer
+// the midpoint than either extreme does), so an unrestricted nearest-colour
+// search would dither a flat grey fill into stray red flecks with no red
+// anywhere in the source - gating on saturation avoids that the same way it
+// lets the warm fill skip dithering altogether. Port of quantize_bwr_
+// dithered in svg_render.py.
+function ditherToEinkPalette(imageData, ink) {
+  const { data, width, height } = imageData;
+  const SATURATION_THRESHOLD = 40;
+  const nearestGrey = (r, g, b) => {
+    let best = [0, 0, 0];
+    let bestDistance = Infinity;
+    for (const candidate of [[0, 0, 0], [255, 255, 255]]) {
+      const dr = r - candidate[0];
+      const dg = g - candidate[1];
+      const db = b - candidate[2];
+      const distance = dr * dr + dg * dg + db * db;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = candidate;
+      }
+    }
+    return best;
+  };
+  // Diffused error lives in its own buffers rather than being folded
+  // straight back into `data` (the more obvious approach): saturation has
+  // to be read from each pixel's true original colour, and mutating `data`
+  // in place would mean a pixel downstream of an already-diffused neighbour
+  // reads *that* neighbour's drifted colour instead of its own - the same
+  // family-flips-from-accumulated-error bug this whole restriction exists to
+  // avoid. Only the current and next row are ever touched, so nothing older
+  // needs keeping. A warm pixel neither reads nor contributes error, since
+  // it is not being rounded at all.
+  const zeroRow = () => new Float64Array(width * 3);
+  let currentRowError = zeroRow();
+  let nextRowError = zeroRow();
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      if (data[index + 3] < 128) {
+        data[index] = 255; data[index + 1] = 255; data[index + 2] = 255; data[index + 3] = 0;
+        continue;
+      }
+      const sourceR = data[index], sourceG = data[index + 1], sourceB = data[index + 2];
+      const saturation = Math.max(sourceR, sourceG, sourceB) - Math.min(sourceR, sourceG, sourceB);
+      if (saturation > SATURATION_THRESHOLD) {
+        data[index] = ink[0]; data[index + 1] = ink[1]; data[index + 2] = ink[2]; data[index + 3] = 255;
+        continue;
+      }
+      const errorIndex = x * 3;
+      const r = Math.min(255, Math.max(0, sourceR + currentRowError[errorIndex]));
+      const g = Math.min(255, Math.max(0, sourceG + currentRowError[errorIndex + 1]));
+      const b = Math.min(255, Math.max(0, sourceB + currentRowError[errorIndex + 2]));
+      const [newR, newG, newB] = nearestGrey(r, g, b);
+      data[index] = newR; data[index + 1] = newG; data[index + 2] = newB; data[index + 3] = 255;
+      const errorR = r - newR, errorG = g - newG, errorB = b - newB;
+      if (x + 1 < width) {
+        const i = errorIndex + 3;
+        currentRowError[i] += errorR * 7 / 16; currentRowError[i + 1] += errorG * 7 / 16; currentRowError[i + 2] += errorB * 7 / 16;
+      }
+      if (x > 0) {
+        const i = errorIndex - 3;
+        nextRowError[i] += errorR * 3 / 16; nextRowError[i + 1] += errorG * 3 / 16; nextRowError[i + 2] += errorB * 3 / 16;
+      }
+      nextRowError[errorIndex] += errorR * 5 / 16; nextRowError[errorIndex + 1] += errorG * 5 / 16; nextRowError[errorIndex + 2] += errorB * 5 / 16;
+      if (x + 1 < width) {
+        const i = errorIndex + 3;
+        nextRowError[i] += errorR * 1 / 16; nextRowError[i + 1] += errorG * 1 / 16; nextRowError[i + 2] += errorB * 1 / 16;
+      }
+    }
+    currentRowError = nextRowError;
+    nextRowError = zeroRow();
+  }
+}
+
+// Home Assistant's own weather glyphs, copied verbatim from its frontend
+// (src/data/weather.ts - getWeatherStateSVG + weatherSVGStyles): same paths,
+// same 17x17 viewBox, same fill colours. `_svgIcon` draws exactly these
+// names - see WEATHER_ICON_TO_CONDITION below - as this real artwork rather
+// than the generic flat MDI glyph every other icon in the app still uses.
+// This vector markup is never sent to the panel directly, though: it is
+// rasterised on an offscreen canvas and dithered (Floyd-Steinberg) to the
+// e-ink palette by _prepareWeatherIconImage - the same "treat it as an image
+// and convert it like one" path a camera snapshot goes through - since a
+// flat threshold would erase the paler fills here (#f9f9f9 cloud-front,
+// #fcf497 moon) outright.
+const WEATHER_SUN_COLOR = "#fdd93c";
+const WEATHER_MOON_COLOR = "#fcf497";
+const WEATHER_CLOUD_BACK_COLOR = "#d4d4d4";
+const WEATHER_CLOUD_FRONT_COLOR = "#f9f9f9";
+const WEATHER_SNOW_FILL = "#f9f9f9";
+
+const WEATHER_SUN_D ="m 14.39303,8.4033507 c 0,3.3114723 -2.684145,5.9956173 -5.9956169,5.9956173 -3.3114716,0 -5.9956168,-2.684145 -5.9956168,-5.9956173 0,-3.311471 2.6841452,-5.995617 5.9956168,-5.995617 3.3114719,0 5.9956169,2.684146 5.9956169,5.995617";
+const WEATHER_MOON_D = "m 13.502891,11.382935 c -1.011285,1.859223 -2.976664,3.121381 -5.2405751,3.121381 -3.289929,0 -5.953329,-2.663833 -5.953329,-5.9537625 0,-2.263911 1.261724,-4.228856 3.120948,-5.240575 -0.452782,0.842738 -0.712753,1.806363 -0.712753,2.832381 0,3.289928 2.663833,5.9533275 5.9533291,5.9533275 1.026017,0 1.989641,-0.259969 2.83238,-0.712752";
+const WEATHER_PARTLY_DISC_D = "m14.981 4.2112c0 1.9244-1.56 3.4844-3.484 3.4844-1.9244 0-3.4844-1.56-3.4844-3.4844s1.56-3.484 3.4844-3.484c1.924 0 3.484 1.5596 3.484 3.484";
+const WEATHER_CLOUD_BACK_D = "m3.8863 5.035c-0.54892 0.16898-1.04 0.46637-1.4372 0.8636-0.63077 0.63041-1.0206 1.4933-1.0206 2.455 0 1.9251 1.5589 3.4682 3.4837 3.4682h6.9688c1.9251 0 3.484-1.5981 3.484-3.5232 0-1.9251-1.5589-3.5232-3.484-3.5232h-1.0834c-0.25294-1.6916-1.6986-2.9083-3.4463-2.9083-1.7995 0-3.2805 1.4153-3.465 3.1679";
+const WEATHER_CLOUD_FRONT_D = "m4.1996 7.6995c-0.33902 0.10407-0.64276 0.28787-0.88794 0.5334-0.39017 0.38982-0.63147 0.92322-0.63147 1.5176 0 1.1896 0.96414 2.1431 2.1537 2.1431h4.3071c1.1896 0 2.153-0.98742 2.153-2.1777 0-1.1896-0.96344-2.1777-2.153-2.1777h-0.66992c-0.15593-1.0449-1.0499-1.7974-2.1297-1.7974-1.112 0-2.0274 0.87524-2.1417 1.9586";
+const WEATHER_RAIN_D = [
+  "m5.2852 14.734c-0.22401 0.24765-0.57115 0.2988-0.77505 0.11395-0.20391-0.1845-0.18732-0.53481 0.036689-0.78281 0.14817-0.16298 0.59126-0.32914 0.87559-0.42369 0.12453-0.04092 0.22684 0.05186 0.19791 0.17956-0.065617 0.2921-0.18732 0.74965-0.33514 0.91299",
+  "m11.257 14.163c-0.22437 0.24765-0.57115 0.2988-0.77505 0.11395-0.2039-0.1845-0.18768-0.53481 0.03669-0.78281 0.14817-0.16298 0.59126-0.32914 0.8756-0.42369 0.12453-0.04092 0.22684 0.05186 0.19791 0.17956-0.06562 0.2921-0.18732 0.74965-0.33514 0.91299",
+  "m8.432 15.878c-0.15452 0.17039-0.3937 0.20567-0.53446 0.07867-0.14041-0.12735-0.12876-0.36865 0.025753-0.53975 0.10195-0.11218 0.40711-0.22684 0.60325-0.29175 0.085725-0.02858 0.15628 0.03563 0.13652 0.12382-0.045508 0.20108-0.12912 0.51647-0.23107 0.629",
+  "m7.9991 14.118c-0.19226 0.21237-0.49001 0.25612-0.66499 0.09737-0.17462-0.15804-0.16051-0.45861 0.03175-0.67098 0.12665-0.14005 0.50729-0.28293 0.75071-0.36336 0.10689-0.03563 0.19473 0.0441 0.17004 0.15346-0.056092 0.25082-0.16051 0.64347-0.28751 0.78352",
+];
+const WEATHER_POURING_EXTRA_D = [
+  "m10.648 16.448c-0.19226 0.21449-0.49001 0.25894-0.66499 0.09878-0.17498-0.16016-0.16087-0.4639 0.03175-0.67874 0.12665-0.14146 0.50694-0.2854 0.75071-0.36724 0.10689-0.03563 0.19473 0.0448 0.17004 0.15558-0.05645 0.25365-0.16051 0.65017-0.28751 0.79163",
+  "m5.9383 16.658c-0.22437 0.25012-0.5715 0.30162-0.77505 0.11501-0.20391-0.18627-0.18768-0.54046 0.036689-0.79093 0.14817-0.1651 0.59126-0.33267 0.87559-0.42827 0.12418-0.04127 0.22648 0.05221 0.19791 0.18168-0.065617 0.29528-0.18732 0.75741-0.33514 0.92251",
+];
+const WEATHER_WIND_D = [
+  "m 13.59616,15.30968 c 0,0 -0.09137,-0.0071 -0.250472,-0.0187 -0.158045,-0.01235 -0.381353,-0.02893 -0.64382,-0.05715 -0.262466,-0.02716 -0.564444,-0.06385 -0.877358,-0.124531 -0.156986,-0.03034 -0.315383,-0.06844 -0.473781,-0.111478 -0.157691,-0.04551 -0.313266,-0.09842 -0.463902,-0.161219 l -0.267406,-0.0949 c -0.09984,-0.02646 -0.205669,-0.04904 -0.305153,-0.06738 -0.193322,-0.02716 -0.3838218,-0.03316 -0.5640912,-0.02011 -0.3626556,0.02611 -0.6847417,0.119239 -0.94615,0.226483 -0.2617611,0.108656 -0.4642556,0.230364 -0.600075,0.324203 -0.1358195,0.09419 -0.2049639,0.160514 -0.2049639,0.160514 0,0 0.089958,-0.01623 0.24765,-0.04445 0.1559278,-0.02575 0.3764139,-0.06174 0.6367639,-0.08714 0.2596444,-0.02646 0.5591527,-0.0441 0.8678333,-0.02328 0.076905,0.0035 0.1538111,0.01658 0.2321278,0.02293 0.077611,0.01058 0.1534581,0.02893 0.2314221,0.04022 0.07267,0.01834 0.1397,0.03986 0.213078,0.05644 l 0.238125,0.08925 c 0.09207,0.03281 0.183444,0.07055 0.275872,0.09878 0.09243,0.0261 0.185208,0.05327 0.277636,0.07161 0.184856,0.0388 0.367947,0.06174 0.543983,0.0702 0.353131,0.01905 0.678745,-0.01341 0.951442,-0.06456 0.27305,-0.05292 0.494595,-0.123119 0.646642,-0.181681 0.152047,-0.05785 0.234597,-0.104069 0.234597,-0.104069",
+  "m 4.7519154,13.905801 c 0,0 0.091369,-0.0032 0.2511778,-0.0092 0.1580444,-0.0064 0.3820583,-0.01446 0.6455833,-0.03281 0.2631722,-0.01729 0.5662083,-0.04269 0.8812389,-0.09137 0.1576916,-0.02434 0.3175,-0.05609 0.4776611,-0.09384 0.1591027,-0.03951 0.3167944,-0.08643 0.4699,-0.14358 l 0.2702277,-0.08467 c 0.1008945,-0.02222 0.2074334,-0.04127 0.3072695,-0.05574 0.1943805,-0.01976 0.3848805,-0.0187 0.5651499,0.0014 0.3608917,0.03951 0.67945,0.144639 0.936625,0.261761 0.2575278,0.118534 0.4554364,0.247297 0.5873754,0.346781 0.132291,0.09913 0.198966,0.168275 0.198966,0.168275 0,0 -0.08925,-0.01976 -0.245886,-0.05397 C 9.9423347,14.087088 9.7232597,14.042988 9.4639681,14.00736 9.2057347,13.97173 8.9072848,13.94245 8.5978986,13.95162 c -0.077258,7.06e-4 -0.1541638,0.01058 -0.2328333,0.01411 -0.077964,0.0078 -0.1545166,0.02328 -0.2331861,0.03175 -0.073025,0.01588 -0.1404055,0.03422 -0.2141361,0.04798 l -0.2420055,0.08008 c -0.093486,0.02963 -0.1859139,0.06421 -0.2794,0.0889 C 7.3028516,14.23666 7.2093653,14.2603 7.116232,14.27512 6.9303181,14.30722 6.7465209,14.3231 6.5697792,14.32486 6.2166487,14.33046 5.8924459,14.28605 5.6218654,14.224318 5.3505793,14.161565 5.1318571,14.082895 4.9822793,14.01869 4.8327015,13.95519 4.7519154,13.905801 4.7519154,13.905801",
+];
+const WEATHER_SNOW_D = [
+  "m 8.4319893,15.348341 c 0,0.257881 -0.209197,0.467079 -0.467078,0.467079 -0.258586,0 -0.46743,-0.209198 -0.46743,-0.467079 0,-0.258233 0.208844,-0.467431 0.46743,-0.467431 0.257881,0 0.467078,0.209198 0.467078,0.467431",
+  "m 11.263878,14.358553 c 0,0.364067 -0.295275,0.659694 -0.659695,0.659694 -0.364419,0 -0.6596937,-0.295627 -0.6596937,-0.659694 0,-0.364419 0.2952747,-0.659694 0.6596937,-0.659694 0.36442,0 0.659695,0.295275 0.659695,0.659694",
+  "m 5.3252173,13.69847 c 0,0.364419 -0.295275,0.660047 -0.659695,0.660047 -0.364067,0 -0.659694,-0.295628 -0.659694,-0.660047 0,-0.364067 0.295627,-0.659694 0.659694,-0.659694 0.36442,0 0.659695,0.295627 0.659695,0.659694",
+];
+const WEATHER_LIGHTNING_D = "m 9.9252695,10.935875 -1.6483986,2.341014 1.1170184,0.05929 -1.2169864,2.02141 3.0450261,-2.616159 H 9.8864918 L 10.97937,11.294651 10.700323,10.79794 h -0.508706 l -0.2663475,0.137936";
+
+// Condition-name sets, copied from cloudyStates/rainStates/windyStates/
+// snowyStates/lightningStates in weather.ts - Home Assistant's own internal
+// `weather.*` condition strings, not the panel's `weather-*` glyph names.
+const WEATHER_CLOUDY_STATES = new Set([
+  "partlycloudy", "cloudy", "fog", "windy", "windy-variant", "hail", "rainy",
+  "snowy", "snowy-rainy", "pouring", "lightning", "lightning-rainy",
+]);
+const WEATHER_RAIN_STATES = new Set(["hail", "rainy", "pouring", "lightning-rainy"]);
+const WEATHER_WINDY_STATES = new Set(["windy", "windy-variant"]);
+const WEATHER_SNOWY_STATES = new Set(["snowy", "snowy-rainy"]);
+const WEATHER_LIGHTNING_STATES = new Set(["lightning", "lightning-rainy"]);
+
+// The panel's `weather-*` icon glyph name for each condition (see
+// `_weatherConditionIcon` below and its mirror `_WEATHER_CONDITION_ICON_NAMES`
+// in render.py), inverted so `_svgIcon` can gate on the glyph name every
+// other icon call already uses and still know which condition to compose.
+const WEATHER_ICON_TO_CONDITION = new Map([
+  ["weather-night", "clear-night"],
+  ["weather-cloudy", "cloudy"],
+  ["weather-fog", "fog"],
+  ["weather-hail", "hail"],
+  ["weather-lightning", "lightning"],
+  ["weather-lightning-rainy", "lightning-rainy"],
+  ["weather-partly-cloudy", "partlycloudy"],
+  ["weather-pouring", "pouring"],
+  ["weather-rainy", "rainy"],
+  ["weather-snowy", "snowy"],
+  ["weather-snowy-rainy", "snowy-rainy"],
+  ["weather-sunny", "sunny"],
+  ["weather-windy", "windy"],
+]);
+
 export const templateSvgMixin = {
   // ---------------------------------------------------------------- icons ---
 
@@ -152,12 +325,16 @@ export const templateSvgMixin = {
   // Every block kind that can carry icons has to be walked here. _svgIcon draws
   // only what this preloaded, so a cell kind missing from this list renders as a
   // silent hole in the layout rather than as an error.
+  // Weather condition glyphs (WEATHER_ICON_TO_CONDITION) are excluded: they
+  // draw from vendored Home Assistant path data, not a resolved ha-icon, so
+  // there is nothing here for _preloadTemplateIcons/_warmTemplateIcons/
+  // _requestTemplateIcons to fetch or wait on for them.
   _templateIconNames(rows) {
     const names = new Set();
-    const cells = (list) => (list || []).forEach((cell) => cell?.icon && names.add(cell.icon));
+    const cells = (list) => (list || []).forEach((cell) => cell?.icon && !WEATHER_ICON_TO_CONDITION.has(cell.icon) && names.add(cell.icon));
     rows.forEach((row) => {
       if (!row) return;
-      if (row.icon) names.add(row.icon);
+      if (row.icon && !WEATHER_ICON_TO_CONDITION.has(row.icon)) names.add(row.icon);
       cells(row.footer);
       cells(row.list);
       cells(row.grid);
@@ -195,10 +372,9 @@ export const templateSvgMixin = {
     const showPrecipitation = this._displayTemplateConfig?.meteoradar_show_precipitation !== false;
     const dottedLight = this._displayTemplateConfig?.meteoradar_dotted_light !== false;
     const showWind = this._displayTemplateConfig?.meteoradar_show_wind === true;
-    const locationAddress = this._meteoradarHomeAddress || this._displayTemplateConfig?.meteoradar_home_address || "";
     const preserveYellow = this._displaySupportsYellow?.() === true;
 
-    const key = `${Math.round(width)}x${Math.round(height)}_${country}_p${showPrecipitation}_d${dottedLight}_w${showWind}_h${locationAddress}_y${preserveYellow}`;
+    const key = `${Math.round(width)}x${Math.round(height)}_${country}_p${showPrecipitation}_d${dottedLight}_w${showWind}_y${preserveYellow}`;
     const cached = this._meteoradarImageCache;
     const age = cached ? Date.now() - cached.fetchedAt : Infinity;
     const ttl = cached?.dataUrl ? METEORADAR_CACHE_MS : METEORADAR_RETRY_MS;
@@ -213,7 +389,6 @@ export const templateSvgMixin = {
         show_precipitation: showPrecipitation,
         dotted_light: dottedLight,
         show_wind: showWind,
-        location_address: locationAddress,
         preserve_yellow: preserveYellow,
       });
       if (!result?.ok || !result?.image) {
@@ -362,10 +537,18 @@ export const templateSvgMixin = {
     // exported image must start as a completely white canvas.
     if (template.id === "blank" || (template.user_created && !template.base_template_id)) return "";
     const baseTemplate = this._templateBaseDefinition(template);
-    const rows = this._templateSvgRows(baseTemplate);
+    const rows = this._templateSvgRows(baseTemplate, width, height);
     this._requestTemplateIcons(rows);
     this._requestTemplateRadarImage(rows, width, height);
     this._warmTemplateIcons();
+    // Weather icons are not in ICON_GEOMETRY (they never go through ha-icon
+    // at all - see _templateIconNames), so _templateSvgThumbnail's own
+    // "is every icon resolved yet" check below could not see them and cached
+    // whatever this pass drew even when a weather-* row's async raster+dither
+    // hadn't landed yet, permanently freezing the catalog tile on a blank
+    // icon. Reset here and let _svgWeatherIcon clear it on any cache miss,
+    // so the caching decision reflects what this specific pass actually drew.
+    this._templateAllWeatherIconsResolved = true;
     return this._applyTemplateAdjustmentsToSvgMarkup(this._layoutTemplateSvg(rows, width, height), template);
   },
 
@@ -396,8 +579,12 @@ export const templateSvgMixin = {
       + `<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>`
       + markup
       + `</svg>`;
-    const rows = template ? this._templateSvgRows(this._templateBaseDefinition(template)) : [];
-    if (template?.id !== "custom_image" && !template?.user_created && !this._templateIconNames(rows).some((name) => !ICON_GEOMETRY.has(name))) {
+    const rows = template ? this._templateSvgRows(this._templateBaseDefinition(template), width, height) : [];
+    if (
+      template?.id !== "custom_image" && !template?.user_created
+      && !this._templateIconNames(rows).some((name) => !ICON_GEOMETRY.has(name))
+      && this._templateAllWeatherIconsResolved !== false
+    ) {
       this._templateThumbnailMarkupCache.set(cacheKey, thumbnail);
       if (this._templateThumbnailMarkupCache.size > 96) this._templateThumbnailMarkupCache.delete(this._templateThumbnailMarkupCache.keys().next().value);
     }
@@ -427,7 +614,13 @@ export const templateSvgMixin = {
   _svgReadableText(value, size, maxWidth, bold, minSize = MIN_READABLE_FONT_SIZE) {
     const original = String(value ?? "");
     const fontSize = this._svgFitFontSize(original, size, maxWidth, bold, minSize);
-    if (!maxWidth || this._svgTextWidth(original, fontSize, bold) <= maxWidth) return { text: original, fontSize };
+    // _svgFitFontSize derives fontSize as size * (maxWidth / estimatedWidth), so
+    // re-measuring at that fontSize should land back on maxWidth exactly - but
+    // floating point only gets close (55.20000000000001 vs 55.2), and a strict
+    // <= turned that into a real string, e.g. "0,86 Kč" on a narrow price tag,
+    // getting needlessly ellipsised to "0,86…" despite fitting. A tolerance
+    // absorbs the rounding error without allowing any real overflow through.
+    if (!maxWidth || this._svgTextWidth(original, fontSize, bold) <= maxWidth + 0.5) return { text: original, fontSize };
     const ellipsis = "…";
     let clipped = original;
     while (clipped.length > 1 && this._svgTextWidth(`${clipped}${ellipsis}`, fontSize, bold) > maxWidth) clipped = clipped.slice(0, -1);
@@ -447,6 +640,10 @@ export const templateSvgMixin = {
   },
 
   _svgIcon(name, cx, cy, size, color = BLACK) {
+    if (WEATHER_ICON_TO_CONDITION.has(name)) {
+      const weather = this._svgWeatherIcon(name, cx, cy, size);
+      if (weather) return weather;
+    }
     const resolved = ICON_GEOMETRY.get(name);
     if (!resolved?.inner) return "";
     const x = cx - size / 2;
@@ -456,6 +653,148 @@ export const templateSvgMixin = {
     // color attribute makes any fill="currentColor" inside resolve correctly.
     return `<svg x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${size.toFixed(2)}" height="${size.toFixed(2)}"`
       + ` viewBox="${resolved.viewBox}" fill="${color}" color="${color}">${resolved.inner}</svg>`;
+  },
+
+  // Home Assistant's own weather glyph, drawn as a dithered raster <image>
+  // rather than vector paths - the same "treat it as an image and convert it
+  // like one" path a camera snapshot or the meteoradar map goes through, not
+  // the panel's own flat-coloured vector shapes. Reducing full-colour art
+  // (real fill colours: WEATHER_SUN_COLOR etc.) to 2-4 e-ink inks with a
+  // plain per-pixel threshold would erase every pale fill (#f9f9f9
+  // cloud-front, #fcf497 moon) outright, so the rasterised icon is run
+  // through Floyd-Steinberg error diffusion instead (_ditherToEinkPalette) -
+  // see svg_blocks.weather_icon_image in Python for the same conversion on
+  // the backend. Rasterising happens on an offscreen canvas, which is
+  // asynchronous by nature (Image.decode/onload), so this mirrors the
+  // existing ha-icon pattern: a resolved image is cached and drawn
+  // immediately; the first request for a not-yet-seen (name, size, palette)
+  // combination returns "" and kicks off _prepareWeatherIconImage, which
+  // caches the result and schedules a repaint once it lands.
+  _svgWeatherIcon(name, cx, cy, size, night = false) {
+    if (!WEATHER_ICON_TO_CONDITION.has(name)) return "";
+    const roundedSize = Math.max(1, Math.round(size));
+    const supportsYellow = this._displaySupportsYellow?.() === true;
+    const key = `${name}:${roundedSize}:${supportsYellow}:${night}`;
+    const dataUrl = WEATHER_ICON_IMAGE_CACHE.get(key);
+    const x = cx - size / 2;
+    const y = cy - size / 2;
+    if (dataUrl) {
+      return `<image x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${size.toFixed(2)}" height="${size.toFixed(2)}"`
+        + ` href="${dataUrl}" image-rendering="pixelated"></image>`;
+    }
+    // Told _templateSvgPreviewMarkup this pass drew an incomplete picture,
+    // so _templateSvgThumbnail's cache (which has no other way to know a
+    // weather-* icon is still pending - see that flag's own comment) does
+    // not freeze on this blank result.
+    this._templateAllWeatherIconsResolved = false;
+    if (!WEATHER_ICON_IMAGE_REQUESTS.has(key)) {
+      const request = this._prepareWeatherIconImage(name, roundedSize, supportsYellow, night)
+        .then((prepared) => {
+          WEATHER_ICON_IMAGE_REQUESTS.delete(key);
+          if (prepared) {
+            WEATHER_ICON_IMAGE_CACHE.set(key, prepared);
+            this._scheduleTemplateIconRepaint();
+          }
+        })
+        .catch(() => WEATHER_ICON_IMAGE_REQUESTS.delete(key));
+      WEATHER_ICON_IMAGE_REQUESTS.set(key, request);
+    }
+    return "";
+  },
+
+  // Home Assistant's own condition -> parts mapping (getWeatherStateSVG),
+  // drawn in its own order (sun/moon behind the cloud, rain/snow/lightning
+  // on top of it) with the real fill colours - this is the rasteriser's
+  // input, never sent to the panel as vector markup itself. Every part now
+  // also gets a black outline: Home Assistant's own fills lean on
+  // antialiasing and a coloured card background to read as shapes, but at
+  // forecast-strip size (roughly 20-40px) a dithered fill alone - especially
+  // the paler ones - comes out as scattered noise with no silhouette at all.
+  // The outline gives the dithering something to sit inside instead of
+  // having to carry the whole icon's legibility by itself.
+  _weatherIconVectorSource(condition, night, size) {
+    const parts = [];
+    // Widths are chosen per shape family rather than one constant: the big
+    // shapes (cloud, sun, moon) can carry a properly bold line without the
+    // outline itself swallowing the shape, while the small accent marks
+    // (rain, snow, wind, the lightning bolt) stay thinner so the stroke does
+    // not overwhelm a mark only a couple of pixels across at forecast-strip
+    // size.
+    if (condition === "sunny") {
+      parts.push([WEATHER_SUN_D, WEATHER_SUN_COLOR, 1.5]);
+    } else if (condition === "clear-night") {
+      parts.push([WEATHER_MOON_D, WEATHER_MOON_COLOR, 1.5]);
+    } else if (condition === "partlycloudy") {
+      parts.push([WEATHER_PARTLY_DISC_D, night ? WEATHER_MOON_COLOR : WEATHER_SUN_COLOR, 1.5]);
+    }
+    if (WEATHER_CLOUDY_STATES.has(condition)) {
+      parts.push([WEATHER_CLOUD_BACK_D, WEATHER_CLOUD_BACK_COLOR, 1.5]);
+      parts.push([WEATHER_CLOUD_FRONT_D, WEATHER_CLOUD_FRONT_COLOR, 1.1]);
+    }
+    // Drawn in black, not Home Assistant's own #30b3ff blue: ditherToEinkPalette's
+    // nearest-colour search only ever considers black/white for an achromatic
+    // source pixel or ink/white for a warm one (see its own comment for why
+    // an unrestricted search can't be trusted) - blue belongs to neither
+    // family, and the rain drops are small, already legible marks with
+    // nothing that needs shading anyway.
+    if (WEATHER_RAIN_STATES.has(condition)) {
+      for (const d of WEATHER_RAIN_D) parts.push([d, BLACK, 0.85]);
+    }
+    if (condition === "pouring") {
+      for (const d of WEATHER_POURING_EXTRA_D) parts.push([d, BLACK, 0.85]);
+    }
+    if (WEATHER_WINDY_STATES.has(condition)) {
+      for (const d of WEATHER_WIND_D) parts.push([d, WEATHER_CLOUD_BACK_COLOR, 0.85]);
+    }
+    if (WEATHER_SNOWY_STATES.has(condition)) {
+      for (const d of WEATHER_SNOW_D) parts.push([d, WEATHER_SNOW_FILL, 0.85]);
+    }
+    if (WEATHER_LIGHTNING_STATES.has(condition)) {
+      parts.push([WEATHER_LIGHTNING_D, WEATHER_SUN_COLOR, 0.85]);
+    }
+    if (!parts.length) return "";
+    const shapes = parts.map(([d, fill, strokeWidth]) =>
+      `<path d="${d}" fill="${fill}" stroke="${BLACK}" stroke-width="${strokeWidth}" paint-order="stroke"></path>`).join("");
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 17 17">${shapes}</svg>`;
+  },
+
+  // Rasterises the vector source on an offscreen canvas, dithers it to the
+  // display's actual palette and re-encodes as a PNG data: URL. Returns null
+  // on any failure (image decode error, no canvas support) so the caller
+  // just leaves the icon blank rather than caching a broken result.
+  async _prepareWeatherIconImage(name, size, supportsYellow, night) {
+    const condition = WEATHER_ICON_TO_CONDITION.get(name);
+    const svg = condition ? this._weatherIconVectorSource(condition, night, size) : "";
+    if (!svg) return null;
+    const image = new Image();
+    image.decoding = "sync";
+    const loaded = new Promise((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = reject;
+    });
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    try {
+      await loaded;
+    } catch (_error) {
+      return null;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.clearRect(0, 0, size, size);
+    ctx.drawImage(image, 0, 0, size, size);
+    let imageData;
+    try {
+      imageData = ctx.getImageData(0, 0, size, size);
+    } catch (_error) {
+      return null;
+    }
+    const ink = supportsYellow ? [244, 196, 0] : [227, 27, 27];
+    ditherToEinkPalette(imageData, ink);
+    ctx.putImageData(imageData, 0, 0);
+    return canvas.toDataURL("image/png");
   },
 
   // Turns the declarative row list into positioned SVG markup filling width x height.
@@ -934,13 +1273,35 @@ export const templateSvgMixin = {
     return parts.join("");
   },
 
+  // A customImage row's default src (see customImage() in _templateSvgSpecs) is
+  // dithered once for the whole display - correct when the image fills the
+  // panel, but a moiré mess once that bitmap is scaled down into one slot of a
+  // multi-template layout, because a dither pattern sized for the full panel
+  // does not survive being shrunk. _customImageSlotDitherEntry keeps a bitmap
+  // re-dithered at each slot size actually seen, read live the same way
+  // _blockRadarMap reads whatever _ensureTemplateRadarImage last cached instead
+  // of a value baked into the row at build time.
   _blockCustomImage(row, box) {
-    const source = String(row.customImage?.src || "");
-    if (!source) return `<rect x="0" y="0" width="${box.fullW}" height="${box.h}" fill="#ffffff"></rect>`;
     const width = Math.max(1, Math.round(box.fullW));
     const height = Math.max(1, Math.round(box.h));
+    const slotSource = this._customImageSlotDitherEntry?.(width, height);
+    if (!slotSource) this._requestCustomImageSlotDither?.(width, height);
+    const source = slotSource || String(row.customImage?.src || "");
+    if (!source) return `<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>`;
+    // slotSource is already dithered at this exact width/height, so "none"
+    // (stretch) is a no-op for it either way. The fallback drawn while that
+    // redither is still in flight is dithered for the *full device* size
+    // instead - stretching that non-uniformly into a differently-shaped slot
+    // (any grid layout whose slots don't share one aspect ratio, e.g.
+    // mixed-5's wide top row vs. its tall bottom row) distorted it a
+    // different amount per slot shape, so every slot flashed a differently
+    // mangled preview for the instant before its own redither landed.
+    // Cropping to fill instead keeps that instant a soft but undistorted
+    // preview of the same photo, consistent with the "cover" look every slot
+    // settles into once its real bitmap arrives.
+    const fit = slotSource ? "none" : "xMidYMid slice";
     return `<image x="0" y="0" width="${width}" height="${height}" href="${this._escape(source)}"`
-      + ` preserveAspectRatio="none" image-rendering="auto"></image>`;
+      + ` preserveAspectRatio="${fit}" image-rendering="auto"></image>`;
   },
 
   // Tiles of equal weight. A list ranks what it stacks; a grid says these readings
@@ -1055,8 +1416,19 @@ export const templateSvgMixin = {
     // Without icons there is no middle row to sit around, so label and value close
     // up instead of leaving a gap where the icon would have been.
     const iconed = cells.some((cell) => cell.icon);
-    const labelY = box.y + box.h * (iconed ? 0.16 : 0.3);
-    const valueY = box.y + box.h * (iconed ? 0.85 : 0.72);
+    // `valueIcon` is an opt-in second presentation for an iconed strip: instead
+    // of the classic label/icon/value stack (forecast days - see weather.js,
+    // and the live "day" automation binding that redraws it server-side in
+    // svg_blocks.py, which only ever calls the classic layout and so has
+    // nothing to mirror here), the icon sits beside the number on the same
+    // line, sized to read as a real glyph instead of a decoration squeezed
+    // into its own row. No template currently binds a `valueIcon` strip to a
+    // live automation, so this branch has no backend counterpart to keep in
+    // sync - see svg_blocks.py's block_strip docstring.
+    const inline = iconed && !!row.valueIcon;
+    const labelY = box.y + box.h * (inline ? 0.26 : iconed ? 0.16 : 0.3);
+    const valueY = box.y + box.h * (inline ? 0.68 : iconed ? 0.85 : 0.72);
+    const valueFontSize = Math.max(10, Math.min(box.h * 0.32, cellWidth * 0.33));
     const parts = [];
     cells.forEach((cell, index) => {
       const cx = box.x + cellWidth * (index + 0.5);
@@ -1070,8 +1442,37 @@ export const templateSvgMixin = {
       // instead of just shrinking a few px. Sizing a bit under the box's own
       // ceiling leaves that error margin instead of spending it.
       parts.push(this._svgText(cell.label, cx, labelY, Math.max(8.5, Math.min(box.h * 0.25, cellWidth * 0.3)), { bold: true, maxWidth: cellWidth * 0.92 }));
-      if (cell.icon) parts.push(this._svgIcon(cell.icon, cx, box.y + box.h * 0.5, Math.min(box.h * 0.34, cellWidth * 0.5), this._templateInk(cell.color)));
-      parts.push(this._svgText(cell.value, cx, valueY, Math.max(10, Math.min(box.h * 0.32, cellWidth * 0.33)), { bold: true, color: this._templateInk(cell.color), maxWidth: cellWidth * 0.92 }));
+      if (cell.icon && inline) {
+        // Roughly double the classic layout's icon again (bounded by
+        // min(h*0.34, cw*0.5)) - it only has to share one line with the value
+        // now instead of squeezing into the strip's own cramped middle row.
+        const margin = cellWidth * 0.02;
+        // Reserved up front, not clamped in afterwards: the value's own fitted
+        // width is measured against a budget that already has this much taken
+        // off its right side, so the finished group is guaranteed to land at
+        // least `shift` right of a plain flush-left position instead of
+        // growing to fill whatever space shrinking the icon freed up.
+        const shift = cellWidth * 0.1;
+        const iconSize = Math.min(box.h * 0.66, cellWidth * 0.36);
+        const gap = iconSize * 0.16;
+        const valueMaxWidth = Math.max(10, cellWidth - margin * 2 - shift - iconSize - gap);
+        const fitted = this._svgReadableText(cell.value, valueFontSize, valueMaxWidth, true);
+        const valueWidth = this._svgTextWidth(fitted.text, fitted.fontSize, true);
+        const groupWidth = iconSize + gap + valueWidth;
+        const cellLeft = box.x + cellWidth * index;
+        const cellRight = cellLeft + cellWidth;
+        const groupLeft = cellRight - margin - groupWidth;
+        parts.push(this._svgIcon(cell.icon, groupLeft + iconSize / 2, valueY, iconSize, this._templateInk(cell.color)));
+        parts.push(this._svgText(cell.value, groupLeft + iconSize + gap, valueY, valueFontSize, {
+          anchor: "start", bold: true, color: this._templateInk(cell.color), maxWidth: valueMaxWidth,
+        }));
+        return;
+      }
+      // 0.40 (was 0.34) - still clears the label above (ends ~28% down) and
+      // the value below (starts ~69% down) with a small margin either side,
+      // but reads as a noticeably bigger glyph than the old ratio did.
+      if (cell.icon) parts.push(this._svgIcon(cell.icon, cx, box.y + box.h * 0.5, Math.min(box.h * 0.40, cellWidth * 0.5), this._templateInk(cell.color)));
+      parts.push(this._svgText(cell.value, cx, valueY, valueFontSize, { bold: true, color: this._templateInk(cell.color), maxWidth: cellWidth * 0.92 }));
     });
     return parts.join("");
   },
@@ -1241,20 +1642,15 @@ export const templateSvgMixin = {
     const w = row.bleed ? box.fullW : box.w;
     const cached = this._meteoradarImageCache;
     if (cached?.dataUrl) {
-      const legendH = Math.max(12, Math.min(22, box.h * 0.09));
-      const legendW = Math.max(70, Math.min(128, w * 0.3));
-      const legendX = x + w - legendW - Math.max(3, w * 0.012);
-      const legendY = box.y + Math.max(3, box.h * 0.012);
-      const third = legendW / 3;
+      // The intensity legend and the +3h forecast/temperature sidebar are
+      // baked into this data URL itself (render.py's _compose_radar_panel) -
+      // the same backend function both this preview and an automatic refresh
+      // fetch through, so drawing them again here as separate SVG shapes
+      // would either double them up or, worse, drift out of sync with what
+      // the backend draws (a "dual renderer" mismatch, see meteoradar.py's
+      // module docstring for why that split is normally deliberate here).
       return `<image x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}"`
-        + ` preserveAspectRatio="xMidYMid meet" href="${cached.dataUrl}"></image>`
-        + `<g aria-label="Intenzita srážek"><rect x="${legendX.toFixed(2)}" y="${legendY.toFixed(2)}" width="${third.toFixed(2)}" height="${legendH.toFixed(2)}" fill="#ffffff" stroke="${BLACK}" stroke-width="0.7"></rect>`
-        + `<rect x="${(legendX + third).toFixed(2)}" y="${legendY.toFixed(2)}" width="${third.toFixed(2)}" height="${legendH.toFixed(2)}" fill="${this._templateInk("yellow")}"></rect>`
-        + `<rect x="${(legendX + third * 2).toFixed(2)}" y="${legendY.toFixed(2)}" width="${third.toFixed(2)}" height="${legendH.toFixed(2)}" fill="${RED}"></rect>`
-        + this._svgText("SLABÉ", legendX + third / 2, legendY + legendH / 2, Math.max(5.5, legendH * 0.36), { color: BLACK, bold: true, maxWidth: third * 0.9 })
-        + this._svgText("STŘED", legendX + third * 1.5, legendY + legendH / 2, Math.max(5.5, legendH * 0.36), { color: BLACK, bold: true, maxWidth: third * 0.9 })
-        + this._svgText("SILNÉ", legendX + third * 2.5, legendY + legendH / 2, Math.max(5.5, legendH * 0.36), { color: "#ffffff", bold: true, maxWidth: third * 0.9 })
-        + `</g>`;
+        + ` preserveAspectRatio="xMidYMid meet" href="${cached.dataUrl}"></image>`;
     }
     const label = cached?.error
       ? `Radarová mapa se nenačetla: ${cached.error}`
@@ -1308,7 +1704,15 @@ export const templateSvgMixin = {
   // fixed by each template's own catalog entry - v(0) is that template's
   // first bound entity - so a template's arrangement can change freely but
   // its numbering cannot.
-  _templateSvgSpecs(template, resolveValue) {
+  // `width`/`height`, when known, are the panel pixels the finished rows will
+  // actually be laid out into - passed through so a template can choose a
+  // genuinely different row set for a badge-sized tag versus a wall-mounted
+  // panel, not just let the same rows get proportionally squeezed. Both are
+  // undefined for callers that build rows without a real target size (icon
+  // warm-up enumerating every template's icon names); a template that reads
+  // them has to treat that as "assume the common case", the same way it
+  // already treats a disconnected entity as "assume the sample value".
+  _templateSvgSpecs(template, resolveValue, width, height) {
     const v = resolveValue || ((index, fallback) => this._templateDisplayValue(template, index, fallback));
     // Charts, meters and dials need numbers rather than formatted strings, and the
     // weather and calendar rows need data that arrives from a service call. All of
@@ -1321,10 +1725,16 @@ export const templateSvgMixin = {
     const option = (name) => this._templateOptionActive(template, name);
     const customImage = () => {
       const active = this._activeCustomImageAsset?.();
-      return (active ? this._paletteImageSrc?.(active) : this._customImageDataUrl)
-        || this._frontendAssetUrl("images/parrot-dithered.png");
+      // No fallback to the raw parrot-source.png here on purpose: it is a
+      // full-colour photo, and painting it - even for the instant before the
+      // real dither pass finishes - reads as a flash of wrong content, not a
+      // loading state. _blockCustomImage draws a blank box instead when this
+      // comes back empty, and _requestCustomImageSlotDither/
+      // _preloadCustomImageForSlot replace it with the actual dithered render
+      // (starting from that same source) as soon as it is ready.
+      return active ? this._paletteImageSrc?.(active) : this._customImageDataUrl;
     };
-    const helpers = { v, series, ratio, day, event, option, customImage };
+    const helpers = { v, series, ratio, day, event, option, customImage, width, height };
     return Object.fromEntries(
       DISPLAY_TEMPLATES.map((entry) => [entry.catalog.id, () => entry.design(helpers)]),
     );
@@ -1361,10 +1771,10 @@ export const templateSvgMixin = {
     return themed;
   },
 
-  _templateSvgRows(template) {
+  _templateSvgRows(template, width, height) {
     const baseTemplate = this._templateBaseDefinition(template);
     if (baseTemplate?.id === "blank" || (baseTemplate?.user_created && !baseTemplate?.base_template_id)) return [];
-    const build = this._templateSvgSpecs(baseTemplate)[baseTemplate?.id];
+    const build = this._templateSvgSpecs(baseTemplate, undefined, width, height)[baseTemplate?.id];
     const rows = build ? build() : [
       { icon: "shape-outline", h: 0.22 },
       { text: baseTemplate?.title || "Šablona", h: 0.1, size: 0.07, bold: true },
@@ -1391,7 +1801,7 @@ export const templateSvgMixin = {
   // falls back to the old icon-only preview for just those few.
   _templateVariableCropBoxes(template, width, height) {
     const baseTemplate = this._templateBaseDefinition(template);
-    const build = this._templateSvgSpecs(baseTemplate, (index) => `VAR${index}`)[baseTemplate?.id];
+    const build = this._templateSvgSpecs(baseTemplate, (index) => `VAR${index}`, width, height)[baseTemplate?.id];
     const rows = build ? build() : [];
     if (!rows.length) return {};
     rows.forEach((row, index) => { row.__rowIndex = index; });
@@ -1423,7 +1833,7 @@ export const templateSvgMixin = {
   // _templateVariableCropBoxes uses for text slots: box geometry is a side
   // effect of the real layout pass, not worth recomputing separately.
   _templateGraphicRowBoxes(template, width, height) {
-    const build = this._templateSvgSpecs(template)[template?.id];
+    const build = this._templateSvgSpecs(template, undefined, width, height)[template?.id];
     const rows = build ? build() : [];
     if (!rows.length) return {};
     rows.forEach((row, index) => { row.__rowIndex = index; });
@@ -1459,19 +1869,24 @@ export const templateSvgMixin = {
   // native resolution. Large displays use the shared layout grid, from one
   // full-screen template up to a 2 × 3 dashboard of six templates.
   async _buildDisplayTemplateSvg(templates, width, height, layout = "single") {
-    const list = templates.filter(Boolean);
-    if (!list.length) throw new Error("Není vybrána žádná šablona.");
+    if (!templates.some(Boolean)) throw new Error("Není vybrána žádná šablona.");
 
     const slots = this._displayTemplateLayoutSlots?.(layout, width, height)
       || [{ x: 0, y: 0, w: width, h: height, index: 0 }];
 
     const bodies = [];
-    for (let index = 0; index < Math.min(slots.length, list.length); index++) {
+    // Index into `templates` positionally, not into a Boolean-filtered copy -
+    // a blank slot must stay a gap (skipped, background shows through) so a
+    // template that comes after it in the array keeps landing in its own
+    // chosen slot instead of sliding forward to fill the gap.
+    for (let index = 0; index < slots.length; index++) {
+      const template = templates[index];
+      if (!template) continue;
       const slot = slots[index];
-      const template = list[index];
-      const rows = this._templateSvgRows(template);
+      const rows = this._templateSvgRows(template, slot.w, slot.h);
       await this._preloadTemplateIcons(rows);
       await this._preloadTemplateRadarImage(rows, slot.w, slot.h);
+      await this._preloadCustomImageForSlot?.(rows, slot.w, slot.h);
       const slotName = index === 0 ? "primary" : index === 1 ? "secondary" : `slot-${index + 1}`;
       const markup = this._applyTemplateAdjustmentsToSvgMarkup(this._layoutTemplateSvg(rows, slot.w, slot.h), template, slotName);
       bodies.push(`<g transform="translate(${slot.x.toFixed(2)},${slot.y.toFixed(2)})">`

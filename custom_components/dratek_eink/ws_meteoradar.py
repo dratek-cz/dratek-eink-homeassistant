@@ -34,7 +34,6 @@ METEORADAR_CAMERA_ENTITY_ID = "camera.meteoradar"
         vol.Optional("show_precipitation"): bool,
         vol.Optional("dotted_light"): bool,
         vol.Optional("show_wind"): bool,
-        vol.Optional("location_address"): str,
         vol.Optional("preserve_yellow"): bool,
     }
 )
@@ -49,7 +48,6 @@ async def websocket_render_meteoradar(
     show_precipitation = bool(msg.get("show_precipitation", True))
     dotted_light = bool(msg.get("dotted_light", True))
     show_wind = bool(msg.get("show_wind", False))
-    location_address = str(msg.get("location_address") or "").strip()
 
     data_url = await async_render_camera_binding_data_url(
         hass,
@@ -60,7 +58,6 @@ async def websocket_render_meteoradar(
         show_precipitation=show_precipitation,
         dotted_light=dotted_light,
         show_wind=show_wind,
-        location_address=location_address,
         preserve_yellow=bool(msg.get("preserve_yellow", False)),
     )
     if data_url is None:

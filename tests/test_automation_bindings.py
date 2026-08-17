@@ -996,14 +996,13 @@ class AutomationBindingTests(unittest.TestCase):
         async def fake_camera_render(
             _hass, entity_id, width, height, country="cz",
             show_precipitation=True, dotted_light=True, show_wind=False,
-            location_address="", preserve_yellow=False,
+            preserve_yellow=False,
         ):
             captured["entity_id"] = entity_id
             captured["country"] = country
             captured["show_precipitation"] = show_precipitation
             captured["dotted_light"] = dotted_light
             captured["show_wind"] = show_wind
-            captured["location_address"] = location_address
             captured["preserve_yellow"] = preserve_yellow
             return "data:image/png;base64,AA=="
 
@@ -1028,7 +1027,6 @@ class AutomationBindingTests(unittest.TestCase):
                                 "show_precipitation": True,
                                 "dotted_light": False,
                                 "show_wind": True,
-                                "location_address": "Václavské náměstí 1, Praha",
                             }
                         ],
                     },
@@ -1043,7 +1041,6 @@ class AutomationBindingTests(unittest.TestCase):
         self.assertFalse(captured["dotted_light"])
         self.assertTrue(captured["show_wind"])
         self.assertTrue(captured["preserve_yellow"])
-        self.assertEqual("Václavské náměstí 1, Praha", captured["location_address"])
 
     def test_ratio_binding_computes_live_percent_with_its_divisor(self):
         # air.js's AQI dial: ratio(0, 21) / 2 - the /2 rides along as the
@@ -2007,6 +2004,30 @@ class SystemAndClimateAutomaticValueTests(unittest.TestCase):
 
         weather_binding = {"entity_id": "weather.home", "kind": "temperature", "label": "Teplota"}
         self.assertEqual("25 °C", automation.EntityAutoUpdateManager._state_value(state, weather_binding))
+
+    def test_weather_entity_resolves_humidity_wind_and_pressure(self):
+        class FakeState:
+            def __init__(self, state, attributes):
+                self.state = state
+                self.attributes = attributes
+
+        state = FakeState("sunny", {
+            "temperature": 25.0,
+            "temperature_unit": "°C",
+            "humidity": 46,
+            "wind_speed": 12.3,
+            "wind_speed_unit": "km/h",
+            "pressure": 1013.2,
+            "pressure_unit": "hPa",
+        })
+
+        humidity_binding = {"entity_id": "weather.home", "kind": "humidity", "label": "Vlhkost"}
+        wind_binding = {"entity_id": "weather.home", "kind": "wind_speed", "label": "Vítr"}
+        pressure_binding = {"entity_id": "weather.home", "kind": "pressure", "label": "Tlak"}
+
+        self.assertEqual("46 %", automation.EntityAutoUpdateManager._state_value(state, humidity_binding))
+        self.assertEqual("12,3 km/h", automation.EntityAutoUpdateManager._state_value(state, wind_binding))
+        self.assertEqual("1013,2 hPa", automation.EntityAutoUpdateManager._state_value(state, pressure_binding))
 
 
 if __name__ == "__main__":

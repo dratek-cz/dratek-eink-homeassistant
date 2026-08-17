@@ -26,19 +26,26 @@ export const template = {
     ],
     note: "Šablona má na displeji fixně tři dlaždice, ale jen první má skutečně dynamické jméno i stav (Osoby + Přítomnost) - prostřední (\"Jana\") a jméno u třetí (\"Eliška\") jsou pevný text v návrhu šablony, pouze stav třetí dlaždice lze napojit přes Stav osoby. Pro víc lidí opravdu naživo si založte vlastní šablonu v eInk Studiu.",
   },
-  design: ({ v }) => [
-    { text: "Kdo je doma", h: 0.08, size: 0.052, bold: true },
-    { rule: true, h: 0.02 },
-    // 0.5 left roughly a quarter of the panel as bare flex space below the
-    // grid - grid cells scale with their own box (see _blockGrid), so this
-    // reclaimed height goes straight into bigger, more legible tiles instead
-    // of an oversized gap before the footer.
-    { grid: [
-      { icon: "account", value: v(0, "Petr"), label: v(1, "Doma"), color: "red" },
-      { icon: "account", value: "Jana", label: "Doma" },
-      { icon: "account", value: "Eliška", label: v(2, "Ve škole") },
-    ], columns: 3, h: 0.68 },
-    { flex: true },
-    { footer: [{ label: "AKTUALIZACE", value: v(3, "12:45") }], h: 0.14 },
-  ],
+  design: ({ v, width, height }) => {
+    // See home.js for why sqrt(area) rather than width alone.
+    const area = width && height ? width * height : 296 * 128;
+    const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
+    const lerp = (from, to) => from + (to - from) * t;
+    return [
+      { text: "Kdo je doma", h: lerp(0.08, 0.055), size: 0.052, bold: true },
+      { rule: true, h: 0.02 },
+      // 0.5 left roughly a quarter of the panel as bare flex space below the
+      // grid - grid cells scale with their own box (see _blockGrid), so this
+      // reclaimed height goes straight into bigger, more legible tiles instead
+      // of an oversized gap before the footer. The lerp grows that further
+      // still on a genuinely large panel.
+      { grid: [
+        { icon: "account", value: v(0, "Petr"), label: v(1, "Doma"), color: "red" },
+        { icon: "account", value: "Jana", label: "Doma" },
+        { icon: "account", value: "Eliška", label: v(2, "Ve škole") },
+      ], columns: 3, h: lerp(0.68, 0.74) },
+      { flex: true },
+      { footer: [{ label: "AKTUALIZACE", value: v(3, "12:45") }], h: lerp(0.14, 0.08) },
+    ];
+  },
 };

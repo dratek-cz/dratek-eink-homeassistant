@@ -26,16 +26,27 @@ export const template = {
     ],
     note: "Údaj Světla zobrazuje stav jedné vybrané entity light.* (zapnuto/vypnuto), ne počet svítících světel v domě - pro počet potřebujete skupinu světel (light group) nebo šablonový senzor, který počet spočítá.",
   },
-  design: ({ v }) => [
-    { icon: "home", h: 0.15, color: "red" },
-    { text: "Dům", h: 0.08, size: 0.058, bold: true },
-    { grid: [
-      { icon: "thermometer", label: "Teplota", value: v(0, "21,5 °C") },
-      { icon: "water-percent", label: "Vlhkost", value: v(1, "45 %") },
-      { icon: "lightbulb-on", label: "Světla", value: v(2, "3 ON") },
-      { icon: "lock", label: "Zámky", value: v(3, "Zamčeno") },
-    ], columns: 2, h: 0.62 },
-    { flex: true },
-    { footer: [{ label: "STAV", value: "Vše v pořádku" }], h: 0.14 },
-  ],
+  design: ({ v, width, height }) => {
+    // A characteristic size (sqrt of area) rather than width alone: it reads
+    // a wide wall panel and a tall portrait badge the same way, unlike a
+    // width-only measure that would call a narrow tall panel "small" even
+    // though it has plenty of height for the grid to grow into. 0 at the
+    // smallest badge this catalog ships samples for (296x128), 1 at the
+    // widest hardware this integration supports (1360x480, see weather.js).
+    const area = width && height ? width * height : 296 * 128;
+    const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
+    const lerp = (from, to) => from + (to - from) * t;
+    return [
+      { icon: "home", h: 0.15, color: "red" },
+      { text: "Dům", h: 0.08, size: 0.058, bold: true },
+      { grid: [
+        { icon: "thermometer", label: "Teplota", value: v(0, "21,5 °C") },
+        { icon: "water-percent", label: "Vlhkost", value: v(1, "45 %") },
+        { icon: "lightbulb-on", label: "Světla", value: v(2, "3 ON") },
+        { icon: "lock", label: "Zámky", value: v(3, "Zamčeno") },
+      ], columns: 2, h: lerp(0.62, 0.68) },
+      { flex: true },
+      { footer: [{ label: "STAV", value: "Vše v pořádku" }], h: lerp(0.14, 0.08) },
+    ];
+  },
 };

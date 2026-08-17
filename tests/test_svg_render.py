@@ -489,9 +489,7 @@ class CleanBackgroundMatchesManualSendTests(unittest.TestCase):
                         [
                             {
                                 "label": day["label"], "value": day["value"],
-                                "icon": render._MDI_WEATHER_ICON_PATHS[
-                                    render._WEATHER_CONDITION_ICON_NAMES[day["condition"]]
-                                ],
+                                "icon": render._WEATHER_CONDITION_ICON_NAMES[day["condition"]],
                             }
                             for day in days
                         ],

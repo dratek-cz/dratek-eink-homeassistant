@@ -36,16 +36,22 @@ export const template = {
       "Dostupnost je volitelná - System Monitor sám o sobě dostupnost nehlásí (běží-li Home Assistant, běží i on); pro skutečné sledování jiného stroje použijte binary_sensor s device_class connectivity (např. z integrace Ping).",
     ],
   },
-  design: ({ v, ratio }) => [
-    { text: "Home server", h: 0.07, size: 0.046, bold: true },
-    { band: { label: "STAV", value: v(0, "ONLINE") }, bleed: true, h: 0.17 },
-    { meters: [
-      { label: "CPU", value: v(1, "24 %"), percent: ratio(1, 24) },
-      { label: "RAM", value: v(2, "61 %"), percent: ratio(2, 61) },
-      { label: "Disk", value: v(3, "73 %"), percent: ratio(3, 73), color: "red" },
-      { label: "Teplota", value: v(4, "48 °C"), percent: ratio(4, 48) },
-    ], group: "ratio", h: 0.6 },
-    { flex: true },
-    { footer: [{ label: "PROVOZ", value: v(5, "18 dní") }], h: 0.13 },
-  ],
+  design: ({ v, ratio, width, height }) => {
+    // See home.js for why sqrt(area) rather than width alone.
+    const area = width && height ? width * height : 296 * 128;
+    const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
+    const lerp = (from, to) => from + (to - from) * t;
+    return [
+      { text: "Home server", h: lerp(0.07, 0.045), size: 0.046, bold: true },
+      { band: { label: "STAV", value: v(0, "ONLINE") }, bleed: true, h: 0.17 },
+      { meters: [
+        { label: "CPU", value: v(1, "24 %"), percent: ratio(1, 24) },
+        { label: "RAM", value: v(2, "61 %"), percent: ratio(2, 61) },
+        { label: "Disk", value: v(3, "73 %"), percent: ratio(3, 73), color: "red" },
+        { label: "Teplota", value: v(4, "48 °C"), percent: ratio(4, 48) },
+      ], group: "ratio", h: lerp(0.6, 0.67) },
+      { flex: true },
+      { footer: [{ label: "PROVOZ", value: v(5, "18 dní") }], h: lerp(0.13, 0.07) },
+    ];
+  },
 };

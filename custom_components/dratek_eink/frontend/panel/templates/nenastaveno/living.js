@@ -27,15 +27,21 @@ export const template = {
     ],
     note: "Popisek KOMFORT dole je pevný text \"Optimální\" - nevyhodnocuje skutečně naměřené hodnoty, je to jen štítek pod ukazateli.",
   },
-  design: ({ v, ratio }) => [
-    { icon: "sofa", h: 0.15 },
-    { stat: { value: v(0, "23,5"), unit: "°C", caption: "Obývák" }, h: 0.3 },
-    { rule: true, h: 0.02 },
-    { meters: [
-      { label: "Vlhkost", value: v(1, "40 %"), percent: ratio(1, 40) },
-      { label: "CO₂", value: v(2, "650 ppm"), percent: ratio(2, 32), color: "red" },
-    ], group: "ratio", h: 0.28 },
-    { flex: true },
-    { footer: [{ label: "KOMFORT", value: "Optimální" }], h: 0.13 },
-  ],
+  design: ({ v, ratio, width, height }) => {
+    // See home.js for why sqrt(area) rather than width alone.
+    const area = width && height ? width * height : 296 * 128;
+    const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
+    const lerp = (from, to) => from + (to - from) * t;
+    return [
+      { icon: "sofa", h: lerp(0.15, 0.12) },
+      { stat: { value: v(0, "23,5"), unit: "°C", caption: "Obývák" }, h: lerp(0.3, 0.34) },
+      { rule: true, h: 0.02 },
+      { meters: [
+        { label: "Vlhkost", value: v(1, "40 %"), percent: ratio(1, 40) },
+        { label: "CO₂", value: v(2, "650 ppm"), percent: ratio(2, 32), color: "red" },
+      ], group: "ratio", h: lerp(0.28, 0.31) },
+      { flex: true },
+      { footer: [{ label: "KOMFORT", value: "Optimální" }], h: lerp(0.13, 0.07) },
+    ];
+  },
 };

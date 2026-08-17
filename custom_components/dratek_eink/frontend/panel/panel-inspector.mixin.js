@@ -354,16 +354,26 @@ export const inspectorMixin = {
         openTemplateSettings();
       });
     });
-    const openDisplaySettings = (address) => {
-      this._selectedDeviceAddress = address;
+    const openDisplaySettings = async (address) => {
+      // A bulk preview load (or a stale localStorage cache) may not have this
+      // device's full draft yet - especially its custom_image_data, which is
+      // large enough that it is skipped from the local cache write entirely.
+      // Going through _selectDevice fetches the authoritative draft from the
+      // backend first, so the custom image preview is correct on first open
+      // instead of only appearing once something else happens to reload it.
+      await this._selectDevice?.(address, { render: false });
       this._displaySettingsView = "templates";
       this._activeTab = "display-settings";
       const openedDevice = this._device();
       if (openedDevice) {
         this._displayTemplateOrientation = this._deviceFrameGeometry(openedDevice).portraitLayout ? "portrait" : "landscape";
-        const storedDraft = this._deviceDrafts?.[String(openedDevice.address || "").toUpperCase()];
-        this._restoreDisplayTemplateConfig?.(storedDraft?.template_config);
       }
+      // The left panel's auto-update section needs this device's automation
+      // record (interval/trigger mode) - normally only fetched when the
+      // Automatické zápisy tab itself is opened. Loaded in the background so
+      // it never delays the page render; the section shows its own
+      // "not sent yet" state until this resolves and re-renders.
+      if (!this._automations) this._loadAutomations();
       this._render();
       this._paint();
       this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
@@ -431,10 +441,12 @@ export const inspectorMixin = {
       const device = this._device();
       const template = this._displayTemplateCards().find((item) => item.id === templateId);
       if (templateId === "custom_image" && !this._customImageDataUrl) {
-        this._useBundledCustomImageTemplate().catch((error) => {
-          this._templateSendResult = { ok: false, message: this._message(error) };
-          this._render();
-        });
+        this._useBundledCustomImageTemplate()
+          .then(() => { this._render(); this._paint(); })
+          .catch((error) => {
+            this._templateSendResult = { ok: false, message: this._message(error) };
+            this._render();
+          });
       }
       const previousAssigned = this._assignedDisplayTemplates(device);
       const layoutSlotMatch = String(placement || "").match(/^slot-(\d+)$/);
@@ -549,10 +561,12 @@ export const inspectorMixin = {
       const template = this._displayTemplateCards().find((item) => item.id === templateId);
       if (!template) return;
       if (templateId === "custom_image" && !this._customImageDataUrl) {
-        this._useBundledCustomImageTemplate().catch((error) => {
-          this._templateSendResult = { ok: false, message: this._message(error) };
-          this._render();
-        });
+        this._useBundledCustomImageTemplate()
+          .then(() => { this._render(); this._paint(); })
+          .catch((error) => {
+            this._templateSendResult = { ok: false, message: this._message(error) };
+            this._render();
+          });
       }
       this._rememberActiveTemplateEditorState?.();
       this._prepareDisplayTemplateBindings(template);
@@ -576,18 +590,23 @@ export const inspectorMixin = {
       }
       this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
     };
-    // A large display with no free slot has no room for another template
-    // without the user choosing where it goes, so both the "configure" button
-    // and the selectable preview have to detect that and defer to the
-    // placement dialog instead of silently doing nothing. That is true both
-    // with one full-size template already there (no split exists yet to drop
-    // the new one into) and with both halves of an existing split already
-    // taken (a third template has nowhere free to land).
+    // A large display running a multi-slot layout has no room for another
+    // template without the user choosing where it goes, so both the
+    // "configure" button and the selectable preview have to detect that and
+    // defer to the placement dialog instead of silently doing nothing. That
+    // is true both with one full-size template already there (no split
+    // exists yet to drop the new one into) and with both halves of an
+    // existing split already taken (a third template has nowhere free to
+    // land). A large display explicitly running the "single" layout has
+    // exactly one destination, occupied or not, so clicking another template
+    // there always just replaces it - it must not trigger this dialog.
     const hasTemplateSlotConflict = (templateId) => {
       const device = this._device();
       const size = this._devicePreviewSize(device);
       const largeDisplay = Math.max(size.width, size.height) >= 400 && Math.min(size.width, size.height) >= 300;
-      return Boolean(templateId) && largeDisplay;
+      if (!templateId || !largeDisplay) return false;
+      const layoutId = this._displayTemplateLayoutDefinition?.(this._displayTemplateLargeLayout)?.id;
+      return layoutId !== "single";
     };
     this.shadowRoot.querySelectorAll("[data-display-template-edit-menu]").forEach((button) => {
       button.addEventListener("click", (event) => {
@@ -741,9 +760,18 @@ export const inspectorMixin = {
       // Resolving the placement only changes the editor draft. The user still
       // confirms the physical transfer separately with the Send button.
       const stayInCatalog = this._pendingDisplayTemplateConflict?.stayInCatalog === true;
+      // The dialog stood in with a two-up split for a "single" layout that
+      // already had one template on it (see _renderTemplatePlacementDialog) -
+      // a chosen slot only makes sense once that becomes the real layout, or
+      // _placeDisplayTemplateInLayoutSlot below would still see the old
+      // "single" capacity of 1 and reject slot index 1 outright.
+      if (/^slot-\d+$/.test(String(placement || "")) && this._displayTemplateLargeLayout === "single" && this._assignedDisplayTemplates().length) {
+        this._displayTemplateLargeLayout = "side-by-side";
+      }
       openDisplayTemplate(pendingTemplateId, null, stayInCatalog, placement);
     }));
     this.shadowRoot.querySelectorAll("[data-template-orientation]").forEach((button) => button.addEventListener("click", () => {
+      const previousOrientation = this._displayTemplateOrientation;
       this._displayTemplateOrientation = button.dataset.templateOrientation === "landscape" ? "landscape" : "portrait";
       const userTemplate = this._currentUserDisplayTemplate?.();
       const device = this._device();
@@ -755,6 +783,14 @@ export const inspectorMixin = {
         this._displayTemplateFormats.secondary = format;
       }
       this._templateOrientationMenuOpen = false;
+      if (this._displayTemplateOrientation !== previousOrientation) {
+        // The physical canvas just changed shape - re-fit every stored custom
+        // image to it instead of leaving last orientation's pixels to be
+        // stretched or squashed into the new frame.
+        this._resyncCustomImagesForOrientation?.(device).catch((error) => {
+          console.warn("DRATEK eInk image orientation refresh failed:", error);
+        });
+      }
       this._render();
       this._paint();
     }));
@@ -1673,33 +1709,6 @@ export const inspectorMixin = {
         this._scheduleDraftSave();
         this._render();
         this._paint();
-      });
-    });
-    this.shadowRoot.querySelectorAll("[data-meteoradar-home-address]").forEach((input) => {
-      const saveAddress = () => {
-        const value = String(input.value || "").trim();
-        this._meteoradarHomeAddress = value;
-        if (!this._displayTemplateConfig) this._displayTemplateConfig = {};
-        this._displayTemplateConfig.meteoradar_home_address = value;
-        this._meteoradarImageCache = null;
-        const address = input.dataset.deviceAddress || this._selectedDeviceAddress;
-        const upperAddr = String(address || "").toUpperCase();
-        if (upperAddr) {
-          if (!this._deviceDrafts) this._deviceDrafts = {};
-          const draft = this._deviceDrafts[upperAddr] || {};
-          if (!draft.template_config) draft.template_config = {};
-          draft.template_config.meteoradar_home_address = value;
-          this._deviceDrafts[upperAddr] = draft;
-        }
-        this._scheduleDraftSave();
-        this._render();
-        this._paint();
-      };
-      input.addEventListener("change", saveAddress);
-      input.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter") return;
-        event.preventDefault();
-        saveAddress();
       });
     });
     this.shadowRoot.querySelectorAll("[data-custom-image-template-upload]").forEach((button) => {

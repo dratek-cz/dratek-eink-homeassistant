@@ -27,15 +27,21 @@ export const template = {
     ],
     note: "Zaškrtávátka u Dveří/Oken/Pohybu i řádek ZÓNY dole jsou vizuálně vždy „v pořádku“ - mění se jen text vedle nich podle skutečného stavu, ne barva ani fajfka. Otevřené dveře tedy poznáte podle slova „Otevřeno“, ne podle vykřičníku.",
   },
-  design: ({ v }) => [
-    { icon: "shield-home", h: 0.15 },
-    { band: { label: "ALARM", value: v(0, "ZAPNUTO"), color: "black" }, bleed: true, h: 0.2 },
-    { checklist: [
-      { label: `Dveře · ${v(1, "Zamčeno")}`, done: true },
-      { label: `Okna · ${v(2, "Zavřeno")}`, done: true },
-      { label: `Pohyb · ${v(3, "Klid")}`, done: true },
-    ], marker: "dot", h: 0.47 },
-    { flex: true },
-    { footer: [{ label: "ZÓNY", value: "3 / 3 v pořádku" }], h: 0.14 },
-  ],
+  design: ({ v, width, height }) => {
+    // See home.js for why sqrt(area) rather than width alone.
+    const area = width && height ? width * height : 296 * 128;
+    const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
+    const lerp = (from, to) => from + (to - from) * t;
+    return [
+      { icon: "shield-home", h: lerp(0.15, 0.12) },
+      { band: { label: "ALARM", value: v(0, "ZAPNUTO"), color: "black" }, bleed: true, h: 0.2 },
+      { checklist: [
+        { label: `Dveře · ${v(1, "Zamčeno")}`, done: true },
+        { label: `Okna · ${v(2, "Zavřeno")}`, done: true },
+        { label: `Pohyb · ${v(3, "Klid")}`, done: true },
+      ], marker: "dot", h: lerp(0.47, 0.54) },
+      { flex: true },
+      { footer: [{ label: "ZÓNY", value: "3 / 3 v pořádku" }], h: lerp(0.14, 0.08) },
+    ];
+  },
 };

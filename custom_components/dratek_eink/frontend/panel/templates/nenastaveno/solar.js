@@ -30,15 +30,21 @@ export const template = {
       "Úsporu CO₂ nabízí jen některé integrace jako samostatný senzor - pokud ji vaše nemá, můžete si ji dopočítat šablonovým senzorem z výroby v kWh.",
     ],
   },
-  design: ({ v, ratio }) => [
-    { text: "Fotovoltaika", h: 0.075, size: 0.05, bold: true },
-    { ring: { percent: ratio(0, 47), value: v(0, "2,35"), caption: "kW" }, group: "ratio", h: 0.42 },
-    { list: [
-      { icon: "weather-sunny", label: "Dnes", value: v(1, "8,2 kWh") },
-      { icon: "calendar-month", label: "Měsíc", value: v(2, "152 kWh") },
-      { icon: "counter", label: "Celkem", value: v(3, "3,45 MWh") },
-    ], h: 0.37 },
-    { flex: true },
-    { footer: [{ label: "ÚSPORA CO₂", value: v(4, "125 kg") }], h: 0.13 },
-  ],
+  design: ({ v, ratio, width, height }) => {
+    // See home.js for why sqrt(area) rather than width alone.
+    const area = width && height ? width * height : 296 * 128;
+    const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
+    const lerp = (from, to) => from + (to - from) * t;
+    return [
+      { text: "Fotovoltaika", h: lerp(0.075, 0.05), size: 0.05, bold: true },
+      { ring: { percent: ratio(0, 47), value: v(0, "2,35"), caption: "kW" }, group: "ratio", h: lerp(0.42, 0.46) },
+      { list: [
+        { icon: "weather-sunny", label: "Dnes", value: v(1, "8,2 kWh") },
+        { icon: "calendar-month", label: "Měsíc", value: v(2, "152 kWh") },
+        { icon: "counter", label: "Celkem", value: v(3, "3,45 MWh") },
+      ], h: lerp(0.37, 0.4) },
+      { flex: true },
+      { footer: [{ label: "ÚSPORA CO₂", value: v(4, "125 kg") }], h: lerp(0.13, 0.07) },
+    ];
+  },
 };

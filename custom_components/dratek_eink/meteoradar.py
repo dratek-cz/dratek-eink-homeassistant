@@ -32,7 +32,6 @@ import io
 import math
 import time
 from typing import TYPE_CHECKING
-from urllib.parse import urlencode
 
 from PIL import Image, ImageChops, ImageDraw
 
@@ -41,7 +40,6 @@ if TYPE_CHECKING:
 
 RAINVIEWER_INDEX_URL = "https://api.rainviewer.com/public/weather-maps.json"
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
-NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
 TILE_SIZE = 512
 ZOOM = 6
 COLOR_SCHEME = 2
@@ -607,7 +605,7 @@ def _draw_home_marker(
     origin_y: float,
     extent: float,
 ) -> None:
-    """Draw a compact red house at ``(longitude, latitude)`` on the map."""
+    """Draw a compact red dot at ``(longitude, latitude)`` on the map."""
     if location is None:
         return
     longitude, latitude = location
@@ -616,69 +614,45 @@ def _draw_home_marker(
     y = round(world_y - origin_y)
     if not (0 <= x < image.width and 0 <= y < image.height):
         return
-    size = max(10, min(34, round(extent * 0.038)))
+    radius = max(5, min(17, round(extent * 0.019)))
     stroke = max(2, _scaled_border_width(extent, 2))
-    half = size / 2
-    roof_y = y - half
-    wall_top = y - size * 0.08
-    bottom = y + half
-    left = x - half * 0.72
-    right = x + half * 0.72
     draw = ImageDraw.Draw(image)
-    draw.polygon(
-        [(x, roof_y), (x - half, wall_top), (x + half, wall_top)],
-        fill=PRECIPITATION_COLOR,
-        outline=BORDER_COLOR,
-    )
-    draw.rectangle(
-        (round(left), round(wall_top), round(right), round(bottom)),
+    draw.ellipse(
+        (x - radius, y - radius, x + radius, y + radius),
         fill=PRECIPITATION_COLOR,
         outline=BORDER_COLOR,
         width=stroke,
     )
-    door_w = max(3, round(size * 0.2))
-    door_h = max(4, round(size * 0.3))
-    draw.rectangle(
-        (x - door_w // 2, round(bottom) - door_h, x + door_w // 2, round(bottom)),
-        fill="white",
-        outline=BORDER_COLOR,
-        width=max(1, stroke // 2),
-    )
 
 
-def _generate_precipitation_pattern(
-    size: tuple[int, int], *, dense: bool,
+def _generate_precipitation_checkerboard(
+    size: tuple[int, int],
+    *,
     ink: tuple[int, int, int] = PRECIPITATION_COLOR,
-    background: tuple[int, int, int] = (255, 255, 255),
+    background: tuple[int, int, int] = PRECIPITATION_YELLOW,
 ) -> Image.Image:
-    """Create an e-ink-safe rain texture that survives the final downscale.
+    """A checkerboard of ink/background squares for moderate rain, scaled so
+    the squares survive the final downscale to device resolution.
 
-    The former 1-pixel checkerboard was usually averaged into pale noise when a
-    zoom-6 map was reduced to a 250x128 display.  These marks scale with the
-    source canvas, so light rain stays visibly dotted and moderate rain becomes
-    a clear diagonal hatch while heavy rain can remain solid red.
+    A diagonal line hatch used to stand in for "moderate" here, but a diagonal
+    stroke draws thin at any one point along its own length - the exact
+    property that made the old dotted "light rain" pattern fade into pale
+    noise once a zoom-6 map got reduced to a 250x128 display (see the removed
+    dotted-pattern code this replaced). Square, axis-aligned pixel blocks next
+    to each other - the same fix already applied to "heavy" (solid) and now
+    "light" (solid) - carry a fixed minimum run length in both directions, so
+    the downscale can only ever merge same-colour neighbours, never thin a
+    mark down to nothing.
     """
     scale = max(1, math.ceil(max(size) / MAX_NATIVE_DIMENSION))
-    period = (7 if dense else 10) * scale
-    stroke = max(1, (2 if dense else 1) * scale)
+    cell = 6 * scale
     pattern = Image.new("RGB", size, background)
     draw = ImageDraw.Draw(pattern)
-    if dense:
-        for offset in range(-size[1], size[0] + size[1], period):
-            draw.line(
-                ((offset, size[1]), (offset + size[1], 0)),
-                fill=ink,
-                width=stroke,
-            )
-    else:
-        radius = max(1, scale)
-        for y in range(period // 2, size[1], period):
-            row_offset = period // 2 if (y // period) % 2 else 0
-            for x in range(period // 2 + row_offset, size[0], period):
-                draw.ellipse(
-                    (x - radius, y - radius, x + radius, y + radius),
-                    fill=ink,
-                )
+    for y in range(0, size[1], cell):
+        row = y // cell
+        for x in range(0, size[0], cell):
+            if (row + x // cell) % 2 == 0:
+                draw.rectangle((x, y, x + cell - 1, y + cell - 1), fill=ink)
     return pattern
 
 
@@ -722,16 +696,18 @@ def _paint_precipitation(
     moderate_mask = ImageChops.logical_or(translucent_moderate, opaque_moderate)
     heavy_mask = ImageChops.logical_and(opaque, ImageChops.invert(blue_over_red))
 
+    # Light rain reads as its own intensity by colour alone (yellow vs. red),
+    # not by texture - a sparse dot pattern on white used to imply "barely
+    # raining, mostly clear," which is a claim about *coverage* this pixel
+    # does not make (the mask has already decided this exact pixel is
+    # raining). Flat ink keeps that claim to intensity only.
     output.paste(
-        _generate_precipitation_pattern(
-            composite.size, dense=False, ink=PRECIPITATION_YELLOW
-        ),
+        Image.new("RGB", composite.size, PRECIPITATION_YELLOW),
         mask=ImageChops.logical_and(area_mask, light_mask),
     )
     output.paste(
-        _generate_precipitation_pattern(
+        _generate_precipitation_checkerboard(
             composite.size,
-            dense=True,
             ink=PRECIPITATION_COLOR,
             background=PRECIPITATION_YELLOW,
         ),
@@ -989,49 +965,6 @@ def fit_to_size(image: Image.Image, width: int, height: int) -> Image.Image:
 
 _cache: dict[str, dict[str, object]] = {}
 _wind_cache: dict[str, dict[str, object]] = {}
-_geocode_cache: dict[str, dict[str, object]] = {}
-
-
-async def _async_geocode_address(
-    hass: "HomeAssistant", address: str, country: str
-) -> tuple[float, float] | None:
-    """Resolve a user-entered address to ``(longitude, latitude)`` with caching."""
-    normalized = " ".join(str(address or "").strip().split())
-    if not normalized:
-        return None
-    country_key = str(country or "cz").lower()
-    key = f"{country_key}:{normalized.casefold()}"
-    now = time.monotonic()
-    cached = _geocode_cache.get(key)
-    if cached and now - float(cached.get("checked_at", 0)) < 24 * 60 * 60:
-        return cached.get("location")  # type: ignore[return-value]
-
-    from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
-    query = {"q": normalized, "format": "jsonv2", "limit": "1"}
-    if country_key in COUNTRY_BORDERS:
-        query["countrycodes"] = country_key
-    url = f"{NOMINATIM_SEARCH_URL}?{urlencode(query)}"
-    try:
-        session = async_get_clientsession(hass)
-        async with session.get(
-            url,
-            timeout=HTTP_TIMEOUT_SECONDS,
-            headers={"User-Agent": "DRATEK-eInk-HomeAssistant/0.1.299"},
-        ) as response:
-            if response.status != 200:
-                raise RuntimeError(f"Nominatim HTTP {response.status}")
-            payload = await response.json(content_type=None)
-        first = payload[0] if isinstance(payload, list) and payload else None
-        location = (
-            (float(first["lon"]), float(first["lat"]))
-            if isinstance(first, dict) and "lon" in first and "lat" in first
-            else None
-        )
-    except Exception:
-        location = None
-    _geocode_cache[key] = {"location": location, "checked_at": now}
-    return location
 
 
 async def _async_fetch_json(hass: "HomeAssistant", url: str) -> object:
@@ -1232,12 +1165,11 @@ async def async_render_meteoradar(
     show_precipitation: bool = True,
     dotted_light: bool = True,
     show_wind: bool = False,
-    location_address: str = "",
 ) -> Image.Image | None:
     """Return the live precipitation map for the requested country - or, for
     country="eu", the multi-country Europe overview - at its own cropped aspect.
     """
-    home_location = await _async_geocode_address(hass, location_address, country)
+    home_location = (hass.config.longitude, hass.config.latitude)
     base = await _async_composed_base_image(
         hass,
         country=country,

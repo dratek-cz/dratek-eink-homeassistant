@@ -362,12 +362,19 @@ class GraphicAutomationBindingRenderTests(unittest.TestCase):
 
     def test_weather_condition_icon_map_covers_every_condition(self):
         # Same domain as _weatherConditionIcon in panel-devices.mixin.js -
-        # every condition it can map to an icon name must resolve to real
-        # path data here too, or that day silently falls back to text for no
-        # reason tied to the actual condition.
+        # every condition it can map to a weather-* icon name must resolve to
+        # real Home Assistant weather artwork here too, or that day silently
+        # falls back to text for no reason tied to the actual condition.
+        # "exceptional" is the one deliberate exception: Home Assistant itself
+        # draws that as a generic MDI alert icon rather than custom weather
+        # artwork (weatherSVGs excludes it too), and this backend has no
+        # headless ha-icon to resolve an arbitrary MDI glyph from - it falls
+        # back to _FORECAST_CONDITION_ABBR's "!" text instead.
         for condition, icon_name in render._WEATHER_CONDITION_ICON_NAMES.items():
+            if condition == "exceptional":
+                continue
             with self.subTest(condition=condition):
-                self.assertIn(icon_name, render._MDI_WEATHER_ICON_PATHS)
+                self.assertIn(icon_name, render.svg_blocks.WEATHER_ICON_TO_CONDITION)
 
     @unittest.skipUnless(render.svg_render.render_available(), "SVG rasteriser not installed")
     def test_forecast_strip_draws_a_real_icon_when_the_rasteriser_is_available(self):
