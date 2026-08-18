@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.305] - 2026-08-18
+
+### Opraveno
+- Šablona **České spotové ceny**: odstraněny všechny ikony z grafiky. Ikona nahoře (dolarový symbol) byla nevhodná pro české koruny a odznaky MIN/MAX se žlutou/červenou barvou vycházely na hardwaru bez žluté barvy identicky červené, takže byly k nerozeznání. Vše je teď čistý černý text.
+
 ## [0.1.304] - 2026-08-18
 
 ### Přidáno a vylepšeno

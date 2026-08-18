@@ -59,17 +59,14 @@ export const template = {
     });
     const now = new Date();
     const highlight = Math.min(prices.length - 1, Math.floor((now.getHours() * 60 + now.getMinutes()) * prices.length / 1440));
-    // MIN in yellow / MAX in red, carried by iconBadge (a solid colour disc
-    // behind the glyph) rather than by colouring the icon/value text itself -
-    // yellow text and icon strokes are close to unreadable on this hardware,
-    // a solid yellow disc reads fine. Label and value both stay plain black.
+    // No icons here, at any size: a MIN/MAX badge coloured yellow-vs-red only
+    // reads as two different colours on hardware that actually has a yellow
+    // pigment. On the (common) BWR-only fallback both "yellow" and "red"
+    // resolve to the same red, so the two badges rendered identically -
+    // trending-down and trending-up circles that looked like copies of each
+    // other instead of a MIN/MAX pair. Plain black label/value text has no
+    // such failure mode.
     const minMax = () => [
-      { icon: "trending-down", label: "MIN", value: v(2, "0,86 Kč"), color: "yellow" },
-      { icon: "trending-up", label: "MAX", value: v(3, "2,74 Kč"), color: "red" },
-    ];
-    // The price-tag tier below has no room for icons/badges, so its MIN/MAX
-    // stay a plain, uncoloured strip.
-    const minMaxPlain = () => [
       { label: "MIN", value: v(2, "0,86 Kč") },
       { label: "MAX", value: v(3, "2,74 Kč") },
     ];
@@ -102,14 +99,12 @@ export const template = {
     // auto-painted yellow at render time (_fourColorTemplateRows's identity
     // search - the one-accent-per-tile rule every catalog template shares).
     // It hunts for the first row carrying an `icon` or `text` field
-    // specifically, wherever that row sits in the array - a plain text title
-    // used to be the only such row here, so it always won and rendered in
-    // yellow: barely-legible letterforms in a colour this pale. A small icon
-    // ahead of that title intercepts the same search instead (icon wins over
-    // text purely by coming first), the same way weather.js's own top icon
-    // and home.js's "home" icon already do - a filled glyph reads fine in
-    // yellow where thin text strokes don't.
-    const accentIcon = { icon: "currency-usd", h: 0.09 };
+    // specifically, wherever that row sits in the array. No title text row
+    // and no icon anywhere here - a bare hairline is the only thing left for
+    // that search to land on (its own fallback: the first row of any kind),
+    // so it always gets the accent and nothing that actually needs to stay
+    // black (the price, MIN/MAX) can end up recoloured by it.
+    const accentRule = { rule: true, h: 0.015 };
     if (area <= 26000) {
       // 212x104, 196x96 - a price tag, not a dashboard. A `stat` row here
       // would be the only icon/text/stat row around, which is exactly what
@@ -118,33 +113,26 @@ export const template = {
       // MIN/MAX splitting the cramped rest. One plain three-cell strip has
       // no such row for the column split to key off, so it falls back to
       // stacking full width instead - more room for every number, not less.
-      // No icon/text row exists at all at this size (no room to spare), so
-      // the identity search's fallback picks the first row of any kind
-      // instead - a bare hairline catches that the same way the icon above
-      // catches the icon/text search at larger sizes.
       return [
-        { rule: true, h: 0.018 },
+        accentRule,
         { strip: [
           { label: "NYNÍ", value: v(0, "2,45 Kč") },
-          ...minMaxPlain(),
-        ], h: 0.84 },
+          ...minMax(),
+        ], h: 0.845 },
         { flex: true },
         rangeFooter(),
       ];
     }
     if (area <= 110000) {
       // 250x128, 296x128, 168x384, 240x416, 210x480 and similar - room for
-      // the chart and a title but not for MIN/MAX icons on top of them too,
-      // so those stay dropped (see minMaxPlain above); the range footer
-      // still fits and the rows above it shrink to make room. Chart first
-      // and biggest, then the main price, then MIN/MAX, then today's range -
+      // the chart but not for a title on top of it too. Chart first and
+      // biggest, then the main price, then MIN/MAX, then today's range -
       // same priority order as the big tier below.
       return [
-        accentIcon,
-        { text: "České spotové ceny", h: 0.05, size: 0.036, bold: true },
-        { bars: { values: prices, labels, highlight }, group: "chart", h: 0.34 },
-        { stat: { value: v(0, "2,45 Kč/kWh"), caption: "aktuální interval" }, h: 0.2 },
-        { strip: minMaxPlain(), h: 0.16 },
+        accentRule,
+        { bars: { values: prices, labels, highlight }, group: "chart", h: 0.4 },
+        { stat: { value: v(0, "2,45 Kč/kWh"), caption: "aktuální interval" }, h: 0.22 },
+        { strip: minMax(), h: 0.18 },
         { flex: true },
         rangeFooter(),
       ];
@@ -154,11 +142,10 @@ export const template = {
     // price, then MIN/MAX, then today's range follow in shrinking order of
     // how often each one is actually what someone is looking for.
     return [
-      accentIcon,
-      { text: "České spotové ceny", h: 0.04, size: 0.03, bold: true },
-      { bars: { values: prices, labels, highlight }, group: "chart", h: 0.38 },
-      { stat: { value: v(0, "2,45 Kč/kWh"), caption: "aktuální interval" }, h: 0.18 },
-      { strip: minMax(), valueIcon: true, iconBadge: true, h: 0.16 },
+      accentRule,
+      { bars: { values: prices, labels, highlight }, group: "chart", h: 0.44 },
+      { stat: { value: v(0, "2,45 Kč/kWh"), caption: "aktuální interval" }, h: 0.2 },
+      { strip: minMax(), h: 0.16 },
       { flex: true },
       rangeFooter(),
     ];
