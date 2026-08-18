@@ -33,7 +33,7 @@ export const template = {
     ],
     note: "Čas a datum si šablona doplňuje sama z hodin Home Assistantu - nejsou to údaje z počasí, takže se nedají přepojit na jinou entitu.",
   },
-  design: ({ v, day, width, height }) => {
+  design: ({ v, day, conditionIcon, width, height }) => {
     // Panels wide enough for LANDSCAPE_ASPECT (panel-template-svg.mixin.js)
     // to kick in render this template as two side-by-side columns, so the
     // forecast strip only ever gets roughly half the panel's own width, not
@@ -93,12 +93,26 @@ export const template = {
       // Ikonový řádek sedí na stejné výšce (0.15) jako u home/living/security/
       // thermostat/parcel/birthdays - dřívějších 0.19 nechávalo nahoře pruh
       // prázdna, který nikde jinde v katalogu není.
-      { icon: "weather-partly-cloudy", h: lerp(0.15, 0.22) },
-      { stat: { value: v(0, "23"), unit: "°C", caption: v(1, "Polojasno") }, h: lerp(0.30, 0.32) },
+      // conditionIcon() čte skutečný stav weather.* entity (stejné jako v(1)
+      // "Stav počasí") - dřív tu byl natvrdo "weather-partly-cloudy", takže
+      // ikona nikdy neodpovídala aktuálnímu předpovědnímu stavu.
+      { icon: conditionIcon("weather-partly-cloudy"), h: lerp(0.15, 0.22) },
+      // No separate `unit` field here on purpose: a weather.* entity's own
+      // "Teplota" already comes back with "°C" baked into the value itself
+      // (_templateDisplayValue client-side, automation.py's _state_value on
+      // an automatic refresh) - a second literal unit field used to draw a
+      // static "°C" beside it that automatic refresh's marker substitution
+      // never re-deduped against, so every live update showed "25 °C°C".
+      { stat: { value: v(0, "23°C"), caption: v(1, "Polojasno") }, h: lerp(0.30, 0.32) },
       { text: v(3, "23. května"), h: lerp(0.07, 0.035), size: 0.045 },
       { rule: true, h: 0.02 },
       { strip: Array.from({ length: dayCount }, (_, i) => day(i)), group: "forecast", h: lerp(0.29, 0.375) },
-      ...(detailCells.length ? [{ rule: true, h: 0.02 }, { strip: detailCells, h: lerp(0.16, 0.22) }] : []),
+      // valueIcon: icon sits beside the number instead of stacked above it -
+      // roughly double the size, and reads far less cramped for three dense
+      // facts (vlhkost/vítr/tlak) sharing one row. This strip is never a live
+      // automation binding (see the detailCells comment above), so there is
+      // no backend svg_blocks.py counterpart that needs to mirror it.
+      ...(detailCells.length ? [{ rule: true, h: 0.02 }, { strip: detailCells, valueIcon: true, h: lerp(0.16, 0.22) }] : []),
       { flex: true },
       { footer: [{ label: "AKTUALIZOVÁNO", value: v(2, "12:45") }], h: lerp(0.13, 0.03) },
     ];

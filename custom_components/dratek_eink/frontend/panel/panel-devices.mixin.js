@@ -5223,6 +5223,17 @@ export const devicesMixin = {
     };
   },
 
+  // The glyph for weather.js's top icon row: the same weather.* entity as
+  // "Stav počasí" (v(1)), read as an icon name instead of its translated
+  // Czech word. That row used to hardcode "weather-partly-cloudy" and so
+  // never reflected the bound entity's real condition, no matter what was
+  // bound or how the forecast changed.
+  _templateCurrentConditionIcon(template, fallback) {
+    const binding = this._templateEntityForKind(template, ["weather"]);
+    const state = binding ? this._hass?.states?.[binding] : null;
+    return this._weatherConditionIcon(state?.state) || fallback;
+  },
+
   // One entry of the calendar template: a boxed date beside what is happening.
   _templateCalendarEntry(template, index) {
     const samples = [

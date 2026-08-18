@@ -1463,16 +1463,43 @@ export const templateSvgMixin = {
         const cellLeft = box.x + cellWidth * index;
         const cellRight = cellLeft + cellWidth;
         const groupLeft = cellRight - margin - groupWidth;
-        parts.push(this._svgIcon(cell.icon, groupLeft + iconSize / 2, valueY, iconSize, this._templateInk(cell.color)));
+        const iconCx = groupLeft + iconSize / 2;
+        // iconBadge: a solid colour disc behind the glyph instead of colouring
+        // the glyph (and value text) itself. Yellow reads fine as a filled
+        // shape but is close to unreadable as thin icon/text strokes on white -
+        // this opts a strip into carrying its accent colour as a real design
+        // element instead. Label stays black either way (see above); the value
+        // stays black here too so the badge is the only coloured thing in the
+        // cell.
+        if (row.iconBadge) {
+          const badgeR = iconSize * 0.62;
+          const badgeFill = this._templateInk(cell.color);
+          // Decided from the *resolved* fill, not the requested colour name: a
+          // "yellow" badge degrades to solid red on hardware without a yellow
+          // pigment (_templateInk's own fallback), and a black glyph on that
+          // red reads just as poorly as it would have on a genuinely red
+          // badge - the glyph has to follow wherever the badge actually
+          // landed, not what it was asked for.
+          parts.push(`<circle cx="${iconCx.toFixed(2)}" cy="${valueY.toFixed(2)}" r="${badgeR.toFixed(2)}" fill="${badgeFill}"></circle>`);
+          parts.push(this._svgIcon(cell.icon, iconCx, valueY, iconSize * 0.64, badgeFill === RED ? "#ffffff" : BLACK));
+          parts.push(this._svgText(cell.value, groupLeft + iconSize + gap, valueY, valueFontSize, {
+            anchor: "start", bold: true, maxWidth: valueMaxWidth,
+          }));
+          return;
+        }
+        parts.push(this._svgIcon(cell.icon, iconCx, valueY, iconSize, this._templateInk(cell.color)));
         parts.push(this._svgText(cell.value, groupLeft + iconSize + gap, valueY, valueFontSize, {
           anchor: "start", bold: true, color: this._templateInk(cell.color), maxWidth: valueMaxWidth,
         }));
         return;
       }
-      // 0.40 (was 0.34) - still clears the label above (ends ~28% down) and
-      // the value below (starts ~69% down) with a small margin either side,
-      // but reads as a noticeably bigger glyph than the old ratio did.
-      if (cell.icon) parts.push(this._svgIcon(cell.icon, cx, box.y + box.h * 0.5, Math.min(box.h * 0.40, cellWidth * 0.5), this._templateInk(cell.color)));
+      // 0.50 (was 0.40, before that 0.34) - still clears the label above
+      // (ends ~28% down) and the value below (starts ~69% down) with a small
+      // margin either side, but reads as a noticeably bigger glyph than the
+      // old ratio did. The only caller of this branch is weather.js's
+      // forecast strip (svg_blocks.py's block_strip mirrors this ratio for
+      // the live-bound automatic refresh - keep both in sync).
+      if (cell.icon) parts.push(this._svgIcon(cell.icon, cx, box.y + box.h * 0.5, Math.min(box.h * 0.50, cellWidth * 0.62), this._templateInk(cell.color)));
       parts.push(this._svgText(cell.value, cx, valueY, valueFontSize, { bold: true, color: this._templateInk(cell.color), maxWidth: cellWidth * 0.92 }));
     });
     return parts.join("");
@@ -1759,6 +1786,7 @@ export const templateSvgMixin = {
     const series = (index, fallback) => this._templateSeries(template, index, fallback);
     const ratio = (index, fallback) => this._templatePercent(template, index, fallback) / 100;
     const day = (index) => this._templateForecastDay(template, index);
+    const conditionIcon = (fallback) => this._templateCurrentConditionIcon(template, fallback);
     const event = (index) => this._templateCalendarEntry(template, index);
     const option = (name) => this._templateOptionActive(template, name);
     const customImage = () => {
@@ -1772,7 +1800,7 @@ export const templateSvgMixin = {
       // (starting from that same source) as soon as it is ready.
       return active ? this._paletteImageSrc?.(active) : this._customImageDataUrl;
     };
-    const helpers = { v, series, ratio, day, event, option, customImage, width, height };
+    const helpers = { v, series, ratio, day, conditionIcon, event, option, customImage, width, height };
     return Object.fromEntries(
       DISPLAY_TEMPLATES.map((entry) => [entry.catalog.id, () => entry.design(helpers)]),
     );

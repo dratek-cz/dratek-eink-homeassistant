@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.302] - 2026-08-18
+
+### Přidáno a vylepšeno
+- Šablona **České spotové ceny** byla přepracována: graf je teď dominantní prvek rozvržení, následuje aktuální cena, MIN/MAX a nakonec dnešní rozpětí. MIN/MAX nesou barevný akcent na plné barevné plaketě za ikonou místo obarveného textu, který je ve žluté barvě špatně čitelný.
+- Šablona **Počasí**: ikona nad teplotou teď odpovídá skutečnému stavu počasí (dřív byla natvrdo "polojasno" bez ohledu na entitu) a ikony v týdenní předpovědi i řádku vlhkost/vítr/tlak jsou větší.
+- Footer šablony **České spotové ceny** se nově plynule škáluje podle velikosti panelu stejně jako u ostatních šablon (dřív měl pevnou výšku).
+
+### Opraveno
+- Šablona **Počasí**: aktuální teplota se už nezobrazuje se zdvojeným "°C" po automatické aktualizaci displeje.
+- Sken bluetooth zařízení ("Načíst zařízení") už nemůže spadnout a vrátit nulu displejů, pokud je v mezipaměti objevování zařízení bez uložených cest - takové zařízení se teď označí jako nedostupné místo pádu celého skenu.
+
 ## [0.1.301] - 2026-08-17
 
 ### Přidáno a vylepšeno

@@ -59,41 +59,30 @@ export const template = {
     });
     const now = new Date();
     const highlight = Math.min(prices.length - 1, Math.floor((now.getHours() * 60 + now.getMinutes()) * prices.length / 1440));
-    // MIN in yellow / MAX in red - cheap-good / expensive-bad, the same pair
-    // the range footer below repeats in full-width red, so a BWRY panel reads
-    // the two accent colours consistently across the whole tile.
-    const minMax = (icons) => [
-      { ...(icons ? { icon: "trending-down" } : {}), label: "MIN", value: v(2, "0,86 Kč"), color: "yellow" },
-      { ...(icons ? { icon: "trending-up" } : {}), label: "MAX", value: v(3, "2,74 Kč"), color: "red" },
+    // MIN in yellow / MAX in red, carried by iconBadge (a solid colour disc
+    // behind the glyph) rather than by colouring the icon/value text itself -
+    // yellow text and icon strokes are close to unreadable on this hardware,
+    // a solid yellow disc reads fine. Label and value both stay plain black.
+    const minMax = () => [
+      { icon: "trending-down", label: "MIN", value: v(2, "0,86 Kč"), color: "yellow" },
+      { icon: "trending-up", label: "MAX", value: v(3, "2,74 Kč"), color: "red" },
     ];
-    // Without an icon, _blockStrip has nothing to carry the colour but the
-    // value text itself - two cramped, differently-coloured numbers with no
-    // icon to explain why read as noisy rather than informative. Colour stays
-    // reserved for the icon in the range footer below; these tiers' strip
-    // stays plain black instead.
+    // The price-tag tier below has no room for icons/badges, so its MIN/MAX
+    // stay a plain, uncoloured strip.
     const minMaxPlain = () => [
       { label: "MIN", value: v(2, "0,86 Kč") },
       { label: "MAX", value: v(3, "2,74 Kč") },
     ];
-    // The red "today's range" band matches standard footer height across templates,
-    // without redundant icons for maximum legibility.
+    // The red "today's range" band matches standard footer height across templates
+    // (the same lerp(0.13, 0.07) most other templates' own footer uses, keyed off
+    // sqrt(area) the same way - see home.js), without redundant icons for maximum
+    // legibility. A fixed 0.12 used to sit here regardless of panel size: smaller
+    // than every other template's footer on a small panel, bigger than all of them
+    // on a large one.
     const rangeFooter = () => ({
       footer: [{ label: "DNES ROZPĚTÍ", value: `${v(2, "0,86 Kč")}–${v(3, "2,74 Kč")}` }],
-      h: 0.12,
+      h: lerp(0.13, 0.07),
     });
-    // The current price used to be hard-coded red regardless of whether it was
-    // actually the day's cheapest or most expensive interval - a glance at a
-    // panel showing the lowest price of the day still read as "expensive",
-    // the opposite of what MIN/MAX's own yellow/red already teach. Deriving
-    // it from where `now` actually sits in today's own low/high range keeps
-    // the same colour language meaning the same thing everywhere on the
-    // tile: yellow cheap, red expensive, black (no colour) unremarkable.
-    const low = Math.min(...prices);
-    const high = Math.max(...prices);
-    const current = prices[highlight];
-    const spread = high - low;
-    const position = Number.isFinite(current) && spread > 0 ? (current - low) / spread : 0.5;
-    const currentColor = position >= 0.66 ? "red" : position <= 0.33 ? "yellow" : undefined;
     // width/height are the real panel this row set is about to be laid out
     // into (see _templateSvgSpecs) - undefined only for callers that build
     // rows without a target device (icon warm-up), where the 296x128 tag is
@@ -103,6 +92,24 @@ export const template = {
     // chart once the price itself is legible, while a big panel has room to
     // spare that shrinking everything to fit the smallest tag would waste.
     const area = width && height ? width * height : 296 * 128;
+    // Same sqrt(area) characteristic-size ramp home.js/water.js/etc. use for
+    // their own footer row - rangeFooter() below is the only row here that
+    // needs it, since every other row in this template picks a size per
+    // discrete area tier instead of interpolating continuously.
+    const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
+    const lerp = (from, to) => from + (to - from) * t;
+    // Every built-in template's first icon/text/stat/strip/... row is
+    // auto-painted yellow at render time (_fourColorTemplateRows's identity
+    // search - the one-accent-per-tile rule every catalog template shares).
+    // It hunts for the first row carrying an `icon` or `text` field
+    // specifically, wherever that row sits in the array - a plain text title
+    // used to be the only such row here, so it always won and rendered in
+    // yellow: barely-legible letterforms in a colour this pale. A small icon
+    // ahead of that title intercepts the same search instead (icon wins over
+    // text purely by coming first), the same way weather.js's own top icon
+    // and home.js's "home" icon already do - a filled glyph reads fine in
+    // yellow where thin text strokes don't.
+    const accentIcon = { icon: "currency-usd", h: 0.09 };
     if (area <= 26000) {
       // 212x104, 196x96 - a price tag, not a dashboard. A `stat` row here
       // would be the only icon/text/stat row around, which is exactly what
@@ -111,16 +118,16 @@ export const template = {
       // MIN/MAX splitting the cramped rest. One plain three-cell strip has
       // no such row for the column split to key off, so it falls back to
       // stacking full width instead - more room for every number, not less.
-      // No icon fits next to these values at this size, and _blockStrip
-      // colours the value text itself when there is no icon to carry the
-      // colour instead - three cramped, differently-coloured numbers read as
-      // noisy rather than informative here. Colour stays reserved for the
-      // icon in the range footer below; the strip itself stays plain black.
+      // No icon/text row exists at all at this size (no room to spare), so
+      // the identity search's fallback picks the first row of any kind
+      // instead - a bare hairline catches that the same way the icon above
+      // catches the icon/text search at larger sizes.
       return [
+        { rule: true, h: 0.018 },
         { strip: [
           { label: "NYNÍ", value: v(0, "2,45 Kč") },
           ...minMaxPlain(),
-        ], h: 0.86 },
+        ], h: 0.84 },
         { flex: true },
         rangeFooter(),
       ];
@@ -129,23 +136,29 @@ export const template = {
       // 250x128, 296x128, 168x384, 240x416, 210x480 and similar - room for
       // the chart and a title but not for MIN/MAX icons on top of them too,
       // so those stay dropped (see minMaxPlain above); the range footer
-      // still fits and the rows above it shrink to make room.
+      // still fits and the rows above it shrink to make room. Chart first
+      // and biggest, then the main price, then MIN/MAX, then today's range -
+      // same priority order as the big tier below.
       return [
-        { text: "České spotové ceny", h: 0.065, size: 0.042, bold: true },
-        { stat: { value: v(0, "2,45 Kč/kWh"), caption: "aktuální interval", color: currentColor }, h: 0.29 },
-        { bars: { values: prices, labels, highlight }, group: "chart", h: 0.32 },
-        { strip: minMaxPlain(), h: 0.26 },
+        accentIcon,
+        { text: "České spotové ceny", h: 0.05, size: 0.036, bold: true },
+        { bars: { values: prices, labels, highlight }, group: "chart", h: 0.34 },
+        { stat: { value: v(0, "2,45 Kč/kWh"), caption: "aktuální interval" }, h: 0.2 },
+        { strip: minMaxPlain(), h: 0.16 },
         { flex: true },
         rangeFooter(),
       ];
     }
-    // 400x300 and up - the full picture: icons beside MIN/MAX and the red
-    // "today's range" band, all with room to breathe.
+    // 400x300 and up - the full picture. The chart is the thing worth a
+    // glance at this size, so it leads and gets the most room; the current
+    // price, then MIN/MAX, then today's range follow in shrinking order of
+    // how often each one is actually what someone is looking for.
     return [
-      { text: "České spotové ceny", h: 0.06, size: 0.04, bold: true },
-      { stat: { value: v(0, "2,45 Kč/kWh"), caption: "aktuální interval", color: currentColor }, h: 0.22 },
-      { bars: { values: prices, labels, highlight }, group: "chart", h: 0.33 },
-      { strip: minMax(true), valueIcon: true, h: 0.3 },
+      accentIcon,
+      { text: "České spotové ceny", h: 0.04, size: 0.03, bold: true },
+      { bars: { values: prices, labels, highlight }, group: "chart", h: 0.38 },
+      { stat: { value: v(0, "2,45 Kč/kWh"), caption: "aktuální interval" }, h: 0.18 },
+      { strip: minMax(), valueIcon: true, iconBadge: true, h: 0.16 },
       { flex: true },
       rangeFooter(),
     ];

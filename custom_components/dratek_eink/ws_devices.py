@@ -437,8 +437,20 @@ async def websocket_scan(
                 device["preferred_path"] = active_gateways[0] if active_gateways else active_paths[0]
             elif gateway_paths:
                 device["preferred_path"] = gateway_paths[0]
-            else:
+            elif device["paths"]:
                 device["preferred_path"] = device["paths"][0]
+            else:
+                # A device retained purely from a stale discovery_cache entry
+                # (grace-period carry-forward, see the loop above) could reach
+                # here with an empty "paths" list if that cached snapshot
+                # never had one - device["paths"][0] used to raise IndexError
+                # in that case, which crashed the whole scan (every device,
+                # not just this one) instead of just marking this one
+                # unavailable.
+                device["preferred_path"] = {
+                    "type": "local", "id": LOCAL_ROUTE_ID,
+                    "name": "Home Assistant Bluetooth", "rssi": None, "unavailable": True,
+                }
         device["rssi"] = device["preferred_path"].get("rssi")
         device["display_name"] = str(device_names.get(address, ""))
 

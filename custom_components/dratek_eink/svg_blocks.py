@@ -644,7 +644,7 @@ def block_strip(cells: list[dict[str, Any]], box: dict[str, float], preserve_yel
             parts.append(
                 weather_icon(
                     str(cell.get("icon")), cx, box["y"] + box["h"] * 0.5,
-                    min(box["h"] * 0.40, cell_width * 0.5), preserve_yellow,
+                    min(box["h"] * 0.50, cell_width * 0.62), preserve_yellow,
                 )
             )
         parts.append(
