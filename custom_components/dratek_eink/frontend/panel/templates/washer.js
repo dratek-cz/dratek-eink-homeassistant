@@ -35,9 +35,15 @@ export const template = {
       // (_fourColorTemplateRows) paints it yellow instead of the title text
       // below - yellow letterforms are close to unreadable on this hardware,
       // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
-      { icon: "washing-machine", h: lerp(0.1, 0.075) },
-      { text: "Pračka", h: lerp(0.065, 0.045), size: 0.055, bold: true },
-      { text: v(0, "Bavlna 60°"), h: lerp(0.08, 0.06), size: 0.062, bold: true, color: "red" },
+      { icon: "washing-machine", h: lerp(0.08, 0.06) },
+      // No "Pračka" title text: the program name right below already says
+      // what this tile is. Remaining time used to be the smallest number on
+      // the tile even though "how much longer" is the one thing someone
+      // actually checks a washer template for - it leads now, sized like
+      // weather.js's own temperature, with the step progress as a smaller,
+      // secondary strip beneath it rather than the biggest thing on the tile.
+      { text: v(0, "Bavlna 60°"), h: lerp(0.075, 0.055), size: 0.055, bold: true, color: "red" },
+      { stat: { value: v(1, "01:15"), caption: "zbývá" }, h: lerp(0.34, 0.38) },
       { rule: true, h: 0.02 },
       { steps: [
         { label: "Napouštění", done: true },
@@ -45,8 +51,7 @@ export const template = {
         { label: "Máchání", done: true, color: "red" },
         { label: "Odstřeďování" },
         { label: "Hotovo" },
-      ], h: lerp(0.4, 0.44) },
-      { stat: { value: v(1, "01:15"), caption: "zbývá" }, h: lerp(0.2, 0.24) },
+      ], h: lerp(0.28, 0.3) },
       { flex: true },
       { footer: [{ label: "SKONČÍ V", value: v(2, "14:30") }], h: lerp(0.13, 0.07) },
     ];

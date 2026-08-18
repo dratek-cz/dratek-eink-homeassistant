@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.304] - 2026-08-18
+
+### Přidáno a vylepšeno
+- Devět šablon (Dům, Spotřeba vody, Stav serveru, Kdo je doma, Nákupní seznam, Odpady, Wi-Fi, Fotovoltaika, Pračka) přišlo o úvodní nadpis, který jen opakoval název šablony a nenesl žádnou informaci navíc - hlavní obsah (mřížka, graf, ukazatele, QR kód...) tak dostal víc místa a je na první pohled to hlavní, co je vidět.
+- Šablona Pračka přeuspořádána: zbývající čas je teď hlavní velké číslo (dřív byl nejmenší), krokový průběh napouštění/praní/máchání je zmenšen na doplňkový pruh pod ním.
+
 ## [0.1.303] - 2026-08-18
 
 ### Přidáno a vylepšeno

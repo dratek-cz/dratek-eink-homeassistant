@@ -35,18 +35,17 @@ export const template = {
       // (_fourColorTemplateRows) paints it yellow instead of the title text
       // below - yellow letterforms are close to unreadable on this hardware,
       // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
-      { icon: "wifi", h: lerp(0.1, 0.075) },
-      { text: "Wi-Fi", h: lerp(0.065, 0.045), size: 0.055, bold: true },
-      // Low redundancy on purpose: it costs four modules of symbol size, and on a
+      { icon: "wifi", h: lerp(0.08, 0.06) },
+      // No title text: "Wi-Fi" only restated the icon above the code that
+      // is this template's entire reason to exist. Low redundancy on the QR
+      // itself is on purpose: it costs four modules of symbol size, and on a
       // tag this small every module is a device pixel that decides whether a phone
       // can read the code at all. The QR's own box is height-bound (its side is
       // min(box.w, box.h) rounded to whole device pixels), so a wider row does
-      // nothing - only a taller one grows the code. 0.36 left the code noticeably
-      // smaller than the box around it; the setup note already warns the printed
-      // code is borderline readable on small tags, so this reclaims height from
+      // nothing - only a taller one grows the code. This reclaims height from
       // the two text bands below (still fully readable at 0.145) instead. The lerp
       // grows the code further still on a genuinely tall/large panel.
-      { qr: { text: `WIFI:T:WPA;S:${v(0, "Home_Network")};P:${v(1, "MyPassword123")};;`, correction: "L" }, h: lerp(0.44, 0.5) },
+      { qr: { text: `WIFI:T:WPA;S:${v(0, "Home_Network")};P:${v(1, "MyPassword123")};;`, correction: "L" }, h: lerp(0.5, 0.57) },
       { band: { label: "SÍŤ", value: v(0, "Home_Network") }, bleed: true, h: 0.145 },
       { gap: true, h: 0.02 },
       { band: { label: "HESLO", value: v(1, "MyPassword123"), color: "black" }, bleed: true, h: 0.145 },

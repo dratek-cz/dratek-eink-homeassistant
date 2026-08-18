@@ -46,15 +46,18 @@ export const template = {
       // (_fourColorTemplateRows) paints it yellow instead of the title text
       // below - yellow letterforms are close to unreadable on this hardware,
       // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
-      { icon: "server-network", h: lerp(0.1, 0.075) },
-      { text: "Home server", h: lerp(0.06, 0.04), size: 0.046, bold: true },
-      { band: { label: "STAV", value: v(0, "ONLINE") }, bleed: true, h: 0.15 },
+      { icon: "server-network", h: lerp(0.09, 0.065) },
+      // No title text: "Home server" only restated what the status band
+      // right below it already announces. Both the band and the four
+      // meters grow into the space that used to go to a caption nobody
+      // needed to read twice.
+      { band: { label: "STAV", value: v(0, "ONLINE") }, bleed: true, h: 0.17 },
       { meters: [
         { label: "CPU", value: v(1, "24 %"), percent: ratio(1, 24) },
         { label: "RAM", value: v(2, "61 %"), percent: ratio(2, 61) },
         { label: "Disk", value: v(3, "73 %"), percent: ratio(3, 73), color: "red" },
         { label: "Teplota", value: v(4, "48 °C"), percent: ratio(4, 48) },
-      ], group: "ratio", h: lerp(0.6, 0.67) },
+      ], group: "ratio", h: lerp(0.68, 0.75) },
       { flex: true },
       { footer: [{ label: "PROVOZ", value: v(5, "18 dní") }], h: lerp(0.13, 0.07) },
     ];

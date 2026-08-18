@@ -43,13 +43,14 @@ export const template = {
       // (_fourColorTemplateRows) paints it yellow instead of the title text
       // below - yellow letterforms are close to unreadable on this hardware,
       // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
-      { icon: "trash-can-outline", h: lerp(0.11, 0.08) },
-      { text: "Odpady", h: lerp(0.075, 0.05), size: 0.058, bold: true },
+      { icon: "trash-can-outline", h: lerp(0.1, 0.075) },
+      // No title text: "Odpady" only restated what the two collection
+      // tiles right below it already are.
       { rule: true, h: 0.02 },
       { split: [
         { icon: "trash-can-outline", value: v(0, "ZÍTRA"), label: "Plast", color: "red" },
         { icon: "recycle", value: v(1, "za 7 dní"), label: "Papír" },
-      ], h: lerp(0.6, 0.68) },
+      ], h: lerp(0.68, 0.76) },
       { flex: true },
       { footer: [{ label: "NEJBLIŽŠÍ SVOZ", value: v(2, "út 24. 5.") }], h: lerp(0.14, 0.08) },
     ];

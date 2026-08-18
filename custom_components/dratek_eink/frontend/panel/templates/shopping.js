@@ -41,8 +41,9 @@ export const template = {
       // (_fourColorTemplateRows) paints it yellow instead of the title text
       // below - yellow letterforms are close to unreadable on this hardware,
       // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
-      { icon: "format-list-checks", h: lerp(0.11, 0.08) },
-      { text: "Nákupní seznam", h: lerp(0.065, 0.045), size: 0.048, bold: true },
+      { icon: "format-list-checks", h: lerp(0.1, 0.075) },
+      // No title text: "Nákupní seznam" only restated what the checklist
+      // right below it already is.
       { rule: true, h: 0.02 },
       // 0.55 left over a fifth of the panel as bare flex before the footer -
       // checklist rows scale with their own share of box height, so growing
@@ -54,7 +55,7 @@ export const template = {
         { label: v(0, "Jablka") },
         { label: "Káva" },
         { label: "Prací gel" },
-      ], marker: "box", strike: true, h: lerp(0.72, 0.78) },
+      ], marker: "box", strike: true, h: lerp(0.79, 0.85) },
       { flex: true },
       { footer: [{ label: "ZBÝVÁ", value: v(2, "3 položky") }], h: lerp(0.14, 0.08) },
     ];

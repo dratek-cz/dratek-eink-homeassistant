@@ -40,9 +40,10 @@ export const template = {
       // (_fourColorTemplateRows) paints it yellow instead of the title text
       // below - yellow letterforms are close to unreadable on this hardware,
       // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
-      { icon: "solar-power", h: lerp(0.11, 0.08) },
-      { text: "Fotovoltaika", h: lerp(0.065, 0.045), size: 0.05, bold: true },
-      { ring: { percent: ratio(0, 47), value: v(0, "2,35"), caption: "kW" }, group: "ratio", h: lerp(0.4, 0.44) },
+      { icon: "solar-power", h: lerp(0.09, 0.065) },
+      // No title text: "Fotovoltaika" only restated the icon above the
+      // power ring that is the whole point of glancing at this tile.
+      { ring: { percent: ratio(0, 47), value: v(0, "2,35"), caption: "kW" }, group: "ratio", h: lerp(0.47, 0.52) },
       { list: [
         { icon: "weather-sunny", label: "Dnes", value: v(1, "8,2 kWh") },
         { icon: "calendar-month", label: "Měsíc", value: v(2, "152 kWh") },

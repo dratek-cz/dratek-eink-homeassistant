@@ -37,17 +37,22 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     return [
+      // No title text: "Dům" only ever repeated what the icon and the four
+      // readings below already say, so it cost a whole row to say nothing -
+      // and made this the fourth template in the catalog with the same
+      // icon-then-title opening. Dropping it also means the readings grid
+      // isn't fighting a caption for the panel's own identity anymore, so it
+      // gets to be the thing someone actually reads.
       // No explicit colour: this is the template's identity row, and
       // _fourColorTemplateRows always repaints the first icon/text row
       // yellow regardless of what colour it starts with.
-      { icon: "home", h: 0.15 },
-      { text: "Dům", h: 0.08, size: 0.058, bold: true },
+      { icon: "home", h: lerp(0.13, 0.1) },
       { grid: [
         { icon: "thermometer", label: "Teplota", value: v(0, "21,5 °C") },
         { icon: "water-percent", label: "Vlhkost", value: v(1, "45 %") },
         { icon: "lightbulb-on", label: "Světla", value: v(2, "3 ON") },
         { icon: "lock", label: "Zámky", value: v(3, "Zamčeno") },
-      ], columns: 2, h: lerp(0.62, 0.68) },
+      ], columns: 2, h: lerp(0.73, 0.79) },
       { flex: true },
       { footer: [{ label: "STAV", value: "Vše v pořádku" }], h: lerp(0.14, 0.08) },
     ];

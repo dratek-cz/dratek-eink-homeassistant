@@ -44,14 +44,16 @@ export const template = {
       // below - yellow letterforms are close to unreadable on this hardware,
       // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
       { icon: "water", h: lerp(0.1, 0.075) },
-      { text: "Spotřeba vody", h: lerp(0.06, 0.04), size: 0.046, bold: true },
+      // No title text: "Spotřeba vody" only restated the icon and the litre
+      // count right below it. Dropping it gives today's total and the
+      // 7-day trend the room to actually be the biggest things on the tile.
       // No separate unit field: a bound sensor's value already comes back
       // with its unit_of_measurement appended (both the frontend preview and
       // automation.py's automatic-refresh substitution do this), so a second
       // literal "l" here used to draw twice after a live update - see
       // weather.js's temperature stat for the same fix.
-      { stat: { value: v(0, "126 l"), caption: "dnes" }, h: lerp(0.24, 0.28) },
-      { spark: { values: series(0, [96, 131, 108, 142, 119, 174, 126]), caption: "7 dní" }, group: "chart", h: lerp(0.24, 0.28) },
+      { stat: { value: v(0, "126 l"), caption: "dnes" }, h: lerp(0.3, 0.34) },
+      { spark: { values: series(0, [96, 131, 108, 142, 119, 174, 126]), caption: "7 dní" }, group: "chart", h: lerp(0.28, 0.32) },
       { rule: true, h: 0.02 },
       { strip: [
         { label: "TÝDEN", value: v(1, "0,84 m³") },
