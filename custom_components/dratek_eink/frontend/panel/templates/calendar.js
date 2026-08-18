@@ -42,10 +42,18 @@ export const template = {
     // 1. NEJMENŠÍ CENOVKY (např. 212x104, 196x96):
     if (area <= 26000) {
       return [
+        // A tiny accent rule leads so the shared one-accent-per-tile auto-
+        // colour (_fourColorTemplateRows) paints it yellow instead of
+        // today's date below - none of this template's rows carry a
+        // row-level icon/text field (every icon lives inside a split/datebox
+        // cell), so without this the identity search fell back to the first
+        // split row and painted its first cell's value text yellow, making
+        // the date illegible. See cz_spot_prices.js for the same fix.
+        { rule: true, h: 0.015 },
         { split: [
           { label: weekdays[now.getDay()].toUpperCase(), value: `${now.getDate()}. ${months[now.getMonth()]}` },
           { label: "SVÁTEK", value: namedayVal, color: "red" },
-        ], card: true, color: "white", h: 0.24 },
+        ], card: true, color: "white", h: 0.225 },
         { rule: true, h: 0.02 },
         { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, group: "event-0", h: 0.54 },
         { flex: true },
@@ -63,11 +71,15 @@ export const template = {
         const rowHeight = 0.77 / rowsPerCol;
 
         const rows = [
+          // Same accent-rule fix as the small tier above: intercepts the
+          // shared auto-yellow paint before it reaches the split cells'
+          // icons/values (today's date, the nameday) below.
+          { rule: true, h: 0.012 },
           { split: [
             { icon: "calendar-today", label: "DNEŠNÍ DEN", value: todayStr },
             { icon: "cake-variant-outline", label: "DNES MÁ SVÁTEK", value: namedayVal, color: "red" },
             { icon: "clock-outline", label: "PŘEHLED KALENDÁŘE", value: `${totalEvents} UDÁLOSTÍ` },
-          ], card: true, color: "white", h: 0.13 },
+          ], card: true, color: "white", h: 0.128 },
           { rule: true, h: 0.02 },
         ];
 
@@ -118,10 +130,13 @@ export const template = {
       const count = h >= 650 ? 7 : h >= 450 ? 5 : h >= 350 ? 4 : 3;
       const eventH = 0.77 / count;
       const rows = [
+        // Same accent-rule fix as above: intercepts the shared auto-yellow
+        // paint before it reaches the split cells' icons/values below.
+        { rule: true, h: 0.012 },
         { split: [
           { icon: "calendar-today", label: "DNEŠNÍ DEN", value: todayStr },
           { icon: "cake-variant-outline", label: "SVÁTEK MÁ", value: namedayVal, color: "red" },
-        ], card: true, color: "white", h: 0.13 },
+        ], card: true, color: "white", h: 0.128 },
         { rule: true, h: 0.02 },
       ];
       for (let i = 0; i < count; i++) {
@@ -146,10 +161,13 @@ export const template = {
     const eventH = isTall ? 0.19 : 0.34;
 
     const rows = [
+      // Same accent-rule fix as above: intercepts the shared auto-yellow
+      // paint before it reaches the split cells' date/nameday values below.
+      { rule: true, h: 0.012 },
       { split: [
         { label: weekdays[now.getDay()].toUpperCase(), value: `${now.getDate()}. ${months[now.getMonth()]}` },
         { label: "SVÁTEK MÁ", value: namedayVal, color: "red" },
-      ], card: true, color: "white", h: isTall ? 0.12 : 0.18 },
+      ], card: true, color: "white", h: (isTall ? 0.12 : 0.18) - 0.012 },
       { rule: true, h: 0.02 },
     ];
     for (let i = 0; i < count; i++) {

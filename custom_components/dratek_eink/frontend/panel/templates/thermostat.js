@@ -32,7 +32,11 @@ export const template = {
     const lerp = (from, to) => from + (to - from) * t;
     return [
       { icon: "thermostat", h: lerp(0.15, 0.12) },
-      { stat: { value: v(0, "21,5"), unit: "°C", caption: "aktuálně" }, h: lerp(0.3, 0.36) },
+      // No separate unit field: a bound climate entity's value already
+      // comes back with "°C" appended (automation.py's climate temperature
+      // branch), so a second literal unit here used to draw twice after a
+      // live update - see weather.js's temperature stat for the same fix.
+      { stat: { value: v(0, "21,5°C"), caption: "aktuálně" }, h: lerp(0.3, 0.36) },
       { split: [
         { value: v(1, "22 °C"), label: "Cíl" },
         { value: v(2, "60 %"), label: "Výkon", color: "red" },

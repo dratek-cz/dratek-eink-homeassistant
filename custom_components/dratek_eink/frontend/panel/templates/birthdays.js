@@ -17,7 +17,7 @@ export const template = {
       ["gift-outline", "Připomínka"],
     ],
   },
-  prepared: false,
+  prepared: true,
   setup: {
     summary: "Kdo dnes slaví velkým jménem nahoře, kdo je na řadě příště jako datum dole.",
     integrations: [

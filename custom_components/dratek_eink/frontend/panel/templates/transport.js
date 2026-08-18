@@ -12,7 +12,7 @@ export const template = {
       ["walk", "Vzdálenost"],
     ],
   },
-  prepared: false,
+  prepared: true,
   setup: {
     summary: "Název zastávky nahoře, čtyři řádky odjezdů pod ním - jen ten první je opravdu živý (viz poznámka).",
     integrations: [
@@ -31,7 +31,12 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     return [
-      { text: v(0, "Hlavní nádraží"), h: lerp(0.085, 0.06), size: 0.052, bold: true },
+      // A small icon leads so the shared one-accent-per-tile auto-colour
+      // (_fourColorTemplateRows) paints it yellow instead of the stop name
+      // below - yellow letterforms are close to unreadable on this hardware,
+      // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
+      { icon: "map-marker-outline", h: lerp(0.11, 0.08) },
+      { text: v(0, "Hlavní nádraží"), h: lerp(0.075, 0.05), size: 0.052, bold: true },
       { rule: true, h: 0.02 },
       // 0.55 left a 20%-of-panel gap before the footer - board rows scale with
       // their own share of box height, so growing this fills that space with

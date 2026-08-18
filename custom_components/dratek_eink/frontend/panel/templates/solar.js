@@ -36,8 +36,13 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     return [
-      { text: "Fotovoltaika", h: lerp(0.075, 0.05), size: 0.05, bold: true },
-      { ring: { percent: ratio(0, 47), value: v(0, "2,35"), caption: "kW" }, group: "ratio", h: lerp(0.42, 0.46) },
+      // A small icon leads so the shared one-accent-per-tile auto-colour
+      // (_fourColorTemplateRows) paints it yellow instead of the title text
+      // below - yellow letterforms are close to unreadable on this hardware,
+      // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
+      { icon: "solar-power", h: lerp(0.11, 0.08) },
+      { text: "Fotovoltaika", h: lerp(0.065, 0.045), size: 0.05, bold: true },
+      { ring: { percent: ratio(0, 47), value: v(0, "2,35"), caption: "kW" }, group: "ratio", h: lerp(0.4, 0.44) },
       { list: [
         { icon: "weather-sunny", label: "Dnes", value: v(1, "8,2 kWh") },
         { icon: "calendar-month", label: "Měsíc", value: v(2, "152 kWh") },

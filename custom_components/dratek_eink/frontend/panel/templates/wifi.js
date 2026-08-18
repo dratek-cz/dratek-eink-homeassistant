@@ -1,5 +1,5 @@
 // Everything about the "Wi-Fi" display template.
-import { helper } from "../shared.js";
+import { helper } from "./shared.js";
 
 export const template = {
   catalog: {
@@ -12,7 +12,7 @@ export const template = {
       ["key-outline", "Heslo"],
     ],
   },
-  prepared: false,
+  prepared: true,
   setup: {
     summary: "QR kód pro připojení k Wi-Fi, název sítě a heslo pod ním - žádný živý senzor, jen dvě hodnoty, které se nastaví jednou a pak se skoro nemění.",
     integrations: [
@@ -31,7 +31,12 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     return [
-      { text: "Wi-Fi", h: lerp(0.075, 0.05), size: 0.055, bold: true },
+      // A small icon leads so the shared one-accent-per-tile auto-colour
+      // (_fourColorTemplateRows) paints it yellow instead of the title text
+      // below - yellow letterforms are close to unreadable on this hardware,
+      // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
+      { icon: "wifi", h: lerp(0.1, 0.075) },
+      { text: "Wi-Fi", h: lerp(0.065, 0.045), size: 0.055, bold: true },
       // Low redundancy on purpose: it costs four modules of symbol size, and on a
       // tag this small every module is a device pixel that decides whether a phone
       // can read the code at all. The QR's own box is height-bound (its side is

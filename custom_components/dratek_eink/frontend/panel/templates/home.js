@@ -37,7 +37,10 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     return [
-      { icon: "home", h: 0.15, color: "red" },
+      // No explicit colour: this is the template's identity row, and
+      // _fourColorTemplateRows always repaints the first icon/text row
+      // yellow regardless of what colour it starts with.
+      { icon: "home", h: 0.15 },
       { text: "Dům", h: 0.08, size: 0.058, bold: true },
       { grid: [
         { icon: "thermometer", label: "Teplota", value: v(0, "21,5 °C") },

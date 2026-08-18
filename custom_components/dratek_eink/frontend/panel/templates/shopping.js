@@ -11,7 +11,7 @@ export const template = {
       ["cart-outline", "Počet zbývajících"],
     ],
   },
-  prepared: false,
+  prepared: true,
   setup: {
     summary: "Nákupní seznam se zaškrtnutými položkami - pět řádků na displeji, ale dva z nich jsou napojitelné na skutečná data, zbytek je ukázka (viz poznámka).",
     integrations: [
@@ -37,7 +37,12 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     return [
-      { text: "Nákupní seznam", h: lerp(0.075, 0.05), size: 0.048, bold: true },
+      // A small icon leads so the shared one-accent-per-tile auto-colour
+      // (_fourColorTemplateRows) paints it yellow instead of the title text
+      // below - yellow letterforms are close to unreadable on this hardware,
+      // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
+      { icon: "format-list-checks", h: lerp(0.11, 0.08) },
+      { text: "Nákupní seznam", h: lerp(0.065, 0.045), size: 0.048, bold: true },
       { rule: true, h: 0.02 },
       // 0.55 left over a fifth of the panel as bare flex before the footer -
       // checklist rows scale with their own share of box height, so growing

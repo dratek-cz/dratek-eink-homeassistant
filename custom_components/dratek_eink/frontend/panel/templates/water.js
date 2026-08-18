@@ -18,7 +18,7 @@ export const template = {
   // Which variable index feeds the sparkline's live series (see air.js for
   // why this can't be recovered from the row itself).
   automation: { series: [{ variableIndex: 0 }] },
-  prepared: false,
+  prepared: true,
   setup: {
     summary: "Spotřeba vody dnes velkým číslem, křivka za posledních 7 dní pod ní, týden/měsíc/rozdíl jako tři čísla dole.",
     integrations: [
@@ -39,8 +39,18 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     return [
-      { text: "Spotřeba vody", h: lerp(0.07, 0.045), size: 0.046, bold: true },
-      { stat: { value: v(0, "126"), unit: "l", caption: "dnes" }, h: lerp(0.26, 0.3) },
+      // A small icon leads so the shared one-accent-per-tile auto-colour
+      // (_fourColorTemplateRows) paints it yellow instead of the title text
+      // below - yellow letterforms are close to unreadable on this hardware,
+      // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
+      { icon: "water", h: lerp(0.1, 0.075) },
+      { text: "Spotřeba vody", h: lerp(0.06, 0.04), size: 0.046, bold: true },
+      // No separate unit field: a bound sensor's value already comes back
+      // with its unit_of_measurement appended (both the frontend preview and
+      // automation.py's automatic-refresh substitution do this), so a second
+      // literal "l" here used to draw twice after a live update - see
+      // weather.js's temperature stat for the same fix.
+      { stat: { value: v(0, "126 l"), caption: "dnes" }, h: lerp(0.24, 0.28) },
       { spark: { values: series(0, [96, 131, 108, 142, 119, 174, 126]), caption: "7 dní" }, group: "chart", h: lerp(0.24, 0.28) },
       { rule: true, h: 0.02 },
       { strip: [

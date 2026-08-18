@@ -12,7 +12,7 @@ export const template = {
       ["clock-outline", "Čas doručení"],
     ],
   },
-  prepared: false,
+  prepared: true,
   setup: {
     summary: "Stav zásilky nahoře, čtyřkrokový průběh dopravy uprostřed - kolečka na cestě jsou ilustrační (viz poznámka), skutečná data nesou jen texty.",
     integrations: [

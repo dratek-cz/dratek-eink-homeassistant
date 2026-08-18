@@ -1,5 +1,5 @@
 // Everything about the "Cenovka" (Price tag) display template.
-import { helper } from "../shared.js";
+import { helper } from "./shared.js";
 
 export const template = {
   catalog: {
@@ -38,8 +38,16 @@ export const template = {
     if (!isSale) {
       // Plain black-and-white price tag: name, large price, product code in black footer
       return [
-        { band: { value: "CENOVKA", color: "black" }, bleed: true, h: lerp(0.13, 0.09) },
-        { text: v(0, "Jablka Golden"), h: lerp(0.14, 0.12), size: 0.075, bold: true },
+        // A small icon leads so the shared one-accent-per-tile auto-colour
+        // (_fourColorTemplateRows) paints it yellow instead of the product
+        // name text below - the identity search matches the first row with
+        // an `icon` or `text` field, and the band below has neither, so
+        // without this the product name (bound, potentially real data) was
+        // the thing that mechanism repainted yellow and made illegible. See
+        // cz_spot_prices.js for the same fix.
+        { icon: "tag-outline", h: lerp(0.1, 0.07) },
+        { band: { value: "CENOVKA", color: "black" }, bleed: true, h: lerp(0.12, 0.08) },
+        { text: v(0, "Jablka Golden"), h: lerp(0.13, 0.11), size: 0.075, bold: true },
         { pricetag: {
           price: v(1, "149,-"),
           currency: "Kč",
@@ -51,8 +59,13 @@ export const template = {
     }
     // Sale variant: red band, struck old price, big new price, code in red footer
     return [
-      { band: { value: "AKCE", color: "red" }, bleed: true, h: lerp(0.13, 0.09) },
-      { text: v(0, "Jablka Golden"), h: lerp(0.13, 0.11), size: 0.068, bold: true },
+      // Same icon-leads fix as the non-sale branch above - and here it also
+      // protects the band's deliberate red "AKCE" alert colour, which the
+      // auto-colour mechanism would otherwise be free to overwrite to
+      // yellow if it ever became the identity row instead of the name text.
+      { icon: "tag-outline", h: lerp(0.1, 0.07) },
+      { band: { value: "AKCE", color: "red" }, bleed: true, h: lerp(0.12, 0.08) },
+      { text: v(0, "Jablka Golden"), h: lerp(0.12, 0.1), size: 0.068, bold: true },
       { pricetag: {
         price: v(1, "149,-"),
         currency: "Kč",

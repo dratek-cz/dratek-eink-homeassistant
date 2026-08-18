@@ -43,8 +43,13 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     return [
-      { text: "Kvalita vzduchu", h: lerp(0.07, 0.045), size: 0.046, bold: true },
-      { dial: { percent: ratio(0, 21) / 2, value: v(0, "42"), caption: "AQI", min: "0", max: "200" }, group: "ratio", h: lerp(0.35, 0.4) },
+      // A small icon leads so the shared one-accent-per-tile auto-colour
+      // (_fourColorTemplateRows) paints it yellow instead of the title text
+      // below - yellow letterforms are close to unreadable on this hardware,
+      // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
+      { icon: "air-filter", h: lerp(0.1, 0.075) },
+      { text: "Kvalita vzduchu", h: lerp(0.06, 0.04), size: 0.046, bold: true },
+      { dial: { percent: ratio(0, 21) / 2, value: v(0, "42"), caption: "AQI", min: "0", max: "200" }, group: "ratio", h: lerp(0.33, 0.38) },
       { rule: true, h: 0.02 },
       { list: [
         { icon: "molecule-co2", label: "CO₂", value: v(1, "612 ppm") },

@@ -11,7 +11,7 @@ export const template = {
       ["clock-check-outline", "Čas dokončení"],
     ],
   },
-  prepared: false,
+  prepared: true,
   setup: {
     summary: "Program pračky, zbývající čas a čas dokončení - průběh napouštění/praní/máchání pod nadpisem je ilustrační grafika, ne živé sledování konkrétní fáze.",
     integrations: [
@@ -31,8 +31,13 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     return [
-      { text: "Pračka", h: lerp(0.075, 0.05), size: 0.055, bold: true },
-      { text: v(0, "Bavlna 60°"), h: lerp(0.09, 0.07), size: 0.062, bold: true, color: "red" },
+      // A small icon leads so the shared one-accent-per-tile auto-colour
+      // (_fourColorTemplateRows) paints it yellow instead of the title text
+      // below - yellow letterforms are close to unreadable on this hardware,
+      // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
+      { icon: "washing-machine", h: lerp(0.1, 0.075) },
+      { text: "Pračka", h: lerp(0.065, 0.045), size: 0.055, bold: true },
+      { text: v(0, "Bavlna 60°"), h: lerp(0.08, 0.06), size: 0.062, bold: true, color: "red" },
       { rule: true, h: 0.02 },
       { steps: [
         { label: "Napouštění", done: true },

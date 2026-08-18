@@ -2,6 +2,15 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.303] - 2026-08-18
+
+### Přidáno a vylepšeno
+- Do katalogu šablon bylo zařazeno a zprovozněno 18 dosud zaparkovaných šablon: Dům, Obývák, Topení, Zabezpečení, Kdo je doma, Odjezdy, Nákupní seznam, Kvalita vzduchu, Spotřeba vody, Zásilka, Narozeniny, Stav serveru, Zahrada, Cenovka, Odpady, Fotovoltaika, Pračka a Wi-Fi. Každá byla zkontrolována, opravena a ověřena, že se vykresluje správně na všech velikostech displeje.
+
+### Opraveno
+- U řady šablon (Fotovoltaika, Kvalita vzduchu, Spotřeba vody, Zahrada, Kdo je doma, Stav serveru, Odjezdy, Nákupní seznam, Pračka, Cenovka, Odpady, Wi-Fi a Kalendář) se sdílený mechanismus pro barevný akcent dlaždice trefil do textového popisku nebo živé hodnoty místo do ikony, takže se vykreslil žlutě - v této barvě je text na displeji prakticky nečitelný. Nově akcent vždy dopadne na ikonu nebo tenkou linku, nikdy na text.
+- Šablony Obývák, Topení, Spotřeba vody a Zahrada zobrazovaly po automatické aktualizaci teplotu/procenta/litry se zdvojenou jednotkou (stejná chyba jako dřív u šablony Počasí).
+
 ## [0.1.302] - 2026-08-18
 
 ### Přidáno a vylepšeno

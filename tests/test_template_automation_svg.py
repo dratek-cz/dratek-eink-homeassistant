@@ -174,13 +174,14 @@ class GraphicRowCaptureTests(unittest.TestCase):
         self.assertIn('group: "forecast"', weather)
         cz_spot_prices = (PANEL / "templates" / "cz_spot_prices.js").read_text(encoding="utf-8")
         self.assertIn("automation: { series: [{ variableIndex: 1 }] }", cz_spot_prices)
-        # calendar.js/air.js are parked under nenastaveno/ while each is
-        # re-verified one at a time (see index.js) - still on disk, just
-        # temporarily unwired from the active catalog.
-        calendar = (PANEL / "templates" / "nenastaveno" / "calendar.js").read_text(encoding="utf-8")
+        calendar = (PANEL / "templates" / "calendar.js").read_text(encoding="utf-8")
+        # The smallest (price-tag) tier shows a single fixed event and
+        # declares it with a literal marker; the larger tiers loop over a
+        # variable number of events, so their marker is a template literal
+        # computed per index instead of a fixed string.
         self.assertIn('group: "event-0"', calendar)
-        self.assertIn('group: "event-1"', calendar)
-        air = (PANEL / "templates" / "nenastaveno" / "air.js").read_text(encoding="utf-8")
+        self.assertIn('group: `event-${', calendar)
+        air = (PANEL / "templates" / "air.js").read_text(encoding="utf-8")
         self.assertIn("automation: { ratio: [{ variableIndex: 0, divisor: 2 }] }", air)
 
     def test_ratio_claimed_indices_are_excluded_from_the_plain_text_capture(self) -> None:

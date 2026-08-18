@@ -12,7 +12,7 @@ export const template = {
       ["clock-outline", "Aktualizace"],
     ],
   },
-  prepared: false,
+  prepared: true,
   setup: {
     summary: "Kdo z domácnosti je doma a kdo ne - první dlaždice ukazuje jméno a stav, druhá a třetí jsou spíš ukázkové (viz poznámka níže).",
     integrations: [
@@ -32,7 +32,12 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     return [
-      { text: "Kdo je doma", h: lerp(0.08, 0.055), size: 0.052, bold: true },
+      // A small icon leads so the shared one-accent-per-tile auto-colour
+      // (_fourColorTemplateRows) paints it yellow instead of the title text
+      // below - yellow letterforms are close to unreadable on this hardware,
+      // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
+      { icon: "account-group-outline", h: lerp(0.11, 0.08) },
+      { text: "Kdo je doma", h: lerp(0.07, 0.05), size: 0.052, bold: true },
       { rule: true, h: 0.02 },
       // 0.5 left roughly a quarter of the panel as bare flex space below the
       // grid - grid cells scale with their own box (see _blockGrid), so this

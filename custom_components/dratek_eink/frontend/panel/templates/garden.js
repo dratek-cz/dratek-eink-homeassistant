@@ -37,8 +37,17 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     return [
-      { text: v(0, "Záhon rajčat"), h: lerp(0.075, 0.05), size: 0.048, bold: true },
-      { stat: { value: v(1, "36"), unit: "%", caption: "vlhkost půdy" }, h: lerp(0.26, 0.3) },
+      // A small icon leads so the shared one-accent-per-tile auto-colour
+      // (_fourColorTemplateRows) paints it yellow instead of the bed name
+      // below - yellow letterforms are close to unreadable on this hardware,
+      // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
+      { icon: "sprout-outline", h: lerp(0.1, 0.075) },
+      { text: v(0, "Záhon rajčat"), h: lerp(0.065, 0.045), size: 0.048, bold: true },
+      // No separate unit field: a bound sensor's value already comes back
+      // with its unit_of_measurement appended, so a second literal "%" here
+      // used to draw twice after a live update - see weather.js's
+      // temperature stat for the same fix.
+      { stat: { value: v(1, "36 %"), caption: "vlhkost půdy" }, h: lerp(0.24, 0.28) },
       { spark: { values: series(1, [62, 58, 55, 49, 47, 43, 40, 38, 36]), caption: "7 dní" }, group: "chart", h: lerp(0.27, 0.3) },
       { rule: true, h: 0.02 },
       { list: [

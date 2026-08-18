@@ -34,7 +34,11 @@ export const template = {
     const lerp = (from, to) => from + (to - from) * t;
     return [
       { icon: "sofa", h: lerp(0.15, 0.12) },
-      { stat: { value: v(0, "23,5"), unit: "°C", caption: "Obývák" }, h: lerp(0.3, 0.34) },
+      // No separate unit field: a bound sensor's value already comes back
+      // with its unit_of_measurement appended, so a second literal "°C"
+      // here used to draw twice after a live update - see weather.js's
+      // temperature stat for the same fix.
+      { stat: { value: v(0, "23,5°C"), caption: "Obývák" }, h: lerp(0.3, 0.34) },
       { rule: true, h: 0.02 },
       { meters: [
         { label: "Vlhkost", value: v(1, "40 %"), percent: ratio(1, 40) },
