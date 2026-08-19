@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.311";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.312";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=catalog-no-color-tests-1";
 
 // The standard Czech civil name-day calendar, indexed [month][day - 1]
@@ -483,34 +483,6 @@ export const devicesMixin = {
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   },
 
-  _renderDeviceCountdownBar(device, writingJob = null) {
-    const automation = device.automation || this._automationForDevice(device.address);
-    if (!automation || automation.enabled === false) return "";
-
-    const interval = Math.max(10, Number(automation.refresh_interval_seconds) || 600);
-    const nextTime = Number(automation.next_refresh_time) * 1000 || 0;
-    const now = Date.now();
-    let remainingSec = 0;
-    if (nextTime > now) {
-      remainingSec = Math.round((nextTime - now) / 1000);
-    } else if (Number.isFinite(automation.remaining_seconds)) {
-      remainingSec = Math.max(0, Number(automation.remaining_seconds));
-    }
-    const percent = Math.max(0, Math.min(100, Math.round((remainingSec / interval) * 100)));
-    const tone = percent > 50 ? "good" : percent > 20 ? "warn" : "critical";
-    const isWriting = Boolean(writingJob);
-
-    return `<div class="display-countdown-bar-wrap ${isWriting ? "is-writing" : ""} tone-${tone}" data-device-countdown="${this._escape(device.address)}" data-next-time="${nextTime}" data-interval="${interval}" title="Interval automatické obnovy: ${interval} s">
-      <div class="display-countdown-bar-header">
-        <span class="countdown-label"><ha-icon icon="${isWriting ? "mdi:progress-upload" : "mdi:timer-sand"}"></ha-icon>${isWriting ? "Probíhá zápis..." : "Příští obnova"}</span>
-        <strong class="countdown-time">${isWriting ? "Zapisuji" : `za ${this._formatCountdownTime(remainingSec)}`}</strong>
-      </div>
-      <div class="display-countdown-progress-track">
-        <div class="display-countdown-progress-fill" style="width: ${isWriting ? 100 : percent}%;"></div>
-      </div>
-    </div>`;
-  },
-
   _startCountdownTicker() {
     if (this._countdownTicker) return;
     this._countdownTicker = window.setInterval(() => {
@@ -529,27 +501,6 @@ export const devicesMixin = {
     const root = this.shadowRoot;
     if (!root) return;
     const now = Date.now();
-
-    root.querySelectorAll("[data-device-countdown]").forEach((el) => {
-      if (el.classList.contains("is-writing")) return;
-      const nextTime = Number(el.dataset.nextTime) || 0;
-      const interval = Math.max(10, Number(el.dataset.interval) || 600);
-      let remainingSec = 0;
-      if (nextTime > 0) {
-        remainingSec = Math.max(0, Math.round((nextTime - now) / 1000));
-      }
-      const percent = Math.max(0, Math.min(100, Math.round((remainingSec / interval) * 100)));
-      const tone = percent > 50 ? "good" : percent > 20 ? "warn" : "critical";
-
-      const timeEl = el.querySelector(".countdown-time");
-      if (timeEl) timeEl.textContent = `za ${this._formatCountdownTime(remainingSec)}`;
-
-      const fillEl = el.querySelector(".display-countdown-progress-fill");
-      if (fillEl) fillEl.style.width = `${percent}%`;
-
-      el.classList.remove("tone-good", "tone-warn", "tone-critical");
-      el.classList.add(`tone-${tone}`);
-    });
 
     root.querySelectorAll("[data-automation-countdown]").forEach((el) => {
       if (el.classList.contains("is-writing")) return;
@@ -625,7 +576,6 @@ export const devicesMixin = {
           // apart at a glance. Its transfer state already sits in the header.
           ? `<div class="display-preview-slot">${cardPreview}</div>`
           : `<div class="display-preview-slot">${transferState}${cardPreview}</div>`}
-        ${this._renderDeviceCountdownBar(device, writingJob)}
         <div class="display-health">
           <div class="display-health-item display-battery-item" title="Baterie${Number.isFinite(battery.percent) ? ` ${battery.percent} %` : ""}${Number.isFinite(battery.voltage) ? ` · ${this._formatBatteryVoltage(battery.voltage)}` : ""}">${this._renderBatterySegments(battery.percent)}<strong class="health-value battery-value level-${this._batteryLevel(battery.percent)}">${Number.isFinite(battery.percent) ? `${battery.percent} %` : "-"}</strong></div>
           <div class="display-health-item display-signal-item" title="Síla signálu${Number.isFinite(rssi) ? ` ${rssi} dBm` : ""}">${this._renderSignalBars(rssi)}<strong class="health-value signal-value level-${this._signalLevel(rssi)}">${Number.isFinite(rssi) ? `${rssi} dBm` : "-"}</strong></div>

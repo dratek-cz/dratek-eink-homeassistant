@@ -74,12 +74,11 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.311",
-        name="DRATEK eInk v0.1.311",
-        body="""## Release 0.1.311
+        tag="v0.1.312",
+        name="DRATEK eInk v0.1.312",
+        body="""## Release 0.1.312
 
-### Opraveno
-- **Oprava pádu `abort()` / `std::bad_alloc` při startu ESP32 firmware**: Alokace vyrovnávací paměti pro přenosy obrázků v `setup()` nyní bezpečně detekuje dostupnou volnou paměť v interní SRAM (`heap_caps_get_largest_free_block`) s bezpečnostní rezervou. Na deskách ESP32 (WROOM bez PSRAM) již nedochází k přetečení paměti a pádu na `abort()`.
-- Aktualizovány přibalené binárky firmware gatewaye pro ESP32 i ESP32-S3 a odstraněno varování deprecated parametru esptool (`--after hard-reset`).
+### Vylepšeno a upraveno
+- **Odstraněn odpočítávací pruh z hlavní stránky displejů**: Z karet displejů na hlavní stránce byl odstraněn odpočítávací časovač a progress bar pro čistší a přehlednější zobrazení. V záložce Automatizace zůstává časovač plně funkční.
 """,
     )

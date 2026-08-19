@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.312
+
+- **Odstraněn odpočítávací pruh z hlavní stránky displejů** – karty na hlavní stránce jsou nyní čistší a soustředí se na přehled zařízení (baterie, signál, trasa). Časovače automatických obnov zůstávají k dispozici v záložce Automatizace.
+
 ## Novinky ve verzi 0.1.311
 
 - **Oprava pádu `abort()` na deskách ESP32 (WROOM)** – vyřešen pád `std::bad_alloc` způsobený pokusem o alokaci 128KB bloku v interní SRAM na ESP32 bez PSRAM. Vyrovnávací paměť se nyní inicializuje bezpečně podle reálně dostupné souvislé paměti.

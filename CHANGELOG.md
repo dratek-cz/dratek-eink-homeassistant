@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.312] - 2026-08-19
+
+### Vylepšeno a upraveno
+- **Odstraněn odpočítávací pruh z hlavní stránky displejů**: Z karet displejů na hlavní stránce byl odstraněn odpočítávací časovač a progress bar příští obnovy pro čistší a přehlednější zobrazení stavu (baterie, signál, trasa). V záložce Automatizace zůstává časovač plně k dispozici pro přehled o naplánovaných úlohách.
+
 ## [0.1.311] - 2026-08-19
 
 ### Opraveno
