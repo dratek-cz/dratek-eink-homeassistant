@@ -43,6 +43,12 @@ def create_release(tag: str, name: str, body: str) -> None:
             with urllib.request.urlopen(get_req) as get_resp:
                 release = json.loads(get_resp.read().decode("utf-8"))
                 upload_url = release["upload_url"].split("{")[0]
+                # Delete existing assets if present
+                for asset in release.get("assets", []):
+                    if asset["name"] == "dratek_eink.zip":
+                        del_req = urllib.request.Request(asset["url"], headers=headers, method="DELETE")
+                        with urllib.request.urlopen(del_req) as del_resp:
+                            print(f"Deleted previous asset {asset['id']}")
         else:
             raise RuntimeError(f"Failed to create release: {e} - {err}")
 
@@ -63,10 +69,7 @@ def create_release(tag: str, name: str, body: str) -> None:
             print(f"Uploaded asset {asset['name']} ({len(zip_bytes)} bytes)")
     except urllib.error.HTTPError as e:
         err = e.read().decode("utf-8")
-        if "already_exists" in err:
-            print("Asset dratek_eink.zip already uploaded.")
-        else:
-            print(f"Asset upload notice: {e} - {err}")
+        print(f"Asset upload notice: {e} - {err}")
 
 
 if __name__ == "__main__":
