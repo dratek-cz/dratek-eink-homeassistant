@@ -74,16 +74,12 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.308",
-        name="DRATEK eInk v0.1.308",
-        body="""## Release 0.1.308
+        tag="v0.1.309",
+        name="DRATEK eInk v0.1.309",
+        body="""## Release 0.1.309
 
-### Přidáno a vylepšeno
-- **Živý odpočítávací časovač a dynamický barevný bar**: Na hlavní stránce u každého displeje s aktivním automatickým zápisem, v záložce Automatizace i na Lovelace přehledové kartě se nyní zobrazuje reálný odpočet do příštího zápisu a plynule ubíhající barevný progress bar (zelený >50 %, jantarový 20–50 %, červený <20 % a pulzující stream při probíhajícím odesílání).
-- **Modernizovaná sekce a terminálová konzole instalace gatewaye**: Kompletně přepracovaný layout kroků 1–4 pro nahrávání gatewaye přes USB a plnošířkový terminál pro pohodlnou diagnostiku a logování bez deformace tlačítek.
-
-### Opraveno
-- **Oprava bootloopu ESP32 po flashnutí gatewaye**: Při nahrávání nového firmwaru se nově maže celá oblast NVS (0x9000–0xe000) i OTA metadat (0xe000–0x10000). Předchází se tím pádu `abort()`, který způsobovala nekompatibilní nebo poškozená konfigurační data z předchozího projektu v NVS paměti.
-- **Oprava automatického odesílání na gatewaye**: Vylepšena koordinace vyhledávání tras a bezpečného odesílání přes volné gatewaye s fallbackem.
+### Opraveno a vylepšeno
+- **Oprava překrývání grafiky a terminálu v záložce Gatewayí**: Odstraněna umělá výšková omezení a vnitřní scroll-trapy (`calc(100vh - ...)` s `overflow: hidden`) na stránce gatewayí. Layout kroků 1–4 a konzole nahrávání se nyní plynule přizpůsobuje šířce okna se striktním `box-sizing`, žádné karty se nepřekrývají a terminál se při spuštění flashování plynule odroluje na viditelné místo.
+- **Oprava čísla verze ve frontendu**: Zajištěno okamžité promítnutí čísla verze v záhlaví panelu a přehledové karty bez držení staré cache.
 """,
     )

@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.309] - 2026-08-19
+
+### Opraveno a vylepšeno
+- **Oprava překrývání grafiky při nahrávání gatewaye**: Odstraněna umělá výšková omezení a vnitřní scroll-trapy (`calc(100vh - ...)` s `overflow: hidden`) na stránce gatewayí. Layout kroků 1–4 a konzole nahrávání se nyní plynule přizpůsobuje šířce okna se striktním `box-sizing`, žádné karty se nepřekrývají a terminál se při spuštění flashování plynule odroluje na viditelné místo.
+- **Aktualizace verzí ve frontendu**: Zajištěno okamžité promítnutí čísla verze v záhlaví panelu a přehledové karty.
+
 ## [0.1.308] - 2026-08-19
 
 ### Přidáno a vylepšeno

@@ -235,6 +235,7 @@ export const gatewayMixin = {
     this._flashResult = { ok: null, status: "queued", log: ["Zakladam flash job..."] };
     this._flashJobId = "";
     this._render();
+    this._scrollGatewayTerminalIntoView();
     try {
       const result = await this._hass.callWS({
         type: "dratek_eink/gateways/flash_start",
@@ -252,6 +253,7 @@ export const gatewayMixin = {
       this._gatewayBusy = false;
     } finally {
       this._render();
+      this._scrollGatewayLogsToBottom();
       this._paint();
     }
   },
@@ -289,6 +291,15 @@ export const gatewayMixin = {
       this.shadowRoot.querySelectorAll(".gateway-log").forEach((node) => {
         node.scrollTop = node.scrollHeight;
       });
+    });
+  },
+
+  _scrollGatewayTerminalIntoView() {
+    window.requestAnimationFrame(() => {
+      const term = this.shadowRoot.querySelector(".gateway-terminal-window");
+      if (term) {
+        term.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
     });
   },
 
@@ -344,8 +355,9 @@ export const gatewayMixin = {
   async _serialGatewayStatus() {
     if (!this._hass || !this._flashForm.port || this._gatewayBusy) return;
     this._gatewayBusy = true;
-    this._serialResult = { ok: null, log: ["Ctu stav ESP32 pres USB serial..."] };
+    this._serialResult = { ok: null, log: ["Overuji USB pripojeni a stav ESP32..."] };
     this._render();
+    this._scrollGatewayTerminalIntoView();
     try {
       this._serialResult = await this._hass.callWS({ type: "dratek_eink/gateways/serial_status", port: this._flashForm.port });
     } catch (err) {
@@ -353,6 +365,7 @@ export const gatewayMixin = {
     } finally {
       this._gatewayBusy = false;
       this._render();
+      this._scrollGatewayLogsToBottom();
       this._paint();
     }
   },
@@ -362,6 +375,7 @@ export const gatewayMixin = {
     this._gatewayBusy = true;
     this._serialResult = { ok: null, log: ["Posilam Wi-Fi konfiguraci do ESP32 pres USB serial..."] };
     this._render();
+    this._scrollGatewayTerminalIntoView();
     try {
       this._serialResult = await this._hass.callWS({
         type: "dratek_eink/gateways/serial_wifi",

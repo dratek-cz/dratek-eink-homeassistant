@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.308";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.309";
 
 export const renderUiMixin = {
 
@@ -93,9 +93,14 @@ export const renderUiMixin = {
            dva nadpisy o tomtéž a karta vysoká přes 690 px. */
         /* Levý rail. Dřív se jako grid item roztáhl na výšku obsahu (238 x 1562 px);
            align-self:start ho srazí na vlastní výšku a sticky ho drží u kraje. */
-        .gateway-workspace{display:grid;grid-template-columns:238px minmax(0,1fr);align-items:start;gap:12px;min-width:0}
-        @media(min-width:1051px){.tab-panel.gateways-panel{display:grid;grid-template-rows:auto minmax(0,1fr);gap:12px;height:calc(100vh - var(--dratek-sticky-top,12px) - 34px);min-height:460px;overflow:hidden}.gateways-panel>.gateway-workspace{align-items:stretch;min-height:0;height:100%}.gateways-panel .gateway-workspace-tabs{position:static;height:100%;overflow:hidden}.gateways-panel .gateway-workspace-content{min-height:0;height:100%;overflow-y:auto;overscroll-behavior:contain}}
-        .gateway-workspace-tabs{position:sticky;top:var(--dratek-sticky-top,12px);align-self:start;display:grid;align-content:start;gap:5px;padding:8px;border:1px solid var(--divider-color);border-radius:14px;background:var(--card-background-color);box-shadow:0 1px 3px rgba(15,23,42,.05);overflow:auto}
+        .gateway-workspace{display:grid;grid-template-columns:238px minmax(0,1fr);align-items:start;gap:14px;min-width:0;width:100%}
+        @media(min-width:1051px){
+          .tab-panel.gateways-panel{display:grid;align-content:start;gap:14px;min-height:0}
+          .gateways-panel>.gateway-workspace{align-items:start;min-height:0}
+          .gateways-panel .gateway-workspace-tabs{position:sticky;top:var(--dratek-sticky-top,12px);height:auto;overflow:visible}
+          .gateways-panel .gateway-workspace-content{min-height:0;height:auto;overflow:visible}
+        }
+        .gateway-workspace-tabs{position:sticky;top:var(--dratek-sticky-top,12px);align-self:start;display:grid;align-content:start;gap:5px;padding:8px;border:1px solid var(--divider-color);border-radius:14px;background:var(--card-background-color);box-shadow:0 1px 3px rgba(15,23,42,.05);overflow:visible}
         .gateway-workspace-tabs button{position:relative;display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 10px;border:0;border-radius:10px;background:transparent;color:var(--primary-text-color);box-shadow:none;text-align:left;cursor:pointer;transition:background-color .16s ease}
         .gateway-workspace-tabs button:hover:not(:disabled){transform:none;background:var(--secondary-background-color)}
         .gateway-workspace-tabs button.active{background:color-mix(in srgb,var(--dratek-teal,#009999) 11%,transparent)}
@@ -294,70 +299,70 @@ export const renderUiMixin = {
         .gateway-alert-compact{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px;margin:0;padding:10px 14px;border-left-width:4px;border-radius:10px}
         .gateway-alert-compact .alert-icon-wrap{width:32px;height:32px;border-radius:8px}.gateway-alert-compact .alert-icon-wrap ha-icon{--mdc-icon-size:18px}
         .gateway-alert-compact strong,.gateway-alert-compact small{display:block}.gateway-alert-compact strong{font-size:11px}.gateway-alert-compact small{margin-top:2px;color:var(--secondary-text-color);font-size:9.5px;line-height:1.35}
-        .gateway-create-block .gateway-setup-grid{display:grid;grid-template-columns:minmax(280px,.85fr) minmax(360px,1.15fr);gap:14px;min-height:0;align-items:start}
-        .gateway-create-block .gateway-setup-column{display:flex;flex-direction:column;gap:14px;min-width:0}
-        .gateway-create-block .gateway-setup-section,.gateway-create-block .gateway-install-panel{min-width:0;padding:14px 16px;border:1px solid var(--divider-color);border-radius:14px;background:var(--card-background-color);box-shadow:0 3px 14px rgba(15,23,42,.04)}
+        .gateway-create-block .gateway-setup-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;min-height:0;align-items:start;width:100%;box-sizing:border-box}
+        .gateway-create-block .gateway-setup-column{display:flex;flex-direction:column;gap:14px;min-width:0;width:100%;box-sizing:border-box}
+        .gateway-create-block .gateway-setup-section,.gateway-create-block .gateway-install-panel{min-width:0;width:100%;box-sizing:border-box;padding:14px 16px;border:1px solid var(--divider-color);border-radius:14px;background:var(--card-background-color);box-shadow:0 3px 14px rgba(15,23,42,.04)}
         .gateway-create-block .gateway-step-header{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:0;border:0}
         .gateway-create-block .step-num{width:26px;height:26px;border-radius:8px;font-size:11.5px;font-weight:900;background:var(--dratek-teal,#009999);color:#fff;display:grid;place-items:center;flex:0 0 auto}
         .gateway-create-block .gateway-step-header strong{font-size:12.5px;display:block}.gateway-create-block .gateway-step-header small{font-size:9.5px;color:var(--secondary-text-color);display:block;margin-top:1px}
-        .gateway-create-block .gateway-port-form{display:block;width:100%}.gateway-create-block .gateway-port-form .field{display:grid;gap:6px;margin:0}
-        .gateway-create-block .field-with-icon select{padding-top:10px;padding-bottom:10px;padding-left:36px;font-size:11.5px;border-radius:10px}
-        .gateway-create-block .port-picker-hint{display:flex;align-items:flex-start;gap:6px;margin-top:4px;padding:8px 10px;border-radius:8px;background:var(--secondary-background-color);font-size:9.5px;line-height:1.3}.gateway-create-block .port-picker-hint ha-icon{--mdc-icon-size:15px;flex:0 0 auto}.gateway-create-block .port-picker-hint.is-ready{color:var(--dratek-status-ok-fg,#16803c)}.gateway-create-block .port-picker-hint.is-empty{color:var(--dratek-status-warn-fg,#b45309)}
-        .gateway-create-block .board-picker-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-        .gateway-create-block .board-card{display:flex;flex-direction:column;justify-content:space-between;gap:8px;padding:12px;border-radius:12px;border:2px solid var(--divider-color);background:var(--secondary-background-color);transition:all .18s ease;cursor:pointer}
+        .gateway-create-block .gateway-port-form{display:block;width:100%;box-sizing:border-box}.gateway-create-block .gateway-port-form .field{display:grid;gap:6px;margin:0;width:100%;box-sizing:border-box}
+        .gateway-create-block .field-with-icon select{padding-top:10px;padding-bottom:10px;padding-left:36px;font-size:11.5px;border-radius:10px;width:100%;box-sizing:border-box}
+        .gateway-create-block .port-picker-hint{display:flex;align-items:flex-start;gap:6px;margin-top:4px;padding:8px 10px;border-radius:8px;background:var(--secondary-background-color);font-size:9.5px;line-height:1.3;box-sizing:border-box}.gateway-create-block .port-picker-hint ha-icon{--mdc-icon-size:15px;flex:0 0 auto}.gateway-create-block .port-picker-hint.is-ready{color:var(--dratek-status-ok-fg,#16803c)}.gateway-create-block .port-picker-hint.is-empty{color:var(--dratek-status-warn-fg,#b45309)}
+        .gateway-create-block .board-picker-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;width:100%;box-sizing:border-box}
+        .gateway-create-block .board-card{display:flex;flex-direction:column;justify-content:space-between;gap:8px;padding:12px;border-radius:12px;border:2px solid var(--divider-color);background:var(--secondary-background-color);transition:all .18s ease;cursor:pointer;box-sizing:border-box}
         .gateway-create-block .board-card:hover{border-color:var(--dratek-teal,#009999);background:color-mix(in srgb,var(--dratek-teal,#009999) 4%,var(--secondary-background-color));transform:translateY(-1px)}
         .gateway-create-block .board-card.active{border-color:var(--dratek-teal,#009999);background:color-mix(in srgb,var(--dratek-teal,#009999) 8%,var(--card-background-color));box-shadow:0 0 0 1px var(--dratek-teal,#009999),0 4px 16px rgba(0,153,153,.15)}
-        .gateway-create-block .board-card-visual{width:100%;height:auto;min-height:72px;display:grid;place-items:center;padding:8px;border-radius:10px;background:var(--card-background-color)}
+        .gateway-create-block .board-card-visual{width:100%;height:auto;min-height:72px;display:grid;place-items:center;padding:8px;border-radius:10px;background:var(--card-background-color);box-sizing:border-box}
         .gateway-create-block .board-preview{max-height:80px;object-fit:contain}
         .gateway-create-block .board-card-info{padding:2px 0}
         .gateway-create-block .board-card-info strong{font-size:12.5px;display:block;color:var(--primary-text-color)}.gateway-create-block .board-subtitle{display:block;margin-top:2px;font-size:9.5px;color:var(--secondary-text-color)}
-        .gateway-create-block .board-option-pick{min-height:34px;padding:7px 10px;border-radius:8px;font-size:10.5px;font-weight:750;display:flex;align-items:center;justify-content:center;gap:6px;pointer-events:none}
-        .gateway-create-block .gateway-form-fields{display:flex;flex-direction:column;gap:10px}
-        .gateway-create-block .gateway-form-fields .field{display:grid;gap:4px;margin:0}
+        .gateway-create-block .board-option-pick{min-height:34px;padding:7px 10px;border-radius:8px;font-size:10.5px;font-weight:750;display:flex;align-items:center;justify-content:center;gap:6px;pointer-events:none;box-sizing:border-box}
+        .gateway-create-block .gateway-form-fields{display:flex;flex-direction:column;gap:10px;width:100%;box-sizing:border-box}
+        .gateway-create-block .gateway-form-fields .field{display:grid;gap:4px;margin:0;width:100%;box-sizing:border-box}
         .gateway-create-block .gateway-form-fields .field label{font-size:10px;font-weight:750;display:flex;align-items:center;gap:5px;color:var(--secondary-text-color)}
         .gateway-create-block .gateway-form-fields .field label ha-icon{--mdc-icon-size:14px;color:var(--dratek-teal,#009999)}
         .gateway-create-block .gateway-form-fields input{width:100%;min-height:38px;padding:9px 12px;font-size:11.5px;border-radius:9px;border:1px solid var(--divider-color);background:var(--secondary-background-color);color:var(--primary-text-color);box-sizing:border-box}
         .gateway-create-block .gateway-form-fields input:focus{border-color:var(--dratek-teal,#009999);outline:none;background:var(--card-background-color);box-shadow:0 0 0 2px rgba(0,153,153,.2)}
         .gateway-create-block .gateway-install-panel{background:linear-gradient(145deg,var(--card-background-color),color-mix(in srgb,var(--dratek-teal,#009999) 4%,var(--card-background-color)));border-left:4px solid var(--dratek-orange,#ff6b00)}
-        .gateway-create-block .gateway-install-overview{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
-        .gateway-create-block .gateway-install-placeholder{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:1px solid var(--divider-color);background:var(--card-background-color)}
-        .gateway-create-block .placeholder-icon-wrap{width:42px;height:42px;border-radius:10px;background:color-mix(in srgb,var(--dratek-teal,#009999) 12%,var(--card-background-color));color:var(--dratek-teal,#009999);display:grid;place-items:center}
+        .gateway-create-block .gateway-install-overview{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px;width:100%;box-sizing:border-box}
+        .gateway-create-block .gateway-install-placeholder{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:1px solid var(--divider-color);background:var(--card-background-color);box-sizing:border-box}
+        .gateway-create-block .placeholder-icon-wrap{width:42px;height:42px;border-radius:10px;background:color-mix(in srgb,var(--dratek-teal,#009999) 12%,var(--card-background-color));color:var(--dratek-teal,#009999);display:grid;place-items:center;flex:0 0 auto}
         .gateway-create-block .placeholder-icon-wrap ha-icon{--mdc-icon-size:24px}
         .gateway-create-block .placeholder-info>small{font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--secondary-text-color);display:block}
         .gateway-create-block .placeholder-info strong{font-size:13px;display:block;color:var(--primary-text-color);margin:2px 0}
         .gateway-create-block .board-target-tag{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;color:var(--secondary-text-color)}.gateway-create-block .placeholder-info .board-target-tag ha-icon{--mdc-icon-size:13px}
-        .gateway-install-checks{display:grid;align-content:center;gap:6px;padding:10px 12px;border:1px solid var(--divider-color);border-radius:12px;background:var(--secondary-background-color)}
+        .gateway-install-checks{display:grid;align-content:center;gap:6px;padding:10px 12px;border:1px solid var(--divider-color);border-radius:12px;background:var(--secondary-background-color);box-sizing:border-box}
         .gateway-install-checks span{display:flex;align-items:center;gap:7px;min-width:0;color:var(--secondary-text-color);font-size:9.5px;font-weight:750}.gateway-install-checks span ha-icon{--mdc-icon-size:16px;flex:0 0 auto}.gateway-install-checks span.is-ready{color:var(--dratek-status-ok-fg,#16803c)}.gateway-install-checks span.is-missing{color:var(--dratek-status-warn-fg,#b45309)}
-        .gateway-create-block .gateway-install-actions{display:flex;flex-direction:column;gap:10px}
-        .gateway-create-block .gateway-cta-primary{min-height:58px;display:flex;align-items:center;justify-content:flex-start;gap:12px;padding:12px 18px;border-radius:12px;border:none;background:linear-gradient(135deg,var(--dratek-teal,#009999),#007a7a);color:#fff;font-weight:800;cursor:pointer;box-shadow:0 6px 20px rgba(0,153,153,.28);transition:all .18s ease}
+        .gateway-create-block .gateway-install-actions{display:flex;flex-direction:column;gap:10px;width:100%;box-sizing:border-box}
+        .gateway-create-block .gateway-cta-primary{min-height:58px;display:flex;align-items:center;justify-content:flex-start;gap:12px;padding:12px 18px;border-radius:12px;border:none;background:linear-gradient(135deg,var(--dratek-teal,#009999),#007a7a);color:#fff;font-weight:800;cursor:pointer;box-shadow:0 6px 20px rgba(0,153,153,.28);transition:all .18s ease;box-sizing:border-box;width:100%}
         .gateway-create-block .gateway-cta-primary:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,153,153,.36);filter:brightness(1.06)}
         .gateway-create-block .gateway-cta-primary:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;transform:none}
         .gateway-create-block .gateway-cta-primary>ha-icon{--mdc-icon-size:26px;flex:0 0 auto}
         .gateway-create-block .gateway-cta-primary span{display:flex;flex-direction:column;text-align:left}
         .gateway-create-block .gateway-cta-primary strong{font-size:13px;letter-spacing:.02em}.gateway-create-block .gateway-cta-primary small{font-size:9px;opacity:.88;font-weight:500;margin-top:1px}
         .gateway-create-block .gateway-cta-arrow{margin-left:auto;--mdc-icon-size:20px!important}
-        .gateway-create-block .gateway-install-sub-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-        .gateway-create-block .gateway-install-sub-actions button{min-height:48px;display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;border:1px solid var(--divider-color);background:var(--card-background-color);text-align:left;cursor:pointer;transition:all .16s ease}
+        .gateway-create-block .gateway-install-sub-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;width:100%;box-sizing:border-box}
+        .gateway-create-block .gateway-install-sub-actions button{min-height:48px;display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;border:1px solid var(--divider-color);background:var(--card-background-color);text-align:left;cursor:pointer;transition:all .16s ease;box-sizing:border-box;width:100%}
         .gateway-create-block .gateway-install-sub-actions button:hover:not(:disabled){border-color:var(--dratek-teal,#009999);background:var(--secondary-background-color)}
         .gateway-create-block .gateway-install-sub-actions button>ha-icon{--mdc-icon-size:20px;color:var(--dratek-teal,#009999);flex:0 0 auto}
         .gateway-create-block .gateway-install-sub-actions button span{display:flex;flex-direction:column}
         .gateway-create-block .gateway-install-sub-actions button strong{font-size:10.5px;color:var(--primary-text-color)}.gateway-create-block .gateway-install-sub-actions button small{font-size:8px;color:var(--secondary-text-color)}
-        @media(max-width:920px){.gateway-create-block .gateway-setup-grid{grid-template-columns:1fr}.gateway-create-block .gateway-install-overview{grid-template-columns:1fr}}
+        @media(max-width:920px){.gateway-create-block .gateway-setup-grid{grid-template-columns:1fr}}
 
-        .gateway-terminal-window{width:100%;margin-top:8px;border:1px solid #30363d;border-radius:14px;background:#0d1117;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,.35)}
-        .terminal-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;background:#161b22;border-bottom:1px solid #21262d}
+        .gateway-terminal-window{width:100%;box-sizing:border-box;margin-top:12px;border:1px solid #30363d;border-radius:14px;background:#0d1117;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,.35)}
+        .terminal-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;background:#161b22;border-bottom:1px solid #21262d;box-sizing:border-box}
         .terminal-dots{display:flex;align-items:center;gap:7px}
         .terminal-dots i{width:11px;height:11px;border-radius:50%;display:inline-block}
         .terminal-dots i:nth-child(1){background:#ff5f56}.terminal-dots i:nth-child(2){background:#ffbd2e}.terminal-dots i:nth-child(3){background:#27c93f}
         .terminal-title{display:flex;align-items:center;gap:8px;color:#8b949e;font-size:11px;font-weight:750;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
         .terminal-title ha-icon{--mdc-icon-size:16px;color:var(--dratek-teal,#009999)}
-        .terminal-status-msg{display:flex;align-items:center;gap:10px;padding:12px 16px;font-size:12px;font-weight:700;border-bottom:1px solid #21262d}
+        .terminal-status-msg{display:flex;align-items:center;gap:10px;padding:12px 16px;font-size:12px;font-weight:700;border-bottom:1px solid #21262d;box-sizing:border-box}
         .terminal-status-msg ha-icon{--mdc-icon-size:20px;flex:0 0 auto}
         .terminal-status-msg.good{background:rgba(16,185,129,.12);color:#34d399}.terminal-status-msg.warn{background:rgba(245,158,11,.12);color:#fbbf24}.terminal-status-msg.bad{background:rgba(239,68,68,.14);color:#f87171}
-        .terminal-facts{display:flex;flex-wrap:wrap;gap:12px;padding:10px 16px;background:#161b22;border-bottom:1px solid #21262d;font-size:11px;color:#8b949e}
+        .terminal-facts{display:flex;flex-wrap:wrap;gap:12px;padding:10px 16px;background:#161b22;border-bottom:1px solid #21262d;font-size:11px;color:#8b949e;box-sizing:border-box}
         .terminal-facts span{display:inline-flex;align-items:center;gap:5px}
         .terminal-facts ha-icon{--mdc-icon-size:14px;color:var(--dratek-teal,#009999)}
-        .gateway-log{margin:0;padding:16px;background:#090d13;color:#e6edf3;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11.5px;line-height:1.55;max-height:360px;min-height:120px;overflow-y:auto;white-space:pre-wrap;border-radius:0}
+        .gateway-log{margin:0;padding:16px;background:#090d13;color:#e6edf3;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11.5px;line-height:1.55;max-height:360px;min-height:140px;overflow-y:auto;white-space:pre-wrap;border-radius:0;box-sizing:border-box}
         @media(max-width:520px){.board-picker-grid{grid-template-columns:1fr}.gateway-install-sub-actions{grid-template-columns:1fr}}
         @media(max-width:520px){.board-picker-grid{grid-template-columns:1fr}.gateway-install-sub-actions{grid-template-columns:1fr}}
 

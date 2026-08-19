@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.309
+
+- **Oprava překrývání grafiky a terminálu v záložce Gatewayí** – odstraněny problematické fixní výšky a vnitřní scroll-trapy, mřížka kroků i terminálová konzole nahrávání se plynule přizpůsobují rozměrům obrazovky a terminál se po startu flashování automaticky nascrolluje na viditelné místo.
+- **Oprava čísla verze ve frontendu** – přebumpnuté importy a konstanty pro okamžitou aktualizaci záhlaví panelu i Lovelace karty bez držení staré cache.
+
 ## Novinky ve verzi 0.1.308
 
 - **Živý odpočítávací časovač a dynamický barevný bar** – na hlavní stránce u každého displeje s aktivním automatickým zápisem, v záložce Automatizace i na přehledové kartě se zobrazuje reálný čas do příštího nahrání a ubíhající barevný progress bar (zelený >50 %, jantarový 20–50 %, červený <20 % a pulzující stream při odesílání).
