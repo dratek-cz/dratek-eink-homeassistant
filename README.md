@@ -4,6 +4,37 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.306
+
+- **Spolehlivější gateway** – přenosový buffer firmwaru se po hodinách provozu už nerozpadá kvůli fragmentaci paměti (chyba `insufficient_contiguous_memory`); alokuje se jednou při startu a mezi přenosy se jen recykluje.
+- **Automatický zápis přežije výpadek gatewaye** – displej připnutý na konkrétní gateway teď při jejím výpadku automaticky zkusí ostatní dostupné gateway místo toho, aby rovnou čekal na Home Assistant Bluetooth.
+- **Šablona Kalendář se svátky bez vlastní entity** – vestavěný český jmenný kalendář, odstraněné ikony z horního a spodního pruhu pro víc místa na text a odstraněné duplicitní zobrazení svátku.
+- **Nová zkratka Automatika ve Frontě zápisu** – rychlý přechod k nastavení automatického obnovování vybraného displeje bez hledání v seznamu.
+- **Galerie vlastních obrázků** – dvě tlačítka nahrazena jedním tlačítkem Uložit a opravena chyba „Connection lost“ při ukládání větších obrázků.
+- **Grafy a ukazatele fungují ve všech slotech velkého rozložení** – dřív se v rozložení 2×3 a podobných zobrazovaly jen v prvních dvou slotech.
+- **Správná barevná paleta v náhledech** – displeje bez žluté barvy ji už nezobrazují v seznamu jen proto, že je zrovna vybraný jiný, žlutou podporující displej.
+
+## Novinky ve verzi 0.1.305
+
+- **Šablona České spotové ceny** – odstraněny všechny ikony z grafiky; dolarová ikona nedávala pro koruny smysl a odznaky MIN/MAX byly na hardwaru bez žluté barvy k nerozeznání od sebe.
+
+## Novinky ve verzi 0.1.304
+
+- **Devět šablon bez zbytečného nadpisu** – Dům, Spotřeba vody, Stav serveru, Kdo je doma, Nákupní seznam, Odpady, Wi-Fi, Fotovoltaika a Pračka dostaly víc místa pro hlavní obsah místo opakování názvu šablony.
+- **Přeuspořádaná šablona Pračka** – zbývající čas je teď hlavní velké číslo, průběh praní/máchání je zmenšený doplňkový pruh pod ním.
+
+## Novinky ve verzi 0.1.303
+
+- **18 nových šablon v katalogu** – Dům, Obývák, Topení, Zabezpečení, Kdo je doma, Odjezdy, Nákupní seznam, Kvalita vzduchu, Spotřeba vody, Zásilka, Narozeniny, Stav serveru, Zahrada, Cenovka, Odpady, Fotovoltaika, Pračka a Wi-Fi – zkontrolované a ověřené na všech velikostech displeje.
+- **Opraven žlutě vykreslený text u řady šablon** – barevný akcent dřív občas dopadl na popisek nebo hodnotu místo na ikonu, což je ve žluté barvě na displeji prakticky nečitelné; teď vždy dopadne na ikonu nebo tenkou linku.
+- **Opraveno zdvojení jednotky** – šablony Obývák, Topení, Spotřeba vody a Zahrada po automatické aktualizaci nezobrazují jednotku dvakrát.
+
+## Novinky ve verzi 0.1.302
+
+- **Přepracovaná šablona České spotové ceny** – graf je nově dominantní prvek rozvržení, MIN/MAX nesou barevný akcent na plné plaketě místo obarveného (a ve žluté špatně čitelného) textu.
+- **Opravená šablona Počasí** – ikona nad teplotou odpovídá skutečnému stavu počasí, ikony v týdenní předpovědi a řádku vlhkost/vítr/tlak jsou větší, teplota se po aktualizaci nezobrazuje se zdvojeným „°C“.
+- **Sken zařízení už nespadne** – tlačítko „Načíst zařízení“ nemůže vrátit nulu displejů kvůli poškozené mezipaměti objevování; takové zařízení se místo pádu celého skenu označí jako nedostupné.
+
 ## Novinky ve verzi 0.1.301
 
 - **Šablona Kalendář** – zprovozněna šablona pro zobrazení dvou nejbližších událostí z lokálního, Google nebo CalDAV kalendáře s velkým červeným rámečkem data a spodním řádkem pro jmeniny / svátek.
