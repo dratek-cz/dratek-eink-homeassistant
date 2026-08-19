@@ -74,11 +74,12 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.310",
-        name="DRATEK eInk v0.1.310",
-        body="""## Release 0.1.310
+        tag="v0.1.311",
+        name="DRATEK eInk v0.1.311",
+        body="""## Release 0.1.311
 
 ### Opraveno
-- **Spolehlivé spuštění ESP32 po flashnutí přes USB**: Přidán parametr `--after hard_reset` do `esptool write-flash` a automatický resetovací pulz (`DTR/RTS`) při otevření sériového portu pro provisioning. ESP32 po nahrání firmware již nezůstává viset v ROM bootloaderu, ale okamžitě nastartuje do aplikace a potvrdí uložení Wi-Fi údajů.
+- **Oprava pádu `abort()` / `std::bad_alloc` při startu ESP32 firmware**: Alokace vyrovnávací paměti pro přenosy obrázků v `setup()` nyní bezpečně detekuje dostupnou volnou paměť v interní SRAM (`heap_caps_get_largest_free_block`) s bezpečnostní rezervou. Na deskách ESP32 (WROOM bez PSRAM) již nedochází k přetečení paměti a pádu na `abort()`.
+- Aktualizovány přibalené binárky firmware gatewaye pro ESP32 i ESP32-S3 a odstraněno varování deprecated parametru esptool (`--after hard-reset`).
 """,
     )

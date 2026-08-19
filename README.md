@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.311
+
+- **Oprava pádu `abort()` na deskách ESP32 (WROOM)** – vyřešen pád `std::bad_alloc` způsobený pokusem o alokaci 128KB bloku v interní SRAM na ESP32 bez PSRAM. Vyrovnávací paměť se nyní inicializuje bezpečně podle reálně dostupné souvislé paměti.
+
 ## Novinky ve verzi 0.1.310
 
 - **Spolehlivé spuštění ESP32 po flashnutí přes USB** – přidán hard reset parametr do `esptool` a pulzní start aplikace při otevírání sériové linky, což eliminuje stav, kdy ESP32 po nahrání zůstalo viset v bootloaderu a nepotvrdilo Wi-Fi konfiguraci.

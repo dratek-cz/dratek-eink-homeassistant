@@ -946,7 +946,7 @@ def _flash_gateway_sync(
         "--baud",
         ESPTOOL_FLASH_BAUD,
         "--after",
-        "hard_reset",
+        "hard-reset",
         "write-flash",
         "-z",
     ]

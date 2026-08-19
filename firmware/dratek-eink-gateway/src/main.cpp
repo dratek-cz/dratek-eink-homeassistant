@@ -14,11 +14,14 @@
 static const char* FIRMWARE_VERSION = "0.1.58-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
+static const size_t MAX_UPLOAD_PAYLOAD_BYTES = 128UL * 1024UL;
+static const size_t INITIAL_UPLOAD_RESERVE_BYTES = 128UL * 1024UL;
 #else
 static const char* CHIP_FAMILY = "esp32";
+static const size_t MAX_UPLOAD_PAYLOAD_BYTES = 98UL * 1024UL;
+static const size_t INITIAL_UPLOAD_RESERVE_BYTES = 64UL * 1024UL;
 #endif
 static const size_t MAX_TRANSFER_LOG_LINES = 80;
-static const size_t MAX_UPLOAD_PAYLOAD_BYTES = 128UL * 1024UL;
 static const uint32_t MDNS_REFRESH_INTERVAL_MS = 5UL * 60UL * 1000UL;
 static const uint32_t WIFI_RECONNECT_INTERVAL_MS = 15UL * 1000UL;
 static const uint16_t DRATEK_COMPANY_ID = 0x5053;
@@ -1326,12 +1329,14 @@ void setup() {
     ESP.restart();
   }
 
-  // Claim the transfer payload's peak-size buffer once, while the heap is
-  // freshest. It is never freed after this (see transferTask/UPLOAD_FILE_START),
-  // only swapped between uploadPayload/queuedPayload/the transfer task's local
-  // copy, so a later transfer never needs to find a fresh contiguous block on
-  // a heap fragmented by many hours of BLE/Wi-Fi churn.
-  uploadPayload.reserve(MAX_UPLOAD_PAYLOAD_BYTES);
+  // Claim the transfer payload's peak-size buffer safely based on available
+  // contiguous heap. It is never freed after this, only swapped between
+  // uploadPayload/queuedPayload/the transfer task's local copy.
+  size_t largestFree = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  size_t initialReserve = (largestFree > 16384) ? min(INITIAL_UPLOAD_RESERVE_BYTES, largestFree - 16384) : 0;
+  if (initialReserve > 0) {
+    uploadPayload.reserve(initialReserve);
+  }
 
   Serial.println("Initializing BLE before Wi-Fi and payload allocation.");
   ensureBleInitialized();
