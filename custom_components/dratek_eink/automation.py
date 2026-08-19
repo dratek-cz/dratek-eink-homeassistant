@@ -19,6 +19,13 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 from homeassistant.helpers.storage import Store
+try:
+    from homeassistant.util import dt as dt_util
+    def _current_local_datetime() -> datetime:
+        return dt_util.now()
+except Exception:
+    def _current_local_datetime() -> datetime:
+        return datetime.now()
 from PIL import Image, ImageChops
 
 from .const import (
@@ -361,7 +368,7 @@ def _resolve_internal_system_value(binding: dict[str, Any]) -> str | None:
         return None
 
     normalized = _remove_diacritics(f"{entity_id} {kind} {label} {key}")
-    now = datetime.now()
+    now = _current_local_datetime()
 
     if "datum" in normalized or "date" in normalized:
         formatted = f"{now.day}. {_MONTH_NAMES_GENITIVE_CS[now.month - 1]}"

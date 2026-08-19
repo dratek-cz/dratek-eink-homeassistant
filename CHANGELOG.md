@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.314] - 2026-08-19
+
+### Opraveno
+- **Automatická aktualizace času a data v šablonách**: Opravena chyba, kdy se interní časové sloty (např. čas poslední aktualizace u počasí, datum, svátky) při přípravě automatizace vynechávaly a na displeji zůstával statický čas z manuálního odeslání. Čas a datum se nyní zachycují jako živé vazby a při každém automatickém zápisu se vykreslují s aktuálním lokálním časem Home Assistantu.
+
 ## [0.1.313] - 2026-08-19
 
 ### Opraveno a vylepšeno

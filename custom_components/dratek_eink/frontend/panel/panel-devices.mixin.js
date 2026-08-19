@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.313";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.314";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=catalog-no-color-tests-1";
 
 // The standard Czech civil name-day calendar, indexed [month][day - 1]
@@ -3177,8 +3177,9 @@ export const devicesMixin = {
       for (let index = 0; index < (template.variables || []).length; index += 1) {
         if (ratioClaimedIndices.has(index)) continue;
         const meta = { ...this._templateVariableMeta(template.variables[index], index), templateId: template.id };
-        const entityId = String(this._templateBinding(template, meta) || "").trim();
-        if (!entityId.includes(".") || entityId.startsWith("internal:")) continue;
+        const rawBinding = String(this._templateBinding(template, meta) || "").trim();
+        const entityId = rawBinding || (meta.automatic ? `internal:${meta.key}` : "");
+        if (!entityId || (!entityId.includes(".") && !entityId.startsWith("internal:"))) continue;
         const bindingKey = `${template.id}:${meta.key}`;
         const marker = `QZ${index}X`;
         this._templateAutomationBindingOverrides[bindingKey] = marker;

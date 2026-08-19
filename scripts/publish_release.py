@@ -74,12 +74,11 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.313",
-        name="DRATEK eInk v0.1.313",
-        body="""## Release 0.1.313
+        tag="v0.1.314",
+        name="DRATEK eInk v0.1.314",
+        body="""## Release 0.1.314
 
-### Opraveno a vylepšeno
-- **Přesná synchronizace automatické obnovy s hodinami Home Assistantu**: Plánování intervalů se nyní zarovnává na vnitřní hodiny HA (např. při 10minutovém intervalu přesně v :00, :10, :20, :30, :40, :50).
-- **Odstranění kumulativního posunu a zpoždění**: Odstraněno redundantní čekání ve smyčce, takže zápis probíhá přesně v nastaveném intervalu bez posunu na 15–20 minut.
+### Opraveno
+- **Automatická aktualizace času a data v šablonách**: Opravena chyba, kdy se interní časové sloty (např. čas poslední aktualizace u počasí, datum, svátky) při přípravě automatizace vynechávaly a na displeji zůstával statický čas z manuálního odeslání. Čas a datum se nyní zachycují jako živé vazby a při každém automatickém zápisu se vykreslují s aktuálním lokálním časem Home Assistantu.
 """,
     )
