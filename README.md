@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.313
+
+- **Přesná synchronizace automatické obnovy s hodinami Home Assistantu** – intervaly obnovy se nyní zarovnávají na systémové hodiny (např. 10minutový interval přesně v :00, :10, :20, :30, :40, :50) a bylo odstraněno vnitřní zpoždění, takže displeje nečekají 15–20 minut namísto nastavených 10 minut.
+
 ## Novinky ve verzi 0.1.312
 
 - **Odstraněn odpočítávací pruh z hlavní stránky displejů** – karty na hlavní stránce jsou nyní čistší a soustředí se na přehled zařízení (baterie, signál, trasa). Časovače automatických obnov zůstávají k dispozici v záložce Automatizace.

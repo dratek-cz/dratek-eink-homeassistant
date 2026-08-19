@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.313] - 2026-08-19
+
+### Opraveno a vylepšeno
+- **Přesná synchronizace automatické obnovy s vnitřními hodinami Home Assistantu**: Plánování intervalové obnovy se nyní zarovnává na přesné časové milníky systémových hodin (např. při 10minutovém intervalu přesně v :00, :10, :20, :30, :40, :50).
+- **Odstranění kumulativního posunu a zpoždění**: Odstraněno redundantní vnitřní čekání ve smyčce a zpoždění vznikající délkou přenosu, takže intervaly již neujíždějí na 15–20 minut a zapisují se přesně v nastaveném čase.
+
 ## [0.1.312] - 2026-08-19
 
 ### Vylepšeno a upraveno

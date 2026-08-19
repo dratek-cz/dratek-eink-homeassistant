@@ -542,6 +542,18 @@ async def _async_calendar_entry(hass: HomeAssistant, entity_id: str, index: int)
     }
 
 
+def _next_clock_aligned_time(interval: int, now: float | None = None) -> float:
+    """Calculate the next wall-clock aligned timestamp for an interval in seconds."""
+    if now is None:
+        now = time.time()
+    if interval <= 0:
+        return now
+    next_time = (int(now) // interval + 1) * interval
+    if next_time - now < 1.0:
+        next_time += interval
+    return float(next_time)
+
+
 class EntityAutoUpdateManager:
     """Keep every display's design current: on-demand when a bound entity's
     state changes, and periodically on the interval chosen in its settings.
@@ -569,6 +581,7 @@ class EntityAutoUpdateManager:
         self._pending_refreshes: set[str] = set()
         self._last_refresh_at_dict: dict[str, float] = {}
         self._last_refresh_wall_time_dict: dict[str, float] = {}
+        self._next_scheduled_wall_time_dict: dict[str, float] = {}
         self._chart_series: dict[str, list[float]] = {}
         self._gateway_route_cache: dict[str, list[dict[str, Any]]] = {}
         self._gateway_route_cache_at = 0.0
@@ -596,6 +609,16 @@ class EntityAutoUpdateManager:
     @_last_refresh_wall_time.setter
     def _last_refresh_wall_time(self, value: dict[str, float]) -> None:
         self._last_refresh_wall_time_dict = value
+
+    @property
+    def _next_scheduled_wall_time(self) -> dict[str, float]:
+        if not hasattr(self, "_next_scheduled_wall_time_dict"):
+            self._next_scheduled_wall_time_dict = {}
+        return self._next_scheduled_wall_time_dict
+
+    @_next_scheduled_wall_time.setter
+    def _next_scheduled_wall_time(self, value: dict[str, float]) -> None:
+        self._next_scheduled_wall_time_dict = value
 
     async def async_initialize(self) -> None:
         if self._initialized:
@@ -654,31 +677,30 @@ class EntityAutoUpdateManager:
 
     @callback
     def _handle_refresh_tick(self, _now: Any) -> None:
-        now = time.monotonic()
+        now_wall = time.time()
+        now_mono = time.monotonic()
         for address, config in self._configs.items():
             if self._refresh_trigger_mode(config) == "change_only":
                 continue
             if not self._automation_enabled(config):
                 continue
             interval = self._refresh_interval(config)
-            overdue = now - self._last_refresh_at.get(address, 0.0)
-            if overdue >= interval:
-                # This 30s fallback tick exists precisely so a broken per-display
-                # timer chain self-heals within about a minute. Only ever seeing
-                # it catch something *this* late (multiple intervals overdue)
-                # means the fallback itself went quiet for a while too - most
-                # likely the whole event loop was starved (e.g. a Home Assistant
-                # Core/Supervisor update running in the background), not a bug
-                # in this integration's own scheduling. Logged so that story is
-                # visible next time instead of the display just going silent
-                # with nothing anywhere to explain why.
-                if overdue >= interval * 2:
+            last_mono = self._last_refresh_at.get(address)
+            if last_mono is None:
+                self._schedule_refresh(address)
+                self._sync_interval_timer(address)
+                continue
+            overdue_mono = now_mono - last_mono
+            next_wall = self._next_scheduled_wall_time.get(address, 0.0)
+            if (next_wall > 0 and now_wall >= next_wall) or overdue_mono >= interval:
+                if overdue_mono >= interval * 2:
                     _LOGGER.warning(
                         "[%s] Automatic refresh is %.0fs overdue (interval %ds) - "
                         "the periodic fallback tick just caught it now.",
-                        address, overdue, interval,
+                        address, overdue_mono, interval,
                     )
                 self._schedule_refresh(address)
+                self._sync_interval_timer(address)
 
     @staticmethod
     def _refresh_interval(config: dict[str, Any]) -> int:
@@ -699,7 +721,7 @@ class EntityAutoUpdateManager:
         return config.get("enabled") is not False
 
     def _sync_interval_timer(self, address: str) -> None:
-        """Arm one exact per-display interval; the global tick is only a fallback."""
+        """Arm one exact per-display interval aligned to HA internal clock."""
         timers = getattr(self, "_interval_timers", None)
         if timers is None:
             timers = self._interval_timers = {}
@@ -713,8 +735,13 @@ class EntityAutoUpdateManager:
             or self._refresh_trigger_mode(config) == "change_only"
             or getattr(self, "hass", None) is None
         ):
+            self._next_scheduled_wall_time.pop(address, None)
             return
         interval = self._refresh_interval(config)
+        now_wall = time.time()
+        next_wall = _next_clock_aligned_time(interval, now_wall)
+        self._next_scheduled_wall_time[address] = next_wall
+        delay = max(0.5, next_wall - now_wall)
 
         @callback
         def _run(_now: Any) -> None:
@@ -725,7 +752,7 @@ class EntityAutoUpdateManager:
             self._schedule_refresh(address)
             self._sync_interval_timer(address)
 
-        timers[address] = async_call_later(self.hass, interval, _run)
+        timers[address] = async_call_later(self.hass, delay, _run)
 
     async def async_set_config(self, address: str, config: dict[str, Any] | None) -> None:
         await self.async_initialize()
@@ -827,14 +854,12 @@ class EntityAutoUpdateManager:
                             if entity_id
                         )
             interval = self._refresh_interval(config)
-            now_mono = time.monotonic()
-            last_mono = self._last_refresh_at.get(address, now_mono)
-            elapsed_mono = max(0.0, now_mono - last_mono)
-            remaining_seconds = max(0, int(round(interval - elapsed_mono)))
+            now_wall = time.time()
+            next_wall = self._next_scheduled_wall_time.get(address) or _next_clock_aligned_time(interval, now_wall)
+            remaining_seconds = max(0, int(round(next_wall - now_wall)))
             last_wall = self._last_refresh_wall_time.get(address, 0.0)
             if not last_wall:
-                last_wall = time.time() - elapsed_mono
-            next_wall = last_wall + interval
+                last_wall = next_wall - interval
             result.append(
                 {
                     "address": address,
@@ -1362,7 +1387,7 @@ class EntityAutoUpdateManager:
                 self._schedule_refresh(address)
 
     @callback
-    def _schedule_refresh(self, address: str) -> None:
+    def _schedule_refresh(self, address: str, immediate: bool = False) -> None:
         config = self._configs.get(address)
         if not config or not self._automation_enabled(config):
             return
@@ -1378,25 +1403,27 @@ class EntityAutoUpdateManager:
         def _run(_now: Any) -> None:
             self._timers.pop(address, None)
             self._refresh_tasks[address] = self.hass.async_create_task(
-                self._async_refresh_loop(address)
+                self._async_refresh_loop(address, immediate=immediate)
             )
 
-        self._timers[address] = async_call_later(self.hass, DEBOUNCE_SECONDS, _run)
+        if immediate:
+            _run(None)
+        else:
+            self._timers[address] = async_call_later(self.hass, DEBOUNCE_SECONDS, _run)
 
-    async def _async_refresh_loop(self, address: str) -> None:
+    async def _async_refresh_loop(self, address: str, immediate: bool = False) -> None:
         try:
             while address in self._pending_refreshes:
                 self._pending_refreshes.discard(address)
                 config = self._configs.get(address)
                 if not config or not self._automation_enabled(config):
                     return
-                interval = self._refresh_interval(config)
-                wait_seconds = max(
-                    0.0,
-                    self._last_refresh_at.get(address, 0.0) + interval - time.monotonic(),
-                )
-                if wait_seconds:
-                    await asyncio.sleep(wait_seconds)
+                if not immediate:
+                    interval = min(30, self._refresh_interval(config))
+                    elapsed = time.monotonic() - self._last_refresh_at.get(address, 0.0)
+                    if elapsed < interval:
+                        await asyncio.sleep(interval - elapsed)
+                immediate = False
                 config = self._configs.get(address)
                 if not config or not self._automation_enabled(config):
                     return

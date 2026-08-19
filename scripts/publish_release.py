@@ -74,11 +74,12 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.312",
-        name="DRATEK eInk v0.1.312",
-        body="""## Release 0.1.312
+        tag="v0.1.313",
+        name="DRATEK eInk v0.1.313",
+        body="""## Release 0.1.313
 
-### Vylepšeno a upraveno
-- **Odstraněn odpočítávací pruh z hlavní stránky displejů**: Z karet displejů na hlavní stránce byl odstraněn odpočítávací časovač a progress bar pro čistší a přehlednější zobrazení. V záložce Automatizace zůstává časovač plně funkční.
+### Opraveno a vylepšeno
+- **Přesná synchronizace automatické obnovy s hodinami Home Assistantu**: Plánování intervalů se nyní zarovnává na vnitřní hodiny HA (např. při 10minutovém intervalu přesně v :00, :10, :20, :30, :40, :50).
+- **Odstranění kumulativního posunu a zpoždění**: Odstraněno redundantní čekání ve smyčce, takže zápis probíhá přesně v nastaveném intervalu bez posunu na 15–20 minut.
 """,
     )

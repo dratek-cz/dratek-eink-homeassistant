@@ -741,14 +741,16 @@ class AutomationBindingTests(unittest.TestCase):
         automation.async_call_later = fake_call_later
         try:
             manager._sync_interval_timer(address)
-            self.assertEqual(600, callbacks[0][0])
+            self.assertGreater(callbacks[0][0], 0)
+            self.assertLessEqual(callbacks[0][0], 600)
             callbacks[0][1](None)
         finally:
             automation.async_call_later = original
 
         self.assertEqual([address], scheduled)
         self.assertEqual(2, len(callbacks))
-        self.assertEqual(600, callbacks[1][0])
+        self.assertGreater(callbacks[1][0], 0)
+        self.assertLessEqual(callbacks[1][0], 600)
         self.assertEqual([], cancelled)
 
     def test_refresh_trigger_mode_defaults_to_both_and_rejects_invalid_values(self):
