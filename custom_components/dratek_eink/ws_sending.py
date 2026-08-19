@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 import base64
 import io
+import logging
 import time
 
 from PIL import Image
@@ -28,6 +29,8 @@ from .ws_shared import (
     _request_entity_automation_refresh,
 )
 
+
+_LOGGER = logging.getLogger(__name__)
 
 DESIGN_UPLOADS_KEY = "design_uploads"
 DESIGN_UPLOAD_CHUNK_BYTES = 64 * 1024

@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.56-gateway";
+static const char* FIRMWARE_VERSION = "0.1.57-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -759,7 +759,6 @@ void handleTransferUploadChunk() {
   HTTPUpload& upload = server.upload();
   if (upload.status == UPLOAD_FILE_START) {
     uploadPayload.clear();
-    uploadPayload.shrink_to_fit();
     uploadExpectedSize = (size_t)server.arg("size").toInt();
     uploadAddress = server.arg("address");
     uploadJobId = server.arg("id");
@@ -798,14 +797,17 @@ void handleTransferUploadChunk() {
       uploadError = "gateway_busy";
     }
     if (!uploadError.length() && !uploadDuplicate) {
-      // Reserve the final size once. Growing 96 kB geometrically made std::vector
-      // briefly require both its old 64 kB and new 128 kB blocks and could panic
-      // an otherwise healthy ESP32 halfway through the HTTP upload.
-      if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < uploadExpectedSize) {
-        uploadError = "insufficient_contiguous_memory";
-        return;
+      // uploadPayload already carries capacity from the boot-time reserve (or
+      // from a previous transfer handing its buffer back, see transferTask),
+      // so this only needs a fresh contiguous heap block the first time a
+      // transfer asks for more than that high-water mark - normally never.
+      if (uploadPayload.capacity() < uploadExpectedSize) {
+        if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < uploadExpectedSize) {
+          uploadError = "insufficient_contiguous_memory";
+          return;
+        }
+        uploadPayload.reserve(uploadExpectedSize);
       }
-      uploadPayload.reserve(uploadExpectedSize);
     }
     return;
   }
@@ -816,7 +818,6 @@ void handleTransferUploadChunk() {
     if (nextSize > uploadExpectedSize || nextSize > MAX_UPLOAD_PAYLOAD_BYTES) {
       uploadError = "payload_too_large";
       uploadPayload.clear();
-      uploadPayload.shrink_to_fit();
       return;
     }
     uploadPayload.insert(uploadPayload.end(), upload.buf, upload.buf + upload.currentSize);
@@ -826,7 +827,6 @@ void handleTransferUploadChunk() {
   if (upload.status == UPLOAD_FILE_ABORTED) {
     uploadError = "upload_aborted";
     uploadPayload.clear();
-    uploadPayload.shrink_to_fit();
   }
 }
 
@@ -965,7 +965,14 @@ void transferTask(void*) {
   addLog(log, "Largest free memory block " + String(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)) + " bytes.");
   bool ok = sendPayloadToDisplay(address, payload, softwareVersion, log, partial, partialX, partialY, partialWidth, partialHeight);
   payload.clear();
-  payload.shrink_to_fit();
+  // Hand the buffer's capacity back to uploadPayload instead of freeing it -
+  // transferJob.status is still "running" here, so gatewayOperationBusy()
+  // keeps a concurrent HTTP upload from touching uploadPayload until this
+  // task clears that status further down. This is what keeps the peak-size
+  // block in circulation for the life of the process instead of needing a
+  // fresh contiguous allocation (and risking insufficient_contiguous_memory)
+  // on every single transfer.
+  uploadPayload.swap(payload);
   addLog(log, "Payload released; free heap " + String(ESP.getFreeHeap()) + ".");
 
   xSemaphoreTake(transferMutex, portMAX_DELAY);
@@ -997,7 +1004,7 @@ void startQueuedTransfer() {
   transferJob.error = "transfer_task_start_failed";
   transferJob.updatedMs = millis();
   queuedPayload.clear();
-  queuedPayload.shrink_to_fit();
+  uploadPayload.swap(queuedPayload);
   xSemaphoreGive(transferMutex);
 }
 
@@ -1310,6 +1317,13 @@ void setup() {
     delay(1000);
     ESP.restart();
   }
+
+  // Claim the transfer payload's peak-size buffer once, while the heap is
+  // freshest. It is never freed after this (see transferTask/UPLOAD_FILE_START),
+  // only swapped between uploadPayload/queuedPayload/the transfer task's local
+  // copy, so a later transfer never needs to find a fresh contiguous block on
+  // a heap fragmented by many hours of BLE/Wi-Fi churn.
+  uploadPayload.reserve(MAX_UPLOAD_PAYLOAD_BYTES);
 
   Serial.println("Initializing BLE before Wi-Fi and payload allocation.");
   ensureBleInitialized();

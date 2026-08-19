@@ -38,6 +38,16 @@ const METEORADAR_CACHE_MS = 2 * 60 * 1000;
 // far sooner than a success is cached for, so the map appears on its own shortly
 // after the underlying cause clears instead of waiting out the full success TTL.
 const METEORADAR_RETRY_MS = 15 * 1000;
+// A safety net for the interactive preview only: if callWS never settles (a
+// dropped connection with no error/close event, for instance) the pending
+// flag it guards would otherwise never clear, permanently wedging the
+// preview on its "loading" placeholder for the rest of the session - opening
+// display settings again wouldn't help, since _requestTemplateRadarImage's
+// own guard skips every future attempt while that flag is still (wrongly)
+// true. The blocking send path (_preloadTemplateRadarImage) has no such
+// flag to get stuck on, which is why a manual send always renders correctly
+// even when the preview is stuck.
+const METEORADAR_REQUEST_TIMEOUT_MS = 20 * 1000;
 
 // Advance width of one glyph as a fraction of the font size, per character class,
 // measured off the Arial/Helvetica stack above.
@@ -416,13 +426,29 @@ export const templateSvgMixin = {
   _requestTemplateRadarImage(rows, width, height) {
     if (!this._templateNeedsRadarImage(rows) || this._radarImageRequestPending) return;
     this._radarImageRequestPending = true;
+    let settled = false;
+    const clearPending = () => {
+      if (settled) return;
+      settled = true;
+      this._radarImageRequestPending = false;
+    };
+    // If callWS itself never resolves or rejects, this timeout still frees the
+    // guard AND schedules a repaint - which is what actually gets a fresh
+    // attempt going again, since nothing else re-runs _requestTemplateRadarImage
+    // on its own once the preview has already been drawn once.
+    const watchdog = setTimeout(() => {
+      clearPending();
+      this._scheduleTemplateIconRepaint();
+    }, METEORADAR_REQUEST_TIMEOUT_MS);
     this._ensureTemplateRadarImage(width, height)
       .then((changed) => {
-        this._radarImageRequestPending = false;
+        clearTimeout(watchdog);
+        clearPending();
         if (changed) this._scheduleTemplateIconRepaint();
       })
       .catch(() => {
-        this._radarImageRequestPending = false;
+        clearTimeout(watchdog);
+        clearPending();
       });
   },
 
@@ -535,7 +561,18 @@ export const templateSvgMixin = {
     if (!template) return "";
     // The catalog may decorate the "create" tile, but the actual designer and
     // exported image must start as a completely white canvas.
-    if (template.id === "blank" || (template.user_created && !template.base_template_id)) return "";
+    if (template.id === "blank") return "";
+    if (template.user_created) {
+      // A from-scratch template has no base_template_id and must stay a blank
+      // canvas behind its own elements. Also treat a base_template_id that
+      // does not resolve to a real, distinct catalog template (stale id from
+      // a removed/renumbered prepared template, or a literal "blank") as "no
+      // base" - otherwise _templateBaseDefinition's own fallback silently
+      // draws an unrelated prepared template's artwork behind the user's
+      // design instead of nothing.
+      const resolvedBase = template.base_template_id ? this._templateBaseDefinition(template) : null;
+      if (!resolvedBase || resolvedBase === template || resolvedBase.id === "blank") return "";
+    }
     const baseTemplate = this._templateBaseDefinition(template);
     const rows = this._templateSvgRows(baseTemplate, width, height);
     this._requestTemplateIcons(rows);

@@ -56,8 +56,8 @@ export const template = {
         ], card: true, color: "white", h: 0.225 },
         { rule: true, h: 0.02 },
         { datebox: { day: event(0).day, month: event(0).month, color: "red", lines: [event(0).title, event(0).detail] }, group: "event-0", h: 0.54 },
+        // No footer repeating the nameday - the split row above already shows it.
         { flex: true },
-        { footer: [{ label: "SVÁTEK MÁ", value: namedayVal }], h: 0.16 },
       ];
     }
 
@@ -76,9 +76,9 @@ export const template = {
           // icons/values (today's date, the nameday) below.
           { rule: true, h: 0.012 },
           { split: [
-            { icon: "calendar-today", label: "DNEŠNÍ DEN", value: todayStr },
-            { icon: "cake-variant-outline", label: "DNES MÁ SVÁTEK", value: namedayVal, color: "red" },
-            { icon: "clock-outline", label: "PŘEHLED KALENDÁŘE", value: `${totalEvents} UDÁLOSTÍ` },
+            { label: "DNEŠNÍ DEN", value: todayStr },
+            { label: "DNES MÁ SVÁTEK", value: namedayVal, color: "red" },
+            { label: "PŘEHLED KALENDÁŘE", value: `${totalEvents} UDÁLOSTÍ` },
           ], card: true, color: "white", h: 0.128 },
           { rule: true, h: 0.02 },
         ];
@@ -116,10 +116,12 @@ export const template = {
         }
 
         rows.push({ flex: true });
+        // Just the nearest event here - the nameday already sits in the split
+        // row above, and repeating it as well as a bound value 2x on the same
+        // display was never intentional.
         rows.push({
           footer: [
-            { icon: "cake-variant-outline", label: "DNES MÁ SVÁTEK", value: namedayVal },
-            { icon: "calendar-star", label: "NEJBLIŽŠÍ UDÁLOST", value: event(0).title || "Žádná" },
+            { label: "NEJBLIŽŠÍ UDÁLOST", value: event(0).title || "Žádná" },
           ],
           h: 0.075,
         });
@@ -134,8 +136,8 @@ export const template = {
         // paint before it reaches the split cells' icons/values below.
         { rule: true, h: 0.012 },
         { split: [
-          { icon: "calendar-today", label: "DNEŠNÍ DEN", value: todayStr },
-          { icon: "cake-variant-outline", label: "SVÁTEK MÁ", value: namedayVal, color: "red" },
+          { label: "DNEŠNÍ DEN", value: todayStr },
+          { label: "SVÁTEK MÁ", value: namedayVal, color: "red" },
         ], card: true, color: "white", h: 0.128 },
         { rule: true, h: 0.02 },
       ];
@@ -147,11 +149,8 @@ export const template = {
           h: eventH,
         });
       }
+      // No footer repeating the nameday - the split row above already shows it.
       rows.push({ flex: true });
-      rows.push({
-        footer: [{ icon: "cake-variant-outline", label: "DNES MÁ SVÁTEK", value: namedayVal }],
-        h: 0.075,
-      });
       return rows;
     }
 
@@ -178,11 +177,8 @@ export const template = {
         h: eventH,
       });
     }
+    // No footer repeating the nameday - the split row above already shows it.
     rows.push({ flex: true });
-    rows.push({
-      footer: [{ icon: "cake-variant-outline", label: "SVÁTEK MÁ", value: namedayVal }],
-      h: isTall ? 0.08 : 0.11,
-    });
     return rows;
   },
 };

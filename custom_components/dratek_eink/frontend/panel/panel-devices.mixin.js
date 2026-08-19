@@ -1,6 +1,29 @@
 import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.299";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=catalog-no-color-tests-1";
 
+// The standard Czech civil name-day calendar, indexed [month][day - 1]
+// (getMonth() is already 0-based). Days with no name day (state/religious
+// holidays only, e.g. 1.1, 24.12) are "". Sourced from the public domain
+// calendar data used by the WebChemistry/svatky project
+// (github.com/WebChemistry/svatky), with holiday labels (Štědrý den, Den
+// vítězství, ...) filtered out, keeping only person names. Mirrors
+// automation.py's _CZECH_NAME_DAYS so a manual preview and an automatic
+// refresh always agree.
+const CZECH_NAME_DAYS = [
+  ["", "Karina", "Radmila", "Diana", "Dalimil", "", "Vilma", "Čestmír", "Vladan", "Břetislav", "Bohdana", "Pravoslav", "Edita", "Radovan", "Alice", "Ctirad", "Drahoslav", "Vladislav", "Doubravka", "Ilona", "Běla", "Slavomír", "Zdeněk", "Milena", "Miloš", "Zora", "Ingrid", "Otýlie", "Zdislava", "Robin", "Marika"],
+  ["Hynek", "Nela", "Blažej", "Jarmila", "Dobromila", "Vanda", "Veronika", "Milada", "Apolena", "Mojmír", "Božena", "Slavěna", "Věnceslav", "Valentýn", "Jiřina", "Ljuba", "Miloslava", "Gizela", "Patrik", "Oldřich", "Lenka", "Petr", "Svatopluk", "Matěj", "Liliana", "Dorota", "Alexandr", "Lumír", "Horymír"],
+  ["Bedřich", "Anežka", "Kamil", "Stela", "Kazimír", "Miroslav", "Tomáš", "Gabriela", "Františka", "Viktorie", "Anděla", "Řehoř", "Růžena", "Rút, Matylda", "Ida", "Elena, Herbert", "Vlastimil", "Eduard", "Josef", "Světlana", "Radek", "Leona", "Ivona", "Gabriel", "Marián", "Emanuel", "Dita", "Soňa", "Taťána", "Arnošt", "Kvido"],
+  ["Hugo", "Erika", "Richard", "Ivana", "Miroslava", "Vendula", "Heřman, Hermína", "Ema", "Dušan", "Darja", "Izabela", "Julius", "Aleš", "Vincenc", "Anastázie", "Irena", "Rudolf", "Valérie", "Rostislav", "Marcela", "Alexandra", "Evženie", "Vojtěch", "Jiří", "Marek", "Oto", "Jaroslav", "Vlastislav", "Robert", "Blahoslav"],
+  ["", "Zikmund", "Alexej", "Květoslav", "Klaudie", "Radoslav", "Stanisla", "", "Ctibor", "Blažena", "Svatava", "Pankrác", "Servác", "Bonifác", "Žofie", "Přemysl", "Aneta", "Nataša", "Ivo", "Zbyšek", "Monika", "Emil", "Vladimír", "Jana", "Viola", "Filip", "Valdemar", "Vilém", "Maxmilián", "Ferdinand", "Kamila"],
+  ["Laura", "Jarmil", "Tamara", "Dalibor", "Dobroslav", "Norbert", "Iveta, Slavoj", "Medard", "Stanislav", "Gita", "Bruno", "Antonie", "Antonín", "Roland", "Vít", "Zbyněk", "Adolf", "Milan", "Leoš", "Květa", "Alois", "Pavla", "Zdeňka", "Jan", "Ivan", "Adriana", "Ladislav", "Lubomír", "Petr, Pavel", "Šárka"],
+  ["Jaroslava", "Patricie", "Radomír", "Prokop", "", "", "Bohuslava", "Nora", "Drahoslava", "Libuše, Amálie", "Olga", "Bořek", "Markéta", "Karolína", "Jindřich", "Luboš", "Martina", "Drahomíra", "Čeněk", "Ilja", "Vítězslav", "Magdeléna", "Libor", "Kristýna", "Jakub", "Anna", "Věroslav", "Viktor", "Marta", "Bořivoj", "Ignác"],
+  ["Oskar", "Gustav", "Miluše", "Dominik", "Kristián", "Oldřiška", "Lada", "Soběslav", "Roman", "Vavřinec", "Zuzana", "Klára", "Alena", "Alan", "Hana", "Jáchym", "Petra", "Helena", "Ludvík", "Bernard", "Johana", "Bohuslav", "Sandra", "Bartoloměj", "Radim", "Luděk", "Otakar", "Augustýn", "Evelína", "Vladěna", "Pavlína"],
+  ["Linda, Samuel", "Adéla", "Bronislav", "Jindřiška", "Boris", "Boleslav", "Regína", "Mariana", "Daniela", "Irma", "Denisa", "Marie", "Lubor", "Radka", "Jolana", "Ludmila", "Naděžda", "Kryštof", "Zita", "Oleg", "Matouš", "Darina", "Berta", "Jaromír", "Zlata", "Andrea", "Jonáš", "Václav", "Michal", "Jeroným"],
+  ["Igor", "Olívie", "Bohumil", "František", "Eliška", "Hanuš", "Justýna", "Věra", "Štefan, Sára", "Marina", "Andrej", "Marcel", "Renáta", "Agáta", "Tereza", "Havel", "Hedvika", "Lukáš", "Michaela", "Vendelín", "Brigita", "Sabina", "Teodor", "Nina", "Beáta", "Erik", "Šarlota, Zoe", "", "Silvie", "Tadeáš", "Štěpánka"],
+  ["Felix", "", "Hubert", "Karel", "Miriam", "Liběna", "Saskie", "Bohumír", "Bohdan", "Evžen", "Martin", "Benedikt", "Tibor", "Sáva", "Leopold", "Otmar", "Mahulena", "Romana", "Alžběta", "Nikola", "Albert", "Cecílie", "Klement", "Emílie", "Kateřina", "Artur", "Xenie", "René", "Zina", "Ondřej"],
+  ["Iva", "Blanka", "Svatoslav", "Barbora", "Jitka", "Mikuláš", "Ambrož, Benjamín", "Květoslava", "Vratislav", "Julie", "Dana", "Simona", "Lucie", "Lýdie", "Radana", "Albína", "Daniel", "Miloslav", "Ester", "Dagmar", "Natálie", "Šimon", "Vlasta", "Adam, Eva", "", "Štěpán", "Žaneta", "Bohumila", "Judita", "David", "Silvestr"],
+];
+
 export const devicesMixin = {
 
   async _scan({ background = false } = {}) {
@@ -96,7 +119,14 @@ export const devicesMixin = {
 
   _device() {
     const devices = this._result ? this._result.devices : [];
-    return devices.find((device) => device.address === this._selectedDeviceAddress) || null;
+    // _renderTemplatePhysicalDevicePreview scopes _renderingDeviceAddress to
+    // whichever device's preview is actually being drawn (a device list can
+    // render several at once). Every palette/size lookup here goes through
+    // this same _device(), so without this it silently used whatever device
+    // happens to be globally "selected" instead - e.g. a BWR-only display's
+    // card showing yellow because a BWRY display was selected elsewhere.
+    const address = this._renderingDeviceAddress || this._selectedDeviceAddress;
+    return devices.find((device) => device.address === address) || null;
   },
 
   _deviceTitle(device) {
@@ -1112,9 +1142,9 @@ export const devicesMixin = {
               <button type="button" class="${orientation === "landscape" ? "is-active" : ""}" data-template-orientation="landscape" title="Na šířku"><ha-icon icon="mdi:phone-rotate-landscape"></ha-icon></button>
             </div>
           </div>
-          <button type="button" class="display-template-send-button ${!this._templateSending && this._templateSendResult?.ok ? "is-success" : !this._templateSending && this._templateSendResult ? "is-error" : ""}" data-template-send ${assignedTemplates.length && !this._templateSending ? "" : "disabled"} title="${this._templateSendResult ? this._escape(this._templateSendResult.message) : "Odeslat aktuální obsah do displeje"}">
+          <button type="button" class="display-template-send-button ${!this._templateSending && this._templateSendResult?.ok ? "is-success" : !this._templateSending && this._templateSendResult ? "is-error" : ""}" data-template-send ${assignedTemplates.length && !this._templateSending ? "" : "disabled"} title="${this._templateSendResult ? this._escape(this._templateSendResult.message) : "Odeslat aktuální obsah do fronty zápisu"}">
             <ha-icon icon="mdi:${this._templateSending ? "loading" : this._templateSendResult?.ok ? "check-circle" : this._templateSendResult ? "alert-circle" : "send"}" ${this._templateSending ? 'class="spin"' : ""}></ha-icon>
-            <span><strong>${this._templateSending ? "Odesílám náhled…" : this._templateSendResult?.ok ? "Odesláno do displeje" : this._templateSendResult ? "Odeslání se nezdařilo" : "Odeslat do displeje"}</strong><small>${this._templateSendResult?.ok ? "Hotovo · přenos byl přijat" : this._templateSendResult ? "Podrobnosti zobrazíte podržením kurzoru" : assignedTemplates.length ? "Zapíše aktuální obsah displeje" : "Nejprve přetáhněte šablonu"}</small></span>
+            <span><strong>${this._templateSending ? "Odesílám náhled…" : this._templateSendResult?.ok ? "Odesláno do fronty" : this._templateSendResult ? "Odeslání se nezdařilo" : "Odeslat do fronty"}</strong><small>${this._templateSendResult?.ok ? "Hotovo · přenos byl přijat" : this._templateSendResult ? "Podrobnosti zobrazíte podržením kurzoru" : assignedTemplates.length ? "Zapíše aktuální obsah displeje" : "Nejprve přetáhněte šablonu"}</small></span>
           </button>
         </aside>
         <section class="display-template-library">
@@ -1208,7 +1238,7 @@ export const devicesMixin = {
                       <small>Náhled, výměna obrázku, galerie a automatické střídání</small>
                     </div>
                     <ha-icon icon="mdi:chevron-right" class="option-arrow"></ha-icon>
-                  </button>` : `<button type="button" class="card-edit-option-btn" data-display-template-edit-choice="variables" data-display-template-id="${this._escape(template.id)}">
+                  </button>` : `<button type="button" class="card-edit-option-btn is-primary-action" data-display-template-edit-choice="variables" data-display-template-id="${this._escape(template.id)}">
                     <span class="option-icon"><ha-icon icon="mdi:database-edit-outline"></ha-icon></span>
                     <div class="option-text">
                       <strong>Upravit zdroje dat</strong>
@@ -1920,8 +1950,7 @@ export const devicesMixin = {
             <p><ha-icon icon="mdi:information-outline"></ha-icon>Po odeslání displej přejde na intervalové aktualizace a střídá až 12 vybraných snímků.</p>
           </section>
           <div class="custom-image-studio-submit">
-            <button type="button" class="secondary" data-custom-image-save><ha-icon icon="mdi:content-save-outline"></ha-icon><span>Uložit galerii</span></button>
-            <button type="button" class="primary" data-template-send ${assets.length && !this._templateSending ? "" : "disabled"}><ha-icon icon="mdi:${this._templateSending ? "loading" : "send"}" ${this._templateSending ? 'class="spin"' : ""}></ha-icon><span>${this._templateSending ? "Odesílám…" : "Uložit a odeslat"}</span></button>
+            <button type="button" class="primary" data-custom-image-save><ha-icon icon="mdi:content-save-outline"></ha-icon><span>Uložit</span></button>
           </div>
           ${this._templateSendResult ? `<div class="template-send-result ${this._templateSendResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSendResult.ok ? "check-circle-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSendResult.message)}</span></div>` : ""}
           ${this._templateSaveResult ? `<div class="template-send-result ${this._templateSaveResult.ok ? "is-success" : "is-error"}"><ha-icon icon="mdi:${this._templateSaveResult.ok ? "content-save-check-outline" : "alert-circle-outline"}"></ha-icon><span>${this._escape(this._templateSaveResult.message)}</span></div>` : ""}
@@ -3297,16 +3326,37 @@ export const devicesMixin = {
     const prepared = await this._preparedTemplateEntityBindings(device, width, height);
     bindings.push(...prepared.bindings);
 
-    for (const source of this._templateEditorElements || []) {
+    // Designer elements (chart/gauge/signal/slider/text) live in
+    // _templateEditorElements only while their own template is the one open
+    // in the editor - every other slot's template keeps its saved elements in
+    // _templateEditorStates (see _rememberActiveTemplateEditorState), which is
+    // where they land the instant editing moves to a different template. A
+    // multi-slot layout (grid-6 etc.) must read every assigned slot's own
+    // elements here, not just whichever one happens to be open right now, or
+    // charts/gauges placed in slot 2+ never produce a binding at all - not
+    // "silently dropped", never created in the first place.
+    const activeEditorTemplateId = this._activeTemplateEditorStateId();
+    const automationSlots = this._displayTemplateLayoutSlots(request.layout, width, height);
+    (request.templates || []).forEach((slotTemplate, slotIndex) => {
+      if (!slotTemplate) return;
+      const slot = automationSlots[slotIndex] || automationSlots[0] || { x: 0, y: 0, w: width, h: height };
+      const slotElements = slotTemplate.id === activeEditorTemplateId
+        ? (this._templateEditorElements || [])
+        : (this._templateEditorStates?.[slotTemplate.id]?.editor_elements
+          || (slotTemplate.user_created ? slotTemplate.editor_elements : [])
+          || []);
+      for (const source of slotElements) {
       const item = this._quarterTurnedUserTemplateElement(source);
       const entityId = String(item.entityId || "").trim();
       if (!entityId || !["text", "chart", "gauge", "signal", "slider"].includes(item.type)) continue;
-      const x = px(item.x, width);
-      const y = px(item.y, height);
-      const w = Math.min(width - x, px(item.w, width, 1));
-      const h = Math.min(height - y, px(item.h, height, 1));
+      const x = slot.x + px(item.x, slot.w);
+      const y = slot.y + px(item.y, slot.h);
+      const w = Math.min(slot.x + slot.w - x, px(item.w, slot.w, 1));
+      const h = Math.min(slot.y + slot.h - y, px(item.h, slot.h, 1));
       const common = {
-        id: String(item.id || `entity-${bindings.length + 1}`),
+        // Slot-suffixed: the same reusable template can occupy more than one
+        // slot, and each occurrence needs its own binding id.
+        id: `${String(item.id || `entity-${bindings.length + 1}`)}-slot${slotIndex}`,
         entity_id: entityId,
         entity_attribute: String(item.entityAttribute || ""),
         x, y, w, h,
@@ -3406,7 +3456,8 @@ export const devicesMixin = {
           arc_mode: item.variant === "semicircle" ? "180" : "360",
         }] }],
       });
-    }
+      }
+    });
 
     if (!bindings.length) return undefined;
     return {
@@ -4589,11 +4640,36 @@ export const devicesMixin = {
         // Generate each hardware palette directly from the decoded original.
         // Never quantize an already quantized variant into the other palette.
         const variants = { bwr: renderVariant("bwr"), bwry: renderVariant("bwry") };
-        resolve(this._storeCustomImageTemplateData(source, variants, name, image.width / Math.max(1, image.height)));
+        const storedSource = this._downscaleImageSourceForStorage(image, source);
+        resolve(this._storeCustomImageTemplateData(storedSource, variants, name, image.width / Math.max(1, image.height)));
       };
       image.onerror = () => reject(new Error("Obrázek se nepodařilo načíst."));
       image.src = source;
     });
+  },
+
+  // A phone photo saved as-is (several MB, more as base64) blows well past
+  // the websocket connection's message-size limit once it rides along in
+  // the device draft on every save, closing the connection ("Connection
+  // lost") before the gallery can be written. The palette variants are
+  // already downsized to the display's own resolution; only the kept
+  // "original" (used later to re-derive variants after a fit/orientation
+  // change) needs shrinking here.
+  _downscaleImageSourceForStorage(image, originalSource) {
+    const MAX_DIMENSION = 1600;
+    const longest = Math.max(Number(image.width) || 0, Number(image.height) || 0);
+    if (!longest || longest <= MAX_DIMENSION) return originalSource;
+    const scale = MAX_DIMENSION / longest;
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(image, 0, 0, width, height);
+    return canvas.toDataURL("image/jpeg", 0.85);
   },
 
   async _useBundledCustomImageTemplate(force = false) {
@@ -5310,6 +5386,9 @@ export const devicesMixin = {
         const format = (date) => new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(date);
         return `${format(now)}–${format(next)}`;
       }
+      if (normalized.includes("svatek")) {
+        return CZECH_NAME_DAYS[now.getMonth()][now.getDate() - 1] || fallback;
+      }
       return fallback;
     }
     const state = binding ? this._hass?.states?.[binding] : null;
@@ -5460,7 +5539,7 @@ export const devicesMixin = {
     // design-time fallback text, in a manual send as much as an automatic
     // refresh.
     const paddedLabel = ` ${normalized} `;
-    const automatic = ["čas", "datum", "aktualizace", "cenový interval"].some((part) => paddedLabel.includes(` ${part} `));
+    const automatic = ["čas", "datum", "aktualizace", "cenový interval", "svátek"].some((part) => paddedLabel.includes(` ${part} `));
     const descriptions = {
       teplota: "Senzor teploty místnosti nebo venkovního prostoru.",
       vlhkost: "Senzor relativní vlhkosti vzduchu nebo půdy.",

@@ -241,7 +241,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('this._templateEditorElements = [];', self.source)
         self.assertIn('this._templateElementAdjustments = {};', self.source)
         self.assertIn('this._projectName = "Vlastní šablona";', self.source)
-        self.assertIn('if (template.id === "blank" || (template.user_created && !template.base_template_id)) return "";', self.source)
+        self.assertIn('if (template.id === "blank") return "";', self.source)
+        self.assertIn('if (!resolvedBase || resolvedBase === template || resolvedBase.id === "blank") return "";', self.source)
         self.assertIn('if (baseTemplate?.id === "blank" || (baseTemplate?.user_created && !baseTemplate?.base_template_id)) return [];', self.source)
         self.assertNotIn('Prázdná plocha od nuly</text>', self.source)
 
@@ -552,7 +553,8 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('Vytvořeno uživatelem', self.source)
         self.assertIn('Vytvořeno v eInk Studiu', self.source)
         self.assertIn('.display-template-library .display-template-card.is-user-created{', self.source)
-        self.assertIn('if (template.id === "blank" || (template.user_created && !template.base_template_id)) return "";', self.source)
+        self.assertIn('if (template.id === "blank") return "";', self.source)
+        self.assertIn('if (!resolvedBase || resolvedBase === template || resolvedBase.id === "blank") return "";', self.source)
         self.assertIn('base_template_id: existing?.base_template_id || (selectedId === "blank" ? "" : selectedId)', self.source)
         self.assertIn('_applyTemplateAdjustmentsToSvgMarkup(markup, template', self.source)
 
@@ -833,7 +835,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("data-template-send", self.source)
         self.assertIn("_sendDisplayTemplatePreview()", self.source)
         self.assertIn('this._templateSendResult?.ok ? "check-circle"', self.source)
-        self.assertIn('this._templateSendResult?.ok ? "Odesláno do displeje"', self.source)
+        self.assertIn('this._templateSendResult?.ok ? "Odesláno do fronty"', self.source)
         self.assertIn('}, displayedResult.ok ? 4500 : 8000);', self.source)
         self.assertIn('.display-template-drop-panel>.display-template-send-button.is-success{', self.source)
         send_button_start = self.source.index('class="display-template-send-button ${')

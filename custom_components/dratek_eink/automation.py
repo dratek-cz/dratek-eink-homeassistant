@@ -293,6 +293,32 @@ _MONTH_NAMES_GENITIVE_CS = (
     "ledna", "února", "března", "dubna", "května", "června",
     "července", "srpna", "září", "října", "listopadu", "prosince"
 )
+# The standard Czech civil name-day calendar, indexed [month - 1][day - 1].
+# Days with no name day (state/religious holidays only, e.g. 1.1, 24.12) are
+# "". Sourced from the public domain calendar data used by the WebChemistry/
+# svatky project (github.com/WebChemistry/svatky), with holiday labels
+# (Štědrý den, Den vítězství, ...) filtered out, keeping only person names.
+_CZECH_NAME_DAYS: tuple[tuple[str, ...], ...] = (
+    ("", "Karina", "Radmila", "Diana", "Dalimil", "", "Vilma", "Čestmír", "Vladan", "Břetislav", "Bohdana", "Pravoslav", "Edita", "Radovan", "Alice", "Ctirad", "Drahoslav", "Vladislav", "Doubravka", "Ilona", "Běla", "Slavomír", "Zdeněk", "Milena", "Miloš", "Zora", "Ingrid", "Otýlie", "Zdislava", "Robin", "Marika"),
+    ("Hynek", "Nela", "Blažej", "Jarmila", "Dobromila", "Vanda", "Veronika", "Milada", "Apolena", "Mojmír", "Božena", "Slavěna", "Věnceslav", "Valentýn", "Jiřina", "Ljuba", "Miloslava", "Gizela", "Patrik", "Oldřich", "Lenka", "Petr", "Svatopluk", "Matěj", "Liliana", "Dorota", "Alexandr", "Lumír", "Horymír"),
+    ("Bedřich", "Anežka", "Kamil", "Stela", "Kazimír", "Miroslav", "Tomáš", "Gabriela", "Františka", "Viktorie", "Anděla", "Řehoř", "Růžena", "Rút, Matylda", "Ida", "Elena, Herbert", "Vlastimil", "Eduard", "Josef", "Světlana", "Radek", "Leona", "Ivona", "Gabriel", "Marián", "Emanuel", "Dita", "Soňa", "Taťána", "Arnošt", "Kvido"),
+    ("Hugo", "Erika", "Richard", "Ivana", "Miroslava", "Vendula", "Heřman, Hermína", "Ema", "Dušan", "Darja", "Izabela", "Julius", "Aleš", "Vincenc", "Anastázie", "Irena", "Rudolf", "Valérie", "Rostislav", "Marcela", "Alexandra", "Evženie", "Vojtěch", "Jiří", "Marek", "Oto", "Jaroslav", "Vlastislav", "Robert", "Blahoslav"),
+    ("", "Zikmund", "Alexej", "Květoslav", "Klaudie", "Radoslav", "Stanisla", "", "Ctibor", "Blažena", "Svatava", "Pankrác", "Servác", "Bonifác", "Žofie", "Přemysl", "Aneta", "Nataša", "Ivo", "Zbyšek", "Monika", "Emil", "Vladimír", "Jana", "Viola", "Filip", "Valdemar", "Vilém", "Maxmilián", "Ferdinand", "Kamila"),
+    ("Laura", "Jarmil", "Tamara", "Dalibor", "Dobroslav", "Norbert", "Iveta, Slavoj", "Medard", "Stanislav", "Gita", "Bruno", "Antonie", "Antonín", "Roland", "Vít", "Zbyněk", "Adolf", "Milan", "Leoš", "Květa", "Alois", "Pavla", "Zdeňka", "Jan", "Ivan", "Adriana", "Ladislav", "Lubomír", "Petr, Pavel", "Šárka"),
+    ("Jaroslava", "Patricie", "Radomír", "Prokop", "", "", "Bohuslava", "Nora", "Drahoslava", "Libuše, Amálie", "Olga", "Bořek", "Markéta", "Karolína", "Jindřich", "Luboš", "Martina", "Drahomíra", "Čeněk", "Ilja", "Vítězslav", "Magdeléna", "Libor", "Kristýna", "Jakub", "Anna", "Věroslav", "Viktor", "Marta", "Bořivoj", "Ignác"),
+    ("Oskar", "Gustav", "Miluše", "Dominik", "Kristián", "Oldřiška", "Lada", "Soběslav", "Roman", "Vavřinec", "Zuzana", "Klára", "Alena", "Alan", "Hana", "Jáchym", "Petra", "Helena", "Ludvík", "Bernard", "Johana", "Bohuslav", "Sandra", "Bartoloměj", "Radim", "Luděk", "Otakar", "Augustýn", "Evelína", "Vladěna", "Pavlína"),
+    ("Linda, Samuel", "Adéla", "Bronislav", "Jindřiška", "Boris", "Boleslav", "Regína", "Mariana", "Daniela", "Irma", "Denisa", "Marie", "Lubor", "Radka", "Jolana", "Ludmila", "Naděžda", "Kryštof", "Zita", "Oleg", "Matouš", "Darina", "Berta", "Jaromír", "Zlata", "Andrea", "Jonáš", "Václav", "Michal", "Jeroným"),
+    ("Igor", "Olívie", "Bohumil", "František", "Eliška", "Hanuš", "Justýna", "Věra", "Štefan, Sára", "Marina", "Andrej", "Marcel", "Renáta", "Agáta", "Tereza", "Havel", "Hedvika", "Lukáš", "Michaela", "Vendelín", "Brigita", "Sabina", "Teodor", "Nina", "Beáta", "Erik", "Šarlota, Zoe", "", "Silvie", "Tadeáš", "Štěpánka"),
+    ("Felix", "", "Hubert", "Karel", "Miriam", "Liběna", "Saskie", "Bohumír", "Bohdan", "Evžen", "Martin", "Benedikt", "Tibor", "Sáva", "Leopold", "Otmar", "Mahulena", "Romana", "Alžběta", "Nikola", "Albert", "Cecílie", "Klement", "Emílie", "Kateřina", "Artur", "Xenie", "René", "Zina", "Ondřej"),
+    ("Iva", "Blanka", "Svatoslav", "Barbora", "Jitka", "Mikuláš", "Ambrož, Benjamín", "Květoslava", "Vratislav", "Julie", "Dana", "Simona", "Lucie", "Lýdie", "Radana", "Albína", "Daniel", "Miloslav", "Ester", "Dagmar", "Natálie", "Šimon", "Vlasta", "Adam, Eva", "", "Štěpán", "Žaneta", "Bohumila", "Judita", "David", "Silvestr"),
+)
+
+
+def _czech_name_day(when: datetime) -> str:
+    month_row = _CZECH_NAME_DAYS[when.month - 1]
+    if when.day - 1 >= len(month_row):
+        return ""
+    return month_row[when.day - 1]
 
 
 def _remove_diacritics(text: str) -> str:
@@ -311,9 +337,18 @@ def _resolve_internal_system_value(binding: dict[str, Any]) -> str | None:
     prefix = str(binding.get("value_prefix") or "")
     suffix = str(binding.get("value_suffix") or "")
 
+    # A binding is never bound to a real entity if entity_id is empty or the
+    # literal "internal:..." placeholder - anything with a "." is a genuine
+    # domain.entity_id (sensor.foo, ...) and must always win over anything
+    # below, including nameday: calendar.js's own setup notes used to tell
+    # users to bind their own name-day-providing sensor here (there was no
+    # working built-in default), so an existing real binding from before this
+    # calendar existed must keep working exactly as configured.
+    bound_to_real_entity = "." in entity_id
+
     is_internal = (
         entity_id.startswith("internal:")
-        or kind in ("time", "date", "clock", "datetime", "update_time", "interval")
+        or (kind in ("time", "date", "clock", "datetime", "update_time", "interval", "nameday") and not bound_to_real_entity)
         or entity_id in ("sensor.time", "sensor.date", "sensor.date_time")
     )
     if not is_internal:
@@ -325,6 +360,12 @@ def _resolve_internal_system_value(binding: dict[str, Any]) -> str | None:
     if "datum" in normalized or "date" in normalized:
         formatted = f"{now.day}. {_MONTH_NAMES_GENITIVE_CS[now.month - 1]}"
         return f"{prefix}{formatted}{suffix}"
+    if kind == "nameday" or "svatek" in normalized or "jmenin" in normalized:
+        # A handful of days (1.1, 24.12, ...) are state/religious holidays with
+        # no name day at all - fall through to the binding's own fallback text
+        # instead of showing a blank value on exactly those days.
+        today_name = _czech_name_day(now)
+        return f"{prefix}{today_name}{suffix}" if today_name else None
     if "interval" in normalized:
         next_hour = now + timedelta(hours=1)
         return f"{prefix}{now.strftime('%H:%M')}–{next_hour.strftime('%H:%M')}{suffix}"
@@ -525,6 +566,7 @@ class EntityAutoUpdateManager:
         self._gateway_route_cache: dict[str, list[dict[str, Any]]] = {}
         self._gateway_route_cache_at = 0.0
         self._gateway_route_lock = asyncio.Lock()
+        self._force_full_refresh: set[str] = set()
         self._initialized = False
         self._refresh_tick_unsubscribe = None
 
@@ -1413,6 +1455,8 @@ class EntityAutoUpdateManager:
             self._encode_base_image, image
         )
         await self._store.async_save({"configs": self._configs})
+        # setdefault: tests build this manager via __new__, bypassing __init__.
+        self.__dict__.setdefault("_force_full_refresh", set()).discard(address)
 
     async def _async_refresh(self, address: str) -> dict[str, Any] | None:
         config = self._configs.get(address)
@@ -1481,6 +1525,17 @@ class EntityAutoUpdateManager:
             and partial[2] * partial[3]
             < current_hardware.width * current_hardware.height * 0.85
         )
+        # setdefault: tests build this manager via __new__, bypassing __init__.
+        force_full_refresh = self.__dict__.setdefault("_force_full_refresh", set())
+        if address in force_full_refresh:
+            use_partial = False
+        # Assume the worst until _remember_rendered_image proves the new image
+        # actually landed. If the send below fails or is interrupted partway
+        # (gateway crashes mid-stream, a failover gateway takes over, etc.)
+        # the display's own framebuffer may already hold a partial write that
+        # does not match what HA thinks it sent. The next attempt then sends
+        # the complete image instead of trusting a stale partial-region diff.
+        force_full_refresh.add(address)
 
         if route_type == "gateway" and gateway_id:
             def gateway_runner_factory(route: dict[str, Any]):
@@ -1562,6 +1617,20 @@ class EntityAutoUpdateManager:
                 )
                 if result and result.get("ok") is not False:
                     return result
+                # The pinned gateway is offline or failed. Don't strand the
+                # display on Home Assistant's own Bluetooth radio alone -
+                # fall back to whichever other gateways currently hear it,
+                # same as the manual "send now" path in ws_sending.py.
+                fallback_routes = await self._async_gateway_routes(address)
+                if fallback_routes:
+                    result = await queue.async_submit_gateway_routes(
+                        routes=fallback_routes,
+                        address=address,
+                        operation="entity_update",
+                        runner_factory=gateway_runner_factory,
+                    )
+                    if result and result.get("ok") is not False:
+                        return result
 
         async def run_local(add_log):
             add_log("Automatic entity update via Home Assistant Bluetooth.")

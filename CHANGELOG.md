@@ -2,6 +2,28 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.306] - 2026-08-19
+
+### Přidáno a vylepšeno
+- Galerie vlastních obrázků: dvě tlačítka nahrazena jedním výrazným oranžovým „Uložit“.
+- Fronta zápisu: nová zkratka „Automatika“ pro rychlý přechod k nastavení automatického obnovování vybraného displeje bez nutnosti hledat ho v seznamu.
+- Tlačítko odeslání v nastavení šablon přejmenováno na „Odeslat do fronty“ / „Odesláno do fronty“.
+- Šablona **Kalendář**: přidána podpora svátků/jmenin bez nutnosti vlastní entity (vestavěný český kalendář); pokud už máte svátky navázané na vlastní entitu, má přednost. Odstraněny ikony z horního a spodního pruhu, aby se vešlo víc textu, a odstraněno duplicitní zobrazení svátku (dřív se ukazoval nahoře i dole zároveň).
+- Zvýrazněna sekce „Upravit zdroje dat“ v šabloně vlastního obrázku, aby ji zákazníci hned zaznamenali.
+- Gateway firmware v0.1.57: buffer pro přenos se teď alokuje jednou při startu a recykluje mezi přenosy místo opakovaného uvolňování a nové alokace.
+
+### Opraveno
+- Gateway: chyba `insufficient_contiguous_memory` po delším provozu způsobená fragmentací heapu z opakovaného uvolňování a alokace přenosového bufferu při každém přenosu.
+- Automatický pravidelný refresh displeje připnutého na konkrétní gateway po jejím výpadku nezkoušel ostatní dostupné gateway a rovnou skočil na Home Assistant Bluetooth - teď použije stejný fallback jako ruční odeslání z panelu.
+- Po nejednoznačném nebo neúspěšném přenosu se u dalšího pokusu (i na jiné gatewayi) vynutí plný přepis displeje místo částečného, aby se nekumulovala poškozená oblast po přepnutí gatewaye.
+- Automatické odeslání Wi-Fi po nahrání firmwaru mohlo tiše selhat, pokud sériový port nebyl hned po `esptool` uvolněný (typicky na Windows) - otevření portu se teď zkouší opakovaně.
+- Chybějící `_LOGGER` v `ws_sending.py` způsoboval pád při logování selhání připnuté gatewaye místo zalogování varování.
+- Uložení galerie vlastních obrázků mohlo skončit chybou „Connection lost“ - originální nahraný obrázek se ukládal v plné kvalitě (klidně několik MB), což překračovalo limit velikosti zprávy websocketu. Nově se před uložením zmenšuje.
+- Grafy, ukazatele a signalizace v šablonách s více než dvěma sloty (např. rozložení 2×3 na velkém displeji) se nikdy nezobrazovaly - editor prvků uměl přiřadit obsah jen prvním dvěma slotům.
+- Náhledy a přehled displejů mohly zobrazit žlutou barvu i na displejích, které umí jen černou/bílou/červenou - výběr palety bral vždy globálně vybrané zařízení místo toho, které se zrovna vykresluje.
+- Obranná oprava proti zobrazení cizí podkladové šablony na pozadí u vlastních šablon.
+- Náhled meteoradaru v šabloně se mohl trvale zaseknout na „načítání“, pokud dotaz na server nikdy neskončil - přidán bezpečnostní timeout, který náhled znovu obnoví.
+
 ## [0.1.305] - 2026-08-18
 
 ### Opraveno

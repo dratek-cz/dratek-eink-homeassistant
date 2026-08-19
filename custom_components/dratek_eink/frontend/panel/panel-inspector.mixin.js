@@ -31,6 +31,35 @@ export const inspectorMixin = {
     nodes.forEach((node) => this._templateCatalogPreviewObserver.observe(node));
   },
 
+  // Shared by the device list's "Upravit displej" and the write queue's
+  // "Automatika" shortcut (panel-queue.mixin.js) - both just need to land the
+  // user on this device's settings, where the auto-update section already
+  // lives, instead of duplicating this navigation in two places.
+  async _openDisplaySettings(address) {
+    // A bulk preview load (or a stale localStorage cache) may not have this
+    // device's full draft yet - especially its custom_image_data, which is
+    // large enough that it is skipped from the local cache write entirely.
+    // Going through _selectDevice fetches the authoritative draft from the
+    // backend first, so the custom image preview is correct on first open
+    // instead of only appearing once something else happens to reload it.
+    await this._selectDevice?.(address, { render: false });
+    this._displaySettingsView = "templates";
+    this._activeTab = "display-settings";
+    const openedDevice = this._device();
+    if (openedDevice) {
+      this._displayTemplateOrientation = this._deviceFrameGeometry(openedDevice).portraitLayout ? "portrait" : "landscape";
+    }
+    // The left panel's auto-update section needs this device's automation
+    // record (interval/trigger mode) - normally only fetched when the
+    // Automatické zápisy tab itself is opened. Loaded in the background so
+    // it never delays the page render; the section shows its own
+    // "not sent yet" state until this resolves and re-renders.
+    if (!this._automations) this._loadAutomations();
+    this._render();
+    this._paint();
+    this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
+  },
+
   _bind() {
     this._bindAutomationEvents?.();
     this._bindLazyTemplateCatalogPreviews();
@@ -61,6 +90,11 @@ export const inspectorMixin = {
     this.shadowRoot.querySelectorAll("[data-queue-filter]").forEach((button) => button.addEventListener("click", (event) => {
       event.stopPropagation();
       this._setQueueFilter(button.dataset.queueFilter, button.dataset.queueValue);
+    }));
+    this.shadowRoot.querySelectorAll("[data-queue-open-automation]").forEach((button) => button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this._queueOpenMenu = "";
+      this._openDisplaySettings(button.dataset.queueOpenAutomation);
     }));
     // Klik mimo rozbalený filtr ho zavře. Posluchač se váže jednou za život
     // komponenty, ne při každém _bind(), aby se nehromadil.
@@ -354,43 +388,19 @@ export const inspectorMixin = {
         openTemplateSettings();
       });
     });
-    const openDisplaySettings = async (address) => {
-      // A bulk preview load (or a stale localStorage cache) may not have this
-      // device's full draft yet - especially its custom_image_data, which is
-      // large enough that it is skipped from the local cache write entirely.
-      // Going through _selectDevice fetches the authoritative draft from the
-      // backend first, so the custom image preview is correct on first open
-      // instead of only appearing once something else happens to reload it.
-      await this._selectDevice?.(address, { render: false });
-      this._displaySettingsView = "templates";
-      this._activeTab = "display-settings";
-      const openedDevice = this._device();
-      if (openedDevice) {
-        this._displayTemplateOrientation = this._deviceFrameGeometry(openedDevice).portraitLayout ? "portrait" : "landscape";
-      }
-      // The left panel's auto-update section needs this device's automation
-      // record (interval/trigger mode) - normally only fetched when the
-      // Automatické zápisy tab itself is opened. Loaded in the background so
-      // it never delays the page render; the section shows its own
-      // "not sent yet" state until this resolves and re-renders.
-      if (!this._automations) this._loadAutomations();
-      this._render();
-      this._paint();
-      this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
-    };
     this.shadowRoot.querySelectorAll("[data-device-settings]").forEach((button) => button.addEventListener("click", (event) => {
       event.stopPropagation();
-      openDisplaySettings(button.dataset.deviceSettings);
+      this._openDisplaySettings(button.dataset.deviceSettings);
     }));
     this.shadowRoot.querySelectorAll("[data-device-card-settings]").forEach((card) => {
       card.addEventListener("click", (event) => {
         if (event.target.closest("button,input,select,textarea,a,details,summary")) return;
-        openDisplaySettings(card.dataset.deviceCardSettings);
+        this._openDisplaySettings(card.dataset.deviceCardSettings);
       });
       card.addEventListener("keydown", (event) => {
         if (event.target !== card || !["Enter", " "].includes(event.key)) return;
         event.preventDefault();
-        openDisplaySettings(card.dataset.deviceCardSettings);
+        this._openDisplaySettings(card.dataset.deviceCardSettings);
       });
     });
     this.shadowRoot.querySelector("[data-display-template-search]")?.addEventListener("input", (event) => {

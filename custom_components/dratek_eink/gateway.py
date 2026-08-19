@@ -826,10 +826,29 @@ def _provision_wifi_over_serial(
             "hostname": _safe_network_hostname(hostname),
         }
     )
+    # esptool just released this port (its own reset sequence can still be
+    # settling on the OS/driver side, especially on Windows), so the very
+    # first reopen attempt can transiently fail even though the flash itself
+    # succeeded. Retry the open for a few seconds instead of giving up on one
+    # shot - previously a single failed open here silently skipped Wi-Fi
+    # provisioning entirely, forcing a manual "Wi-Fi only" resend afterward.
+    open_deadline = time.monotonic() + 5
+    ser = None
+    last_open_error: Exception | None = None
+    while ser is None and time.monotonic() < open_deadline:
+        try:
+            ser = _open_serial_without_reset(serial, port)
+        except Exception as exc:  # port not released by esptool/OS yet
+            last_open_error = exc
+            time.sleep(0.3)
+    if ser is None:
+        add_log(f"Could not reopen the serial port for Wi-Fi provisioning: {last_open_error}")
+        return False
+
     deadline = time.monotonic() + timeout_seconds
     attempts = 0
     next_send_at = time.monotonic() + 1.5
-    with _open_serial_without_reset(serial, port) as ser:
+    with ser:
         while time.monotonic() < deadline:
             now = time.monotonic()
             if now >= next_send_at:

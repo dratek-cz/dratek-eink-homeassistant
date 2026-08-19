@@ -198,7 +198,7 @@ const EN_EXACT = new Map(Object.entries({
   "Černé pozadí návrhu": "Black design background",
   "Červené pozadí návrhu": "Red design background",
   "Odeslat výběr": "Send selection",
-  "Odeslat do displeje": "Send to display",
+  "Odeslat do fronty": "Send to queue",
   "Odesílám...": "Sending...",
   "Přepíše na displeji jen oblast označených objektů": "Updates only the area covered by selected objects",
   "Nejprve označ objekty, jejichž oblast se má přepsat": "Select the objects whose area should be updated first",

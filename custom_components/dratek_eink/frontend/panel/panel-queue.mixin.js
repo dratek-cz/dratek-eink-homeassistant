@@ -136,6 +136,30 @@ export const queueMixin = {
     </div>`;
   },
 
+  // A shortcut to jump straight to a display's own settings (where the
+  // auto-update / interval section already lives), without leaving the
+  // queue page to hunt for it in the main device list. Deliberately lists
+  // every known display, not just the ones with jobs in this queue view -
+  // most displays needing automation set up for the first time have no
+  // queue history yet.
+  _renderQueueAutomationShortcut() {
+    const devices = [...(this._result?.devices || [])].sort((a, b) => this._deviceTitle(a).localeCompare(this._deviceTitle(b), "cs"));
+    const open = this._queueOpenMenu === "automation-shortcut";
+    return `<div class="queue-filter ${open ? "is-open" : ""}">
+      <button class="queue-select" data-queue-menu="automation-shortcut" aria-haspopup="listbox" aria-expanded="${open ? "true" : "false"}" title="Otevřít nastavení automatiky pro vybraný displej">
+        <ha-icon class="queue-select-icon" icon="mdi:calendar-sync-outline"></ha-icon>
+        <span>Automatika</span>
+        <ha-icon class="queue-select-caret" icon="mdi:chevron-down"></ha-icon>
+      </button>
+      <div class="queue-menu" role="listbox" aria-label="Otevřít nastavení automatiky pro displej" ${open ? "" : "hidden"}>
+        <div class="queue-menu-title">Vybrat displej</div>
+        ${devices.length ? devices.map((device) => `<button class="queue-menu-item" role="option" data-queue-open-automation="${this._escape(device.address)}">
+          <ha-icon icon="mdi:tablet-dashboard"></ha-icon><span>${this._escape(this._deviceTitle(device))}</span>
+        </button>`).join("") : `<div class="queue-menu-empty">Zatím nebyl nalezen žádný displej.</div>`}
+      </div>
+    </div>`;
+  },
+
   _setQueueFilter(key, value) {
     const property = FILTER_KEYS[key];
     if (!property) return;
@@ -278,6 +302,7 @@ export const queueMixin = {
             ])}
           </div>
           <div class="devices-toolbar-spacer"></div>
+          ${this._renderQueueAutomationShortcut()}
           <button id="exportQueueLog" class="secondary" style="margin-right: 8px;"><ha-icon icon="mdi:download-outline"></ha-icon>Stáhnout protokol</button>
           <button id="clearQueueHistory" class="danger"><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Vyčistit historii</button>
           </div>
