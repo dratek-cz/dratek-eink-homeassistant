@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.310] - 2026-08-19
+
+### Opraveno
+- **Spolehlivé spuštění ESP32 po flashnutí přes USB**: Přidán parametr `--after hard_reset` do `esptool write-flash` a automatický resetovací pulz (`DTR/RTS`) při otevření sériového portu pro provisioning. ESP32 po nahrání firmware již nezůstává viset v ROM bootloaderu, ale okamžitě nastartuje do aplikace a potvrdí uložení Wi-Fi údajů.
+
 ## [0.1.309] - 2026-08-19
 
 ### Opraveno a vylepšeno

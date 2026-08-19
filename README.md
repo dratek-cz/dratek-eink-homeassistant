@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.310
+
+- **Spolehlivé spuštění ESP32 po flashnutí přes USB** – přidán hard reset parametr do `esptool` a pulzní start aplikace při otevírání sériové linky, což eliminuje stav, kdy ESP32 po nahrání zůstalo viset v bootloaderu a nepotvrdilo Wi-Fi konfiguraci.
+
 ## Novinky ve verzi 0.1.309
 
 - **Oprava překrývání grafiky a terminálu v záložce Gatewayí** – odstraněny problematické fixní výšky a vnitřní scroll-trapy, mřížka kroků i terminálová konzole nahrávání se plynule přizpůsobují rozměrům obrazovky a terminál se po startu flashování automaticky nascrolluje na viditelné místo.

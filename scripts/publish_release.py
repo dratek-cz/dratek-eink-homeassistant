@@ -74,12 +74,11 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.309",
-        name="DRATEK eInk v0.1.309",
-        body="""## Release 0.1.309
+        tag="v0.1.310",
+        name="DRATEK eInk v0.1.310",
+        body="""## Release 0.1.310
 
-### Opraveno a vylepšeno
-- **Oprava překrývání grafiky a terminálu v záložce Gatewayí**: Odstraněna umělá výšková omezení a vnitřní scroll-trapy (`calc(100vh - ...)` s `overflow: hidden`) na stránce gatewayí. Layout kroků 1–4 a konzole nahrávání se nyní plynule přizpůsobuje šířce okna se striktním `box-sizing`, žádné karty se nepřekrývají a terminál se při spuštění flashování plynule odroluje na viditelné místo.
-- **Oprava čísla verze ve frontendu**: Zajištěno okamžité promítnutí čísla verze v záhlaví panelu a přehledové karty bez držení staré cache.
+### Opraveno
+- **Spolehlivé spuštění ESP32 po flashnutí přes USB**: Přidán parametr `--after hard_reset` do `esptool write-flash` a automatický resetovací pulz (`DTR/RTS`) při otevření sériového portu pro provisioning. ESP32 po nahrání firmware již nezůstává viset v ROM bootloaderu, ale okamžitě nastartuje do aplikace a potvrdí uložení Wi-Fi údajů.
 """,
     )

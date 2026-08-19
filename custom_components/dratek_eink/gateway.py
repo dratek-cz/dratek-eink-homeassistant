@@ -807,6 +807,18 @@ def _open_serial_without_reset(serial_module: Any, port: str, timeout: float = 0
     return ser
 
 
+def _pulse_esp_reset_into_app(ser: Any) -> None:
+    """Ensure ESP32 boots into user application mode by toggling RTS/DTR lines."""
+    try:
+        ser.dtr = False  # IO0 = High (Normal execution, not bootloader)
+        ser.rts = True   # EN = Low (Reset)
+        time.sleep(0.12)
+        ser.rts = False  # EN = High (Run)
+        time.sleep(0.35)
+    except Exception:
+        pass
+
+
 def _provision_wifi_over_serial(
     port: str,
     ssid: str,
@@ -847,16 +859,19 @@ def _provision_wifi_over_serial(
 
     deadline = time.monotonic() + timeout_seconds
     attempts = 0
-    next_send_at = time.monotonic() + 1.5
+    next_send_at = time.monotonic() + 1.2
     with ser:
+        _pulse_esp_reset_into_app(ser)
         while time.monotonic() < deadline:
             now = time.monotonic()
             if now >= next_send_at:
                 attempts += 1
+                if attempts == 4:
+                    _pulse_esp_reset_into_app(ser)
                 add_log(f"Sending Wi-Fi configuration (attempt {attempts}).")
                 ser.write((payload + "\n").encode())
                 ser.flush()
-                next_send_at = now + 3
+                next_send_at = now + 2.5
 
             line = ser.readline().decode(errors="ignore").strip()
             if not line:
@@ -930,6 +945,8 @@ def _flash_gateway_sync(
         port,
         "--baud",
         ESPTOOL_FLASH_BAUD,
+        "--after",
+        "hard_reset",
         "write-flash",
         "-z",
     ]
