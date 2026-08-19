@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.308
+
+- **Živý odpočítávací časovač a dynamický barevný bar** – na hlavní stránce u každého displeje s aktivním automatickým zápisem, v záložce Automatizace i na přehledové kartě se zobrazuje reálný čas do příštího nahrání a ubíhající barevný progress bar (zelený >50 %, jantarový 20–50 %, červený <20 % a pulzující stream při odesílání).
+- **Oprava bootloopu ESP32 po flashnutí gatewaye** – kompletní výmaz NVS a OTA metadat před nahráním firmwaru eliminuje pád `abort()` způsobený starými daty v NVS.
+- **Moderní uspořádání sekce Nová gateway a plnošířkový terminál** – přehledné 4 kroky instalace a čitelná tmavá vývojářská konzole pro diagnostiku a nahrávání přes USB.
+
 ## Novinky ve verzi 0.1.307
 
 - **Nový výchozí režim automatického obnovování „Jen podle intervalu“** (10 minut) – rychle se měnící navázaná entita už defaultně nespouští odesílání mnohem častěji, než uživatel čeká. Kdo chce reagovat i na změnu hodnoty, může to v nastavení automatiky displeje zvolit ručně.
