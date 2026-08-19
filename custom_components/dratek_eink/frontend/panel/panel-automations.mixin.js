@@ -62,6 +62,31 @@ export const automationsMixin = {
     return `<label class="automation-interval-field"><span>Co spouští obnovu</span><div><ha-icon icon="mdi:swap-horizontal"></ha-icon><select aria-label="Co spouští automatickou obnovu" data-automation-trigger="${this._escape(automation.address)}" ${this._automationBusyAddress === automation.address ? "disabled" : ""}>${options.map(([value, label]) => `<option value="${value}" ${mode === value ? "selected" : ""}>${label}</option>`).join("")}</select><ha-icon class="automation-select-chevron" icon="mdi:chevron-down"></ha-icon></div></label>`;
   },
 
+  _renderAutomationCountdown(automation, isWriting = false) {
+    if (automation.enabled === false) return "";
+    const interval = Math.max(10, Number(automation.refresh_interval_seconds) || 600);
+    const nextTime = Number(automation.next_refresh_time) * 1000 || 0;
+    const now = Date.now();
+    let remainingSec = 0;
+    if (nextTime > now) {
+      remainingSec = Math.round((nextTime - now) / 1000);
+    } else if (Number.isFinite(automation.remaining_seconds)) {
+      remainingSec = Math.max(0, Number(automation.remaining_seconds));
+    }
+    const percent = Math.max(0, Math.min(100, Math.round((remainingSec / interval) * 100)));
+    const tone = percent > 50 ? "good" : percent > 20 ? "warn" : "critical";
+
+    return `<div class="automation-countdown-widget ${isWriting ? "is-writing" : ""} tone-${tone}" data-automation-countdown="${this._escape(automation.address)}" data-next-time="${nextTime}" data-interval="${interval}">
+      <div class="automation-countdown-header">
+        <span class="countdown-badge"><ha-icon icon="${isWriting ? "mdi:progress-upload" : "mdi:clock-fast"}"></ha-icon>${isWriting ? "Probíhá nahrávání..." : "Další nahrátí za"}</span>
+        <strong class="countdown-digital">${isWriting ? "Zápis" : this._formatCountdownTime(remainingSec)}</strong>
+      </div>
+      <div class="automation-progress-track">
+        <div class="automation-progress-fill" style="width: ${isWriting ? 100 : percent}%;"></div>
+      </div>
+    </div>`;
+  },
+
   _renderAutomations() {
     const automations = this._automations || [];
     const writingAddresses = new Set(
@@ -114,7 +139,7 @@ export const automationsMixin = {
         </header>
         <section class="automation-card-overview">
           <div class="automation-display-preview">${device ? this._renderDevicePreview(device, "mini") : `<span class="automation-preview-missing"><ha-icon icon="mdi:monitor-off"></ha-icon></span>`}</div>
-          <span class="automation-schedule-copy"><small>Nastavený interval</small><strong>Každých ${this._escape(this._automationIntervalLabel(automation))}</strong><span><ha-icon icon="${enabled ? triggerIcon : "mdi:pause-circle-outline"}"></ha-icon>${enabled ? this._escape(this._automationTriggerLabel(automation.refresh_trigger_mode)) : "Aktualizace je pozastavená"}</span></span>
+          <span class="automation-schedule-copy"><small>Nastavený interval</small><strong>Každých ${this._escape(this._automationIntervalLabel(automation))}</strong><span><ha-icon icon="${enabled ? triggerIcon : "mdi:pause-circle-outline"}"></ha-icon>${enabled ? this._escape(this._automationTriggerLabel(automation.refresh_trigger_mode)) : "Aktualizace je pozastavená"}</span>${enabled ? this._renderAutomationCountdown(automation, writing) : ""}</span>
         </section>
         <footer class="automation-card-actions">${this._automationIntervalSelect(automation)}<button type="button" class="automation-delete" title="Smazat automatický zápis" data-automation-delete="${this._escape(automation.address)}" ${busy ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon><span>Smazat zápis</span></button></footer>
         <details class="automation-entity-details">

@@ -24,7 +24,7 @@ HISTORY_LIMIT = 100
 # so the outer safety net must cover that reliable fallback as well.
 TRANSFER_JOB_TIMEOUT_SECONDS = 600
 AUTOMATIC_BLUETOOTH_RETRY_DELAY_SECONDS = 20
-OFFLINE_BACKOFF_SECONDS = 900  # 15 minutes backoff for unreachable/failed displays
+OFFLINE_BACKOFF_SECONDS = 60  # 60s backoff for unreachable/failed displays
 LEGACY_COMPLETION_TIMEOUT_MARKER = "waiting for the display to confirm the completed refresh"
 RETRYABLE_BLUETOOTH_ERROR_MARKERS = (
     "available connection slot",

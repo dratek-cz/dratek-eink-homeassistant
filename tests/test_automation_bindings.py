@@ -751,16 +751,16 @@ class AutomationBindingTests(unittest.TestCase):
         self.assertEqual(600, callbacks[1][0])
         self.assertEqual([], cancelled)
 
-    def test_refresh_trigger_mode_defaults_to_interval_only_and_rejects_invalid_values(self):
+    def test_refresh_trigger_mode_defaults_to_both_and_rejects_invalid_values(self):
         trigger_mode = automation.EntityAutoUpdateManager._refresh_trigger_mode
 
-        self.assertEqual("interval_only", trigger_mode({}))
+        self.assertEqual("both", trigger_mode({}))
         self.assertEqual("both", trigger_mode({"refresh_trigger_mode": "both"}))
         self.assertEqual("change_only", trigger_mode({"refresh_trigger_mode": "change_only"}))
         self.assertEqual("interval_only", trigger_mode({"refresh_trigger_mode": "interval_only"}))
         # Unrecognised/garbage values fall back to the safe default rather than
         # silently enabling a trigger the stored config never actually chose.
-        self.assertEqual("interval_only", trigger_mode({"refresh_trigger_mode": "nonsense"}))
+        self.assertEqual("both", trigger_mode({"refresh_trigger_mode": "nonsense"}))
 
     def test_refresh_tick_skips_change_only_displays(self):
         # "change_only" means the periodic tick must never schedule this

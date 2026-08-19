@@ -238,12 +238,29 @@ class DratekEinkOverviewCard extends HTMLElement {
     const route = device?.preferred_path?.type === "gateway"
       ? device.preferred_path.name || "Gateway"
       : "Home Assistant Bluetooth";
+    const auto = device?.automation;
+    const hasAuto = auto && auto.enabled !== false;
+    let autoBar = "";
+    if (hasAuto) {
+      const interval = Math.max(10, Number(auto.refresh_interval_seconds) || 600);
+      const nextTime = Number(auto.next_refresh_time) * 1000 || 0;
+      const now = Date.now();
+      const rem = nextTime > now ? Math.round((nextTime - now) / 1000) : (Number(auto.remaining_seconds) || 0);
+      const pct = Math.max(0, Math.min(100, Math.round((rem / interval) * 100)));
+      const tone = pct > 50 ? "good" : pct > 20 ? "warn" : "critical";
+      const formatted = rem >= 3600 ? `${Math.floor(rem / 3600)}h ${Math.floor((rem % 3600) / 60)}m` : rem >= 60 ? `${Math.floor(rem / 60)}m ${rem % 60}s` : `${rem}s`;
+      autoBar = `<span class="overview-countdown tone-${tone}" title="Příští obnova za ${formatted}">
+        <span class="overview-countdown-label"><small>Obnova za</small><strong>${formatted}</strong></span>
+        <span class="overview-countdown-track"><i style="width:${pct}%"></i></span>
+      </span>`;
+    }
     return `<button class="display-item ${unseen ? "stale" : ""}" data-open-panel="${escapeHtml(address)}">
       <span class="display-miniature"><i></i><em></em></span>
       <span class="display-copy">
         <strong>${escapeHtml(this._deviceTitle(device))}</strong>
         <small>${escapeHtml(this._deviceSubtitle(device))}</small>
         <span class="route">${unseen ? "Dočasně mimo dosah" : escapeHtml(route)}</span>
+        ${autoBar}
       </span>
       <span class="display-health">
         <span class="metric"><small>Baterie</small>${this._renderBattery(device?.battery_percent)}</span>
@@ -288,6 +305,15 @@ class DratekEinkOverviewCard extends HTMLElement {
         .display-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.display-item{display:grid;grid-template-columns:52px minmax(0,1fr) auto;align-items:center;gap:10px;width:100%;min-width:0;padding:10px;border:1px solid var(--divider-color,#ddd);border-radius:11px;background:var(--secondary-background-color,#f3f5f5);text-align:left;cursor:pointer;transition:border-color .16s ease,transform .16s ease,box-shadow .16s ease}.display-item:hover,.display-item:focus-visible,.display-item.selected{transform:translateY(-1px);border-color:#00a2a5;box-shadow:0 0 0 2px rgba(0,162,165,.22)}.display-item.stale{border-color:rgba(245,158,11,.55);opacity:.78}
         .display-miniature{position:relative;display:block;width:52px;height:35px;border:4px solid #f7f7f7;border-radius:5px;background:#c9ccc4;box-shadow:0 0 0 1px #c9cdcd,0 3px 8px rgba(0,0,0,.1)}.display-miniature:before{content:"";position:absolute;left:6px;right:6px;top:5px;height:3px;background:#111;box-shadow:0 7px 0 #111,0 14px 0 #e02822}.display-miniature i{position:absolute;right:-7px;top:13px;width:3px;height:7px;border-radius:2px;background:#00a2a5}.display-miniature em{display:none}
         .display-copy{min-width:0}.display-copy strong,.display-copy small,.route{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.display-copy strong{font-size:12px}.display-copy small{margin-top:3px;color:var(--secondary-text-color,#6b7280);font-size:9px}.route{margin-top:5px;color:#007f82;font-size:8px;font-weight:800}.stale .route{color:#b45309}
+        .overview-countdown{display:flex;flex-direction:column;gap:2px;margin-top:4px;width:100%}
+        .overview-countdown-label{display:flex;align-items:center;justify-content:space-between;font-size:8px}
+        .overview-countdown-label small{color:var(--secondary-text-color,#6b7280);font-size:8px;font-weight:700}
+        .overview-countdown-label strong{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:8.5px;color:var(--primary-text-color)}
+        .overview-countdown-track{display:block;width:100%;height:3px;border-radius:999px;background:rgba(0,0,0,.08);overflow:hidden}
+        .overview-countdown-track i{display:block;height:100%;border-radius:999px;transition:width .9s linear;background:#00a2a5}
+        .tone-good .overview-countdown-track i{background:#10b981}
+        .tone-warn .overview-countdown-track i{background:#f59e0b}
+        .tone-critical .overview-countdown-track i{background:#ef4444}
         .display-health{display:grid;grid-template-columns:1fr 1fr;gap:6px}.metric{display:grid;justify-items:center;gap:4px;min-width:58px}.metric>small{color:var(--secondary-text-color,#6b7280);font-size:8px;font-weight:750}
         .battery-wrap{display:grid;justify-items:center;gap:3px}.battery-wrap b,.signal b{font-size:8px}.battery{position:relative;display:block;width:28px;height:13px;padding:2px;border:2px solid currentColor;border-radius:3px}.battery:after{content:"";position:absolute;right:-5px;top:3px;width:3px;height:5px;border-radius:0 2px 2px 0;background:currentColor}.battery i{display:block;height:100%;min-width:2px;border-radius:1px;background:currentColor}.green{color:#169b4a}.yellow{color:#b58a00}.orange{color:#ef7d00}.red{color:#d5312f}.muted{color:#9ca3af}
         .signal{display:flex;align-items:flex-end;gap:2px;height:18px}.signal i{display:block;width:4px;border-radius:1px;background:currentColor;opacity:.18}.signal i.on{opacity:1}.signal b{align-self:center;margin-left:3px;color:var(--primary-text-color)}

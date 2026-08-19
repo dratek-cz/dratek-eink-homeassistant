@@ -276,8 +276,10 @@ class DratekEinkPanel extends HTMLElement {
     this._render();
     this._paint();
     this._lastRenderedDeviceSignature = this._deviceStatusSignature?.(this._result) || "";
+    this._startCountdownTicker?.();
     this._scheduleDeviceStatusPoll(1000);
     this._scheduleGatewayStatusPoll?.(1500);
+    if (!this._automations) this._loadAutomations?.(false);
   }
 
   disconnectedCallback() {
@@ -294,6 +296,7 @@ class DratekEinkPanel extends HTMLElement {
       this.shadowRoot.removeEventListener("click", this._customImageCardClickHandler, true);
       this._customImageCardClickHandler = null;
     }
+    this._stopCountdownTicker?.();
     window.clearTimeout(this._propertyEditTimer);
     window.clearTimeout(this._templateEntityHistorySaveTimer);
     window.clearTimeout(this._flashPollTimer);
@@ -334,6 +337,7 @@ class DratekEinkPanel extends HTMLElement {
       this._paint();
       this._lastRenderedDeviceSignature = this._deviceStatusSignature?.(this._result) || "";
       this._loadQueue(false);
+      this._loadAutomations?.(false);
       this._scheduleDeviceStatusPoll(1000);
       this._scheduleGatewayStatusPoll?.(1500);
       this._loadUserDisplayTemplates?.();

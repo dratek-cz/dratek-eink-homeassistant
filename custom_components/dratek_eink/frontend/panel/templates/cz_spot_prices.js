@@ -95,16 +95,14 @@ export const template = {
     // discrete area tier instead of interpolating continuously.
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
-    // Every built-in template's first icon/text/stat/strip/... row is
-    // auto-painted yellow at render time (_fourColorTemplateRows's identity
-    // search - the one-accent-per-tile rule every catalog template shares).
-    // It hunts for the first row carrying an `icon` or `text` field
-    // specifically, wherever that row sits in the array. No title text row
-    // and no icon anywhere here - a bare hairline is the only thing left for
-    // that search to land on (its own fallback: the first row of any kind),
-    // so it always gets the accent and nothing that actually needs to stay
-    // black (the price, MIN/MAX) can end up recoloured by it.
-    const accentRule = { rule: true, h: 0.015 };
+    // A lightning bolt, not a currency symbol: this is a price *of
+    // electricity*, and a $ glyph (the catalog's own "Aktuální cena" icon)
+    // read as an outright mistake on a Kč tile. It also gives the shared
+    // one-accent-per-tile auto-colour (_fourColorTemplateRows) an icon to
+    // land on ahead of the title text below, the same way every other
+    // template's own icon does.
+    const accentIcon = { icon: "flash", h: 0.075 };
+    const title = { text: "České spotové ceny", h: 0.04, size: 0.03, bold: true };
     if (area <= 26000) {
       // 212x104, 196x96 - a price tag, not a dashboard. A `stat` row here
       // would be the only icon/text/stat row around, which is exactly what
@@ -114,7 +112,7 @@ export const template = {
       // no such row for the column split to key off, so it falls back to
       // stacking full width instead - more room for every number, not less.
       return [
-        accentRule,
+        { rule: true, h: 0.018 },
         { strip: [
           { label: "NYNÍ", value: v(0, "2,45 Kč") },
           ...minMax(),
@@ -123,29 +121,41 @@ export const template = {
         rangeFooter(),
       ];
     }
+    // On a landscape panel (most real hardware - see LANDSCAPE_ASPECT in
+    // panel-template-svg.mixin.js) _layoutTemplateSvgColumns pulls the
+    // icon/title/stat rows out into their own leading column, stacked and
+    // stretched to fill it top to bottom - the same treatment weather.js's
+    // icon+date+temperature already gets. Without an icon and title of its
+    // own to go with the price, that column held the price alone stretched
+    // across the *entire* column height, which read as a mostly-empty box
+    // with one number floating in the middle of it rather than a
+    // deliberately composed lead-in - drop the icon+title from a landscape
+    // tile's design and this immediately looks abandoned again.
     if (area <= 110000) {
       // 250x128, 296x128, 168x384, 240x416, 210x480 and similar - room for
-      // the chart but not for a title on top of it too. Chart first and
-      // biggest, then the main price, then MIN/MAX, then today's range -
-      // same priority order as the big tier below.
+      // the chart but not much beyond it. Chart first and biggest, then the
+      // main price, then MIN/MAX, then today's range - same priority order
+      // as the big tier below.
       return [
-        accentRule,
-        { bars: { values: prices, labels, highlight }, group: "chart", h: 0.4 },
-        { stat: { value: v(0, "2,45 Kč/kWh"), caption: "aktuální interval" }, h: 0.22 },
-        { strip: minMax(), h: 0.18 },
+        accentIcon,
+        title,
+        { bars: { values: prices, labels, highlight }, group: "chart", h: 0.36 },
+        { stat: { value: v(0, "2,45 Kč/kWh"), caption: "aktuální interval" }, h: 0.2 },
+        { strip: minMax(), h: 0.16 },
         { flex: true },
         rangeFooter(),
       ];
     }
     // 400x300 and up - the full picture. The chart is the thing worth a
-    // glance at this size, so it leads and gets the most room; the current
-    // price, then MIN/MAX, then today's range follow in shrinking order of
-    // how often each one is actually what someone is looking for.
+    // glance at this size, so it gets the most room; the current price,
+    // then MIN/MAX, then today's range follow in shrinking order of how
+    // often each one is actually what someone is looking for.
     return [
-      accentRule,
-      { bars: { values: prices, labels, highlight }, group: "chart", h: 0.44 },
-      { stat: { value: v(0, "2,45 Kč/kWh"), caption: "aktuální interval" }, h: 0.2 },
-      { strip: minMax(), h: 0.16 },
+      accentIcon,
+      title,
+      { bars: { values: prices, labels, highlight }, group: "chart", h: 0.4 },
+      { stat: { value: v(0, "2,45 Kč/kWh"), caption: "aktuální interval" }, h: 0.18 },
+      { strip: minMax(), h: 0.14 },
       { flex: true },
       rangeFooter(),
     ];

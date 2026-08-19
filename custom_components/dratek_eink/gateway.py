@@ -949,10 +949,10 @@ def _flash_gateway_sync(
             "--baud",
             ESPTOOL_FLASH_BAUD,
             "erase-region",
-            "0xe000",
-            "0x2000",
+            "0x9000",
+            "0x7000",
         ]
-        add_log("Resetting OTA boot metadata while preserving Wi-Fi configuration.")
+        add_log("Resetting NVS partition and OTA boot metadata for clean initialization.")
         erase_proc = subprocess.run(
             erase_cmd,
             stdout=subprocess.PIPE,

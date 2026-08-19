@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.308] - 2026-08-19
+
+### Přidáno a vylepšeno
+- **Živý odpočítávací časovač a dynamický barevný bar**: Na hlavní stránce u každého displeje s aktivním automatickým zápisem, v záložce Automatizace i na Lovelace přehledové kartě se nyní zobrazuje reálný odpočet do příštího zápisu a plynule ubíhající barevný progress bar (zelený >50 %, jantarový 20–50 %, červený <20 % a pulzující stream při probíhajícím odesílání).
+- **Modernizovaná sekce a terminálová konzole instalace gatewaye**: Kompletně přepracovaný layout kroků 1–4 pro nahrávání gatewaye přes USB a plnošířkový terminál pro pohodlnou diagnostiku a logování bez deformace tlačítek.
+
+### Opraveno
+- **Oprava bootloopu ESP32 po flashnutí gatewaye**: Při nahrávání nového firmwaru se nově maže celá oblast NVS (0x9000–0xe000) i OTA metadat (0xe000–0x10000). Předchází se tím pádu `abort()`, který způsobovala nekompatibilní nebo poškozená konfigurační data z předchozího projektu v NVS paměti.
+- **Oprava automatického odesílání na gatewaye**: Vylepšena koordinace vyhledávání tras a bezpečného odesílání přes volné gatewaye s fallbackem.
+
 ## [0.1.307] - 2026-08-19
 
 ### Přidáno a vylepšeno

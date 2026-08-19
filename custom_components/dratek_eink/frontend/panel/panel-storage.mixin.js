@@ -106,7 +106,7 @@ export const storageMixin = {
       orientation: this._orientation,
       display_transform: this._displayTransform,
       refresh_interval_seconds: 600,
-      refresh_trigger_mode: "interval_only",
+      refresh_trigger_mode: "both",
       invert_colors: false,
       background_color: "white",
       width: size.width,

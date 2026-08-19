@@ -471,7 +471,6 @@ export const gatewayMixin = {
           <button id="serialStatus" class="secondary" ${this._gatewayBusy || !portReady ? "disabled" : ""}><ha-icon icon="mdi:console-line"></ha-icon><span><strong>Ověřit USB</strong><small>Diagnostika připojení</small></span></button>
         </div>
       </div>
-      ${this._renderFlashResult()}${this._renderSerialResult()}
     </section>`;
   },
 
@@ -512,6 +511,7 @@ export const gatewayMixin = {
           <section class="gateway-setup-section gateway-board-section"><div class="gateway-step-header"><span class="step-num">3</span><div><strong>Vyberte typ desky</strong><small>Dvě podporované varianty gateway firmwaru</small></div></div>${this._renderGatewayBoardPicker()}</section>
           ${this._renderGatewayInstallPanel(selectedBoard)}
         </div></div>
+        ${this._renderFlashResult()}${this._renderSerialResult()}
       </div>${shellEnd}`;
     }
     // Návod ke směrování je dokumentace, ne stav - drží se sbalený, aby nad

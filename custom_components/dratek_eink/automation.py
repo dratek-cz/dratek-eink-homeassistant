@@ -52,7 +52,7 @@ MAX_REFRESH_INTERVAL_SECONDS = 86400
 BATTERY_SAVER_THRESHOLD_PERCENT = 15
 BATTERY_SAVER_MIN_INTERVAL_SECONDS = 3600
 GATEWAY_ROUTE_SCAN_SECONDS = 3
-GATEWAY_ROUTE_CACHE_SECONDS = 5
+GATEWAY_ROUTE_CACHE_SECONDS = 30
 # Backstop for _async_gateway_routes's lock-held section (see the comment at
 # its call site): comfortably above the ~8s each individual gateway scan is
 # already bounded to (see gateway.py's DEFAULT_TIMEOUT), so it never fires in
@@ -65,20 +65,17 @@ GATEWAY_ROUTE_LOOKUP_TIMEOUT_SECONDS = 20
 # than that would make picking a short interval pointless.
 REFRESH_TICK_SECONDS = MIN_REFRESH_INTERVAL_SECONDS
 # What actually triggers a refresh for a given display:
-# - "both": a bound entity changing state AND the periodic tick, same as
-#   every display got before this setting existed.
+# - "both" (default): a bound entity changing state AND the periodic tick,
+#   same as every display got before this setting existed.
 # - "change_only": only a bound entity changing state - the periodic tick
 #   skips this display entirely. For displays with nothing that benefits from
 #   periodic insurance (e.g. no camera binding) and where the user would
 #   rather it never redraw between real changes.
-# - "interval_only" (default): only the periodic tick - entity state changes
-#   are ignored. A noisy/fast-changing bound entity under "both" can fire far
-#   more often than the display's own interval intends, piling up queue jobs
-#   well beyond what the user configured; a fixed cadence is the safer
-#   default and still redraws everything at MIN_REFRESH_INTERVAL_SECONDS
-#   worst case.
+# - "interval_only": only the periodic tick - entity state changes
+#   are ignored. For a fast-changing entity the user wants throttled to a
+#   fixed cadence instead of redrawing on every update.
 VALID_REFRESH_TRIGGER_MODES = {"both", "change_only", "interval_only"}
-DEFAULT_REFRESH_TRIGGER_MODE = "interval_only"
+DEFAULT_REFRESH_TRIGGER_MODE = "both"
 ALL_ATTRIBUTES_SOURCE = "__dratek_all_attributes__"
 
 
@@ -570,7 +567,8 @@ class EntityAutoUpdateManager:
         self._interval_timers: dict[str, Any] = {}
         self._refresh_tasks: dict[str, Any] = {}
         self._pending_refreshes: set[str] = set()
-        self._last_refresh_at: dict[str, float] = {}
+        self._last_refresh_at_dict: dict[str, float] = {}
+        self._last_refresh_wall_time_dict: dict[str, float] = {}
         self._chart_series: dict[str, list[float]] = {}
         self._gateway_route_cache: dict[str, list[dict[str, Any]]] = {}
         self._gateway_route_cache_at = 0.0
@@ -578,6 +576,26 @@ class EntityAutoUpdateManager:
         self._force_full_refresh: set[str] = set()
         self._initialized = False
         self._refresh_tick_unsubscribe = None
+
+    @property
+    def _last_refresh_at(self) -> dict[str, float]:
+        if not hasattr(self, "_last_refresh_at_dict"):
+            self._last_refresh_at_dict = {}
+        return self._last_refresh_at_dict
+
+    @_last_refresh_at.setter
+    def _last_refresh_at(self, value: dict[str, float]) -> None:
+        self._last_refresh_at_dict = value
+
+    @property
+    def _last_refresh_wall_time(self) -> dict[str, float]:
+        if not hasattr(self, "_last_refresh_wall_time_dict"):
+            self._last_refresh_wall_time_dict = {}
+        return self._last_refresh_wall_time_dict
+
+    @_last_refresh_wall_time.setter
+    def _last_refresh_wall_time(self, value: dict[str, float]) -> None:
+        self._last_refresh_wall_time_dict = value
 
     async def async_initialize(self) -> None:
         if self._initialized:
@@ -593,9 +611,11 @@ class EntityAutoUpdateManager:
         self._initialized = True
         self._refresh_listener()
         initialized_at = time.monotonic()
+        initialized_wall = time.time()
         for address, config in self._configs.items():
             if self._automation_enabled(config):
                 self._last_refresh_at.setdefault(address, initialized_at)
+                self._last_refresh_wall_time.setdefault(address, initialized_wall)
             self._sync_interval_timer(address)
         if self._refresh_tick_unsubscribe is None:
             self._refresh_tick_unsubscribe = async_track_time_interval(
@@ -740,6 +760,7 @@ class EntityAutoUpdateManager:
             # instead of treating a missing timestamp as immediately overdue.
             if updated["enabled"]:
                 self._last_refresh_at[normalized] = time.monotonic()
+                self._last_refresh_wall_time[normalized] = time.time()
         await self._store.async_save({"configs": self._configs})
         self._refresh_listener()
         self._sync_interval_timer(normalized)
@@ -805,12 +826,24 @@ class EntityAutoUpdateManager:
                             for entity_id, _attribute in _binding_sources(binding)
                             if entity_id
                         )
+            interval = self._refresh_interval(config)
+            now_mono = time.monotonic()
+            last_mono = self._last_refresh_at.get(address, now_mono)
+            elapsed_mono = max(0.0, now_mono - last_mono)
+            remaining_seconds = max(0, int(round(interval - elapsed_mono)))
+            last_wall = self._last_refresh_wall_time.get(address, 0.0)
+            if not last_wall:
+                last_wall = time.time() - elapsed_mono
+            next_wall = last_wall + interval
             result.append(
                 {
                     "address": address,
                     "enabled": self._automation_enabled(config),
-                    "refresh_interval_seconds": self._refresh_interval(config),
+                    "refresh_interval_seconds": interval,
                     "refresh_trigger_mode": self._refresh_trigger_mode(config),
+                    "last_refresh_time": round(last_wall, 1),
+                    "next_refresh_time": round(next_wall, 1),
+                    "remaining_seconds": remaining_seconds,
                     "binding_count": len(bindings) if isinstance(bindings, list) else 0,
                     "image_cycle_count": len(config.get("image_cycle", []))
                     if isinstance(config.get("image_cycle"), list)
@@ -866,8 +899,10 @@ class EntityAutoUpdateManager:
             # A resumed automation starts a fresh interval instead of firing an
             # overdue write immediately after the user switches it on.
             self._last_refresh_at[normalized] = time.monotonic()
+            self._last_refresh_wall_time[normalized] = time.time()
         else:
             self._last_refresh_at.pop(normalized, None)
+            self._last_refresh_wall_time.pop(normalized, None)
             self._pending_refreshes.discard(normalized)
             cancel_timer = self._timers.pop(normalized, None)
             if callable(cancel_timer):
@@ -1393,6 +1428,7 @@ class EntityAutoUpdateManager:
                     # Count every attempt, including skips and failures, so old
                     # one-second configurations are protected by the safety limit.
                     self._last_refresh_at[address] = time.monotonic()
+                    self._last_refresh_wall_time[address] = time.time()
         finally:
             self._refresh_tasks.pop(address, None)
 
@@ -1800,14 +1836,31 @@ class EntityAutoUpdateManager:
                                 or "DRATEK eInk gateway"
                             ),
                             "rssi": rssi,
-                            # This route was not present in the just-finished
-                            # short scan. Keep it as a fallback, but never let
-                            # an old strong RSSI outrank a gateway that hears
-                            # the display right now (the connection map uses
-                            # the same freshness-first rule).
                             "temporarily_unseen": True,
                         }
                     )
+                    live_ids.add(gateway_id)
+
+            # In background automations where discovery_cache may be empty/stale,
+            # preserve previously confirmed routes from self._gateway_route_cache
+            # so a single missed 3-second scan doesn't instantly drop the gateway route.
+            for cached_addr, cached_routes in getattr(self, "_gateway_route_cache", {}).items():
+                normalized_addr = str(cached_addr or "").upper()
+                live_ids = {
+                    str(route.get("id") or "")
+                    for route in routes.get(normalized_addr, [])
+                }
+                for prev_route in cached_routes if isinstance(cached_routes, list) else []:
+                    if not isinstance(prev_route, dict):
+                        continue
+                    gateway_id = str(prev_route.get("id") or "")
+                    gateway = configured_gateways.get(gateway_id)
+                    if not gateway or gateway_id in live_ids:
+                        continue
+                    routes.setdefault(normalized_addr, []).append({
+                        **prev_route,
+                        "temporarily_unseen": True,
+                    })
                     live_ids.add(gateway_id)
 
             for device_routes in routes.values():

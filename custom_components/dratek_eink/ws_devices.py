@@ -454,6 +454,20 @@ async def websocket_scan(
         device["rssi"] = device["preferred_path"].get("rssi")
         device["display_name"] = str(device_names.get(address, ""))
 
+    try:
+        auto_manager = get_entity_auto_update_manager(hass)
+        automation_configs = await auto_manager.async_list_configs()
+        automations_by_address = {
+            str(item.get("address") or "").upper(): item
+            for item in automation_configs
+            if isinstance(item, dict) and item.get("address")
+        }
+        for device in devices:
+            dev_addr = str(device.get("address") or "").upper()
+            device["automation"] = automations_by_address.get(dev_addr)
+    except Exception:
+        pass
+
     devices.sort(key=lambda item: item["physical_code"])
     ble_devices.sort(key=lambda item: (item["name"] or "", item["address"]))
 
