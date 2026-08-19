@@ -53,7 +53,7 @@ export const automationsMixin = {
   _automationTriggerSelect(automation) {
     const mode = ["both", "change_only", "interval_only"].includes(automation.refresh_trigger_mode)
       ? automation.refresh_trigger_mode
-      : "both";
+      : "interval_only";
     const options = [
       ["both", "Při změně i pravidelně"],
       ["change_only", "Jen při změně entity"],

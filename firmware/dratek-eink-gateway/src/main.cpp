@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.57-gateway";
+static const char* FIRMWARE_VERSION = "0.1.58-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 #else
@@ -1306,6 +1306,14 @@ void connectWifi() {
 }
 
 void setup() {
+  // After an OTA update the new image boots into the "pending verify" OTA
+  // slot. Confirming it here - unconditionally, on every boot - tells the
+  // bootloader this image actually started successfully, so it keeps
+  // booting it going forward instead of ever silently reverting to the
+  // previous slot. A no-op on a normal (non-OTA) boot or when the running
+  // partition is already marked valid.
+  esp_ota_mark_app_valid_cancel_rollback();
+
   Serial.begin(115200);
   delay(300);
   gatewayId = "dratek-eink-gateway-" + macId();

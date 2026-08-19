@@ -168,7 +168,7 @@ export const projectsMixin = {
     this._refreshIntervalSeconds = Math.max(30, Math.min(86400, Number(source.refresh_interval_seconds) || 600));
     this._refreshTriggerMode = ["both", "change_only", "interval_only"].includes(source.refresh_trigger_mode)
       ? source.refresh_trigger_mode
-      : "both";
+      : "interval_only";
     this._invertColors = false;
     this._backgroundColor = ["white", "black", "red"].includes(source.background_color) ? source.background_color : "white";
     const size = this._displaySize(device);

@@ -1,9 +1,9 @@
 import { storageMixin } from "./panel/panel-storage.mixin.js";
 import { queueMixin } from "./panel/panel-queue.mixin.js?v=automation-shortcut-1";
-import { automationsMixin } from "./panel/panel-automations.mixin.js?v=automation-power-1";
+import { automationsMixin } from "./panel/panel-automations.mixin.js?v=interval-only-default-1";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=no-background-flicker-1";
-import { devicesMixin } from "./panel/panel-devices.mixin.js?v=nameday-grid-fixes-1";
-import { projectsMixin } from "./panel/panel-projects.mixin.js?v=0.1.299";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=interval-only-default-1";
+import { projectsMixin } from "./panel/panel-projects.mixin.js?v=interval-only-default-1";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
 import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-3";
 import { templatesMixin } from "./panel/panel-templates.mixin.js?v=readable-chart-type-2";
@@ -11,12 +11,12 @@ import { variablesMixin } from "./panel/panel-variables.mixin.js?v=readable-char
 import { previewMixin } from "./panel/panel-preview.mixin.js?v=device-preview-quality-1";
 import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=queue-send-rename-1";
 import { i18nMixin } from "./panel/panel-i18n.mixin.js";
-import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=open-display-settings-shared-1";
+import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=pointer-capture-fix-1";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js?v=templates-4c-1";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
 import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=meteoradar-watchdog-1";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.306";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.307";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {

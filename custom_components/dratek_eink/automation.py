@@ -53,23 +53,32 @@ BATTERY_SAVER_THRESHOLD_PERCENT = 15
 BATTERY_SAVER_MIN_INTERVAL_SECONDS = 3600
 GATEWAY_ROUTE_SCAN_SECONDS = 3
 GATEWAY_ROUTE_CACHE_SECONDS = 5
+# Backstop for _async_gateway_routes's lock-held section (see the comment at
+# its call site): comfortably above the ~8s each individual gateway scan is
+# already bounded to (see gateway.py's DEFAULT_TIMEOUT), so it never fires in
+# normal operation - it only matters if something manages to hang past its
+# own nominal timeout.
+GATEWAY_ROUTE_LOOKUP_TIMEOUT_SECONDS = 20
 # Every configured display is checked on this cadence to see whether its own
 # refresh_interval_seconds has elapsed - the shortest interval a user can pick
 # (MIN_REFRESH_INTERVAL_SECONDS) sets the floor, since checking any less often
 # than that would make picking a short interval pointless.
 REFRESH_TICK_SECONDS = MIN_REFRESH_INTERVAL_SECONDS
 # What actually triggers a refresh for a given display:
-# - "both" (default): a bound entity changing state AND the periodic tick,
-#   same as before this setting existed.
+# - "both": a bound entity changing state AND the periodic tick, same as
+#   every display got before this setting existed.
 # - "change_only": only a bound entity changing state - the periodic tick
 #   skips this display entirely. For displays with nothing that benefits from
 #   periodic insurance (e.g. no camera binding) and where the user would
 #   rather it never redraw between real changes.
-# - "interval_only": only the periodic tick - entity state changes are
-#   ignored. For a fast-changing entity the user wants throttled to a fixed
-#   cadence instead of redrawing on every update.
+# - "interval_only" (default): only the periodic tick - entity state changes
+#   are ignored. A noisy/fast-changing bound entity under "both" can fire far
+#   more often than the display's own interval intends, piling up queue jobs
+#   well beyond what the user configured; a fixed cadence is the safer
+#   default and still redraws everything at MIN_REFRESH_INTERVAL_SECONDS
+#   worst case.
 VALID_REFRESH_TRIGGER_MODES = {"both", "change_only", "interval_only"}
-DEFAULT_REFRESH_TRIGGER_MODE = "both"
+DEFAULT_REFRESH_TRIGGER_MODE = "interval_only"
 ALL_ATTRIBUTES_SOURCE = "__dratek_all_attributes__"
 
 
@@ -1677,6 +1686,23 @@ class EntityAutoUpdateManager:
             runner=run_local,
         )
 
+    async def _async_load_gateways_and_scan(self) -> tuple[list[dict[str, Any]], list[Any]]:
+        """Load configured gateways and scan every one of them in parallel."""
+        gateways = await async_load_gateways(self.hass)
+        scan_results = await asyncio.gather(
+            *(
+                async_scan_gateway(
+                    self.hass,
+                    str(gateway.get("id") or ""),
+                    GATEWAY_ROUTE_SCAN_SECONDS,
+                )
+                for gateway in gateways
+                if gateway.get("id")
+            ),
+            return_exceptions=True,
+        )
+        return gateways, scan_results
+
     async def _async_gateway_routes(self, address: str) -> list[dict[str, Any]]:
         """Return every gateway receiving this display, strongest first."""
         now = time.monotonic()
@@ -1689,18 +1715,19 @@ class EntityAutoUpdateManager:
                 return list(self._gateway_route_cache.get(address.upper(), []))
 
             try:
-                gateways = await async_load_gateways(self.hass)
-                scan_results = await asyncio.gather(
-                    *(
-                        async_scan_gateway(
-                            self.hass,
-                            str(gateway.get("id") or ""),
-                            GATEWAY_ROUTE_SCAN_SECONDS,
-                        )
-                        for gateway in gateways
-                        if gateway.get("id")
-                    ),
-                    return_exceptions=True,
+                # self._gateway_route_lock is shared by every device's automatic
+                # refresh (and, since today, the manual-pin failover path too) -
+                # if async_load_gateways or any single gateway's scan ever hangs
+                # past its own nominal timeout (a stalled TCP handshake to a
+                # gateway that's down in a way that doesn't cleanly refuse the
+                # connection, for instance), this lock would otherwise never be
+                # released, silently wedging automatic updates for every display
+                # forever, with nothing logged since nothing ever completes.
+                # wait_for is the backstop: whatever the underlying cause, this
+                # call can never hold the lock past GATEWAY_ROUTE_LOOKUP_TIMEOUT.
+                gateways, scan_results = await asyncio.wait_for(
+                    self._async_load_gateways_and_scan(),
+                    timeout=GATEWAY_ROUTE_LOOKUP_TIMEOUT_SECONDS,
                 )
             except Exception:  # one unavailable gateway must not break local automation
                 gateways = []

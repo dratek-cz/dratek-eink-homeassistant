@@ -824,7 +824,16 @@ export const inspectorMixin = {
         if (event.button !== 0 || event.target.closest("button,input,select,a,[data-template-editable-part],[data-template-editor-element]")) return;
         event.preventDefault();
         designerPan = { x: event.clientX, y: event.clientY, left: this._templateDesignerPan?.x || 0, top: this._templateDesignerPan?.y || 0 };
-        designerViewport.setPointerCapture?.(event.pointerId);
+        try {
+          // Throws InvalidStateError on some browser/input combos (seen with
+          // trackpad/touch-emulated pointers) when the pointer isn't in a
+          // state that can be captured - panning still works fine via the
+          // pointermove listener below without capture, it just won't keep
+          // tracking if the cursor leaves the viewport mid-drag.
+          designerViewport.setPointerCapture?.(event.pointerId);
+        } catch (_error) {
+          // no-op - see comment above
+        }
         designerViewport.classList.add("is-panning");
       });
       designerViewport.addEventListener("pointermove", (event) => {
@@ -1686,7 +1695,7 @@ export const inspectorMixin = {
       select.addEventListener("change", (event) => {
         event.stopPropagation();
         const address = select.dataset.deviceRefreshTriggerMode || this._selectedDeviceAddress;
-        const mode = ["both", "change_only", "interval_only"].includes(event.target.value) ? event.target.value : "both";
+        const mode = ["both", "change_only", "interval_only"].includes(event.target.value) ? event.target.value : "interval_only";
         this._refreshTriggerMode = mode;
         const upperAddr = String(address || "").toUpperCase();
         if (upperAddr) {

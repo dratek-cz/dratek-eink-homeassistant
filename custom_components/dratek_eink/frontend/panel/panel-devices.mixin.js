@@ -3487,7 +3487,7 @@ export const devicesMixin = {
       refresh_interval_seconds: Math.max(30, Math.min(86400, Number(this._refreshIntervalSeconds) || 600)),
       refresh_trigger_mode: ["both", "change_only", "interval_only"].includes(this._refreshTriggerMode)
         ? this._refreshTriggerMode
-        : "both",
+        : "interval_only",
       ...routing,
     };
   },

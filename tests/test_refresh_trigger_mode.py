@@ -45,7 +45,7 @@ class FrontendTriggerModeWiringTests(unittest.TestCase):
     def test_draft_round_trip_reads_and_writes_the_mode(self) -> None:
         self.assertIn("this._refreshTriggerMode = ", self.projects)
         self.assertIn("refresh_trigger_mode: this._refreshTriggerMode,", self.projects)
-        self.assertIn('refresh_trigger_mode: "both",', self.storage)
+        self.assertIn('refresh_trigger_mode: "interval_only",', self.storage)
 
     def test_manual_send_carries_the_mode_into_the_automation_config(self) -> None:
         self.assertIn("refresh_trigger_mode: [\"both\", \"change_only\", \"interval_only\"].includes(this._refreshTriggerMode)", self.devices)

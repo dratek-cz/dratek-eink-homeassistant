@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.307] - 2026-08-19
+
+### Přidáno a vylepšeno
+- Nový výchozí režim automatického obnovování je „Jen podle intervalu“ (dřív „Při změně i pravidelně“) s intervalem 10 minut - rychle se měnící navázaná entita už defaultně nespouští odesílání mnohem častěji, než uživatel čeká. Kdo chce reagovat i na změnu hodnoty, může to v nastavení automatiky displeje zvolit ručně.
+- Gateway firmware v0.1.58: po OTA aktualizaci firmware nyní potvrzuje bootloaderu, že nová verze úspěšně naběhla, aby se nemohl tiše vrátit na předchozí verzi.
+
+### Opraveno
+- Vyhledávání trasy ke gatewayi (sdílené napříč všemi displeji) mělo bezpečnostní strop - pokud by cokoliv uvnitř viselo déle, než je jeho vlastní timeout, dřív mohlo navždy zablokovat automatické obnovování pro úplně všechny displeje najednou beze stopy v protokolu. Teď je to ohraničené na 20 sekund.
+- Neošetřená výjimka `InvalidStateError` při tažení plátna v Designeru (na některých kombinacích prohlížeč/vstupní zařízení).
+
 ## [0.1.306] - 2026-08-19
 
 ### Přidáno a vylepšeno
