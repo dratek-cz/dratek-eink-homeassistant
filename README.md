@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.307
+
+- **Nový výchozí režim automatického obnovování „Jen podle intervalu“** (10 minut) – rychle se měnící navázaná entita už defaultně nespouští odesílání mnohem častěji, než uživatel čeká. Kdo chce reagovat i na změnu hodnoty, může to v nastavení automatiky displeje zvolit ručně.
+- **Bezpečnostní strop pro vyhledávání trasy ke gatewayi** – sdílené napříč všemi displeji; pokud by cokoliv uvnitř viselo déle, než je jeho vlastní timeout, dřív mohlo navždy zablokovat automatické obnovování pro úplně všechny displeje najednou beze stopy v protokolu.
+- **Gateway firmware v0.1.58** – po OTA aktualizaci firmware nyní potvrzuje bootloaderu, že nová verze úspěšně naběhla, aby se nemohl tiše vrátit na předchozí verzi.
+- **Opravena chyba při tažení plátna v Designeru** na některých kombinacích prohlížeč/vstupní zařízení.
+
 ## Novinky ve verzi 0.1.306
 
 - **Spolehlivější gateway** – přenosový buffer firmwaru se po hodinách provozu už nerozpadá kvůli fragmentaci paměti (chyba `insufficient_contiguous_memory`); alokuje se jednou při startu a mezi přenosy se jen recykluje.
