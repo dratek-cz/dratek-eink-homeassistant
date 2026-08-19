@@ -1009,7 +1009,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
 
     def test_main_display_cards_show_the_supported_color_strip(self):
         self.assertIn("_displayPaletteColors(device)", self.source)
-        self.assertIn("const bwrySdkTypes = new Set([46, 78, 142, 270, 302, 310, 318, 558, 654, 686, 2670, 2702])", self.source)
+        self.assertIn("const bwrySdkTypes = new Set([46])", self.source)
         self.assertIn('[["black", "Černá"], ["white", "Bílá"], ["red", "Červená"], ["yellow", "Žlutá"]]', self.source)
         self.assertIn('class="display-tile-tools">${this._renderDisplayPaletteBookmarks(device)}', self.source)
         self.assertIn('class="display-palette-strip"', self.source)

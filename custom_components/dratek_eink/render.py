@@ -2064,7 +2064,7 @@ def render_text_image(
 PE29_CODES = {40, 43, 46, 48, 51}
 BWRY_296X128_CODE = 46
 BWRY_CODES = {46, 78, 142, 270, 302, 310, 318, 558, 654, 686, 2670, 2702}
-BWR_800X480_CODES = {299, 315}
+BWR_800X480_CODES = {299, 302, 310, 315, 318}
 
 
 def _finalize_bwry_orientation(image: Image.Image) -> Image.Image:

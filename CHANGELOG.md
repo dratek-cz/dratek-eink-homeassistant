@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.315] - 2026-08-19
+
+### Opraveno
+- **Barevná paleta náhledu pro velké displeje (BWR)**: Opraveno chybné přiřazení žlutého kanálu (`BWRY`) u velkých tříbarevných displejů (800x480, 400x300, 960x640, 1360x480 apod.). Ikony v šablonách se na náhledu hlavní stránky a v editoru nyní vykreslují správně v červené barvě odpovídající reálnému e-ink displeji.
+
 ## [0.1.314] - 2026-08-19
 
 ### Opraveno

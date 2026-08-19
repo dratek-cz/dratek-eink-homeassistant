@@ -74,11 +74,11 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.314",
-        name="DRATEK eInk v0.1.314",
-        body="""## Release 0.1.314
+        tag="v0.1.315",
+        name="DRATEK eInk v0.1.315",
+        body="""## Release 0.1.315
 
 ### Opraveno
-- **Automatická aktualizace času a data v šablonách**: Opravena chyba, kdy se interní časové sloty (např. čas poslední aktualizace u počasí, datum, svátky) při přípravě automatizace vynechávaly a na displeji zůstával statický čas z manuálního odeslání. Čas a datum se nyní zachycují jako živé vazby a při každém automatickém zápisu se vykreslují s aktuálním lokálním časem Home Assistantu.
+- **Barevná paleta náhledu pro velké displeje (BWR)**: Opraveno chybné přiřazení žlutého kanálu (`BWRY`) u velkých tříbarevných displejů (800x480, 400x300, 960x640, 1360x480 apod.). Ikony v šablonách se na náhledu hlavní stránky a v editoru nyní vykreslují správně v červené barvě odpovídající reálnému e-ink displeji.
 """,
     )

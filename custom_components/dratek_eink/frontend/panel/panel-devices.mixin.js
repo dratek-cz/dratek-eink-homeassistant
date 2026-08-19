@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.314";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.315";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=catalog-no-color-tests-1";
 
 // The standard Czech civil name-day calendar, indexed [month][day - 1]
@@ -236,7 +236,7 @@ export const devicesMixin = {
   },
 
   _displaySupportsYellow(device = this._device()) {
-    const bwrySdkTypes = new Set([46, 78, 142, 270, 302, 310, 318, 558, 654, 686, 2670, 2702]);
+    const bwrySdkTypes = new Set([46]);
     const descriptor = `${device?.model || ""} ${device?.display_type || ""}`.toUpperCase();
     return bwrySdkTypes.has(Number(device?.sdk_type)) || descriptor.includes("BWRY");
   },
@@ -2641,6 +2641,8 @@ export const devicesMixin = {
         variants: activeVariants,
       }, device);
     if (targetCustomImage) this._customImageDataUrl = targetCustomImage;
+    const previousRenderingDevice = this._renderingDeviceAddress;
+    this._renderingDeviceAddress = device?.address || null;
     try {
       return await this._rasterizeDisplayTemplateSvg(
         request.templates,
@@ -2650,6 +2652,7 @@ export const devicesMixin = {
         overlays.length ? (context, width, height) => this._paintTemplateOverlays(context, overlays, width, height) : null,
       );
     } finally {
+      this._renderingDeviceAddress = previousRenderingDevice;
       this._customImageDataUrl = previousCustomImage;
     }
   },
@@ -3154,7 +3157,10 @@ export const devicesMixin = {
   },
 
   async _preparedTemplateEntityBindings(device, width, height) {
-    const request = this._currentDisplayTemplateSvgRequest(device);
+    const previousRenderingDevice = this._renderingDeviceAddress;
+    this._renderingDeviceAddress = device?.address || null;
+    try {
+      const request = this._currentDisplayTemplateSvgRequest(device);
     if (!request?.templates?.length || typeof DOMParser === "undefined") return { bindings: [], svgTemplate: "" };
     const currentSvg = await this._buildDisplayTemplateSvg(request.templates, width, height, request.layout);
     const currentDocument = new DOMParser().parseFromString(currentSvg, "image/svg+xml");
@@ -3305,6 +3311,9 @@ export const devicesMixin = {
     const svgTemplate = bindings.length ? currentDocument.documentElement.outerHTML : "";
     const cleanBackground = await this._blankedDisplayTemplateBackground(currentDocument, bindings, width, height);
     return { bindings, svgTemplate, cleanBackground };
+    } finally {
+      this._renderingDeviceAddress = previousRenderingDevice;
+    }
   },
 
   // Builds the true, value-free background an automatic refresh composites

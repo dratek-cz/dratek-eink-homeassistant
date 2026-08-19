@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.315
+
+- **Oprava žlutých ikon v náhledu na velkých displejích** – opraveno přiřazení barevného profilu u velkých displejů (800x480, 400x300, 960x640, 1360x480 apod.), které byly mylně vyhodnocovány jako 4-barevné (BWRY). V náhledech na hlavní stránce i v editoru se ikony šablon nyní správně zobrazují v červené barvě odpovídající fyzickému tříbarevnému BWR e-ink panelu.
+
 ## Novinky ve verzi 0.1.314
 
 - **Aktualizace času a data při automatické obnově** – vyřešena chyba, kdy se čas v šablonách (např. čas poslední aktualizace u počasí, datum) při automatických zápisech neměnil a zůstával na hodnotě z manuálního odeslání. Čas a datum se nyní při každém automatickém zápisu překreslují s aktuálním časem Home Assistantu.
