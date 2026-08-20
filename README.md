@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.327
+
+- **Při více šablonách v mřížce se aktualizovala jen jedna** – ostatní se odesílaly bez hodnot a grafů. Grafické bloky se hledaly v celém dokumentu, ale jejich pořadí se počítalo zvlášť pro každou šablonu, takže dvě šablony se stejným názvem bloku obě sáhly po prvním slotu. Nově se blok hledá i počítá v rámci konkrétního slotu.
+
 ## Novinky ve verzi 0.1.326
 
 - **Při automatickém zápisu mizely části šablony** – prázdná skupina `<g/>` rozhodila počítání vnoření, takže se při aktualizaci grafu vymazaly sousední prvky (text, obrázky, celé bloky); a slot s prázdnou hodnotou se uložil jako samouzavírací `<text/>`, načež hledání jeho konce smazalo i následující slot. Projevovalo se to jen občas a ruční odeslání téhož návrhu bylo v pořádku.

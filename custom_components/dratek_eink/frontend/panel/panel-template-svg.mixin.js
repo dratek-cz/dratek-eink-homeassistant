@@ -2025,7 +2025,13 @@ export const templateSvgMixin = {
       await this._preloadCustomImageForSlot?.(rows, slot.w, slot.h);
       const slotName = index === 0 ? "primary" : index === 1 ? "secondary" : `slot-${index + 1}`;
       const markup = this._applyTemplateAdjustmentsToSvgMarkup(this._layoutTemplateSvg(rows, slot.w, slot.h), template, slotName);
-      bodies.push(`<g transform="translate(${slot.x.toFixed(2)},${slot.y.toFixed(2)})">`
+      // data-template-slot lets the automation capture find a block inside the
+      // slot it actually belongs to. Without it the capture matched
+      // [data-template-block] across the whole document, so two templates that
+      // both use the same block name (two charts, say) fought over the first
+      // slot's node - one overwrote the other's id and the later slots were
+      // never bound at all, which shipped them with no values and no chart.
+      bodies.push(`<g data-template-slot="${index}" transform="translate(${slot.x.toFixed(2)},${slot.y.toFixed(2)})">`
         + `<rect x="0" y="0" width="${slot.w.toFixed(2)}" height="${slot.h.toFixed(2)}" fill="#ffffff"></rect>`
         + markup + `</g>`);
     }

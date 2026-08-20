@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.327] - 2026-08-20
+
+### Opraveno
+- **Při více šablonách v mřížce se aktualizovala jen jedna, ostatní se odeslaly bez hodnot a grafů**: Při přípravě automatiky se grafické bloky (graf, ukazatel, předpověď…) vyhledávaly v celém dokumentu, ale jejich pořadí se počítalo zvlášť pro každou šablonu. Dvě šablony se stejným názvem bloku tak obě sáhly po prvním slotu - druhá přepsala značku první a vlastní blok nechala neoznačený, takže se nikdy neobnovoval. Nově se blok hledá i počítá v rámci konkrétního slotu (nová značka `data-template-slot`) a číslo slotu je součástí identifikátoru, aby se stejná šablona mohla objevit ve dvou slotech bez kolize.
+
 ## [0.1.326] - 2026-08-20
 
 ### Opraveno

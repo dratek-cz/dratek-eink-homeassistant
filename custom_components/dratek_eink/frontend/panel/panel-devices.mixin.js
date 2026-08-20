@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.326";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.327";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=catalog-no-color-tests-1";
 
 // The standard Czech civil name-day calendar, indexed [month][day - 1]
@@ -3257,10 +3257,18 @@ export const devicesMixin = {
       const slot = slots[slotIndex] || slots[0];
       const graphicRows = this._templateGraphicRowBoxes(template, slot.w, slot.h);
       for (const [group, { box, row }] of Object.entries(graphicRows)) {
-        const occurrenceKey = `${template.id}:${group}`;
+        // Scope both the search and the occurrence counter to this slot. They
+        // used to disagree: the counter was per template, the node list was
+        // the whole document. Two templates using the same block name each
+        // took nodes[0] - the first slot's - so the second overwrote the
+        // first's id and its own node was never tagged. Only one template then
+        // refreshed, and every other slot went out with no values and no
+        // chart.
+        const slotRoot = currentDocument.querySelector(`[data-template-slot="${slotIndex}"]`) || currentDocument;
+        const occurrenceKey = `${slotIndex}:${group}`;
         const occurrence = graphicOccurrences[occurrenceKey] || 0;
         graphicOccurrences[occurrenceKey] = occurrence + 1;
-        const nodes = [...currentDocument.querySelectorAll(`[data-template-block="${group}"]`)];
+        const nodes = [...slotRoot.querySelectorAll(`[data-template-block="${group}"]`)];
         const node = nodes[occurrence];
         if (!node) continue;
         const binding = this._templateAutomationGraphicBinding(template, group, row, {
@@ -3268,7 +3276,11 @@ export const devicesMixin = {
           w: Math.round(box.w), h: Math.round(box.h),
         });
         if (!binding) continue;
-        binding.id = `template-${template.id}-${group}-${occurrence}`;
+        // The slot index belongs in the id now that occurrences are counted
+        // per slot: the same template placed in two slots would otherwise
+        // produce the same id twice, and a duplicate id means the backend's
+        // substitution only ever finds the first of them.
+        binding.id = `template-${template.id}-${group}-s${slotIndex}-${occurrence}`;
         node.setAttribute("id", binding.id);
         bindings.push(binding);
       }
