@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.326] - 2026-08-20
+
+### Opraveno
+- **Při automatickém zápisu mizely části šablony (klidně i velké)**: Dvě chyby stejného druhu ve vkládání živých hodnot do zachycené šablony. (1) Prázdná skupina `<g/>` se počítala jako otevírací značka, takže se graf/ukazatel „uzavřel" až u cizí `</g>` a vymazal přitom všechny sousední prvky mezi tím - text, obrázky i celé bloky. (2) Slot s prázdnou hodnotou se ukládá jako samouzavírací `<text/>`, a hledání jeho konce pak přeskočilo na **následující** slot a smazalo i ten. Obojí se projevovalo jen občas (podle toho, zda návrh zrovna obsahoval prázdný prvek) a ruční odeslání téhož návrhu bylo přitom v pořádku.
+- **Náhled Meteoradaru v katalogu šablon zůstával na „Načítám radarovou mapu…"**: Miniatura se ukládala do cache hned při prvním vykreslení, tedy ještě než dorazila radarová mapa, a na tom zástupném textu pak zůstala po zbytek relace. Nově se miniatura uloží až ve chvíli, kdy je mapa skutečně k dispozici - stejná pojistka, jakou už měly ikony počasí.
+
 ## [0.1.325] - 2026-08-20
 
 ### Opraveno

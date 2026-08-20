@@ -610,6 +610,67 @@ class SvgImageHrefSubstitutionTests(unittest.TestCase):
         self.assertEqual(result, document)
 
 
+class SvgElementSplicingTests(unittest.TestCase):
+    """Substituting one slot must never disturb its neighbours.
+
+    Both helpers used to locate an element's end by a pattern that assumed the
+    element had a separate closing tag. An empty element is serialised
+    self-closing instead, and the search then ran on to some *later* element's
+    closing tag - so a refresh silently dropped whatever sat in between, up to
+    a large part of the template, while a manual send of the same design was
+    fine.
+    """
+
+    def test_an_empty_text_slot_does_not_swallow_the_next_one(self) -> None:
+        document = '<svg><text id="s1"/><text id="s2">KEEP</text></svg>'
+        result = render._replace_svg_element_by_id(document, "s1", '<text id="s1">NEW</text>')
+        self.assertIn('<text id="s1">NEW</text>', result)
+        self.assertIn('<text id="s2">KEEP</text>', result)
+
+    def test_a_text_slot_with_children_is_replaced_whole(self) -> None:
+        document = '<svg><text id="s1"><tspan>a</tspan></text><text id="s2">KEEP</text></svg>'
+        result = render._replace_svg_element_by_id(document, "s1", '<text id="s1">NEW</text>')
+        self.assertNotIn("tspan", result)
+        self.assertIn('<text id="s2">KEEP</text>', result)
+
+    def test_a_self_closing_group_does_not_shift_the_nesting_depth(self) -> None:
+        # The empty <g/> used to count as an opener, so the tagged group was
+        # closed at the enclosing slot's </g> and every sibling after it -
+        # here a whole text run and an image - was spliced out.
+        document = (
+            '<svg><g id="slot"><g id="chart"><g transform="t"/><rect/></g>'
+            '<text>KEEP</text><image href="x"/></g></svg>'
+        )
+        result = render._replace_svg_group_by_id(document, "chart", '<g id="chart">NEW</g>')
+        self.assertIn('<g id="chart">NEW</g>', result)
+        self.assertIn("<text>KEEP</text>", result)
+        self.assertIn('<image href="x"/>', result)
+        # The self-closed <g/> lived inside the replaced group, so the result
+        # should be plainly balanced: <g id="slot"> and <g id="chart"> each
+        # with their own closing tag.
+        self.assertEqual(result.count("<g"), result.count("</g>"))
+
+    def test_a_sibling_group_after_the_target_survives(self) -> None:
+        document = (
+            '<svg><g id="chart"><g transform="t"/><rect/></g>'
+            '<g id="other">OTHER</g></svg>'
+        )
+        result = render._replace_svg_group_by_id(document, "chart", '<g id="chart">NEW</g>')
+        self.assertIn('<g id="chart">NEW</g>', result)
+        self.assertIn('<g id="other">OTHER</g>', result)
+
+    def test_an_empty_tagged_group_is_replaced_in_place(self) -> None:
+        document = '<svg><g id="chart" transform="t"/><text>KEEP</text></svg>'
+        result = render._replace_svg_group_by_id(document, "chart", '<g id="chart">NEW</g>')
+        self.assertIn('<g id="chart">NEW</g>', result)
+        self.assertIn("<text>KEEP</text>", result)
+
+    def test_deeply_nested_groups_still_close_at_the_right_tag(self) -> None:
+        document = '<svg><g id="chart"><g><g><g/></g></g></g><text>KEEP</text></svg>'
+        result = render._replace_svg_group_by_id(document, "chart", '<g id="chart">NEW</g>')
+        self.assertEqual(result, '<svg><g id="chart">NEW</g><text>KEEP</text></svg>')
+
+
 class CameraBindingTemplateRenderTests(unittest.TestCase):
     """render_entity_bound_template_image's handling of type: camera bindings."""
 

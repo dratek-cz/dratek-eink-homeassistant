@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.326
+
+- **Při automatickém zápisu mizely části šablony** – prázdná skupina `<g/>` rozhodila počítání vnoření, takže se při aktualizaci grafu vymazaly sousední prvky (text, obrázky, celé bloky); a slot s prázdnou hodnotou se uložil jako samouzavírací `<text/>`, načež hledání jeho konce smazalo i následující slot. Projevovalo se to jen občas a ruční odeslání téhož návrhu bylo v pořádku.
+- **Náhled Meteoradaru v katalogu šablon** zůstával na „Načítám radarovou mapu…" – miniatura se ukládala do cache dřív, než mapa dorazila. Nyní se uloží až s hotovou mapou.
+
 ## Novinky ve verzi 0.1.325
 
 - **Meteoradar se při automatickém zápisu nikdy neaktualizoval** – čerstvá radarová mapa se sice pokaždé stáhla, ale při vkládání do šablony se zahodila, protože vyhledávací vzor vyžadoval atribut `id` před `href`; prohlížeč ho ale vždy zapisuje až za něj. Na displeji tak zůstával snímek z posledního ručního odeslání. Opraveno – `id` se nyní hledá nezávisle na pořadí atributů.

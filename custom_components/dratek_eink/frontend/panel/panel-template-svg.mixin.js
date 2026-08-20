@@ -641,6 +641,13 @@ export const templateSvgMixin = {
       template?.id !== "custom_image" && !template?.user_created
       && !this._templateIconNames(rows).some((name) => !ICON_GEOMETRY.has(name))
       && this._templateAllWeatherIconsResolved !== false
+      // Same trap the weather icons above fell into: the radar map arrives
+      // asynchronously, so the very first pass draws the "Načítám radarovou
+      // mapu…" placeholder. Caching that froze the Meteoradar catalog tile on
+      // the placeholder for the rest of the session - the map only ever
+      // appeared if something else happened to evict the entry. Keep
+      // re-rendering until the map is actually in hand.
+      && !(this._templateNeedsRadarImage(rows) && !this._meteoradarImageCache?.dataUrl)
     ) {
       this._templateThumbnailMarkupCache.set(cacheKey, thumbnail);
       if (this._templateThumbnailMarkupCache.size > 96) this._templateThumbnailMarkupCache.delete(this._templateThumbnailMarkupCache.keys().next().value);

@@ -1561,29 +1561,56 @@ def _replace_svg_element_by_id(document: str, element_id: str, replacement: str)
     serialised by the browser and only ever needs one element located by the id
     the panel stamped on it when it captured this template, so a regex spares a
     dependency without giving up correctness.
+
+    The element's own end is located explicitly rather than with a lazy
+    `.*?</text>`: a slot whose value rendered empty is serialised as a
+    self-closing `<text ... />` with no `</text>` of its own, and the lazy match
+    then ran on to the *next* slot's closing tag - replacing both and deleting
+    that neighbouring value from the refreshed image entirely.
     """
-    pattern = re.compile(
-        r"<text\b[^>]*\bid=\"" + re.escape(element_id) + r"\"[^>]*>.*?</text>",
-        re.DOTALL,
+    opening = re.search(
+        r'<text\b[^>]*\bid="' + re.escape(element_id) + r'"[^>]*>', document
     )
-    return pattern.sub(lambda _match: replacement, document, count=1)
+    if opening is None:
+        return document
+    if opening.group(0).endswith("/>"):
+        return document[: opening.start()] + replacement + document[opening.end():]
+    closing = document.find("</text>", opening.end())
+    if closing == -1:
+        return document
+    return document[: opening.start()] + replacement + document[closing + len("</text>"):]
 
 
 def _replace_svg_group_by_id(document: str, element_id: str, replacement: str) -> str:
-    """Replace one tagged SVG group, including any groups nested inside it."""
+    """Replace one tagged SVG group, including any groups nested inside it.
+
+    A self-closing `<g/>` opens and closes in the same tag and must not move
+    the nesting depth. Counting one as an opener (which is what a plain
+    `<g\b[^>]*>` match does) desynchronised the depth for the rest of the
+    scan, so the group was closed at some *outer* `</g>` instead of its own -
+    splicing out every sibling in between and leaving the document unbalanced.
+    On a design that happened to contain an empty group that silently deleted
+    a large part of the template from an automatic refresh, while a manual
+    send of the very same design was fine.
+    """
     opening = re.search(
         r'<g\b[^>]*\bid="' + re.escape(element_id) + r'"[^>]*>', document
     )
     if opening is None:
         return document
+    # The tagged group is itself empty (`<g id="..."/>`): it has no separate
+    # closing tag, so the whole element is exactly the matched span.
+    if opening.group(0).endswith("/>"):
+        return document[:opening.start()] + replacement + document[opening.end():]
     depth = 0
     for tag in re.finditer(r"<g\b[^>]*>|</g\s*>", document[opening.start():]):
-        if tag.group(0).startswith("</"):
+        token = tag.group(0)
+        if token.startswith("</"):
             depth -= 1
             if depth == 0:
                 end = opening.start() + tag.end()
                 return document[:opening.start()] + replacement + document[end:]
-        else:
+        elif not token.endswith("/>"):
             depth += 1
     return document
 

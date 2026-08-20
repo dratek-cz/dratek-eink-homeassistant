@@ -14,9 +14,9 @@ import { i18nMixin } from "./panel/panel-i18n.mixin.js?v=full-en-translation-2";
 import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=readable-connection-map-1";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js?v=templates-4c-1";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
-import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=meteoradar-sidebar-block-1";
+import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=radar-thumb-cache-1";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.325";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.326";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
