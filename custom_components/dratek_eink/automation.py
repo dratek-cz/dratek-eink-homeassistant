@@ -806,6 +806,18 @@ class EntityAutoUpdateManager:
         """Treat legacy configurations without the flag as active."""
         return config.get("enabled") is not False
 
+    @staticmethod
+    def _always_send(config: dict[str, Any]) -> bool:
+        """Whether to write even when the new image is identical to the old one.
+
+        Off by default: an e-ink refresh costs battery and flashes the panel,
+        so redrawing an unchanged picture is normally wasted. Users whose
+        design genuinely never changes (or who want the panel re-driven
+        periodically to clear ghosting) can turn it on per display, rather
+        than being left with an automation that silently never writes.
+        """
+        return config.get("always_send") is True
+
     def _sync_interval_timer(self, address: str) -> None:
         """Arm one exact per-display interval aligned to HA internal clock."""
         timers = getattr(self, "_interval_timers", None)
@@ -972,6 +984,7 @@ class EntityAutoUpdateManager:
                     "enabled": self._automation_enabled(config),
                     "refresh_interval_seconds": interval,
                     "refresh_trigger_mode": self._refresh_trigger_mode(config),
+                    "always_send": self._always_send(config),
                     "last_refresh_time": round(last_wall, 1),
                     "next_refresh_time": round(next_wall, 1),
                     "remaining_seconds": remaining_seconds,
@@ -1012,6 +1025,21 @@ class EntityAutoUpdateManager:
         # display's bindings should ever be able to trigger a refresh through.
         self._refresh_listener()
         self._sync_interval_timer(normalized)
+
+    async def async_set_always_send(self, address: str, always_send: Any) -> None:
+        """Toggle writing even when the rendered image has not changed."""
+        await self.async_initialize()
+        normalized = address.upper()
+        config = self._configs.get(normalized)
+        if not config:
+            return
+        resolved = bool(always_send)
+        if self._always_send(config) == resolved:
+            return
+        updated = dict(config)
+        updated["always_send"] = resolved
+        self._configs[normalized] = updated
+        await self._store.async_save({"configs": self._configs})
 
     async def async_set_enabled(self, address: str, enabled: Any) -> None:
         """Pause or resume a stored automatic display update in place."""
@@ -1744,6 +1772,9 @@ class EntityAutoUpdateManager:
             ),
         )
         changed = self._changed_region(previous_hardware, current_hardware)
+        if changed is None and self._always_send(config):
+            # "Odesílat i beze změny" is on: rewrite the whole panel anyway.
+            changed = (0, 0, current_hardware.width, current_hardware.height)
         if changed is None:
             # Nothing to send: the freshly rendered image is pixel-identical to
             # what the display is already showing, so a write would spend a

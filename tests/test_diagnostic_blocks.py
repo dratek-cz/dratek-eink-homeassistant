@@ -84,6 +84,37 @@ class DiagnosticBlockWiringTests(unittest.TestCase):
         self.assertIn("self.last_transfer_diagnostic = {", self.queue_source)
         self.assertIn("last_transfer_diagnostic", self.sensor_source)
 
+    def test_unchanged_skip_is_reported_rather_than_silent(self) -> None:
+        # The skip itself is fine; being invisible is what made it look like a
+        # dead scheduler for days. It must both log and reach the sensor.
+        self.assertIn('"unchanged": True', self.automation_source)
+        self.assertIn("no write was queued", self.automation_source)
+        sensor_reads_unchanged = (
+            "beze změny" in self.automation_source
+        )
+        self.assertTrue(
+            sensor_reads_unchanged,
+            "the unchanged outcome must be distinguishable from a plain 'ok'",
+        )
+
+    def test_always_send_option_can_defeat_the_skip(self) -> None:
+        # An automation on a never-changing design would otherwise never write
+        # at all, with no way for the user to force it.
+        self.assertIn("def _always_send(", self.automation_source)
+        self.assertIn("async def async_set_always_send(", self.automation_source)
+        self.assertIn("if changed is None and self._always_send(config):", self.automation_source)
+        # Off by default: an e-ink refresh costs battery and flashes the panel.
+        self.assertIn('config.get("always_send") is True', self.automation_source)
+        # Surfaced through the websocket API and listed back to the UI.
+        ws_source = (COMPONENT / "ws_automations.py").read_text(encoding="utf-8")
+        self.assertIn("dratek_eink/automations/update_always_send", ws_source)
+        self.assertIn('"always_send": self._always_send(config)', self.automation_source)
+        registry = (COMPONENT / "websocket.py").read_text(encoding="utf-8")
+        self.assertIn("websocket_update_automation_always_send", registry)
+        panel = (COMPONENT / "frontend" / "panel" / "panel-automations.mixin.js").read_text(encoding="utf-8")
+        self.assertIn("data-automation-always-send", panel)
+        self.assertIn("dratek_eink/automations/update_always_send", panel)
+
     def test_diagnostics_never_break_the_caller(self) -> None:
         # A diagnostic must never be able to take down the very refresh it is
         # reporting on, so the recorder stays free of anything that can raise

@@ -98,6 +98,29 @@ async def websocket_update_automation_enabled(
 
 @websocket_api.websocket_command(
     {
+        "type": "dratek_eink/automations/update_always_send",
+        "address": str,
+        "always_send": bool,
+    }
+)
+@websocket_api.async_response
+async def websocket_update_automation_always_send(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    manager = get_entity_auto_update_manager(hass)
+    await manager.async_initialize()
+    address = msg["address"].upper()
+    if address not in manager._configs:
+        connection.send_error(msg["id"], "not_found", "Automation was not found.")
+        return
+    await manager.async_set_always_send(address, msg["always_send"])
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command(
+    {
         "type": "dratek_eink/automations/delete",
         "address": str,
     }

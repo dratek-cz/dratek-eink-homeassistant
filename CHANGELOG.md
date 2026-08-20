@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.321] - 2026-08-20
+
+### Přidáno
+- **Přepínač „Odesílat i beze změny"** u každého automatického zápisu (záložka Automatizace → rozbalit displej). Pokud je zapnutý, displej se přepíše i tehdy, když je vykreslený obrázek shodný s tím, co už na něm je - vhodné pro šablony se statickým obsahem nebo pro pravidelné pročištění e-inku od duchů. Ve výchozím stavu vypnuto, protože překreslení e-inku stojí baterii a viditelně blikne.
+
 ## [0.1.320] - 2026-08-20
 
 ### Opraveno
