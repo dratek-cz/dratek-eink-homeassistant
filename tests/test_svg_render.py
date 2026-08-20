@@ -568,6 +568,42 @@ class SvgImageHrefSubstitutionTests(unittest.TestCase):
         self.assertIn('id="cam1" x="1" y="2" href="data:new-cam1"', result)
         self.assertIn('id="other" href="data:old-other"', result)
 
+    def test_replaces_the_href_when_the_id_trails_it(self) -> None:
+        # The order a real captured template actually has. The panel emits the
+        # <image> without an id and calls setAttribute("id", ...) afterwards,
+        # and DOM serialisation appends a newly set attribute at the end - so
+        # the id always comes last, after href. Requiring id-before-href meant
+        # the swap never ran and the Meteoradar map never refreshed.
+        document = (
+            '<svg><image data-radar-part="map" x="10" y="0" width="100" height="80"'
+            ' preserveAspectRatio="xMidYMid meet" href="data:old"'
+            ' id="template-radar-map-1"/></svg>'
+        )
+        result = render._replace_svg_image_href_by_id(document, "template-radar-map-1", "data:new")
+        self.assertIn('href="data:new"', result)
+        self.assertNotIn("data:old", result)
+        # Geometry captured at manual-send time must survive untouched.
+        self.assertIn('x="10" y="0" width="100" height="80"', result)
+
+    def test_replaces_a_legacy_xlink_href(self) -> None:
+        document = '<svg><image xlink:href="data:old" id="cam1"/></svg>'
+        result = render._replace_svg_image_href_by_id(document, "cam1", "data:new")
+        self.assertIn('xlink:href="data:new"', result)
+
+    def test_adds_an_href_when_the_element_has_none(self) -> None:
+        # A background whose href the panel stripped must still receive the
+        # fresh frame rather than staying blank.
+        document = '<svg><image x="0" y="0" id="cam1"/></svg>'
+        result = render._replace_svg_image_href_by_id(document, "cam1", "data:new")
+        self.assertIn('href="data:new"', result)
+        self.assertIn('id="cam1"', result)
+
+    def test_a_data_url_with_regex_metacharacters_is_inserted_literally(self) -> None:
+        document = '<svg><image href="data:old" id="cam1"/></svg>'
+        awkward = "data:image/png;base64,a\\b$1c"
+        result = render._replace_svg_image_href_by_id(document, "cam1", awkward)
+        self.assertIn(f'href="{awkward}"', result)
+
     def test_a_missing_id_leaves_the_document_untouched(self) -> None:
         document = '<image id="cam1" href="data:old"/>'
         result = render._replace_svg_image_href_by_id(document, "no-such-id", "data:new")

@@ -1593,11 +1593,36 @@ def _replace_svg_image_href_by_id(document: str, element_id: str, data_url: str)
 
     Only the attribute changes - the element's position and size, set when the
     panel captured the template, stay exactly as designed.
+
+    The id is located independently of where it sits among the tag's other
+    attributes. This used to require the id to appear *before* href, which
+    never actually happens in a captured template: the panel emits the
+    `<image>` without an id and adds it with `setAttribute` afterwards, and DOM
+    serialisation appends a newly set attribute at the end of the tag - so the
+    id always trailed href, the pattern never matched, and the swap silently
+    did nothing. Every camera binding (the Meteoradar map) therefore stayed
+    frozen on whatever frame happened to be captured during the last manual
+    send, no matter how often the automatic refresh ran.
     """
-    pattern = re.compile(
-        r'(<image\b[^>]*\bid="' + re.escape(element_id) + r'"[^>]*\bhref=")[^"]*(")'
-    )
-    return pattern.sub(lambda match: match.group(1) + data_url + match.group(2), document, count=1)
+    tag_pattern = re.compile(r'<image\b[^>]*\bid="' + re.escape(element_id) + r'"[^>]*>')
+
+    def _swap(match: "re.Match[str]") -> str:
+        element = match.group(0)
+        for attribute in ("href", "xlink:href"):
+            attribute_pattern = re.compile(r'(\b' + re.escape(attribute) + r'=")[^"]*(")')
+            # A lambda, not a replacement string: a data: URL is arbitrary text
+            # and a backslash in it would otherwise be read as a group escape.
+            replaced, count = attribute_pattern.subn(
+                lambda inner: inner.group(1) + data_url + inner.group(2), element, count=1
+            )
+            if count:
+                return replaced
+        # The element carries no href at all (a background whose href the panel
+        # stripped). Add one instead of leaving the slot blank.
+        closing = "/>" if element.endswith("/>") else ">"
+        return element[: -len(closing)].rstrip() + f' href="{data_url}"{closing}'
+
+    return tag_pattern.sub(_swap, document, count=1)
 
 
 _RADAR_SIDEBAR_MIN = 92

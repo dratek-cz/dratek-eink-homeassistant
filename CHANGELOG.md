@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.325] - 2026-08-20
+
+### Opraveno
+- **Meteoradar (a jakákoli kamerová vazba) se při automatickém zápisu nikdy neaktualizoval**: Automatická obnova sice pokaždé stáhla čerstvou radarovou mapu, ale při vkládání do šablony ji zahodila - vyhledávací vzor vyžadoval, aby atribut `id` stál v `<image>` *před* atributem `href`. Prohlížeč ale `id` doplňuje až dodatečně přes `setAttribute`, takže se při serializaci vždy zapíše až na konec, za `href`. Vzor proto nikdy nesedl, obrázek se nevyměnil a na displeji zůstal navždy ten snímek, který byl zachycen při posledním ručním odeslání. Nově se `id` hledá nezávisle na pořadí atributů (a podporuje se i starší `xlink:href`).
+
 ## [0.1.324] - 2026-08-20
 
 ### Opraveno a vylepšeno

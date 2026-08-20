@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.325
+
+- **Meteoradar se při automatickém zápisu nikdy neaktualizoval** – čerstvá radarová mapa se sice pokaždé stáhla, ale při vkládání do šablony se zahodila, protože vyhledávací vzor vyžadoval atribut `id` před `href`; prohlížeč ho ale vždy zapisuje až za něj. Na displeji tak zůstával snímek z posledního ručního odeslání. Opraveno – `id` se nyní hledá nezávisle na pořadí atributů.
+
 ## Novinky ve verzi 0.1.324
 
 - **Mapa připojení je konečně čitelná** – dosud dostala vlastní šedou linku každá gateway, která displej jen slyší, takže při více gatewayích vznikla změť čar přes celou mapu a zdravý displej vypadal jako „chytaný, ale nepřipojený". Nově se kreslí jen trasa, po které displej skutečně komunikuje; záložní trasy se zobrazí po kliknutí na displej nebo přepínačem „Zobrazit záložní trasy". Gatewaye se navíc rozmísťují podle sdílených displejů, aby záložní trasa byla krátký skok k sousedovi místo čáry napříč mapou.
