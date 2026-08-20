@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.324] - 2026-08-20
+
+### Opraveno a vylepšeno
+- **Mapa připojení je konečně čitelná**: Dosud dostala vlastní šedou linku *každá* gateway, která displej jen slyší - i když přes ni nic neteče. Při více gatewayích z toho byla změť čar přes celou mapu a zdravý displej vypadal, že je „něčím chytaný, ale nepřipojený". Nově se ve výchozím stavu kreslí jen ta trasa, po které displej **skutečně komunikuje**. Záložní trasy se zobrazí po kliknutí na displej, nebo trvale přepínačem „Zobrazit záložní trasy" v legendě.
+- **Gatewaye se v kruhu rozmísťují podle sdílených displejů**, takže záložní trasa je krátký skok k sousedovi místo čáry napříč celou mapou (v testovacím scénáři se celková délka záložních spojů zkrátila o 36 %).
+- Legenda nově rozlišuje „Právě obsluhuje" a „Záložní trasa (jen slyší)" a napovídá, že kliknutím na displej se zobrazí všechny jeho trasy.
+
 ## [0.1.323] - 2026-08-20
 
 ### Přidáno a vylepšeno

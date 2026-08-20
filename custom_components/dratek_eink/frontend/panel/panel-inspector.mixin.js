@@ -2069,6 +2069,12 @@ export const inspectorMixin = {
       this._render();
       this._paint();
     });
+    this.shadowRoot.querySelector("[data-map-show-alternatives]")?.addEventListener("change", (event) => {
+      this._gatewayMapShowAlternatives = event.target.checked === true;
+      this._saveUiPreference("gateway-map-show-alternatives", this._gatewayMapShowAlternatives ? "1" : "0");
+      this._render();
+      this._paint();
+    });
     // Stary uzel se vzdy zahodi spolu s .page - listenery zavesene na nem same
     // odejdou s nim, ale ty pripojene na window (kolo/tazeni presahujici svg)
     // je treba odpojit rucne, jinak by se pri kazdem _bind() hromadily.

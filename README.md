@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.324
+
+- **Mapa připojení je konečně čitelná** – dosud dostala vlastní šedou linku každá gateway, která displej jen slyší, takže při více gatewayích vznikla změť čar přes celou mapu a zdravý displej vypadal jako „chytaný, ale nepřipojený". Nově se kreslí jen trasa, po které displej skutečně komunikuje; záložní trasy se zobrazí po kliknutí na displej nebo přepínačem „Zobrazit záložní trasy". Gatewaye se navíc rozmísťují podle sdílených displejů, aby záložní trasa byla krátký skok k sousedovi místo čáry napříč mapou.
+
 ## Novinky ve verzi 0.1.323
 
 - **Dokončen anglický překlad celého rozhraní** – doplněno přes 580 chybějících překladů napříč všemi sekcemi panelu (Displeje, Mapa připojení, Fronta zápisu, Automatické zápisy, Gatewaye, Designer, Inspector, Proměnné, Šablony i Lovelace karta). Po přepnutí na angličtinu už nikde nezůstávají české texty. Nový test navíc hlídá, že se s každým dalším českým textem doplní i jeho anglická verze.

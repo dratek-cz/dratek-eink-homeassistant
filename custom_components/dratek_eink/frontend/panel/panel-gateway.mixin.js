@@ -721,6 +721,55 @@ export const gatewayMixin = {
     return "";
   },
 
+  // Seat hubs around the circle so that hubs sharing displays sit next to each
+  // other. Greedy nearest-neighbour on "how many displays can both hear": good
+  // enough to keep an alternative route as a short hop to a neighbour instead
+  // of a chord across the whole map, and it stays stable between renders
+  // because ties fall back to the incoming order.
+  _orderHubsBySharedDevices(hubGroups, devices) {
+    if (hubGroups.length < 3) return hubGroups;
+
+    const reach = new Map(hubGroups.map((group) => [group.key, new Set()]));
+    (devices || []).forEach((device) => {
+      (device.paths || []).forEach((path) => {
+        const key = this._gatewayHubKey(path);
+        if (reach.has(key)) reach.get(key).add(device.address);
+      });
+    });
+    const shared = (a, b) => {
+      const left = reach.get(a.key);
+      const right = reach.get(b.key);
+      let count = 0;
+      left.forEach((address) => {
+        if (right.has(address)) count += 1;
+      });
+      return count;
+    };
+
+    const remaining = [...hubGroups];
+    // Start from the busiest hub so the densest part of the map is laid out
+    // first, while the ordering still has the most freedom.
+    let index = 0;
+    remaining.forEach((group, i) => {
+      if (reach.get(group.key).size > reach.get(remaining[index].key).size) index = i;
+    });
+    const ordered = [remaining.splice(index, 1)[0]];
+    while (remaining.length) {
+      const last = ordered[ordered.length - 1];
+      let best = 0;
+      let bestScore = -1;
+      remaining.forEach((candidate, i) => {
+        const score = shared(last, candidate);
+        if (score > bestScore) {
+          bestScore = score;
+          best = i;
+        }
+      });
+      ordered.push(remaining.splice(best, 1)[0]);
+    }
+    return ordered;
+  },
+
   // Mysslenkova mapa: gatewaye (a lokalni BLE) jsou bubliny rozlozene do kruhu,
   // displeje jsou bubliny vejrazene do vejseku sve domovske gatewaye. Kazda
   // trasa, kterou displej hlasi (device.paths), dostane vybledly spoj; trasa,
@@ -744,11 +793,19 @@ export const gatewayMixin = {
     const hubR = Math.min(W, H) * 0.28;
     const devR = Math.min(W, H) * 0.47;
 
+    // Hub order decides how long the alternative-route lines end up being. With
+    // the raw configuration order, two gateways that both hear the same display
+    // could land on opposite sides of the circle, so that display's second route
+    // was drawn as a line straight across the middle of the map - the single
+    // biggest reason the map looked like tangled spaghetti rather than a
+    // topology. Seat hubs that share displays next to each other instead.
+    const orderedHubGroups = this._orderHubsBySharedDevices(hubGroups, devices);
+
     const hubPositions = new Map();
-    hubGroups.forEach((group, index) => {
-      const angle = hubGroups.length === 1
+    orderedHubGroups.forEach((group, index) => {
+      const angle = orderedHubGroups.length === 1
         ? -Math.PI / 2
-        : -Math.PI / 2 + (index / hubGroups.length) * Math.PI * 2;
+        : -Math.PI / 2 + (index / orderedHubGroups.length) * Math.PI * 2;
       hubPositions.set(group.key, {
         x: cx + Math.cos(angle) * hubR,
         y: cy + Math.sin(angle) * hubR,
@@ -782,6 +839,14 @@ export const gatewayMixin = {
       devicePositions.set(entry.device.address, { x, y: orphanY });
     });
 
+    // Every gateway that merely *hears* a display used to get its own faded
+    // line, all the time. On a site with a few gateways that is a mesh of grey
+    // lines nobody can read, and it makes a perfectly healthy display look
+    // half-connected - "it catches it but doesn't connect", as it was reported.
+    // Those alternatives are still worth seeing, just not all at once: they are
+    // drawn for the display you click (focus), or for everything when the
+    // "show backup routes" toggle is on.
+    const showAlternatives = this._gatewayMapShowAlternatives === true;
     const edgesFaded = [];
     const edgesActive = [];
     (devices || []).forEach((device) => {
@@ -800,6 +865,7 @@ export const gatewayMixin = {
         if (!hub) return;
         const isActive = Boolean(key) && key === preferredKey;
         if (isActive) matchedPreferred = true;
+        if (!isActive && !showAlternatives && !(focus && related)) return;
         (isActive ? edgesActive : edgesFaded).push({ x1: hub.x, y1: hub.y, x2: pos.x, y2: pos.y, dimmed: !related, highlight: highlight && !isActive });
       });
       // Rucni zamek muze mirit na gateway, kterou displej sam nikdy nehlasil
@@ -881,8 +947,10 @@ export const gatewayMixin = {
       <div class="gwmap-legend">
         <span><i class="gwmap-legend-dot is-online"></i>Gateway</span>
         <span><i class="gwmap-legend-dot is-local"></i>Bluetooth Home Assistantu</span>
-        <span><i class="gwmap-legend-line is-faded"></i>Displej byl nalezen</span>
         <span><i class="gwmap-legend-line is-active"></i>Právě obsluhuje</span>
+        <span><i class="gwmap-legend-line is-faded"></i>Záložní trasa (jen slyší)</span>
+        <label class="gwmap-legend-toggle" title="Zobrazí i gatewaye, které displej pouze slyší, ale právě přes ně nic neposílá."><input type="checkbox" data-map-show-alternatives ${showAlternatives ? "checked" : ""}>Zobrazit záložní trasy</label>
+        <span class="gwmap-legend-hint"><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon>Klikněte na displej a uvidíte všechny jeho trasy</span>
         <span class="gwmap-legend-hint"><ha-icon icon="mdi:mouse-move-vertical"></ha-icon>Kolečko = zoom, levé tlačítko = posun</span>
         ${focus ? `<button class="gwmap-legend-clear" data-map-focus-device="">Zrušit zvýraznění</button>` : ""}
       </div>

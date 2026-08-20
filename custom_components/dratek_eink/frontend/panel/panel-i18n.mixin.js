@@ -1085,6 +1085,10 @@ const EN_EXACT = new Map(Object.entries({
   "Hvězda": "Star",
   "Ušetříte": "You save",
   "Displeje obnovené z lokální cache.": "Displays restored from the local cache.",
+  "Záložní trasa (jen slyší)": "Backup route (hears it only)",
+  "Zobrazit záložní trasy": "Show backup routes",
+  "Zobrazí i gatewaye, které displej pouze slyší, ale právě přes ně nic neposílá.": "Also shows gateways that merely hear the display but are not currently sending through it.",
+  "Klikněte na displej a uvidíte všechny jeho trasy": "Click a display to see all of its routes",
 }));
 
 const SYMBOL_LABEL_EN = new Map(Object.entries({
