@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.319";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.320";
 
 export const renderUiMixin = {
 

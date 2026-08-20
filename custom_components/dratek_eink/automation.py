@@ -1569,9 +1569,20 @@ class EntityAutoUpdateManager:
                     "last_refresh", "probíhá", {"address": address, "started": _current_local_datetime().isoformat()},
                 )
                 try:
-                    await self._async_refresh(address)
+                    result = await self._async_refresh(address)
+                    # "beze změny" is reported separately from "ok" on purpose:
+                    # it is the one successful outcome that produces no queue
+                    # job at all, which is otherwise indistinguishable from a
+                    # broken scheduler when looking at the queue.
+                    unchanged = bool((result or {}).get("unchanged"))
                     self._publish_diagnostic_state(
-                        "last_refresh", "ok", {"address": address, "finished": _current_local_datetime().isoformat()},
+                        "last_refresh",
+                        "beze změny (nic se neodesílá)" if unchanged else "ok",
+                        {
+                            "address": address,
+                            "finished": _current_local_datetime().isoformat(),
+                            "zapsáno_do_fronty": not unchanged,
+                        },
                     )
                 except Exception:
                     # Rendering and hardware-format conversion run before
@@ -1734,6 +1745,22 @@ class EntityAutoUpdateManager:
         )
         changed = self._changed_region(previous_hardware, current_hardware)
         if changed is None:
+            # Nothing to send: the freshly rendered image is pixel-identical to
+            # what the display is already showing, so a write would spend a
+            # full e-ink refresh (and battery) redrawing the same picture.
+            #
+            # Deliberate, but it used to be completely invisible: no queue job
+            # is created, so from the outside an interval elapsing and being
+            # skipped here looks exactly like a scheduler that has stopped
+            # working. That cost a long investigation once already, so say so
+            # plainly - both in the log and on the "Poslední vykreslení"
+            # diagnostic sensor.
+            _LOGGER.info(
+                "[%s] Automatic refresh rendered an image identical to the one already "
+                "on the display, so no write was queued. This is normal when no bound "
+                "value has changed since the last write.",
+                address,
+            )
             return {"ok": True, "unchanged": True, "address": address}
         x0, y0, x1, y1 = changed
         partial = (x0, y0, x1 - x0, y1 - y0)

@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.320] - 2026-08-20
+
+### Opraveno
+- **Zjištěna příčina „časovač doběhne, ale nic se nezapíše"**: Pokud automatická obnova vykreslí obrázek, který je pixel po pixelu shodný s tím, co už na displeji je, integrace zápis záměrně přeskočí (šetří baterii i zbytečné překreslení e-inku). Dosud to ale bylo úplně neviditelné - do fronty nepřišla žádná úloha, takže to zvenčí vypadalo přesně jako rozbitý plánovač. Nově se tento stav vypisuje do protokolu a zobrazuje na senzoru **Poslední vykreslení** jako „beze změny (nic se neodesílá)", včetně atributu `zapsáno_do_fronty`.
+
 ## [0.1.319] - 2026-08-20
 
 ### Přidáno

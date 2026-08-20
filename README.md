@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.320
+
+- **Zjištěna příčina „časovač doběhne, ale nic se nezapíše"** – pokud automatická obnova vykreslí obrázek shodný s tím, co už na displeji je, zápis se záměrně přeskočí (šetří baterii a zbytečné překreslení e-inku). Dosud to bylo neviditelné a vypadalo to jako rozbitý plánovač; nově se to vypisuje do protokolu a zobrazuje na senzoru **Poslední vykreslení** jako „beze změny (nic se neodesílá)".
+
 ## Novinky ve verzi 0.1.319
 
 - **Integrace rozdělena na tři diagnostické bloky** – na stránce integrace jsou nyní tři samostatná zařízení: **Rozhraní**, **Automatické zápisy** a **Přenos do zařízení**. Každé má vlastní senzory ukazující, zda a kdy naposledy daná část proběhla a jak dopadla, takže jde hned poznat, ve které části řetězce automatický zápis vázne.
