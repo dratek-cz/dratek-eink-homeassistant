@@ -38,6 +38,13 @@ const METEORADAR_CACHE_MS = 2 * 60 * 1000;
 // far sooner than a success is cached for, so the map appears on its own shortly
 // after the underlying cause clears instead of waiting out the full success TTL.
 const METEORADAR_RETRY_MS = 15 * 1000;
+// The map and its info sidebar (precipitation legend + forecast) are two
+// separate blocks placed side by side, not one image letterboxed across
+// both shapes - mirrors render.py's radar_sidebar_width exactly; both sides
+// must move together or the two blocks stop lining up edge to edge.
+const RADAR_SIDEBAR_MIN = 92;
+const RADAR_SIDEBAR_MAX = 168;
+const RADAR_SIDEBAR_FRACTION = 0.24;
 // A safety net for the interactive preview only: if callWS never settles (a
 // dropped connection with no error/close event, for instance) the pending
 // flag it guards would otherwise never clear, permanently wedging the
@@ -366,10 +373,17 @@ export const templateSvgMixin = {
     return (rows || []).some((row) => row?.radarMap);
   },
 
-  // Fetches (or reuses a cached) rendered radar map at roughly the template's
-  // own resolution. The image is embedded with preserveAspectRatio, so it does
-  // not need to match the radarMap row's exact sub-box - only be large enough
-  // that scaling it down stays sharp.
+  // The info sidebar's own width, given the full radarMap block's width -
+  // mirrors render.py's radar_sidebar_width exactly (see that function's own
+  // comment for why both sides must move together).
+  _radarSidebarWidth(totalWidth) {
+    const raw = Math.max(RADAR_SIDEBAR_MIN, Math.min(RADAR_SIDEBAR_MAX, Math.round(totalWidth * RADAR_SIDEBAR_FRACTION)));
+    return Math.min(raw, Math.max(1, totalWidth - 60));
+  },
+
+  // Fetches (or reuses a cached) rendered radar map and its info sidebar, each
+  // at its own block's exact size - two separate images placed side by side
+  // (see _blockRadarMap), not one image letterboxed across both shapes.
   //
   // A failure is cached too, distinctly from "never tried yet" - the most common
   // cause is camera.meteoradar not existing until Home Assistant restarts after
@@ -383,8 +397,10 @@ export const templateSvgMixin = {
     const dottedLight = this._displayTemplateConfig?.meteoradar_dotted_light !== false;
     const showWind = this._displayTemplateConfig?.meteoradar_show_wind === true;
     const preserveYellow = this._displaySupportsYellow?.() === true;
+    const sidebarW = this._radarSidebarWidth(width);
+    const mapW = Math.max(1, Math.round(width) - sidebarW);
 
-    const key = `${Math.round(width)}x${Math.round(height)}_${country}_p${showPrecipitation}_d${dottedLight}_w${showWind}_y${preserveYellow}`;
+    const key = `${mapW}x${Math.round(height)}_${sidebarW}_${country}_p${showPrecipitation}_d${dottedLight}_w${showWind}_y${preserveYellow}`;
     const cached = this._meteoradarImageCache;
     const age = cached ? Date.now() - cached.fetchedAt : Infinity;
     const ttl = cached?.dataUrl ? METEORADAR_CACHE_MS : METEORADAR_RETRY_MS;
@@ -393,8 +409,10 @@ export const templateSvgMixin = {
     try {
       const result = await this._hass.callWS({
         type: "dratek_eink/render_meteoradar",
-        width: Math.round(width),
+        width: mapW,
         height: Math.round(height),
+        sidebar_width: sidebarW,
+        sidebar_height: Math.round(height),
         country: country,
         show_precipitation: showPrecipitation,
         dotted_light: dottedLight,
@@ -402,13 +420,15 @@ export const templateSvgMixin = {
         preserve_yellow: preserveYellow,
       });
       if (!result?.ok || !result?.image) {
-        this._meteoradarImageCache = { key, dataUrl: "", fetchedAt: Date.now(), error: "Server nevrátil obrázek." };
+        this._meteoradarImageCache = { key, dataUrl: "", sidebarDataUrl: "", fetchedAt: Date.now(), error: "Server nevrátil obrázek." };
         return true;
       }
-      this._meteoradarImageCache = { key, dataUrl: result.image, fetchedAt: Date.now(), error: "" };
+      this._meteoradarImageCache = {
+        key, dataUrl: result.image, sidebarDataUrl: result.sidebar_image || "", fetchedAt: Date.now(), error: "",
+      };
       return true;
     } catch (error) {
-      this._meteoradarImageCache = { key, dataUrl: "", fetchedAt: Date.now(), error: this._message?.(error) || String(error?.message || error) };
+      this._meteoradarImageCache = { key, dataUrl: "", sidebarDataUrl: "", fetchedAt: Date.now(), error: this._message?.(error) || String(error?.message || error) };
       return true;
     }
   },
@@ -1728,12 +1748,16 @@ export const templateSvgMixin = {
       + `<path d="${path}" fill="${BLACK}" shape-rendering="crispEdges"></path>`;
   },
 
-  // The only raster content in an otherwise all-vector renderer: a live snapshot
-  // of camera.meteoradar (camera.py), already rendered server-side as a black
-  // country outline with red/white precipitation and quantised to the panel's
-  // three colours (ws_meteoradar.py). Embedding it as <image> rather than
-  // redrawing a map here keeps the projection and border-drawing code in one
-  // place instead of duplicated between Python and this file.
+  // Two blocks side by side, both raster in an otherwise all-vector renderer:
+  // an info sidebar (precipitation legend + forecast/temperature, drawn
+  // server-side) on the left, always spanning the block's full height - the
+  // same way every other template's own side panel does - and a live
+  // snapshot of camera.meteoradar (camera.py) filling the rest. Both are
+  // embedded as <image> rather than redrawn here so the sidebar's layout and
+  // the map's projection/border-drawing code stay in one place (render.py),
+  // not duplicated between Python and this file - see _ensureTemplateRadarImage
+  // for why both are fetched at exactly this block's own pixel sizes rather
+  // than one bitmap letterboxed to fit two differently-shaped areas.
   //
   // The fetch is asynchronous and this method is not, so it can only ever draw
   // whatever _ensureTemplateRadarImage last cached - never block layout waiting
@@ -1743,16 +1767,18 @@ export const templateSvgMixin = {
     const x = row.bleed ? box.fullX : box.x;
     const w = row.bleed ? box.fullW : box.w;
     const cached = this._meteoradarImageCache;
+    const sidebarW = this._radarSidebarWidth(w);
+    const mapX = x + sidebarW;
+    const mapW = Math.max(1, w - sidebarW);
     if (cached?.dataUrl) {
-      // The intensity legend and the +3h forecast/temperature sidebar are
-      // baked into this data URL itself (render.py's _compose_radar_panel) -
-      // the same backend function both this preview and an automatic refresh
-      // fetch through, so drawing them again here as separate SVG shapes
-      // would either double them up or, worse, drift out of sync with what
-      // the backend draws (a "dual renderer" mismatch, see meteoradar.py's
-      // module docstring for why that split is normally deliberate here).
-      return `<image x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}"`
+      const sidebar = cached.sidebarDataUrl
+        ? `<image data-radar-part="sidebar" x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${sidebarW.toFixed(2)}" height="${box.h.toFixed(2)}"`
+          + ` preserveAspectRatio="none" href="${cached.sidebarDataUrl}"></image>`
+        : "";
+      const divider = this._svgHairline(mapX, box.y, 1, box.h);
+      const map = `<image data-radar-part="map" x="${mapX.toFixed(2)}" y="${box.y.toFixed(2)}" width="${mapW.toFixed(2)}" height="${box.h.toFixed(2)}"`
         + ` preserveAspectRatio="xMidYMid meet" href="${cached.dataUrl}"></image>`;
+      return sidebar + divider + map;
     }
     const label = cached?.error
       ? `Radarová mapa se nenačetla: ${cached.error}`

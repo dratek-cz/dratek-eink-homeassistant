@@ -41,6 +41,7 @@ from .queue import get_transfer_queue
 from .render import (
     BWRY_CODES,
     async_render_camera_binding_data_url,
+    async_render_meteoradar_sidebar_data_url,
     prepare_image_for_display,
     render_automatic_refresh_image,
 )
@@ -1358,17 +1359,30 @@ class EntityAutoUpdateManager:
         for binding in bindings:
             if binding.get("type") != "camera":
                 continue
-            data_url = await async_render_camera_binding_data_url(
-                self.hass,
-                str(binding.get("entity_id") or ""),
-                int(binding.get("width") or 0) or 400,
-                int(binding.get("height") or 0) or 300,
-                country=str(binding.get("country") or "cz"),
-                show_precipitation=bool(binding.get("show_precipitation", True)),
-                dotted_light=bool(binding.get("dotted_light", True)),
-                show_wind=bool(binding.get("show_wind", False)),
-                preserve_yellow=int(config.get("sdk_type") or 0) in BWRY_CODES,
-            )
+            preserve_yellow = int(config.get("sdk_type") or 0) in BWRY_CODES
+            # The Meteoradar map and its info sidebar are two separate blocks
+            # (see panel-template-svg.mixin.js's _blockRadarMap) captured as
+            # two separate camera-type bindings, each re-fetched at its own
+            # box's exact size - not one image letterboxed into both shapes.
+            if binding.get("radar_part") == "sidebar":
+                data_url = await async_render_meteoradar_sidebar_data_url(
+                    self.hass,
+                    int(binding.get("width") or 0) or 200,
+                    int(binding.get("height") or 0) or 300,
+                    preserve_yellow=preserve_yellow,
+                )
+            else:
+                data_url = await async_render_camera_binding_data_url(
+                    self.hass,
+                    str(binding.get("entity_id") or ""),
+                    int(binding.get("width") or 0) or 400,
+                    int(binding.get("height") or 0) or 300,
+                    country=str(binding.get("country") or "cz"),
+                    show_precipitation=bool(binding.get("show_precipitation", True)),
+                    dotted_light=bool(binding.get("dotted_light", True)),
+                    show_wind=bool(binding.get("show_wind", False)),
+                    preserve_yellow=preserve_yellow,
+                )
             if data_url:
                 values[str(binding.get("id"))] = data_url
         # day() and event() need the same treatment: the forecast/calendar data

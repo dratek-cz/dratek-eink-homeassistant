@@ -83,6 +83,7 @@ def _load_automation_module():
             "prepare_image_for_display": lambda _sdk, image, *_args: image,
             "render_automatic_refresh_image": lambda *_args, **_kwargs: None,
             "async_render_camera_binding_data_url": _async_none,
+            "async_render_meteoradar_sidebar_data_url": _async_none,
         },
         "display_preview": {"async_save_display_preview": lambda *_args, **_kwargs: None},
         "transfer": {"DratekTransfer": object},

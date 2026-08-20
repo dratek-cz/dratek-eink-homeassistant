@@ -1668,31 +1668,39 @@ async def _async_radar_forecast_summary(hass: Any) -> dict[str, str] | None:
         return None
 
 
-def _compose_radar_panel(
-    radar_img: Image.Image, width: int, height: int, forecast: dict[str, str] | None, preserve_yellow: bool
-) -> Image.Image:
-    """Letterbox the map into the left side of the panel and draw the
-    precipitation-intensity legend plus a +3h forecast/temperature summary
-    into a sidebar on the right.
+def radar_sidebar_width(total_width: int) -> int:
+    """The left-panel width a radar template's own layout reserves for the
+    sidebar, given the full block's width - shared by both the sidebar and
+    the map so the two are always sized to fit together edge to edge, with
+    nothing left over to letterbox or stretch. Mirrors
+    _radarSidebarWidth in panel-template-svg.mixin.js; both sides must move
+    together (see that function's own comment for why).
+    """
+    sidebar_w = max(_RADAR_SIDEBAR_MIN, min(_RADAR_SIDEBAR_MAX, round(total_width * _RADAR_SIDEBAR_FRACTION)))
+    return min(sidebar_w, max(1, total_width - 60))
 
-    Baked into the same bitmap the browser preview and the automatic refresh
-    both fetch (this function's caller is the one shared path for both), so
-    the legend and forecast can never drift out of sync the way a JS-only SVG
-    overlay drawn only for the browser preview could.
+
+def _draw_radar_sidebar(
+    width: int, height: int, forecast: dict[str, str] | None, preserve_yellow: bool
+) -> Image.Image:
+    """Draw the precipitation-intensity legend plus a +3h forecast/temperature
+    summary onto its own canvas, sized to exactly the sidebar block's box.
+
+    A separate image from the map itself (see radar_sidebar_width) - the two
+    are placed side by side as two independent blocks, each fetched and
+    rasterised at its own box's exact pixel size, rather than one bitmap
+    letterboxed to fit into two differently-shaped boxes. Still the one
+    shared function both the browser preview and an automatic refresh fetch
+    through, so the legend and forecast can never drift out of sync the way
+    a JS-only overlay drawn only for the browser preview could.
     """
     from .meteoradar import _generate_precipitation_checkerboard
 
-    sidebar_w = max(_RADAR_SIDEBAR_MIN, min(_RADAR_SIDEBAR_MAX, round(width * _RADAR_SIDEBAR_FRACTION)))
-    sidebar_w = min(sidebar_w, max(1, width - 60))
-    map_w = max(1, width - sidebar_w)
-
     canvas = Image.new("RGB", (width, height), "white")
-    canvas.paste(fit_to_size(radar_img, map_w, height), (0, 0))
     draw = ImageDraw.Draw(canvas)
-    draw.line((map_w, 0, map_w, height), fill=BORDER_COLOR, width=1)
 
-    pad = max(4, round(sidebar_w * 0.1))
-    x0, x1 = map_w + pad, width - pad
+    pad = max(4, round(width * 0.1))
+    x0, x1 = pad, width - pad
     inner_w = max(1, x1 - x0)
     y = pad
 
@@ -1783,26 +1791,9 @@ async def async_render_camera_binding_data_url(
             show_wind=show_wind,
         )
         if radar_img is not None:
-            forecast_summary = await _async_radar_forecast_summary(hass)
-
             def _prepare_radar() -> bytes:
-                fitted = _compose_radar_panel(radar_img, width, height, forecast_summary, preserve_yellow)
-                if not preserve_yellow:
-                    rgb = fitted.convert("RGB")
-                    red_band, green_band, blue_band = rgb.split()
-                    yellow_mask = ImageChops.logical_and(
-                        ImageChops.logical_and(
-                            red_band.point(lambda value: 255 if value >= 161 else 0, mode="1"),
-                            green_band.point(lambda value: 255 if value >= 128 else 0, mode="1"),
-                        ),
-                        blue_band.point(lambda value: 255 if value < 96 else 0, mode="1"),
-                    )
-                    rgb.paste(BWR_RED, mask=yellow_mask)
-                    fitted = rgb
-                quantized = quantize_bwr_preview(fitted, preserve_yellow)
-                buffer = io.BytesIO()
-                quantized.save(buffer, format="PNG")
-                return buffer.getvalue()
+                fitted = fit_to_size(radar_img, width, height)
+                return _encode_radar_png(fitted, preserve_yellow)
 
             png_bytes = await hass.async_add_executor_job(_prepare_radar)
             return "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
@@ -1811,6 +1802,53 @@ async def async_render_camera_binding_data_url(
 
     return None
 
+
+def _encode_radar_png(image: Image.Image, preserve_yellow: bool) -> bytes:
+    """Quantise a radar-template image (map or sidebar) to the panel's palette
+    and encode it as PNG bytes - shared so the map and the sidebar, rendered
+    and fetched separately, still end up looking like one consistent panel.
+    """
+    if not preserve_yellow:
+        rgb = image.convert("RGB")
+        red_band, green_band, blue_band = rgb.split()
+        yellow_mask = ImageChops.logical_and(
+            ImageChops.logical_and(
+                red_band.point(lambda value: 255 if value >= 161 else 0, mode="1"),
+                green_band.point(lambda value: 255 if value >= 128 else 0, mode="1"),
+            ),
+            blue_band.point(lambda value: 255 if value < 96 else 0, mode="1"),
+        )
+        rgb.paste(BWR_RED, mask=yellow_mask)
+        image = rgb
+    quantized = quantize_bwr_preview(image, preserve_yellow)
+    buffer = io.BytesIO()
+    quantized.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+async def async_render_meteoradar_sidebar_data_url(
+    hass: Any, width: int, height: int, preserve_yellow: bool = False
+) -> str | None:
+    """Render the Meteoradar template's left info panel (precipitation legend
+    plus a +3h forecast/temperature summary) as its own image, sized to
+    exactly (width, height) - the sidebar block sitting beside the map block,
+    not baked into it. Never raises: a display should still get its map even
+    if the weather-entity lookup this needs fails for any reason.
+    """
+    try:
+        forecast_summary = await _async_radar_forecast_summary(hass)
+    except Exception:
+        forecast_summary = None
+
+    def _prepare_sidebar() -> bytes:
+        canvas = _draw_radar_sidebar(width, height, forecast_summary, preserve_yellow)
+        return _encode_radar_png(canvas, preserve_yellow)
+
+    try:
+        png_bytes = await hass.async_add_executor_job(_prepare_sidebar)
+    except Exception:
+        return None
+    return "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
 
 
 def render_entity_bound_template_image(

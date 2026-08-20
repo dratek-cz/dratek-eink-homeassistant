@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.317] - 2026-08-20
+
+### Opraveno a vylepšeno
+- **Šablona Meteoradar přestavěna na dva samostatné bloky**: Boční panel (legenda intenzity srážek a předpověď na 3 h dopředu) a samotná mapa se nyní vykreslují jako dva nezávislé bloky vedle sebe - stejně jako boční panel u ostatních šablon vždy vyplňuje celou výšku displeje. Dřív byl celý panel jeden obrázek se zabudovaným bočním pruhem, který se při jiném poměru stran displeje než byl výchozí, neroztahoval podle skutečné plochy - mapa i boční panel se teď každý zvlášť vyžádají a vykreslí přesně na velikost svého vlastního bloku, takže se vždy přesně přizpůsobí ploše displeje.
+
 ## [0.1.316] - 2026-08-20
 
 ### Opraveno

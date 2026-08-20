@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.316";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.317";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=catalog-no-color-tests-1";
 
 // The standard Czech civil name-day calendar, indexed [month][day - 1]
@@ -3273,36 +3273,45 @@ export const devicesMixin = {
         bindings.push(binding);
       }
     });
-    // The Meteoradar row (and anything else built from _blockRadarMap) embeds a
-    // live camera snapshot as a plain <image>, not a bound HA entity value, so it
-    // is tagged and captured the same way but carries its own binding type: an
-    // automatic refresh re-fetches the camera rather than reading entity state.
-    const radarImage = currentDocument.querySelector("image");
-    if (radarImage) {
-      const radarId = "template-radar-map";
+    // The Meteoradar row (and anything else built from _blockRadarMap) embeds
+    // its map and its info sidebar as two plain <image> elements, not bound HA
+    // entity values, so each is tagged and captured the same way but carries
+    // its own binding type: an automatic refresh re-fetches the camera/sidebar
+    // rather than reading entity state. data-radar-part tells them apart -
+    // _blockRadarMap stamps it on both, and it never appears on an ordinary
+    // customImage/dither block's <image>.
+    const radarImages = [...currentDocument.querySelectorAll("image[data-radar-part]")];
+    radarImages.forEach((radarImage, index) => {
+      const part = radarImage.getAttribute("data-radar-part");
+      const radarId = `template-radar-${part}-${index}`;
       radarImage.setAttribute("id", radarId);
       const radarWidth = Math.round(Number(radarImage.getAttribute("width")) || width);
       const radarHeight = Math.round(Number(radarImage.getAttribute("height")) || height);
-      bindings.push({
+      const binding = {
         id: radarId,
         type: "camera",
         entity_id: "camera.meteoradar",
         width: radarWidth,
         height: radarHeight,
         // x/y/w/h let the backend's clean_background tier paste the fresh
-        // camera frame at the exact spot the <image> occupied - the other
+        // frame at the exact spot the <image> occupied - the other
         // (SVG-substitution) tier does not need these, it just swaps the
         // href of the very same element and keeps its original geometry.
         x: Math.round(Number(radarImage.getAttribute("x")) || 0),
         y: Math.round(Number(radarImage.getAttribute("y")) || 0),
         w: radarWidth,
         h: radarHeight,
-        country: this._meteoradarCountry || this._displayTemplateConfig?.meteoradar_country || "cz",
-        show_precipitation: this._displayTemplateConfig?.meteoradar_show_precipitation !== false,
-        dotted_light: this._displayTemplateConfig?.meteoradar_dotted_light !== false,
-        show_wind: this._displayTemplateConfig?.meteoradar_show_wind === true,
-      });
-    }
+      };
+      if (part === "sidebar") {
+        binding.radar_part = "sidebar";
+      } else {
+        binding.country = this._meteoradarCountry || this._displayTemplateConfig?.meteoradar_country || "cz";
+        binding.show_precipitation = this._displayTemplateConfig?.meteoradar_show_precipitation !== false;
+        binding.dotted_light = this._displayTemplateConfig?.meteoradar_dotted_light !== false;
+        binding.show_wind = this._displayTemplateConfig?.meteoradar_show_wind === true;
+      }
+      bindings.push(binding);
+    });
     // currentDocument's tagged nodes are what the backend substitutes fresh
     // values into - text runs and the radar image alike - so this capture of the
     // whole template (background art, icons and all) is what makes an automatic
