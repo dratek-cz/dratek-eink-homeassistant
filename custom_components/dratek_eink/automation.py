@@ -810,13 +810,21 @@ class EntityAutoUpdateManager:
     def _always_send(config: dict[str, Any]) -> bool:
         """Whether to write even when the new image is identical to the old one.
 
-        Off by default: an e-ink refresh costs battery and flashes the panel,
-        so redrawing an unchanged picture is normally wasted. Users whose
-        design genuinely never changes (or who want the panel re-driven
-        periodically to clear ghosting) can turn it on per display, rather
-        than being left with an automation that silently never writes.
+        **On by default.** Skipping an unchanged image saves battery and
+        avoids a pointless e-ink flash, and that was the original default -
+        but in practice it made a working automation indistinguishable from a
+        broken one: the very first automatic write would land (its content
+        differed from the manually uploaded design), every later render came
+        out byte-identical, and the display then silently never wrote again.
+        Users reasonably read "the timer ran out and nothing was sent" as a
+        bug, and no amount of logging changes that a scheduled write they
+        asked for did not happen.
+
+        So the guarantee wins over the optimisation: an interval that elapses
+        now always produces a real write. Turn it off per display to get the
+        battery-saving behaviour back on a design that does change on its own.
         """
-        return config.get("always_send") is True
+        return config.get("always_send") is not False
 
     def _sync_interval_timer(self, address: str) -> None:
         """Arm one exact per-display interval aligned to HA internal clock."""

@@ -62,18 +62,17 @@ export const automationsMixin = {
     return `<label class="automation-interval-field"><span>Co spouští obnovu</span><div><ha-icon icon="mdi:swap-horizontal"></ha-icon><select aria-label="Co spouští automatickou obnovu" data-automation-trigger="${this._escape(automation.address)}" ${this._automationBusyAddress === automation.address ? "disabled" : ""}>${options.map(([value, label]) => `<option value="${value}" ${mode === value ? "selected" : ""}>${label}</option>`).join("")}</select><ha-icon class="automation-select-chevron" icon="mdi:chevron-down"></ha-icon></div></label>`;
   },
 
-  // Without this the integration looks broken on a design whose content never
-  // changes: the interval elapses, the image is re-rendered, it comes out
-  // identical to what the panel already shows, and the write is skipped - no
-  // queue job, nothing on the display. Off by default, because redrawing an
-  // unchanged picture spends battery and flashes the panel for nothing.
+  // On by default (see _always_send in automation.py): with it off, a design
+  // whose content never changes writes exactly once and then goes quiet
+  // forever, which reads as a broken integration rather than as an
+  // optimisation. Turning it off is the opt-in, not the other way round.
   _automationAlwaysSendToggle(automation) {
-    const checked = automation.always_send === true ? "checked" : "";
+    const checked = automation.always_send !== false ? "checked" : "";
     const busy = this._automationBusyAddress === automation.address ? "disabled" : "";
     return `<label class="automation-interval-field automation-always-send"><span>Odesílat i beze změny</span>`
       + `<div><ha-icon icon="mdi:refresh-auto"></ha-icon>`
       + `<input type="checkbox" data-automation-always-send="${this._escape(automation.address)}" ${checked} ${busy}>`
-      + `<small>Zapište i tehdy, když je obrázek stejný jako ten na displeji.</small></div></label>`;
+      + `<small>Zapsat po každém intervalu i tehdy, když je obrázek stejný jako na displeji. Vypnutím se ušetří baterie, ale displej se nemusí přepsat vůbec.</small></div></label>`;
   },
 
   _renderAutomationCountdown(automation, isWriting = false) {

@@ -103,8 +103,13 @@ class DiagnosticBlockWiringTests(unittest.TestCase):
         self.assertIn("def _always_send(", self.automation_source)
         self.assertIn("async def async_set_always_send(", self.automation_source)
         self.assertIn("if changed is None and self._always_send(config):", self.automation_source)
-        # Off by default: an e-ink refresh costs battery and flashes the panel.
-        self.assertIn('config.get("always_send") is True', self.automation_source)
+        # ON by default. With it off, a design whose content never changes
+        # writes once and then silently never again - which users correctly
+        # read as broken. The scheduled-write guarantee beats the battery
+        # optimisation; turning it off is the opt-in.
+        self.assertIn('config.get("always_send") is not False', self.automation_source)
+        panel = (COMPONENT / "frontend" / "panel" / "panel-automations.mixin.js").read_text(encoding="utf-8")
+        self.assertIn("automation.always_send !== false", panel)
         # Surfaced through the websocket API and listed back to the UI.
         ws_source = (COMPONENT / "ws_automations.py").read_text(encoding="utf-8")
         self.assertIn("dratek_eink/automations/update_always_send", ws_source)

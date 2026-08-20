@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.322
+
+- **Automatický zápis se po doběhnutí intervalu odešle vždy** – přepínač „Odesílat i beze změny" je nově výchozím stavu zapnutý. Dřív se zápis přeskočil, když vyšel obrázek shodný s tím na displeji, takže po prvním automatickém zápisu se displej už nikdy nepřepsal. Kdo chce šetřit baterii, může přepínač u displeje vypnout.
+
 ## Novinky ve verzi 0.1.321
 
 - **Přepínač „Odesílat i beze změny"** – v záložce Automatizace u každého displeje. Zapnutý přepíše displej i tehdy, když je obrázek shodný s tím, co už na něm je (vhodné pro statické šablony nebo pročištění e-inku od duchů). Výchozí stav je vypnuto, protože překreslení stojí baterii a viditelně blikne.

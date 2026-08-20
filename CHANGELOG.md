@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.322] - 2026-08-20
+
+### Opraveno
+- **Automatický zápis se teď po doběhnutí intervalu odešle vždy**: Přepínač „Odesílat i beze změny" je nově **ve výchozím stavu zapnutý**. Dosud se zápis přeskočil, pokud vyšel obrázek shodný s tím, co už na displeji je - v praxi to znamenalo, že první automatický zápis po ručním odeslání prošel, ale všechny další se tiše zahodily a displej se už nikdy nepřepsal. Jistota naplánovaného zápisu má přednost před úsporou baterie; kdo chce původní chování, může přepínač u konkrétního displeje vypnout.
+
 ## [0.1.321] - 2026-08-20
 
 ### Přidáno
