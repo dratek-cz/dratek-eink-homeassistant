@@ -4,6 +4,15 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.317
+
+- **Šablona Meteoradar přestavěna na dva samostatné bloky** – boční panel (legenda intenzity srážek a předpověď na 3 h dopředu) a samotná mapa se nyní vykreslují jako dva nezávislé bloky vedle sebe, boční panel vždy vyplňuje celou výšku displeje stejně jako u ostatních šablon. Opravuje to, že se mapa dřív neroztahovala přesně podle plochy displeje.
+
+## Novinky ve verzi 0.1.316
+
+- **Automatické zápisy se mohly navždy zaseknout beze stopy v protokolu** – vykreslení šablony při automatickém zápisu nemělo žádný časový limit; nově je omezeno 90sekundovým bezpečnostním limitem, po kterém se pokus vyhodnotí jako neúspěšný a displej se normálně zkusí znovu podle svého intervalu.
+- **Odolnost plánovače automatických zápisů proti jedné rozbité položce** – chyba u jednoho displeje/konfigurace už nemůže tiše zastavit kontrolu i pro všechny další displeje.
+
 ## Novinky ve verzi 0.1.315
 
 - **Oprava žlutých ikon v náhledu na velkých displejích** – opraveno přiřazení barevného profilu u velkých displejů (800x480, 400x300, 960x640, 1360x480 apod.), které byly mylně vyhodnocovány jako 4-barevné (BWRY). V náhledech na hlavní stránce i v editoru se ikony šablon nyní správně zobrazují v červené barvě odpovídající fyzickému tříbarevnému BWR e-ink panelu.
