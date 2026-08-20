@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.318
+
+- **Živé diagnostické stavy pro automatické zápisy** – čtyři nové stavy viditelné v Nástroje pro vývojáře → Stavy ukazují, kdy naposledy proběhl tik plánovače, kdy byl naposledy naplánován zápis pro konkrétní displej, jak dopadl poslední pokus o vykreslení a jak dopadl poslední přenos do zařízení – pomáhá poznat, kde přesně automatický zápis vázne, bez nutnosti exportovat log.
+
 ## Novinky ve verzi 0.1.317
 
 - **Šablona Meteoradar přestavěna na dva samostatné bloky** – boční panel (legenda intenzity srážek a předpověď na 3 h dopředu) a samotná mapa se nyní vykreslují jako dva nezávislé bloky vedle sebe, boční panel vždy vyplňuje celou výšku displeje stejně jako u ostatních šablon. Opravuje to, že se mapa dřív neroztahovala přesně podle plochy displeje.

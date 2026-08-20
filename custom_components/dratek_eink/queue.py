@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 import logging
 import time
 import uuid
@@ -440,6 +441,26 @@ class TransferQueue:
         result["queue_status"] = job["status"]
         self._prune()
         await self._save_history()
+        # Live visibility into the transfer block specifically (Developer Tools
+        # -> States), separate from the scheduler-side diagnostics in
+        # automation.py - lets "the schedule fired but nothing reached the
+        # display" and "nothing ever got scheduled at all" be told apart at a
+        # glance instead of only from a queue-log export after the fact.
+        try:
+            self.hass.states.async_set(
+                "sensor.dratek_eink_last_transfer",
+                datetime.fromtimestamp(job["finished_at"]).isoformat(),
+                {
+                    "friendly_name": "DRATEK eInk - poslední přenos do zařízení",
+                    "address": job.get("address"),
+                    "status": job.get("status"),
+                    "operation": job.get("operation"),
+                    "transport_name": job.get("transport_name"),
+                    "error": job.get("error") or "",
+                },
+            )
+        except Exception:
+            pass
         return result
 
 

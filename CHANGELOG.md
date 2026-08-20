@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.318] - 2026-08-20
+
+### Přidáno
+- **Živé diagnostické stavy pro automatické zápisy**: Tři nové stavy viditelné v Nástroje pro vývojáře → Stavy (`sensor.dratek_eink_scheduler_heartbeat`, `sensor.dratek_eink_last_schedule_attempt`, `sensor.dratek_eink_last_refresh_attempt`) a jeden pro přenos (`sensor.dratek_eink_last_transfer`) - ukazují přímo v Home Assistantu, kdy naposledy proběhl tik plánovače, kdy byl naposledy naplánován zápis pro konkrétní displej, jak dopadl poslední pokus o vykreslení a kdy/jak dopadl poslední přenos do zařízení. Umožňuje poznat, ve které konkrétní části řetězce automatický zápis vázne, bez nutnosti exportovat log.
+
 ## [0.1.317] - 2026-08-20
 
 ### Opraveno a vylepšeno

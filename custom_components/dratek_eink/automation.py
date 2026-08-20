@@ -608,6 +608,28 @@ class EntityAutoUpdateManager:
         self._initialized = False
         self._refresh_tick_unsubscribe = None
 
+    def _publish_diagnostic_state(
+        self, object_id: str, state: str, attributes: dict[str, Any] | None = None
+    ) -> None:
+        """Set a live diagnostic state directly (Developer Tools -> States),
+        bypassing full entity/platform registration.
+
+        Not a real sensor entity - just a way to see, live, which stage of
+        the automatic-refresh chain (scheduler tick -> per-display schedule
+        attempt -> the actual render/transfer) last ran and when, instead of
+        only being able to infer it after the fact from a queue-log export.
+        A genuine incident: automatic writes went completely silent with no
+        queue job and no logged exception anywhere, and there was no way to
+        see which link in the chain had stopped without adding this.
+        """
+        hass = getattr(self, "hass", None)
+        if hass is None:
+            return
+        try:
+            hass.states.async_set(f"sensor.{object_id}", state, attributes or {})
+        except Exception:
+            pass
+
     @property
     def _last_refresh_at(self) -> dict[str, float]:
         if not hasattr(self, "_last_refresh_at_dict"):
@@ -697,6 +719,16 @@ class EntityAutoUpdateManager:
     def _handle_refresh_tick(self, _now: Any) -> None:
         now_wall = time.time()
         now_mono = time.monotonic()
+        self._publish_diagnostic_state(
+            "dratek_eink_scheduler_heartbeat",
+            _current_local_datetime().isoformat(),
+            {
+                "friendly_name": "DRATEK eInk - tep plánovače",
+                "configured_displays": len(self._configs),
+                "armed_interval_timers": len(getattr(self, "_interval_timers", {})),
+                "pending_refreshes": len(getattr(self, "_pending_refreshes", ())),
+            },
+        )
         # This sweep is the fallback that is supposed to catch and repair any
         # single display whose own dedicated timer chain (_sync_interval_timer)
         # broke - so one address raising here must never be allowed to abort
@@ -1467,6 +1499,11 @@ class EntityAutoUpdateManager:
         config = self._configs.get(address)
         if not config or not self._automation_enabled(config):
             return
+        self._publish_diagnostic_state(
+            "dratek_eink_last_schedule_attempt",
+            _current_local_datetime().isoformat(),
+            {"friendly_name": "DRATEK eInk - poslední naplánování zápisu", "address": address, "immediate": immediate},
+        )
         self._pending_refreshes.add(address)
         active_task = self._refresh_tasks.get(address)
         if active_task is not None and not active_task.done():
@@ -1506,8 +1543,18 @@ class EntityAutoUpdateManager:
                 # Values are read only after the wait. Changes that arrived
                 # during the interval are therefore already part of this image.
                 self._pending_refreshes.discard(address)
+                self._publish_diagnostic_state(
+                    "dratek_eink_last_refresh_attempt",
+                    _current_local_datetime().isoformat(),
+                    {"friendly_name": "DRATEK eInk - poslední pokus o zápis", "address": address, "outcome": "running"},
+                )
                 try:
                     await self._async_refresh(address)
+                    self._publish_diagnostic_state(
+                        "dratek_eink_last_refresh_attempt",
+                        _current_local_datetime().isoformat(),
+                        {"friendly_name": "DRATEK eInk - poslední pokus o zápis", "address": address, "outcome": "ok"},
+                    )
                 except Exception:
                     # Rendering and hardware-format conversion run before
                     # _async_refresh ever reaches the transfer queue, so a
@@ -1521,6 +1568,11 @@ class EntityAutoUpdateManager:
                     _LOGGER.exception(
                         "[%s] Automatic refresh failed before reaching the transfer queue.",
                         address,
+                    )
+                    self._publish_diagnostic_state(
+                        "dratek_eink_last_refresh_attempt",
+                        _current_local_datetime().isoformat(),
+                        {"friendly_name": "DRATEK eInk - poslední pokus o zápis", "address": address, "outcome": "error"},
                     )
                 finally:
                     # A skipped/merged queue entry must not schedule itself again.
