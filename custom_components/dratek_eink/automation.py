@@ -66,6 +66,16 @@ GATEWAY_ROUTE_CACHE_SECONDS = 30
 # normal operation - it only matters if something manages to hang past its
 # own nominal timeout.
 GATEWAY_ROUTE_LOOKUP_TIMEOUT_SECONDS = 20
+# Backstop for async_render_preview. Rendering normally takes well under a
+# second even for a complex 800x480 template; this only matters if something
+# in that chain (a service call, or the resvg SVG rasteriser this integration
+# shells out to via an executor thread for automatic text bindings) never
+# returns. asyncio.wait_for cannot reclaim a thread genuinely stuck in a
+# native/blocking call - the executor slot stays lost - but it does stop that
+# one hang from silently ending this display's automatic refresh forever: the
+# task un-blocks, the failure gets logged, and the next scheduled attempt (a
+# fresh executor thread) still runs normally.
+RENDER_TIMEOUT_SECONDS = 90
 # Every configured display is checked on this cadence to see whether its own
 # refresh_interval_seconds has elapsed - the shortest interval a user can pick
 # (MIN_REFRESH_INTERVAL_SECONDS) sets the floor, since checking any less often
@@ -686,28 +696,42 @@ class EntityAutoUpdateManager:
     def _handle_refresh_tick(self, _now: Any) -> None:
         now_wall = time.time()
         now_mono = time.monotonic()
-        for address, config in self._configs.items():
-            if self._refresh_trigger_mode(config) == "change_only":
-                continue
-            if not self._automation_enabled(config):
-                continue
-            interval = self._refresh_interval(config)
-            last_mono = self._last_refresh_at.get(address)
-            if last_mono is None:
-                self._schedule_refresh(address)
-                self._sync_interval_timer(address)
-                continue
-            overdue_mono = now_mono - last_mono
-            next_wall = self._next_scheduled_wall_time.get(address, 0.0)
-            if (next_wall > 0 and now_wall >= next_wall) or overdue_mono >= interval:
-                if overdue_mono >= interval * 2:
-                    _LOGGER.warning(
-                        "[%s] Automatic refresh is %.0fs overdue (interval %ds) - "
-                        "the periodic fallback tick just caught it now.",
-                        address, overdue_mono, interval,
-                    )
-                self._schedule_refresh(address)
-                self._sync_interval_timer(address)
+        # This sweep is the fallback that is supposed to catch and repair any
+        # single display whose own dedicated timer chain (_sync_interval_timer)
+        # broke - so one address raising here must never be allowed to abort
+        # the loop before it reaches every address after it. An unguarded
+        # exception on one bad config used to do exactly that: it silently
+        # wedged automatic refresh for every display listed after the broken
+        # one, every single tick, forever, with nothing about it logged.
+        for address, config in list(self._configs.items()):
+            try:
+                if self._refresh_trigger_mode(config) == "change_only":
+                    continue
+                if not self._automation_enabled(config):
+                    continue
+                interval = self._refresh_interval(config)
+                last_mono = self._last_refresh_at.get(address)
+                if last_mono is None:
+                    self._schedule_refresh(address)
+                    self._sync_interval_timer(address)
+                    continue
+                overdue_mono = now_mono - last_mono
+                next_wall = self._next_scheduled_wall_time.get(address, 0.0)
+                if (next_wall > 0 and now_wall >= next_wall) or overdue_mono >= interval:
+                    if overdue_mono >= interval * 2:
+                        _LOGGER.warning(
+                            "[%s] Automatic refresh is %.0fs overdue (interval %ds) - "
+                            "the periodic fallback tick just caught it now.",
+                            address, overdue_mono, interval,
+                        )
+                    self._schedule_refresh(address)
+                    self._sync_interval_timer(address)
+            except Exception:
+                _LOGGER.exception(
+                    "[%s] Periodic refresh fallback tick failed for this display; "
+                    "continuing with the rest of the fleet.",
+                    address,
+                )
 
     @staticmethod
     def _refresh_interval(config: dict[str, Any]) -> int:
@@ -756,8 +780,28 @@ class EntityAutoUpdateManager:
             config = self._configs.get(address)
             if not config or not self._automation_enabled(config):
                 return
-            self._schedule_refresh(address)
-            self._sync_interval_timer(address)
+            # This per-display chain only survives as long as every link
+            # re-arms the next one. An exception here used to end the chain
+            # for this address forever - silently, since a callback exception
+            # escaping to the event loop is not logged under this integration's
+            # own logger - leaving it to be caught (if at all) by the 30s
+            # fallback sweep in _handle_refresh_tick. Re-arm unconditionally so
+            # a single failed attempt costs one missed refresh, not all of them.
+            try:
+                self._schedule_refresh(address)
+            except Exception:
+                _LOGGER.exception(
+                    "[%s] Failed to schedule the clock-aligned automatic refresh.",
+                    address,
+                )
+            try:
+                self._sync_interval_timer(address)
+            except Exception:
+                _LOGGER.exception(
+                    "[%s] Failed to re-arm the next clock-aligned automatic refresh; "
+                    "the periodic fallback sweep should still catch it.",
+                    address,
+                )
 
         timers[address] = async_call_later(self.hass, delay, _run)
 
@@ -1376,22 +1420,33 @@ class EntityAutoUpdateManager:
         entity_id = event.data.get("entity_id")
         old_state = event.data.get("old_state")
         new_state = event.data.get("new_state")
-        for address, config in self._configs.items():
-            if self._refresh_trigger_mode(config) == "interval_only":
-                continue
-            if not self._automation_enabled(config):
-                continue
-            sources = {
-                (source_entity_id, attribute)
-                for binding in config.get("bindings", [])
-                for source_entity_id, attribute in _binding_sources(binding)
-                if source_entity_id == entity_id
-            }
-            if sources and any(
-                _source_value(old_state, attribute) != _source_value(new_state, attribute)
-                for _source_entity_id, attribute in sources
-            ):
-                self._schedule_refresh(address)
+        # Same isolation as _handle_refresh_tick: this fires on every relevant
+        # HA state change, so one config with a binding that raises here would
+        # otherwise abort the loop before every address after it ever gets
+        # checked, for as long as that bad binding persists.
+        for address, config in list(self._configs.items()):
+            try:
+                if self._refresh_trigger_mode(config) == "interval_only":
+                    continue
+                if not self._automation_enabled(config):
+                    continue
+                sources = {
+                    (source_entity_id, attribute)
+                    for binding in config.get("bindings", [])
+                    for source_entity_id, attribute in _binding_sources(binding)
+                    if source_entity_id == entity_id
+                }
+                if sources and any(
+                    _source_value(old_state, attribute) != _source_value(new_state, attribute)
+                    for _source_entity_id, attribute in sources
+                ):
+                    self._schedule_refresh(address)
+            except Exception:
+                _LOGGER.exception(
+                    "[%s] Handling a state change failed for this display; "
+                    "continuing with the rest of the fleet.",
+                    address,
+                )
 
     @callback
     def _schedule_refresh(self, address: str, immediate: bool = False) -> None:
@@ -1541,7 +1596,13 @@ class EntityAutoUpdateManager:
         config = self._configs.get(address)
         if not config or not self._automation_enabled(config):
             return None
-        image = await self.async_render_preview(address, config)
+        try:
+            async with asyncio.timeout(RENDER_TIMEOUT_SECONDS):
+                image = await self.async_render_preview(address, config)
+        except TimeoutError as exc:
+            raise RuntimeError(
+                f"Rendering exceeded the {RENDER_TIMEOUT_SECONDS}s safety timeout."
+            ) from exc
         route_type = config.get("route_type", "local")
         gateway_id = str(config.get("gateway_id") or "")
         transport_name = str(config.get("transport_name") or "")

@@ -2,7 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
-## [0.1.315] - 2026-08-19
+## [0.1.316] - 2026-08-20
+
+### Opraveno
+- **Automatické zápisy se mohly navždy zaseknout beze stopy v protokolu**: Vykreslení šablony při automatickém zápisu (včetně živých časových/datumových textů zaváděných v 0.1.314) nemělo žádný časový limit - pokud se kdekoli v tomto řetězci nikdy nevrátilo (např. zaseknutý běh vykreslovače SVG na pozadí), úloha daného displeje čekala navždy a žádný další pokus o zápis se už nikdy nespustil, bez jakékoli chybové hlášky. Nově je vykreslení omezeno 90sekundovým bezpečnostním limitem, po kterém se pokus vyhodnotí jako neúspěšný, zaloguje a displej se normálně zkusí znovu podle svého intervalu.
+- **Odolnost plánovače automatických zápisů proti jedné rozbité položce**: Periodická kontrola všech displejů, reakce na změnu entity i řetězec časovačů přesně zarovnaných na hodiny nově izolují chybu u jednoho displeje/konfigurace - dřív mohla jedna chyba tiše zastavit kontrolu i pro všechny další displeje v pořadí za ní, nebo ukončit řetězec časovačů natrvalo bez opětovného spuštění.
 
 ### Opraveno
 - **Barevná paleta náhledu pro velké displeje (BWR)**: Opraveno chybné přiřazení žlutého kanálu (`BWRY`) u velkých tříbarevných displejů (800x480, 400x300, 960x640, 1360x480 apod.). Ikony v šablonách se na náhledu hlavní stránky a v editoru nyní vykreslují správně v červené barvě odpovídající reálnému e-ink displeji.

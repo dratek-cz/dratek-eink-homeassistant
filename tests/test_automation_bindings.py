@@ -1150,6 +1150,38 @@ class AutomationBindingTests(unittest.TestCase):
         self.assertNotIn(address, manager._pending_refreshes)
         self.assertIn(address, manager._last_refresh_at)
 
+    def test_async_refresh_gives_up_on_a_render_that_never_returns(self):
+        # A real incident: automatic refresh for every configured display went
+        # completely silent for hours after one successful write, with nothing
+        # logged anywhere. async_render_preview dispatches rendering (including
+        # the resvg SVG rasteriser used for live text bindings) to an executor
+        # thread with no bound on how long that can take - a render that never
+        # returns there used to hang this address's refresh task forever, and
+        # _schedule_refresh's own "already have an active task" guard then
+        # silently refused every future attempt for that display too.
+        # RENDER_TIMEOUT_SECONDS must cut a stuck render off instead of letting
+        # it hang the task (and this display's automatic refresh) forever.
+        address = "FF:FF:92:81:46:32"
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager._configs = {
+            address: {"enabled": True, "bindings": [], "sdk_type": 46}
+        }
+
+        async def never_returns(_address, _config):
+            await asyncio.sleep(3600)
+
+        manager.async_render_preview = never_returns
+
+        original_timeout = automation.RENDER_TIMEOUT_SECONDS
+        automation.RENDER_TIMEOUT_SECONDS = 0.05
+        try:
+            with self.assertRaises(RuntimeError):
+                asyncio.run(manager._async_refresh(address))
+        finally:
+            automation.RENDER_TIMEOUT_SECONDS = original_timeout
+
     def test_series_binding_reads_the_live_timestamped_attribute_series(self):
         manager = automation.EntityAutoUpdateManager.__new__(automation.EntityAutoUpdateManager)
         manager.hass = types.SimpleNamespace(
