@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.319
+
+- **Integrace rozdělena na tři diagnostické bloky** – na stránce integrace jsou nyní tři samostatná zařízení: **Rozhraní**, **Automatické zápisy** a **Přenos do zařízení**. Každé má vlastní senzory ukazující, zda a kdy naposledy daná část proběhla a jak dopadla, takže jde hned poznat, ve které části řetězce automatický zápis vázne.
+
 ## Novinky ve verzi 0.1.318
 
 - **Živé diagnostické stavy pro automatické zápisy** – čtyři nové stavy viditelné v Nástroje pro vývojáře → Stavy ukazují, kdy naposledy proběhl tik plánovače, kdy byl naposledy naplánován zápis pro konkrétní displej, jak dopadl poslední pokus o vykreslení a jak dopadl poslední přenos do zařízení – pomáhá poznat, kde přesně automatický zápis vázne, bez nutnosti exportovat log.

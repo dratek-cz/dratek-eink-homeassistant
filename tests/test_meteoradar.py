@@ -423,7 +423,10 @@ class CameraPlatformWiringTests(unittest.TestCase):
 
     def test_camera_platform_is_forwarded_from_setup_entry(self) -> None:
         init_source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
-        self.assertIn("PLATFORMS: list[Platform] = [Platform.CAMERA]", init_source)
+        # Asserted per-platform rather than against the whole literal, so
+        # adding another platform (sensor.py's diagnostic blocks) does not
+        # fail a test that only cares that CAMERA is still wired up.
+        self.assertIn("Platform.CAMERA", init_source)
         self.assertIn("await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)", init_source)
         self.assertIn("await hass.config_entries.async_unload_platforms(entry, PLATFORMS)", init_source)
 

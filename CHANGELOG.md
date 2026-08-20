@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.319] - 2026-08-20
+
+### Přidáno
+- **Integrace rozdělena na tři diagnostické bloky**: Na stránce integrace se nyní zobrazují tři samostatná zařízení - **Rozhraní** (panel v prohlížeči), **Automatické zápisy** (plánovač a vykreslování) a **Přenos do zařízení** (fronta a odeslání přes BLE/gateway). Každý blok má vlastní senzory, které ukazují, zda a kdy naposledy proběhl a jak dopadl, takže jde na první pohled poznat, ve které části řetězce automatický zápis vázne - bez nutnosti exportovat a číst log fronty.
+- Nahrazuje syrové stavy zavedené v 0.1.318 plnohodnotnými entitami, které přežijí restart a lze na ně navázat automatizace či grafy.
+
 ## [0.1.318] - 2026-08-20
 
 ### Přidáno

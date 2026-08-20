@@ -24,7 +24,7 @@ _LOGGER = logging.getLogger(__name__)
 # Assistant, so it is a real camera entity instead - inspectable in Developer
 # Tools like any other camera, and read through the same camera.async_get_image
 # API a user's own camera entities already go through.
-PLATFORMS: list[Platform] = [Platform.CAMERA]
+PLATFORMS: list[Platform] = [Platform.CAMERA, Platform.SENSOR]
 GATEWAY_MONITOR_INTERVAL = timedelta(seconds=30)
 PANEL_URL_PATH = "dratek-eink"
 # The version belongs in the path, not in a ?v= query on the entry file alone.
