@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.323] - 2026-08-20
+
+### Přidáno a vylepšeno
+- **Dokončen anglický překlad celého rozhraní**: Doplněno přes 580 chybějících překladů napříč všemi sekcemi panelu - Displeje, Mapa připojení, Fronta zápisu, Automatické zápisy, Gatewaye, Designer, Inspector, Proměnné, Šablony i přehledová Lovelace karta. Při přepnutí na angličtinu už nezůstávají české texty v popiscích, tlačítkách, nápovědách ani chybových hláškách.
+- Odstraněno 6 duplicitních klíčů v překladové mapě (v JavaScriptu tiše přepíšou dřívější záznam).
+- Nový test hlídá, že se s každým dalším českým textem doplní i jeho anglická verze. Záměrně nepřekládané texty (jména ze jmenného kalendáře, ukázková data kreslená na displej a interní fragmenty pro párování entit) jsou v testu vyjmenované i s důvodem.
+
 ## [0.1.322] - 2026-08-20
 
 ### Opraveno

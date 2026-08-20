@@ -4,6 +4,10 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.323
+
+- **Dokončen anglický překlad celého rozhraní** – doplněno přes 580 chybějících překladů napříč všemi sekcemi panelu (Displeje, Mapa připojení, Fronta zápisu, Automatické zápisy, Gatewaye, Designer, Inspector, Proměnné, Šablony i Lovelace karta). Po přepnutí na angličtinu už nikde nezůstávají české texty. Nový test navíc hlídá, že se s každým dalším českým textem doplní i jeho anglická verze.
+
 ## Novinky ve verzi 0.1.322
 
 - **Automatický zápis se po doběhnutí intervalu odešle vždy** – přepínač „Odesílat i beze změny" je nově výchozím stavu zapnutý. Dřív se zápis přeskočil, když vyšel obrázek shodný s tím na displeji, takže po prvním automatickém zápisu se displej už nikdy nepřepsal. Kdo chce šetřit baterii, může přepínač u displeje vypnout.

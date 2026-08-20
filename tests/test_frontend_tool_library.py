@@ -1076,7 +1076,13 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn("<h1>DRATEK eInk</h1>", self.source)
 
     def test_header_language_switch_and_page_help_are_available_everywhere(self):
-        self.assertIn('import { i18nMixin } from "./panel/panel-i18n.mixin.js";', self.source)
+        # Matched without the cache-busting query, which changes whenever the
+        # mixin's contents do - what matters here is only that the panel still
+        # imports it.
+        self.assertRegex(
+            self.source,
+            r'import \{ i18nMixin \} from "\./panel/panel-i18n\.mixin\.js(\?v=[^"]*)?";',
+        )
         self.assertIn("i18nMixin,", self.source)
         self.assertIn('data-language="cs"', self.source)
         self.assertIn('data-language="en"', self.source)

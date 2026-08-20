@@ -10,13 +10,13 @@ import { templatesMixin } from "./panel/panel-templates.mixin.js?v=readable-char
 import { variablesMixin } from "./panel/panel-variables.mixin.js?v=readable-chart-type-2";
 import { previewMixin } from "./panel/panel-preview.mixin.js?v=device-preview-quality-1";
 import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=queue-send-rename-1";
-import { i18nMixin } from "./panel/panel-i18n.mixin.js";
+import { i18nMixin } from "./panel/panel-i18n.mixin.js?v=full-en-translation-1";
 import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=pointer-capture-fix-1";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js?v=templates-4c-1";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
 import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=meteoradar-sidebar-block-1";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.322";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.323";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
