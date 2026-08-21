@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.335] - 2026-08-21
+
+### Opraveno
+- **Srážky jako na klasické e-ink radarové mapě**: běžné srážky se na čtyřbarevném BWRY displeji vykreslují žlutým rastrem, jehož hustota roste s intenzitou; nejsilnější červené odrazy zůstávají červené.
+- **Tříbarevná varianta používá červený rastr**: stejná informace o intenzitě se na BWR zobrazí pomocí bílé a červené, protože žlutý pigment není k dispozici.
+- **Černá je vyhrazena hranicím a textu**: radarové modré ani azurové pixely už nevytvářejí černé srážkové plochy.
+
 ## [0.1.334] - 2026-08-21
 
 ### Opraveno

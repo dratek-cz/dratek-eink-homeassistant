@@ -665,11 +665,12 @@ def _paint_precipitation(
 
     RainViewer's Universal Blue tiles use dark blue/cyan for ordinary rain.
     Sending those RGB values straight to an e-ink nearest-colour palette turns
-    an opaque blue field into solid black. Instead, alpha plus the cool colour
-    signal controls black-dot coverage, while warm yellow/red echoes select the
-    accent ink. This keeps the source raster's detail without mistaking blue
-    screen colour for black pigment. The legacy ``dotted_light`` option remains
-    accepted for stored configurations but deliberately has no effect.
+    an opaque blue field into solid black. Instead, alpha plus the source colour
+    controls the density of an accent-colour halftone: yellow on BWRY and red on
+    BWR. Truly hot red echoes use red on BWRY as well. Black remains reserved
+    for map outlines and labels, matching a conventional e-ink radar map. The
+    legacy ``dotted_light`` option remains accepted for stored configurations
+    but deliberately has no effect.
     """
     comp_rgba = composite.convert("RGBA")
     red, green, blue, alpha = comp_rgba.split()
@@ -682,25 +683,19 @@ def _paint_precipitation(
             precipitation_mask, area_mask.convert("1")
         )
 
-    # Ordinary blue/cyan echoes become a neutral tone before dithering. Alpha
-    # supplies most of the density; red/green growth within RainViewer's ramp
-    # adds detail for stronger cyan/green cells. Quantising this layer against
-    # BW only is intentional: a mid-grey is numerically close to red, and an
-    # unrestricted palette would sprinkle false red into ordinary rain.
+    # Alpha supplies most of the coverage; red/green growth within RainViewer's
+    # ramp adds detail for stronger cyan/green cells. Keeping this as a scalar
+    # coverage plane prevents dark source-blue RGB from being confused with
+    # black ink.
     alpha_strength = alpha.point([
         0 if value < min_alpha
-        else round(20 + 90 * (value - min_alpha) / max(1, 255 - min_alpha))
+        else round(28 + 132 * (value - min_alpha) / max(1, 255 - min_alpha))
         for value in range(256)
     ])
     cool_colour_strength = ImageChops.lighter(red, green).point([
-        min(72, round(value * 72 / 255)) for value in range(256)
+        min(80, round(value * 80 / 255)) for value in range(256)
     ])
     cool_strength = ImageChops.add(alpha_strength, cool_colour_strength)
-    cool_tone = ImageChops.invert(cool_strength)
-    cool_source = Image.merge("RGB", (cool_tone, cool_tone, cool_tone))
-    cool_dithered = _dither_to_palette(
-        cool_source, ((255, 255, 255), BORDER_COLOR)
-    )
 
     red_high = red.point([0 if value < 150 else 255 for value in range(256)], mode="1")
     blue_low = blue.point([255 if value < 150 else 0 for value in range(256)], mode="1")
@@ -713,9 +708,6 @@ def _paint_precipitation(
         ImageChops.logical_or(green_high, red_leads),
     )
     warm = ImageChops.logical_and(warm, precipitation_mask)
-    cool_mask = ImageChops.logical_and(precipitation_mask, ImageChops.invert(warm))
-    output.paste(cool_dithered, mask=cool_mask)
-
     # Warm echoes retain their alpha as colour coverage rather than becoming a
     # solid block merely because the source hue is red or yellow.
     warm_coverage = alpha.point([
@@ -724,11 +716,13 @@ def _paint_precipitation(
         for value in range(256)
     ])
 
-    def tinted_source(ink: tuple[int, int, int]) -> Image.Image:
+    def tinted_source(
+        ink: tuple[int, int, int], coverage: Image.Image
+    ) -> Image.Image:
         return Image.merge("RGB", tuple(
-            warm_coverage.point([
-                round(255 + coverage * (channel - 255) / 255)
-                for coverage in range(256)
+            coverage.point([
+                round(255 + amount * (channel - 255) / 255)
+                for amount in range(256)
             ])
             for channel in ink
         ))
@@ -736,20 +730,29 @@ def _paint_precipitation(
     if preserve_yellow:
         hot_red = ImageChops.logical_and(warm, red_leads)
         warm_yellow = ImageChops.logical_and(warm, ImageChops.invert(hot_red))
+        yellow_coverage = cool_strength.copy()
+        yellow_coverage.paste(warm_coverage, mask=warm_yellow)
         yellow_dithered = _dither_to_palette(
-            tinted_source(PRECIPITATION_YELLOW),
+            tinted_source(PRECIPITATION_YELLOW, yellow_coverage),
             ((255, 255, 255), PRECIPITATION_YELLOW),
         )
-        output.paste(yellow_dithered, mask=warm_yellow)
-        red_mask = hot_red
+        yellow_mask = ImageChops.logical_and(
+            precipitation_mask, ImageChops.invert(hot_red)
+        )
+        output.paste(yellow_dithered, mask=yellow_mask)
+        red_dithered = _dither_to_palette(
+            tinted_source(PRECIPITATION_COLOR, warm_coverage),
+            ((255, 255, 255), PRECIPITATION_COLOR),
+        )
+        output.paste(red_dithered, mask=hot_red)
     else:
-        red_mask = warm
-
-    red_dithered = _dither_to_palette(
-        tinted_source(PRECIPITATION_COLOR),
-        ((255, 255, 255), PRECIPITATION_COLOR),
-    )
-    output.paste(red_dithered, mask=red_mask)
+        red_coverage = cool_strength.copy()
+        red_coverage.paste(warm_coverage, mask=warm)
+        red_dithered = _dither_to_palette(
+            tinted_source(PRECIPITATION_COLOR, red_coverage),
+            ((255, 255, 255), PRECIPITATION_COLOR),
+        )
+        output.paste(red_dithered, mask=precipitation_mask)
 
 
 def _draw_wind_vectors(

@@ -74,13 +74,13 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.334",
-        name="DRATEK eInk v0.1.334",
-        body="""## Release 0.1.334
+        tag="v0.1.335",
+        name="DRATEK eInk v0.1.335",
+        body="""## Release 0.1.335
 
 ### Opraveno
-- **Žádné souvislé černé srážky**: modré a azurové RainViewer pixely nově určují hustotu černobílého rastru místo přímého převodu modré na černou.
-- **Správné akcentní barvy**: teplé odrazy používají na BWR červenou a na BWRY žlutou nebo červenou; běžná srážka zůstává bez falešných barevných bodů.
-- **Jemný 1px obrys států** místo příliš silné 3px linky.
+- **Žlutě stínované srážky na BWRY**: běžné srážky používají žlutý polotónový rastr s hustotou podle intenzity, nejsilnější odrazy jsou červené.
+- **Červeně stínované srážky na BWR**: tříbarevné displeje zachovají odstupňování bez žlutého pigmentu.
+- **Žádné černé srážkové plochy**: černá je vyhrazena hranicím mapy a textu.
 """,
     )

@@ -216,23 +216,26 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         colors_bwr = set(list(image_bwr.getdata()))
         self.assertTrue(colors_bwr <= {(255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.BORDER_COLOR})
 
-    def test_cool_radar_echo_is_shaded_directly_in_black_and_white(self) -> None:
-        image = self._compose((0, 100, 200, 160), preserve_yellow=True)
-        colors = set(image.getdata())
-        self.assertIn(meteoradar.BORDER_COLOR, colors)
-        self.assertIn((255, 255, 255), colors)
-        self.assertNotIn(meteoradar.PRECIPITATION_COLOR, colors)
-        self.assertNotIn(meteoradar.PRECIPITATION_YELLOW, colors)
+    def test_bwry_cool_radar_echo_is_a_yellow_halftone(self) -> None:
+        source = Image.new("RGBA", (64, 64), (0, 100, 200, 160))
+        image = Image.new("RGB", source.size, "white")
+        meteoradar._paint_precipitation(image, source, preserve_yellow=True)
+        area = list(image.getdata())
+        yellow_ratio = sum(pixel == meteoradar.PRECIPITATION_YELLOW for pixel in area) / len(area)
+        self.assertGreater(yellow_ratio, 0.20)
+        self.assertLess(yellow_ratio, 0.90)
+        self.assertNotIn(meteoradar.BORDER_COLOR, area)
+        self.assertNotIn(meteoradar.PRECIPITATION_COLOR, area)
 
-        cx, cy = image.width // 2, image.height // 2
-        area = [
-            image.getpixel((x, y))
-            for y in range(cy - 25, cy + 26)
-            for x in range(cx - 25, cx + 26)
-        ]
-        black_ratio = sum(pixel == meteoradar.BORDER_COLOR for pixel in area) / len(area)
-        self.assertGreater(black_ratio, 0.08)
-        self.assertLess(black_ratio, 0.70)
+    def test_bwr_cool_radar_echo_is_a_red_halftone(self) -> None:
+        source = Image.new("RGBA", (64, 64), (0, 100, 200, 160))
+        image = Image.new("RGB", source.size, "white")
+        meteoradar._paint_precipitation(image, source, preserve_yellow=False)
+        area = list(image.getdata())
+        red_ratio = sum(pixel == meteoradar.PRECIPITATION_COLOR for pixel in area) / len(area)
+        self.assertGreater(red_ratio, 0.20)
+        self.assertLess(red_ratio, 0.90)
+        self.assertNotIn(meteoradar.BORDER_COLOR, area)
 
     def test_bwry_warm_echo_uses_the_yellow_pigment(self) -> None:
         image = self._compose((244, 196, 0, 255), preserve_yellow=True)
@@ -244,15 +247,15 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         self.assertIn(meteoradar.PRECIPITATION_COLOR, colors)
         self.assertNotIn(meteoradar.PRECIPITATION_YELLOW, colors)
 
-    def test_stronger_cool_echo_has_more_black_coverage(self) -> None:
+    def test_stronger_cool_echo_has_more_yellow_coverage(self) -> None:
         light = self._compose((0, 100, 200, 80), preserve_yellow=True)
         moderate = self._compose((0, 100, 200, 220), preserve_yellow=True)
         cx, cy = light.width // 2, light.height // 2
         area = [(x, y) for y in range(cy - 25, cy + 26) for x in range(cx - 25, cx + 26)]
-        light_black = sum(light.getpixel(point) == meteoradar.BORDER_COLOR for point in area)
-        moderate_black = sum(moderate.getpixel(point) == meteoradar.BORDER_COLOR for point in area)
-        self.assertGreater(moderate_black, light_black)
-        self.assertLess(moderate_black, len(area))
+        light_yellow = sum(light.getpixel(point) == meteoradar.PRECIPITATION_YELLOW for point in area)
+        moderate_yellow = sum(moderate.getpixel(point) == meteoradar.PRECIPITATION_YELLOW for point in area)
+        self.assertGreater(moderate_yellow, light_yellow)
+        self.assertLess(moderate_yellow, len(area))
 
     def test_wind_arrows_are_bold_and_clipped_to_the_country(self) -> None:
         plain = self._compose((0, 0, 0, 0), show_wind=False)
