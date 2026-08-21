@@ -4,11 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
-## Novinky ve verzi 0.1.331
+## Novinky ve verzi 0.1.332
 
-- **Meteoradar vykresluje srážky přes celou mapu** – srážková pole se nově neořezávají pouze dovnitř vybraného polygonu státu, ale pokrývají celou plochu mapového výřezu i s přesahem za hranice. Obrys státu a domovský marker jsou zřetelně vykresleny jako černá/červená vrstva přes srážky.
-- **Detailní stínované srážky s adaptivním ditheringem** – nahrazení dřívějších hrubých šachovnic plynulým přechodem intenzity srážek s Floyd-Steinberg rozptylem chyby na míru konkrétnímu typu displeje (BWRY, BWR, BW).
-- **Zvýrazněný předěl levého panelu** – oddělovací linka mezi bočním panelem s předpovědí a mapou meteoradaru byla zesílena na zřetelnou 2px linku.
+- **Mapa připojení ukazuje všechny právě naměřené cesty** – při otevření i každých 30 sekund se obnoví lokální Bluetooth a scany gatewayí. Ruční zámek už z mapy neschová ostatní gatewaye ani jádro Home Assistantu, které displej skutečně slyší; zámek nadále omezuje jen cestu použitou pro odesílání.
+- **800×480 funguje i přes obyčejnou ESP32 gateway** – firmware gatewaye `0.1.60` ukládá velký payload do neaktivního OTA oddílu flash místo požadavku na jeden obří souvislý blok RAM. BLE přenos zůstává blokový a umí z flash znovu načíst i blok, který si displej vyžádá opakovaně. Po aktualizaci integrace je nutné nahrát nový firmware také do gatewaye.
+- **Meteoradar už nezablokuje Home Assistant** – displeje se stejnými parametry sdílejí jeden probíhající render, náročná kompozice běží nejvýše jedna současně a timeout jednoho displeje nezruší práci ostatním.
+- **Meteoradar se počítá rovnou pro cílový displej** – pixelové Python smyčky nahradily nativní operace Pillow a mapa se ořízne a zmenší ještě před barvením. Malý panel tak už neplatí cenu za zpracování velké megapixelové mapy.
+- **Fronta zápisu zůstává ovladatelná během přenosu** – každou sekundu se aktualizuje jen živý stav a log konkrétní úlohy, nikoli celé rozhraní.
+- **Zeroconf discovery neblokuje jádro HA** – hledání gatewayí i načtení detailů služeb je plně asynchronní.
 
 ## Novinky ve verzi 0.1.327
 

@@ -569,6 +569,24 @@ export const gatewayMixin = {
     return `<div class="density-toolbar">${options.map(([value, icon, label]) => `<button class="secondary density-btn ${effective === value ? "active" : ""}" data-view-scope="${scope}" data-view-mode="${value}" title="${label}" aria-label="${label}"><ha-icon icon="${icon}"></ha-icon></button>`).join("")}</div>`;
   },
 
+  _deviceTopologyPaths(device) {
+    const measured = Array.isArray(device?.observed_paths) && device.observed_paths.length
+      ? device.observed_paths
+      : (Array.isArray(device?.paths) ? device.paths : []);
+    const unique = new Map();
+    measured.forEach((path) => {
+      const key = this._gatewayHubKey(path);
+      if (!key) return;
+      const previous = unique.get(key);
+      const currentLive = !path?.temporarily_unseen;
+      const previousLive = previous && !previous.temporarily_unseen;
+      if (!previous || (currentLive && !previousLive) || Number(path?.rssi ?? -999) > Number(previous?.rssi ?? -999)) {
+        unique.set(key, path);
+      }
+    });
+    return [...unique.values()];
+  },
+
   _topologyGroups(devices) {
     const groups = new Map();
     (this._gateways || []).forEach((gateway) => {
@@ -588,8 +606,18 @@ export const gatewayMixin = {
         devices: [],
       });
     });
+    // Alternative measured routes need their own hubs too. In particular, HA
+    // Bluetooth is often a backup while a gateway is preferred; previously no
+    // local hub was created in that case, so its otherwise valid edge had no
+    // endpoint and silently disappeared.
     (devices || []).forEach((device) => {
-      const paths = device.paths || [];
+      this._deviceTopologyPaths(device).forEach((path) => {
+        const key = this._gatewayHubKey(path);
+        if (key && !groups.has(key)) groups.set(key, { key, path, devices: [] });
+      });
+    });
+    (devices || []).forEach((device) => {
+      const paths = this._deviceTopologyPaths(device);
       const preferred = device.preferred_path || null;
       const matchingPath = preferred
         ? paths.find((path) => path.type === preferred.type && String(path.id ?? "") === String(preferred.id ?? ""))
@@ -711,7 +739,7 @@ export const gatewayMixin = {
   _gatewayHubKey(path) {
     if (!path || !path.type) return "";
     if (path.type === "local") {
-      const identity = path.host || path.name || "default";
+      const identity = path.id || path.host || path.name || LOCAL_ROUTE_ID;
       return `local:${String(identity).trim().toLowerCase()}`;
     }
     if (path.type === "gateway") {
@@ -731,7 +759,7 @@ export const gatewayMixin = {
 
     const reach = new Map(hubGroups.map((group) => [group.key, new Set()]));
     (devices || []).forEach((device) => {
-      (device.paths || []).forEach((path) => {
+      this._deviceTopologyPaths(device).forEach((path) => {
         const key = this._gatewayHubKey(path);
         if (reach.has(key)) reach.get(key).add(device.address);
       });
@@ -859,13 +887,17 @@ export const gatewayMixin = {
       // navic "highlight" priznak, kdyz patri fokusovanemu displeji.
       const highlight = focus && related;
       let matchedPreferred = false;
-      (device.paths || []).forEach((path) => {
+      this._deviceTopologyPaths(device).forEach((path) => {
         const key = this._gatewayHubKey(path);
         const hub = hubPositions.get(key);
         if (!hub) return;
         const isActive = Boolean(key) && key === preferredKey;
         if (isActive) matchedPreferred = true;
-        if (!isActive && !showAlternatives && !(focus && related)) return;
+        // Every route heard in the current scan is real topology and is always
+        // shown. The toggle only controls retained, temporarily-unseen routes
+        // from an older scan, which are useful diagnostics but can clutter a
+        // busy site when displayed permanently.
+        if (!isActive && path.temporarily_unseen && !showAlternatives && !(focus && related)) return;
         (isActive ? edgesActive : edgesFaded).push({ x1: hub.x, y1: hub.y, x2: pos.x, y2: pos.y, dimmed: !related, highlight: highlight && !isActive });
       });
       // Rucni zamek muze mirit na gateway, kterou displej sam nikdy nehlasil
@@ -949,7 +981,7 @@ export const gatewayMixin = {
         <span><i class="gwmap-legend-dot is-local"></i>Bluetooth Home Assistantu</span>
         <span><i class="gwmap-legend-line is-active"></i>Právě obsluhuje</span>
         <span><i class="gwmap-legend-line is-faded"></i>Záložní trasa (jen slyší)</span>
-        <label class="gwmap-legend-toggle" title="Zobrazí i gatewaye, které displej pouze slyší, ale právě přes ně nic neposílá."><input type="checkbox" data-map-show-alternatives ${showAlternatives ? "checked" : ""}>Zobrazit záložní trasy</label>
+        <label class="gwmap-legend-toggle" title="Zobrazí i dříve naměřené trasy, které aktuální scan právě nepotvrdil."><input type="checkbox" data-map-show-alternatives ${showAlternatives ? "checked" : ""}>Zobrazit dříve viděné trasy</label>
         <span class="gwmap-legend-hint"><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon>Klikněte na displej a uvidíte všechny jeho trasy</span>
         <span class="gwmap-legend-hint"><ha-icon icon="mdi:mouse-move-vertical"></ha-icon>Kolečko = zoom, levé tlačítko = posun</span>
         ${focus ? `<button class="gwmap-legend-clear" data-map-focus-device="">Zrušit zvýraznění</button>` : ""}

@@ -183,6 +183,8 @@ class BwrIntensityTests(unittest.TestCase):
         source = (COMPONENT / "render.py").read_text(encoding="utf-8")
         call = source[source.index("radar_img = await async_render_meteoradar(") :][:600]
         self.assertIn("preserve_yellow=preserve_yellow,", call)
+        self.assertIn("target_width=width,", call)
+        self.assertIn("target_height=height", call)
         meteoradar = (COMPONENT / "meteoradar.py").read_text(encoding="utf-8")
         self.assertIn("_y{int(preserve_yellow)}_h{marker_key}", meteoradar)
 

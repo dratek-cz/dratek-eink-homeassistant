@@ -298,7 +298,9 @@ export const inspectorMixin = {
         await Promise.all([
           this._loadGateways(false),
           this._loadQueue(true),
+          this._scan({ background: true }),
         ]);
+        this._scheduleDeviceStatusPoll();
       }
       if (this._activeTab === "gateways") {
         // Kapacita gatewaye i dlaždice "Zapisují" čtou frontu přes

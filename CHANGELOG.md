@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.332] - 2026-08-21
+
+### Přidáno a vylepšeno
+- **Spolehlivější mapa připojení**: Otevření mapy nyní rovnou spustí nový lokální i gateway scan a po dobu zobrazení jej pravidelně obnovuje. Backend odděluje všechny skutečně naměřené trasy od trasy povolené ručním zámkem, takže mapa ukáže i další gatewaye a Bluetooth jádra HA, které displej slyší, aniž by se změnilo směrování přenosů. Opraven byl také rozdílný identifikátor lokálního HA uzlu, kvůli kterému se k němu hrany v myšlenkové mapě vůbec nepřipojily. Aktuálně potvrzené záložní trasy jsou vidět vždy; přepínač ovládá jen starší dočasně nepotvrzená měření.
+- **800×480 přes obyčejnou ESP32 gateway**: Gateway firmware `0.1.60` už nemusí držet celý vendorový payload v souvislém bloku RAM. Přenosy nad bezpečný RAM limit se během HTTP uploadu ukládají do neaktivního OTA oddílu flash a BLE worker z něj čte jednotlivé bloky náhodným přístupem, takže zvládne i opakované požadavky displeje. Payload 800×480 BWR o velikosti 100 504 B tak nově projde i přes plain ESP32. Gateway přes `/api/status` oznamuje svůj skutečný limit a integrace jej respektuje; starší firmware zůstává chráněný původním limitem.
+- **Meteoradar už neblokuje Home Assistant**: Stejný probíhající render sdílejí všechny displeje se shodnými parametry a současně může běžet nejvýše jedna náročná kompozice. Timeout jednoho čekajícího displeje sdílenou práci nezruší.
+- **Nativní a cílově velký render meteoradaru**: Pythonové smyčky přes jednotlivé pixely nahradily nativní operace Pillow. Mapový výřez se ořízne a zmenší ještě před barvením přímo podle cílového rozlišení displeje, takže se zbytečně nezpracovává megapixelová plocha.
+- **Plynulá fronta zápisu**: Pravidelný postup přenosu mění jen text živého logu a jeho počitadlo. Celý shadow DOM panelu se překreslí až při strukturální změně fronty, takže ovládání a přepínání během odesílání nezamrzá.
+- **Asynchronní hledání gatewayí**: Zeroconf používá asynchronní browser i načtení detailu služby a již neblokuje hlavní event loop Home Assistantu.
+
 ## [0.1.331] - 2026-08-21
 
 ### Přidáno a vylepšeno

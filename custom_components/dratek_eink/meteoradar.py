@@ -626,98 +626,23 @@ def _draw_home_marker(
 
 
 def dither_to_eink_palette(image: Image.Image, preserve_yellow: bool = True) -> Image.Image:
-    """Error-diffusion (Floyd-Steinberg) dithering to BWR or BWRY e-ink palette."""
-    rgb = image.convert("RGB")
-    w, h = rgb.size
-    raw_pixels = rgb.load()
+    """Floyd-Steinberg dithering in Pillow's native C implementation.
 
-    out = Image.new("RGB", (w, h), (255, 255, 255))
-    out_pixels = out.load()
-
-    cur_err = [[0.0, 0.0, 0.0] for _ in range(w)]
-    nxt_err = [[0.0, 0.0, 0.0] for _ in range(w)]
-
-    for y in range(h):
-        for x in range(w):
-            orig_r, orig_g, orig_b = raw_pixels[x, y]
-            err = cur_err[x]
-            r = max(0.0, min(255.0, float(orig_r) + err[0]))
-            g = max(0.0, min(255.0, float(orig_g) + err[1]))
-            b = max(0.0, min(255.0, float(orig_b) + err[2]))
-
-            # Fast-path for plain white without error
-            if (
-                orig_r == 255
-                and orig_g == 255
-                and orig_b == 255
-                and abs(err[0]) < 0.5
-                and abs(err[1]) < 0.5
-                and abs(err[2]) < 0.5
-            ):
-                out_pixels[x, y] = (255, 255, 255)
-                continue
-
-            # Pick candidate palette based on hue family of the source pixel
-            if preserve_yellow:
-                if orig_r >= 240 and orig_g >= 190 and orig_b <= 50:
-                    candidates = (PRECIPITATION_YELLOW,)
-                elif orig_g > 150 and orig_b < 100:
-                    candidates = ((255, 255, 255), PRECIPITATION_YELLOW)
-                elif orig_g > 60 and orig_b < 60:
-                    candidates = (PRECIPITATION_YELLOW, PRECIPITATION_COLOR)
-                elif orig_r > 150 and orig_g < 60:
-                    candidates = (PRECIPITATION_COLOR,)
-                elif orig_r < 50 and orig_g < 50 and orig_b < 50:
-                    candidates = (BORDER_COLOR,)
-                else:
-                    candidates = ((255, 255, 255), PRECIPITATION_YELLOW, PRECIPITATION_COLOR, BORDER_COLOR)
-            else:
-                if orig_r > 180 and orig_g < 50:
-                    candidates = (PRECIPITATION_COLOR,)
-                elif orig_r < 50 and orig_g < 50 and orig_b < 50:
-                    candidates = (BORDER_COLOR,)
-                elif orig_r > 150:
-                    candidates = ((255, 255, 255), PRECIPITATION_COLOR)
-                else:
-                    candidates = ((255, 255, 255), PRECIPITATION_COLOR, BORDER_COLOR)
-
-            best_col = candidates[0]
-            min_dist = float("inf")
-            for pr, pg, pb in candidates:
-                dr = r - float(pr)
-                dg = g - float(pg)
-                db = b - float(pb)
-                dist = dr * dr + dg * dg + db * db
-                if dist < min_dist:
-                    min_dist = dist
-                    best_col = (pr, pg, pb)
-
-            out_pixels[x, y] = best_col
-
-            er = r - float(best_col[0])
-            eg = g - float(best_col[1])
-            eb = b - float(best_col[2])
-
-            if x + 1 < w:
-                cur_err[x + 1][0] += er * (7.0 / 16.0)
-                cur_err[x + 1][1] += eg * (7.0 / 16.0)
-                cur_err[x + 1][2] += eb * (7.0 / 16.0)
-            if x > 0:
-                nxt_err[x - 1][0] += er * (3.0 / 16.0)
-                nxt_err[x - 1][1] += eg * (3.0 / 16.0)
-                nxt_err[x - 1][2] += eb * (3.0 / 16.0)
-            nxt_err[x][0] += er * (5.0 / 16.0)
-            nxt_err[x][1] += eg * (5.0 / 16.0)
-            nxt_err[x][2] += eb * (5.0 / 16.0)
-            if x + 1 < w:
-                nxt_err[x + 1][0] += er * (1.0 / 16.0)
-                nxt_err[x + 1][1] += eg * (1.0 / 16.0)
-                nxt_err[x + 1][2] += eb * (1.0 / 16.0)
-
-        cur_err = nxt_err
-        nxt_err = [[0.0, 0.0, 0.0] for _ in range(w)]
-
-    return out
+    The former implementation walked every pixel in Python and held the GIL
+    for tens of seconds on small Home Assistant hosts. Pillow performs the same
+    error diffusion without starving the event loop or other executor jobs.
+    """
+    colors = [(255, 255, 255)]
+    if preserve_yellow:
+        colors.append(PRECIPITATION_YELLOW)
+    colors.extend((PRECIPITATION_COLOR, BORDER_COLOR))
+    palette = Image.new("P", (1, 1))
+    flat = [channel for color in colors for channel in color]
+    palette.putpalette(flat + [0] * (768 - len(flat)))
+    return image.convert("RGB").quantize(
+        palette=palette,
+        dither=Image.Dither.FLOYDSTEINBERG,
+    ).convert("RGB")
 
 
 def _precipitation_intensity_fills(
@@ -758,56 +683,54 @@ def _paint_precipitation(
     dotted_light: bool = True,
     preserve_yellow: bool = True,
 ) -> None:
-    """Paint detailed shaded precipitation onto ``output`` with Floyd-Steinberg dithering."""
+    """Paint detailed shaded precipitation using native Pillow band operations."""
     comp_rgba = composite.convert("RGBA")
-    w, h = comp_rgba.size
-    comp_pixels = comp_rgba.load()
-
-    shaded = Image.new("RGB", (w, h), (255, 255, 255))
-    shaded_pixels = shaded.load()
-
+    red, _green, blue, alpha = comp_rgba.split()
     min_alpha = 40
-    for y in range(h):
-        for x in range(w):
-            r, g, b, a = comp_pixels[x, y]
-            if a < min_alpha:
-                continue
+    low_intensity = alpha.point([
+        0 if value < min_alpha
+        else round((0.15 + 0.50 * min(1.0, (value - min_alpha) / 205.0)) * 255)
+        for value in range(256)
+    ])
+    high_mask = alpha.point([0 if value < 245 else 255 for value in range(256)], mode="1")
+    blue_diff = ImageChops.subtract(blue, red)
+    red_diff = ImageChops.subtract(red, blue)
+    blue_leads = blue_diff.point([0 if value == 0 else 255 for value in range(256)], mode="1")
+    high_blue_mask = ImageChops.logical_and(high_mask, blue_leads)
+    high_red_mask = ImageChops.logical_and(high_mask, ImageChops.invert(blue_leads))
+    high_blue = blue_diff.point([
+        round((0.65 + 0.15 * min(1.0, value / 200.0)) * 255)
+        for value in range(256)
+    ])
+    high_red = red_diff.point([
+        round((0.80 + 0.20 * min(1.0, value / 220.0)) * 255)
+        for value in range(256)
+    ])
+    intensity = low_intensity
+    intensity.paste(high_blue, mask=high_blue_mask)
+    intensity.paste(high_red, mask=high_red_mask)
 
-            if a < 245:
-                v = 0.15 + 0.50 * min(1.0, max(0.0, (float(a) - min_alpha) / (245.0 - min_alpha)))
-            else:
-                if b > r:
-                    diff = max(0.0, float(b - r))
-                    v = 0.65 + 0.15 * min(1.0, diff / 200.0)
-                else:
-                    diff = max(0.0, float(r - b))
-                    v = 0.80 + 0.20 * min(1.0, diff / 220.0)
-
-            v = max(0.0, min(1.0, v))
-
+    def channel_lut(channel: int) -> list[int]:
+        values: list[int] = []
+        for raw in range(256):
+            v = raw / 255.0
             if preserve_yellow:
                 if v <= 0.35:
                     t = v / 0.35
-                    tr = round(255 + t * (PRECIPITATION_YELLOW[0] - 255))
-                    tg = round(255 + t * (PRECIPITATION_YELLOW[1] - 255))
-                    tb = round(255 + t * (PRECIPITATION_YELLOW[2] - 255))
+                    value = round(255 + t * (PRECIPITATION_YELLOW[channel] - 255))
                 elif v <= 0.72:
                     t = (v - 0.35) / (0.72 - 0.35)
-                    tr = round(PRECIPITATION_YELLOW[0] + t * (PRECIPITATION_COLOR[0] - PRECIPITATION_YELLOW[0]))
-                    tg = round(PRECIPITATION_YELLOW[1] + t * (PRECIPITATION_COLOR[1] - PRECIPITATION_YELLOW[1]))
-                    tb = round(PRECIPITATION_YELLOW[2] + t * (PRECIPITATION_COLOR[2] - PRECIPITATION_YELLOW[2]))
+                    value = round(PRECIPITATION_YELLOW[channel] + t * (PRECIPITATION_COLOR[channel] - PRECIPITATION_YELLOW[channel]))
                 else:
-                    tr, tg, tb = PRECIPITATION_COLOR
+                    value = PRECIPITATION_COLOR[channel]
+            elif v <= 0.75:
+                value = round(255 + (v / 0.75) * (PRECIPITATION_COLOR[channel] - 255))
             else:
-                if v <= 0.75:
-                    t = v / 0.75
-                    tr = round(255 + t * (PRECIPITATION_COLOR[0] - 255))
-                    tg = round(255 + t * (PRECIPITATION_COLOR[1] - 255))
-                    tb = round(255 + t * (PRECIPITATION_COLOR[2] - 255))
-                else:
-                    tr, tg, tb = PRECIPITATION_COLOR
+                value = PRECIPITATION_COLOR[channel]
+            values.append(max(0, min(255, value)))
+        return values
 
-            shaded_pixels[x, y] = (tr, tg, tb)
+    shaded = Image.merge("RGB", tuple(intensity.point(channel_lut(index)) for index in range(3)))
 
     dithered = dither_to_eink_palette(shaded, preserve_yellow=preserve_yellow)
     if area_mask is not None:
@@ -890,6 +813,7 @@ def compose_country_radar_image(
     wind_samples: tuple[tuple[float, float, float, float], ...] = (),
     home_location: tuple[float, float] | None = None,
     preserve_yellow: bool = True,
+    max_dimension: int = MAX_NATIVE_DIMENSION,
 ) -> Image.Image:
     """Stitch fetched tiles and draw the unclipped precipitation map with black country outline.
 
@@ -919,6 +843,43 @@ def compose_country_radar_image(
 
     xs = [point[0] for point in polygon]
     ys = [point[1] for point in polygon]
+    crop_box = (
+        max(0, int(min(xs)) - margin),
+        max(0, int(min(ys)) - margin),
+        min(composite.width, int(max(xs)) + margin),
+        min(composite.height, int(max(ys)) + margin),
+    )
+    crop_left, crop_top = crop_box[:2]
+    composite = composite.crop(crop_box)
+    polygon = [(x - crop_left, y - crop_top) for x, y in polygon]
+    projected_wind_samples = tuple(
+        (x - crop_left, y - crop_top, direction, speed)
+        for x, y, direction, speed in projected_wind_samples
+    )
+    origin_x += crop_left
+    origin_y += crop_top
+
+    max_dimension = max(1, int(max_dimension))
+    if max(composite.size) > max_dimension:
+        scale = max_dimension / max(composite.size)
+        composite = composite.resize(
+            (
+                max(1, round(composite.width * scale)),
+                max(1, round(composite.height * scale)),
+            ),
+            Image.Resampling.LANCZOS,
+        )
+        polygon = [(x * scale, y * scale) for x, y in polygon]
+        projected_wind_samples = tuple(
+            (x * scale, y * scale, direction, speed)
+            for x, y, direction, speed in projected_wind_samples
+        )
+        tile_size *= scale
+        origin_x *= scale
+        origin_y *= scale
+
+    xs = [point[0] for point in polygon]
+    ys = [point[1] for point in polygon]
     extent = max(max(xs) - min(xs), max(ys) - min(ys))
 
     output = Image.new("RGB", composite.size, "white")
@@ -937,7 +898,11 @@ def compose_country_radar_image(
     if show_wind:
         _draw_wind_vectors(output, polygon, extent, projected_wind_samples)
 
-    draw.polygon(polygon, outline=BORDER_COLOR, width=_scaled_border_width(extent, border_width))
+    draw.polygon(
+        polygon,
+        outline=BORDER_COLOR,
+        width=_scaled_border_width(extent, border_width),
+    )
     _draw_home_marker(
         output,
         home_location,
@@ -948,13 +913,7 @@ def compose_country_radar_image(
         extent=extent,
     )
 
-    crop_box = (
-        max(0, int(min(xs)) - margin),
-        max(0, int(min(ys)) - margin),
-        min(output.width, int(max(xs)) + margin),
-        min(output.height, int(max(ys)) + margin),
-    )
-    return output.crop(crop_box)
+    return output
 
 
 def compose_multi_country_radar_image(
@@ -976,6 +935,7 @@ def compose_multi_country_radar_image(
     wind_samples: tuple[tuple[float, float, float, float], ...] = (),
     home_location: tuple[float, float] | None = None,
     preserve_yellow: bool = True,
+    max_dimension: int = MAX_NATIVE_DIMENSION,
 ) -> Image.Image:
     """The Europe-overview counterpart to `compose_country_radar_image`."""
     grid_width = (x_max - x_min + 1) * tile_size
@@ -1000,6 +960,49 @@ def compose_multi_country_radar_image(
         origin_x=origin_x,
         origin_y=origin_y,
     )
+
+    xs = [x for polygon in polygons for x, _y in polygon]
+    ys = [y for polygon in polygons for _x, y in polygon]
+    crop_box = (
+        max(0, int(min(xs)) - margin),
+        max(0, int(min(ys)) - margin),
+        min(composite.width, int(max(xs)) + margin),
+        min(composite.height, int(max(ys)) + margin),
+    )
+    crop_left, crop_top = crop_box[:2]
+    composite = composite.crop(crop_box)
+    polygons = [
+        [(x - crop_left, y - crop_top) for x, y in polygon]
+        for polygon in polygons
+    ]
+    projected_wind_samples = tuple(
+        (x - crop_left, y - crop_top, direction, speed)
+        for x, y, direction, speed in projected_wind_samples
+    )
+    origin_x += crop_left
+    origin_y += crop_top
+
+    max_dimension = max(1, int(max_dimension))
+    if max(composite.size) > max_dimension:
+        scale = max_dimension / max(composite.size)
+        composite = composite.resize(
+            (
+                max(1, round(composite.width * scale)),
+                max(1, round(composite.height * scale)),
+            ),
+            Image.Resampling.LANCZOS,
+        )
+        polygons = [
+            [(x * scale, y * scale) for x, y in polygon]
+            for polygon in polygons
+        ]
+        projected_wind_samples = tuple(
+            (x * scale, y * scale, direction, speed)
+            for x, y, direction, speed in projected_wind_samples
+        )
+        tile_size *= scale
+        origin_x *= scale
+        origin_y *= scale
 
     xs = [x for polygon in polygons for x, _y in polygon]
     ys = [y for polygon in polygons for _x, y in polygon]
@@ -1033,13 +1036,7 @@ def compose_multi_country_radar_image(
         extent=extent,
     )
 
-    crop_box = (
-        max(0, int(min(xs)) - margin),
-        max(0, int(min(ys)) - margin),
-        min(output.width, int(max(xs)) + margin),
-        min(output.height, int(max(ys)) + margin),
-    )
-    return output.crop(crop_box)
+    return output
 
 
 def fit_to_size(image: Image.Image, width: int, height: int) -> Image.Image:
@@ -1056,6 +1053,38 @@ def fit_to_size(image: Image.Image, width: int, height: int) -> Image.Image:
 
 _cache: dict[str, dict[str, object]] = {}
 _wind_cache: dict[str, dict[str, object]] = {}
+_inflight_renders: dict[str, asyncio.Task[Image.Image | None]] = {}
+_compose_semaphore: asyncio.Semaphore | None = None
+_compose_semaphore_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _render_cache_key(
+    country: str,
+    show_precipitation: bool,
+    dotted_light: bool,
+    show_wind: bool,
+    home_location: tuple[float, float] | None,
+    preserve_yellow: bool,
+    max_dimension: int,
+) -> str:
+    marker_key = "none" if home_location is None else f"{home_location[0]:.5f},{home_location[1]:.5f}"
+    return (
+        f"{str(country or 'cz').lower()}_p{int(show_precipitation)}_d{int(dotted_light)}"
+        f"_w{int(show_wind)}_y{int(preserve_yellow)}_h{marker_key}"
+        f"_m{max(1, int(max_dimension))}"
+    )
+
+
+def _render_semaphore() -> asyncio.Semaphore:
+    """Return a loop-local semaphore limiting CPU-heavy composition to one job."""
+    global _compose_semaphore, _compose_semaphore_loop
+    loop = asyncio.get_running_loop()
+    if _compose_semaphore is None or (
+        _compose_semaphore_loop is not loop and not _inflight_renders
+    ):
+        _compose_semaphore = asyncio.Semaphore(1)
+        _compose_semaphore_loop = loop
+    return _compose_semaphore
 
 
 async def _async_fetch_json(hass: "HomeAssistant", url: str) -> object:
@@ -1136,7 +1165,7 @@ async def _async_fetch_tile(hass: "HomeAssistant", url: str) -> Image.Image | No
         return None
 
 
-async def _async_composed_base_image(
+async def _async_composed_base_image_uncached(
     hass: "HomeAssistant",
     country: str = "cz",
     show_precipitation: bool = True,
@@ -1144,15 +1173,23 @@ async def _async_composed_base_image(
     show_wind: bool = False,
     home_location: tuple[float, float] | None = None,
     preserve_yellow: bool = True,
+    max_dimension: int = MAX_NATIVE_DIMENSION,
 ) -> Image.Image | None:
     """Return the current country (or "eu" overview) map at native resolution,
     refetching only when RainViewer's own frame timestamp has actually moved on.
     """
-    marker_key = "none" if home_location is None else f"{home_location[0]:.5f},{home_location[1]:.5f}"
     # The palette is part of the key: the same country rendered for a BWR and
     # a BWRY panel are genuinely different bitmaps now, and sharing one cache
     # entry between them would hand whichever asked second the wrong one.
-    key = f"{str(country or 'cz').lower()}_p{int(show_precipitation)}_d{int(dotted_light)}_w{int(show_wind)}_y{int(preserve_yellow)}_h{marker_key}"
+    key = _render_cache_key(
+        country,
+        show_precipitation,
+        dotted_light,
+        show_wind,
+        home_location,
+        preserve_yellow,
+        max_dimension,
+    )
     country_key = str(country or "cz").lower()
     is_europe = country_key == "eu"
     all_points = (
@@ -1207,46 +1244,49 @@ async def _async_composed_base_image(
     if not tiles:
         return cached.get("composed") if cached else None  # type: ignore[return-value]
 
-    if is_europe:
-        composed = await hass.async_add_executor_job(
-            functools.partial(
-                compose_multi_country_radar_image,
-                tiles,
-                zoom=ZOOM,
-                tile_size=TILE_SIZE,
-                x_min=x_min,
-                y_min=y_min,
-                x_max=x_max,
-                y_max=y_max,
-                borders=EUROPE_OVERVIEW_BORDERS,
-                show_precipitation=show_precipitation,
-                dotted_light=dotted_light,
-                show_wind=show_wind,
-                wind_samples=wind_samples,
-                home_location=home_location,
-                preserve_yellow=preserve_yellow,
+    async with _render_semaphore():
+        if is_europe:
+            composed = await hass.async_add_executor_job(
+                functools.partial(
+                    compose_multi_country_radar_image,
+                    tiles,
+                    zoom=ZOOM,
+                    tile_size=TILE_SIZE,
+                    x_min=x_min,
+                    y_min=y_min,
+                    x_max=x_max,
+                    y_max=y_max,
+                    borders=EUROPE_OVERVIEW_BORDERS,
+                    show_precipitation=show_precipitation,
+                    dotted_light=dotted_light,
+                    show_wind=show_wind,
+                    wind_samples=wind_samples,
+                    home_location=home_location,
+                    preserve_yellow=preserve_yellow,
+                    max_dimension=max_dimension,
+                )
             )
-        )
-    else:
-        composed = await hass.async_add_executor_job(
-            functools.partial(
-                compose_country_radar_image,
-                tiles,
-                zoom=ZOOM,
-                tile_size=TILE_SIZE,
-                x_min=x_min,
-                y_min=y_min,
-                x_max=x_max,
-                y_max=y_max,
-                border=all_points,
-                show_precipitation=show_precipitation,
-                dotted_light=dotted_light,
-                show_wind=show_wind,
-                wind_samples=wind_samples,
-                home_location=home_location,
-                preserve_yellow=preserve_yellow,
+        else:
+            composed = await hass.async_add_executor_job(
+                functools.partial(
+                    compose_country_radar_image,
+                    tiles,
+                    zoom=ZOOM,
+                    tile_size=TILE_SIZE,
+                    x_min=x_min,
+                    y_min=y_min,
+                    x_max=x_max,
+                    y_max=y_max,
+                    border=all_points,
+                    show_precipitation=show_precipitation,
+                    dotted_light=dotted_light,
+                    show_wind=show_wind,
+                    wind_samples=wind_samples,
+                    home_location=home_location,
+                    preserve_yellow=preserve_yellow,
+                    max_dimension=max_dimension,
+                )
             )
-        )
     _cache[key] = {
         "composed": composed,
         "frame_key": frame_key,
@@ -1256,6 +1296,53 @@ async def _async_composed_base_image(
     return composed
 
 
+async def _async_composed_base_image(
+    hass: "HomeAssistant",
+    country: str = "cz",
+    show_precipitation: bool = True,
+    dotted_light: bool = True,
+    show_wind: bool = False,
+    home_location: tuple[float, float] | None = None,
+    preserve_yellow: bool = True,
+    max_dimension: int = MAX_NATIVE_DIMENSION,
+) -> Image.Image | None:
+    """Share one in-flight render between callers requesting identical output."""
+    key = _render_cache_key(
+        country,
+        show_precipitation,
+        dotted_light,
+        show_wind,
+        home_location,
+        preserve_yellow,
+        max_dimension,
+    )
+    task = _inflight_renders.get(key)
+    if task is None:
+        task = asyncio.create_task(
+            _async_composed_base_image_uncached(
+                hass,
+                country=country,
+                show_precipitation=show_precipitation,
+                dotted_light=dotted_light,
+                show_wind=show_wind,
+                home_location=home_location,
+                preserve_yellow=preserve_yellow,
+                max_dimension=max_dimension,
+            )
+        )
+        _inflight_renders[key] = task
+
+        def clear_finished(finished: asyncio.Task[Image.Image | None]) -> None:
+            if _inflight_renders.get(key) is finished:
+                _inflight_renders.pop(key, None)
+            if not finished.cancelled():
+                finished.exception()
+
+        task.add_done_callback(clear_finished)
+    # A timeout of one display must not cancel work already shared by others.
+    return await asyncio.shield(task)
+
+
 async def async_render_meteoradar(
     hass: "HomeAssistant",
     country: str = "cz",
@@ -1263,11 +1350,19 @@ async def async_render_meteoradar(
     dotted_light: bool = True,
     show_wind: bool = False,
     preserve_yellow: bool = True,
+    target_width: int | None = None,
+    target_height: int | None = None,
 ) -> Image.Image | None:
     """Return the live precipitation map for the requested country - or, for
     country="eu", the multi-country Europe overview - at its own cropped aspect.
     """
     home_location = (hass.config.longitude, hass.config.latitude)
+    target_dimensions = [
+        max(1, int(value))
+        for value in (target_width, target_height)
+        if value is not None
+    ]
+    max_dimension = max(target_dimensions, default=MAX_NATIVE_DIMENSION)
     base = await _async_composed_base_image(
         hass,
         country=country,
@@ -1276,11 +1371,12 @@ async def async_render_meteoradar(
         show_wind=show_wind,
         home_location=home_location,
         preserve_yellow=preserve_yellow,
+        max_dimension=max_dimension,
     )
     if base is None:
         return None
-    if base.width <= MAX_NATIVE_DIMENSION and base.height <= MAX_NATIVE_DIMENSION:
+    if base.width <= max_dimension and base.height <= max_dimension:
         return base
-    scale = MAX_NATIVE_DIMENSION / max(base.width, base.height)
+    scale = max_dimension / max(base.width, base.height)
     size = (max(1, round(base.width * scale)), max(1, round(base.height * scale)))
     return await hass.async_add_executor_job(base.resize, size, Image.Resampling.LANCZOS)

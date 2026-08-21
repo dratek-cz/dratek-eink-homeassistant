@@ -66,15 +66,19 @@ export const queueMixin = {
         started_at: job.started_at,
         finished_at: job.finished_at,
         error: job.error,
-        log: job.log,
       })),
     });
+  },
+
+  _queueLogSignature(queue = this._queue) {
+    return JSON.stringify((queue?.jobs || []).map((job) => ({ id: job.id, log: job.log })));
   },
 
   async _loadQueue(render = true, onlyWhenChanged = false) {
     if (!this._hass) return;
     window.clearTimeout(this._queuePollTimer);
     const previousSignature = this._queueRenderSignature();
+    const previousLogSignature = this._queueLogSignature();
     const previousActive = new Set(
       (this._queue?.jobs || [])
         .filter((job) => ["queued", "writing"].includes(job.status))
@@ -94,7 +98,9 @@ export const queueMixin = {
         error: this._message(err),
       };
     }
-    const queueChanged = previousSignature !== this._queueRenderSignature();
+    const logChanged = previousLogSignature !== this._queueLogSignature();
+    const queueChanged = previousSignature !== this._queueRenderSignature()
+      || (Boolean(String(this._queueSearch || "").trim()) && logChanged);
     if (render && (!onlyWhenChanged || queueChanged || this._pendingQueueBackgroundRender)) {
       if (!onlyWhenChanged || this._backgroundUiCanRender?.() !== false) {
         this._pendingQueueBackgroundRender = false;
@@ -102,6 +108,8 @@ export const queueMixin = {
       } else {
         this._pendingQueueBackgroundRender = true;
       }
+    } else if (render && logChanged) {
+      this._updateQueueLiveDom();
     }
     if (Number(this._queue?.queued || 0) + Number(this._queue?.writing || 0) > 0 || this._activeTab === "automations") {
       this._queuePollTimer = window.setTimeout(() => {
@@ -175,8 +183,28 @@ export const queueMixin = {
     this._paint();
   },
 
-  // Fronta se překresluje každou sekundu. _render() vymění celý shadow strom,
-  // takže bez tohohle by psaní do hledání po pár znacích ztratilo fokus.
+  _updateQueueLiveDom() {
+    const jobs = new Map((this._queue?.jobs || []).map((job) => [String(job.id || ""), job]));
+    this.shadowRoot.querySelectorAll("[data-queue-job]").forEach((row) => {
+      const job = jobs.get(String(row.dataset.queueJob || ""));
+      if (!job) return;
+      const lines = Array.isArray(job.log) ? job.log : [];
+      const latest = row.querySelector("[data-queue-live-summary]");
+      if (latest) {
+        latest.textContent = job.error || lines.slice(-3).join(" | ");
+        latest.hidden = !latest.textContent;
+      }
+      const details = row.querySelector("details[data-queue-log]");
+      if (details) details.hidden = lines.length === 0;
+      const count = row.querySelector("[data-queue-log-count]");
+      if (count) count.textContent = String(lines.length);
+      const contents = row.querySelector("[data-queue-log-lines]");
+      if (contents) contents.textContent = lines.join("\n");
+    });
+  },
+
+  // Celý shadow strom se mění jen při strukturální změně fronty. Tato cesta
+  // navíc zachová fokus a otevřené protokoly při změně stavu úlohy.
   _renderQueueKeepingFocus() {
     // Otevřenou nabídku by pravidelné překreslení zavřelo pod rukama. Data už
     // jsou uložená, seznam se dorovná při prvním dalším překreslení.
@@ -386,7 +414,7 @@ export const queueMixin = {
     const gateway = job.transport_type === "gateway";
     const logLines = Array.isArray(job.log) ? job.log : [];
     const logText = logLines.length ? logLines.slice(-3).join(" | ") : "";
-    return `<article class="queue-row ${this._escape(status)}">
+    return `<article class="queue-row ${this._escape(status)}" data-queue-job="${this._escape(job.id || "")}">
       <span class="queue-icon"><ha-icon icon="${STATUS_ICONS[status] || "mdi:help"}"></ha-icon></span>
       <div class="queue-main">
         <strong>${this._escape(device ? this._deviceTitle(device) : address)}</strong>
@@ -404,11 +432,11 @@ export const queueMixin = {
         <span class="pill ${STATUS_PILLS[status] || "muted"}">${STATUS_LABELS[status] || this._escape(status)}</span>
         ${status === "queued" ? `<button type="button" class="tile-icon-btn queue-cancel-btn" data-cancel-queue-job="${this._escape(job.id || "")}" title="Zrušit frontu"><ha-icon icon="mdi:close-circle-outline"></ha-icon></button>` : ""}
       </div>
-      ${(job.error || logText) ? `<div class="queue-row-log">${this._escape(job.error || logText)}</div>` : ""}
-      ${logLines.length ? `<details class="queue-row-details" data-queue-log="${this._escape(job.id || "")}">
-        <summary><ha-icon icon="mdi:text-box-search-outline"></ha-icon>Zobrazit celý protokol (${logLines.length} řádků)</summary>
-        <pre>${this._escape(logLines.join("\n"))}</pre>
-      </details>` : ""}
+      <div class="queue-row-log" data-queue-live-summary ${job.error || logText ? "" : "hidden"}>${this._escape(job.error || logText)}</div>
+      <details class="queue-row-details" data-queue-log="${this._escape(job.id || "")}" ${logLines.length ? "" : "hidden"}>
+        <summary><ha-icon icon="mdi:text-box-search-outline"></ha-icon>Zobrazit celý protokol (<span data-queue-log-count>${logLines.length}</span> řádků)</summary>
+        <pre data-queue-log-lines>${this._escape(logLines.join("\n"))}</pre>
+      </details>
     </article>`;
   },
 };

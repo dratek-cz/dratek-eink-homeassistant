@@ -173,6 +173,10 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         # Corners have radar precipitation rendered across the map
         self.assertEqual(image.getpixel((0, 0)), meteoradar.PRECIPITATION_COLOR)
 
+    def test_composition_is_bounded_before_palette_work(self) -> None:
+        image = self._compose((220, 20, 12, 255), max_dimension=64)
+        self.assertLessEqual(max(image.size), 64)
+
     def test_low_alpha_trace_echo_does_not_count_as_precipitation(self) -> None:
         image = self._compose((0, 100, 200, 30))  # below the threshold
         self.assertNotIn(meteoradar.PRECIPITATION_COLOR, list(image.getdata()))
@@ -391,6 +395,63 @@ class CurrentWindTests(unittest.TestCase):
         self.assertIn("2026-08-11T12:00", observation_key)
         self.assertIn("current=wind_speed_10m,wind_direction_10m", requested_urls[0])
         self.assertIn("wind_speed_unit=kmh", requested_urls[0])
+
+
+class SharedRenderTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        meteoradar._inflight_renders.clear()
+        meteoradar._compose_semaphore = None
+        meteoradar._compose_semaphore_loop = None
+
+    async def asyncTearDown(self) -> None:
+        tasks = list(meteoradar._inflight_renders.values())
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        meteoradar._inflight_renders.clear()
+
+    async def test_identical_callers_share_work_even_if_one_times_out(self) -> None:
+        started = asyncio.Event()
+        release = asyncio.Event()
+        calls = 0
+
+        async def fake_render(*_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+            started.set()
+            await release.wait()
+            return Image.new("RGB", (10, 10), "white")
+
+        original = meteoradar._async_composed_base_image_uncached
+        meteoradar._async_composed_base_image_uncached = fake_render
+        try:
+            first = asyncio.create_task(meteoradar._async_composed_base_image(object()))
+            await started.wait()
+            second = asyncio.create_task(meteoradar._async_composed_base_image(object()))
+            with self.assertRaises(asyncio.TimeoutError):
+                await asyncio.wait_for(first, timeout=0.001)
+            self.assertEqual(calls, 1)
+            self.assertEqual(len(meteoradar._inflight_renders), 1)
+            release.set()
+            self.assertEqual((await second).size, (10, 10))
+        finally:
+            meteoradar._async_composed_base_image_uncached = original
+
+    async def test_composition_semaphore_allows_only_one_heavy_job(self) -> None:
+        active = 0
+        maximum = 0
+
+        async def worker() -> None:
+            nonlocal active, maximum
+            async with meteoradar._render_semaphore():
+                active += 1
+                maximum = max(maximum, active)
+                await asyncio.sleep(0.005)
+                active -= 1
+
+        await asyncio.gather(*(worker() for _ in range(4)))
+        self.assertEqual(maximum, 1)
 
 
 class CameraPlatformWiringTests(unittest.TestCase):

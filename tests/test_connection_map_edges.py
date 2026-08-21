@@ -31,11 +31,11 @@ class ConnectionMapEdgeTests(unittest.TestCase):
         self.panel = (FRONTEND / "dratek-eink-panel.js").read_text(encoding="utf-8")
         self.styles = (PANEL / "panel-render-ui.mixin.js").read_text(encoding="utf-8")
 
-    def test_alternative_routes_are_hidden_unless_asked_for(self) -> None:
-        # The guard must cover all three cases: not active, toggle off, and no
-        # focused display. Dropping any one of them brings the mesh back.
+    def test_stale_alternative_routes_are_hidden_unless_asked_for(self) -> None:
+        # Freshly observed links must remain visible even when they are not the
+        # selected route. Only retained, temporarily unseen history is opt-in.
         self.assertIn(
-            "if (!isActive && !showAlternatives && !(focus && related)) return;",
+            "if (!isActive && path.temporarily_unseen && !showAlternatives && !(focus && related)) return;",
             self.gateway,
         )
         self.assertIn(
@@ -46,7 +46,7 @@ class ConnectionMapEdgeTests(unittest.TestCase):
     def test_active_route_is_never_hidden(self) -> None:
         # Whatever the toggle says, the line to the gateway actually serving the
         # display has to stay on the map.
-        guard = "if (!isActive && !showAlternatives && !(focus && related)) return;"
+        guard = "if (!isActive && path.temporarily_unseen && !showAlternatives && !(focus && related)) return;"
         self.assertIn(guard, self.gateway)
         self.assertTrue(
             guard.startswith("if (!isActive"),

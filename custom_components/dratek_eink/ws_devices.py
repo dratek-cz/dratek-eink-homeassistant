@@ -383,6 +383,13 @@ async def websocket_scan(
             ),
             reverse=True,
         )
+        # Keep the complete measured topology separate from the routes allowed
+        # to own a transfer. A manual route lock is intentionally exclusive for
+        # sending, but it must not erase the fact that another gateway (or the
+        # HA Bluetooth adapter) can currently hear this display. The connection
+        # map consumes observed_paths; transfer selection continues to consume
+        # the filtered paths list below.
+        device["observed_paths"] = [dict(path) for path in device["paths"]]
         gateway_paths = [path for path in device["paths"] if path.get("type") == "gateway"]
         address = _normalize_address(device["address"])
         selected_gateway_id = str(gateway_preferences.get(address) or "")

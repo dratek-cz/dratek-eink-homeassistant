@@ -1,8 +1,8 @@
 import { storageMixin } from "./panel/panel-storage.mixin.js";
-import { queueMixin } from "./panel/panel-queue.mixin.js?v=automation-shortcut-1";
+import { queueMixin } from "./panel/panel-queue.mixin.js?v=live-log-update-1";
 import { automationsMixin } from "./panel/panel-automations.mixin.js?v=always-send-default-on-1";
-import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=readable-connection-map-1";
-import { devicesMixin } from "./panel/panel-devices.mixin.js?v=whole-pixel-slots-1";
+import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=live-topology-routes-1";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=live-topology-routes-1";
 import { projectsMixin } from "./panel/panel-projects.mixin.js?v=interval-only-default-1";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
 import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-3";
@@ -10,13 +10,13 @@ import { templatesMixin } from "./panel/panel-templates.mixin.js?v=readable-char
 import { variablesMixin } from "./panel/panel-variables.mixin.js?v=readable-chart-type-2";
 import { previewMixin } from "./panel/panel-preview.mixin.js?v=device-preview-quality-1";
 import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=repeat-template-repaint-1";
-import { i18nMixin } from "./panel/panel-i18n.mixin.js?v=full-en-translation-2";
-import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=readable-connection-map-1";
+import { i18nMixin } from "./panel/panel-i18n.mixin.js?v=full-en-translation-3";
+import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=live-topology-routes-1";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js?v=templates-4c-1";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
 import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=radar-hourly-sidebar-1";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.331";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.332";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {

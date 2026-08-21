@@ -186,6 +186,8 @@ async def async_gateway_status(hass: HomeAssistant, gateway: dict[str, Any]) -> 
         "ota_bytes_written": payload.get("ota_bytes_written"),
         "ota_expected_size": payload.get("ota_expected_size"),
         "partial_update": bool(payload.get("partial_update")),
+        "max_upload_payload_bytes": payload.get("max_upload_payload_bytes"),
+        "flash_payload_staging": bool(payload.get("flash_payload_staging")),
         "firmware_size": payload.get("firmware_size"),
         "flash_size": payload.get("flash_size"),
         "running_partition_size": payload.get("running_partition_size"),
@@ -485,14 +487,9 @@ GATEWAY_SIDE_JOB_ERRORS = frozenset(
 )
 
 
-# What each gateway chip's firmware will accept in one upload, mirroring
-# MAX_UPLOAD_PAYLOAD_BYTES in firmware/dratek-eink-gateway/src/main.cpp.
-#
-# These are not tuning knobs. A plain ESP32 shares roughly 320 kB of DRAM
-# between Wi-Fi, NimBLE, the web server and this buffer, and a gateway in
-# service reports a largest free block around 25 kB - so the 98 kB ceiling is
-# already optimistic, and raising it would only move the failure from
-# "invalid_payload_size" to "insufficient_contiguous_memory".
+# Legacy limits used only when an older gateway does not advertise its own
+# ceiling. Firmware 0.1.60 and newer stages oversized uploads in its inactive
+# OTA partition and reports a larger limit through /api/status.
 GATEWAY_MAX_UPLOAD_BYTES = {
     "esp32": 98 * 1024,
     "esp32s3": 128 * 1024,
@@ -510,15 +507,31 @@ def gateway_chip(gateway: dict[str, Any]) -> str:
     return str(status.get("chip") or gateway.get("chip") or "").strip().lower()
 
 
-def gateway_payload_limit(chip: str | None) -> int | None:
-    """The largest payload this chip can take, or None when it is unknown.
+def gateway_payload_limit(gateway_or_chip: dict[str, Any] | str | None) -> int | None:
+    """The largest payload this gateway can take, or None when it is unknown.
 
-    None means "do not second-guess it": blocking on a guess would strand an
-    ESP32-S3 - which handles the largest panels perfectly well - behind the
-    smaller ESP32 ceiling merely because its status had not been read yet.
-    An unknown chip is left to the gateway's own answer, as before.
+    New firmware advertises the real ceiling. A chip name still resolves to
+    the conservative legacy limit for compatibility with stored gateways and
+    callers that have not yet received a fresh status response.
     """
-    return GATEWAY_MAX_UPLOAD_BYTES.get(str(chip or "").strip().lower())
+    if isinstance(gateway_or_chip, dict):
+        status = (
+            gateway_or_chip.get("status")
+            if isinstance(gateway_or_chip.get("status"), dict)
+            else {}
+        )
+        advertised = status.get("max_upload_payload_bytes") or gateway_or_chip.get(
+            "max_upload_payload_bytes"
+        )
+        try:
+            if int(advertised) > 0:
+                return int(advertised)
+        except (TypeError, ValueError):
+            pass
+        chip = gateway_chip(gateway_or_chip)
+    else:
+        chip = str(gateway_or_chip or "").strip().lower()
+    return GATEWAY_MAX_UPLOAD_BYTES.get(chip)
 
 
 def _exception_message(exc: BaseException) -> str:
@@ -583,22 +596,16 @@ async def async_send_gateway_payload(
             payload = framed
         add_log(f"Payload size: {len(payload)} bytes.")
 
-        # Checked here rather than discovered from the gateway's own rejection.
-        # The firmware answers an oversized upload with "invalid_payload_size",
-        # which reads like the integration built something malformed when the
-        # truth is that this chip cannot hold an image this large: an 800x480
-        # BWR panel frames to 100 504 bytes against an ESP32's 100 352 byte
-        # ceiling, over by 152. Failing before the upload keeps the transfer
-        # off the wire and, because it is flagged gateway_side, lets the queue
-        # fall back to another gateway or to Home Assistant's own Bluetooth
-        # instead of blaming a display that was never contacted.
+        # Prefer the limit reported by current firmware. Legacy gateways fall
+        # back to their conservative chip limit and still produce a useful
+        # upgrade error before a payload they cannot stage reaches the wire.
         chip = gateway_chip(gateway)
-        payload_limit = gateway_payload_limit(chip)
+        payload_limit = gateway_payload_limit(gateway)
         if payload_limit is not None and len(payload) > payload_limit:
             add_log(
                 f"Payload is {len(payload)} bytes but this {chip or 'unknown'} gateway accepts at "
-                f"most {payload_limit}. A display this large needs an ESP32-S3 gateway, another "
-                "route, or Home Assistant's own Bluetooth."
+                f"most {payload_limit}. Update the gateway firmware to enable flash-backed "
+                "large-payload staging, or use another route."
             )
             return {
                 "ok": False,
@@ -761,46 +768,68 @@ async def async_send_gateway_payload(
 async def async_discover_gateways(hass: HomeAssistant, seconds: int = 10) -> list[dict[str, Any]]:
     try:
         from homeassistant.components.zeroconf import async_get_instance
-        from zeroconf import ServiceBrowser, ServiceListener
+        from zeroconf import ServiceStateChange
+        from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo
     except Exception as exc:
         raise RuntimeError(f"zeroconf library is not available: {exc}") from exc
 
     found: dict[str, dict[str, Any]] = {}
 
-    class Listener(ServiceListener):
-        def add_service(self, zc: Any, service_type: str, name: str) -> None:
-            self.update_service(zc, service_type, name)
-
-        def update_service(self, zc: Any, service_type: str, name: str) -> None:
-            info = zc.get_service_info(service_type, name, timeout=3000)
-            if not info or not info.addresses:
-                return
-            host = socket.inet_ntoa(info.addresses[0])
-            properties = {
-                key.decode(errors="ignore"): value.decode(errors="ignore")
-                for key, value in (info.properties or {}).items()
-            }
-            found[name] = {
-                "name": name.removesuffix("." + DISCOVERY_SERVICE),
-                "host": host,
-                "port": info.port,
-                "gateway_id": properties.get("id", ""),
-                "firmware": properties.get("fw", ""),
-                "chip": properties.get("chip", ""),
-                "ota_supported": properties.get("ota", "") == "1",
-                "server": info.server.rstrip("."),
-            }
-
-        def remove_service(self, zc: Any, service_type: str, name: str) -> None:
-            return
-
     aiozc = await async_get_instance(hass)
     zc = getattr(aiozc, "zeroconf", aiozc)
-    browser = ServiceBrowser(zc, DISCOVERY_SERVICE, Listener())
+    pending: set[asyncio.Task[None]] = set()
+
+    async def resolve(service_type: str, name: str) -> None:
+        info = AsyncServiceInfo(service_type, name)
+        if not await info.async_request(zc, timeout=3000):
+            return
+        addresses = info.parsed_addresses()
+        if not addresses:
+            return
+        properties = {
+            key.decode(errors="ignore"): value.decode(errors="ignore")
+            for key, value in (info.properties or {}).items()
+        }
+        found[name] = {
+            "name": name.removesuffix("." + DISCOVERY_SERVICE),
+            "host": addresses[0],
+            "port": info.port,
+            "gateway_id": properties.get("id", ""),
+            "firmware": properties.get("fw", ""),
+            "chip": properties.get("chip", ""),
+            "ota_supported": properties.get("ota", "") == "1",
+            "server": str(info.server or "").rstrip("."),
+        }
+
+    def resolver_finished(task: asyncio.Task[None]) -> None:
+        pending.discard(task)
+        if not task.cancelled():
+            task.exception()
+
+    def on_service_state_change(
+        zeroconf: Any,
+        service_type: str,
+        name: str,
+        state_change: ServiceStateChange,
+    ) -> None:
+        del zeroconf
+        if state_change not in (ServiceStateChange.Added, ServiceStateChange.Updated):
+            return
+        task = hass.async_create_task(resolve(service_type, name))
+        pending.add(task)
+        task.add_done_callback(resolver_finished)
+
+    browser = AsyncServiceBrowser(
+        zc,
+        DISCOVERY_SERVICE,
+        handlers=[on_service_state_change],
+    )
     try:
         await asyncio.sleep(max(1, min(15, seconds)))
     finally:
-        browser.cancel()
+        await browser.async_cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
     return list(found.values())
 
 

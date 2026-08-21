@@ -71,7 +71,7 @@ export const devicesMixin = {
     if (!this.isConnected || !this._hass) return;
     this._deviceStatusPollTimer = window.setTimeout(async () => {
       this._deviceStatusPollTimer = null;
-      if (this._activeTab === "devices") {
+      if (["devices", "topology"].includes(this._activeTab)) {
         await this._scan({ background: true });
       }
       this._scheduleDeviceStatusPoll();
@@ -111,6 +111,9 @@ export const devicesMixin = {
           path_name: preferredPath?.name || "",
           path_rssi: preferredPath?.rssi ?? null,
           path_unavailable: !!preferredPath?.unavailable,
+          topology_paths: (device.observed_paths || device.paths || [])
+            .map((path) => `${path.type || ""}:${path.id || path.gateway_id || path.host || path.name || ""}:${path.rssi ?? ""}:${path.temporarily_unseen ? 1 : 0}`)
+            .sort(),
         });
       })
       .sort()

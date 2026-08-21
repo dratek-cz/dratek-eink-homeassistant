@@ -74,13 +74,15 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.331",
-        name="DRATEK eInk v0.1.331",
-        body="""## Release 0.1.331
+        tag="v0.1.332",
+        name="DRATEK eInk v0.1.332",
+        body="""## Release 0.1.332
 
 ### Přidáno a vylepšeno
-- **Meteoradar: celoplošné srážky bez ořezu na hranice států**: Srážková pole se nově vykreslují přes celou plochu mapového výřezu (včetně přesahu do okolních států). Černý obrys hranic států i domovská poloha se kreslí jako zřetelná vrstva přes srážky.
-- **Plynulé stínování srážek s adaptivním Floyd-Steinberg ditheringem**: Hrubé umělé šachovnice byly nahrazeny plynulým přechodem intenzity srážek s Floyd-Steinberg rozptylem chyby optimalizovaným pro konkrétní paletu e-inku (BWRY, BWR a BW). Výsledkem je autentické detailní meteoradarové zobrazení na všech velikostech displejů.
-- **Zvýrazněný předěl levého panelu**: Dělící linka mezi bočním panelem s předpovědí a mapou meteoradaru byla zesílena na zřetelnou 2px linku pro čistší oddělení obou částí.
+- **800×480 přes obyčejnou ESP32 gateway** díky ukládání velkého payloadu do flash a náhodnému čtení BLE bloků.
+- **Spolehlivější mapa připojení** se všemi aktuálně potvrzenými lokálními i gateway trasami.
+- **Meteoradar bez blokování HA** se sdíleným renderem, jednou náročnou kompozicí a nativními operacemi Pillow přímo v cílovém rozlišení.
+- **Plynulá fronta zápisu** aktualizuje během přenosu jen živý stav a log, nikoli celé rozhraní.
+- **Plně asynchronní zeroconf discovery** gatewayí.
 """,
     )

@@ -62,6 +62,14 @@ class GatewayDiscoveryRetentionTests(unittest.TestCase):
         self.assertIn('type: "dratek_eink/gateways/list"', panel_source)
         self.assertIn("this._scheduleRefresh();", overview_source)
 
+    def test_zeroconf_resolution_never_blocks_the_home_assistant_loop(self) -> None:
+        source = (COMPONENT / "gateway.py").read_text(encoding="utf-8")
+        discovery = source[source.index("async def async_discover_gateways(") : source.index("def _is_flashable_serial_device(")]
+        self.assertIn("AsyncServiceBrowser", discovery)
+        self.assertIn("AsyncServiceInfo", discovery)
+        self.assertIn("await info.async_request", discovery)
+        self.assertNotIn("get_service_info", discovery)
+
 
 if __name__ == "__main__":
     unittest.main()

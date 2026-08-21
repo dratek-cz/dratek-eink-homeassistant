@@ -1,20 +1,12 @@
-"""An oversized image must not be offered to a gateway that cannot hold it.
+"""Large gateway payloads use flash staging when firmware advertises it.
 
 An 800x480 BWR panel packs to 96 000 bytes and, when the display does not
 advertise the 0x4000 raw-data flag, frames to 100 504 as the vendor QuickLZ
-stream. A plain ESP32 gateway accepts 98 KiB - 100 352 bytes. Over by 152.
-
-The firmware answered that with "invalid_payload_size", which reads like the
-integration built something malformed. It had not: the chip simply cannot
-hold an image that large. Raising the ceiling would not help either, because
-an ESP32 shares ~320 KB of DRAM with Wi-Fi, NimBLE and the web server and one
-in service reports a largest free block around 25 KB - the failure would just
-move to "insufficient_contiguous_memory".
-
-So the check happens before the upload, and is flagged gateway_side, which
-lets the queue fall back to another gateway or to Home Assistant's Bluetooth
-(see test_gateway_failure_isolation) instead of blaming a display that was
-never contacted.
+stream. Legacy plain-ESP32 firmware accepts only 98 KiB, 152 bytes too little.
+Current firmware stages larger payloads in the inactive OTA partition and
+advertises a 512 KiB ceiling. The integration must honor that reported value
+while retaining the conservative preflight for gateways that have not yet
+been upgraded.
 """
 
 from __future__ import annotations
@@ -58,26 +50,35 @@ LARGE_PANEL_PAYLOAD = 100_504
 
 
 class PayloadLimitTests(unittest.TestCase):
-    def test_the_limits_match_the_firmware(self) -> None:
+    def test_the_reported_flash_limit_matches_the_firmware(self) -> None:
         firmware = FIRMWARE.read_text(encoding="utf-8")
-        esp32s3 = re.search(
-            r"CONFIG_IDF_TARGET_ESP32S3.*?MAX_UPLOAD_PAYLOAD_BYTES = (\d+)UL \* (\d+)UL",
-            firmware,
-            re.S,
-        )
-        esp32 = re.search(
-            r'CHIP_FAMILY = "esp32";\s*static const size_t MAX_UPLOAD_PAYLOAD_BYTES = (\d+)UL \* (\d+)UL',
+        ceiling = re.search(
+            r"MAX_UPLOAD_PAYLOAD_BYTES = (\d+)UL \* (\d+)UL",
             firmware,
         )
-        self.assertIsNotNone(esp32s3, "the ESP32-S3 ceiling was not found in the firmware")
-        self.assertIsNotNone(esp32, "the ESP32 ceiling was not found in the firmware")
-        self.assertEqual(gateway_payload_limit("esp32s3"), int(esp32s3.group(1)) * int(esp32s3.group(2)))
-        self.assertEqual(gateway_payload_limit("esp32"), int(esp32.group(1)) * int(esp32.group(2)))
+        self.assertIsNotNone(ceiling, "the flash-backed ceiling was not found in the firmware")
+        advertised = int(ceiling.group(1)) * int(ceiling.group(2))
+        gateway = {
+            "status": {
+                "chip": "esp32",
+                "max_upload_payload_bytes": advertised,
+                "flash_payload_staging": True,
+            }
+        }
+        self.assertEqual(gateway_payload_limit(gateway), advertised)
 
-    def test_the_large_panel_is_over_the_esp32_ceiling(self) -> None:
-        # 152 bytes over. The whole point of the check.
+    def test_legacy_esp32_still_uses_its_conservative_ceiling(self) -> None:
         self.assertGreater(LARGE_PANEL_PAYLOAD, gateway_payload_limit("esp32"))
         self.assertLessEqual(LARGE_PANEL_PAYLOAD, gateway_payload_limit("esp32s3"))
+
+    def test_flash_staging_allows_the_large_panel_on_plain_esp32(self) -> None:
+        gateway = {
+            "status": {
+                "chip": "esp32",
+                "max_upload_payload_bytes": 512 * 1024,
+            }
+        }
+        self.assertLessEqual(LARGE_PANEL_PAYLOAD, gateway_payload_limit(gateway))
 
     def test_an_unknown_chip_is_never_blocked(self) -> None:
         # Guessing would strand an ESP32-S3 - which handles this panel fine -
@@ -125,6 +126,25 @@ class PreflightWiringTests(unittest.TestCase):
     def test_the_log_line_names_both_numbers(self) -> None:
         self.assertIn("but this {chip or 'unknown'} gateway accepts at ", self.body)
         self.assertIn("{payload_limit}", self.body)
+
+
+class FlashStagingFirmwareTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.source = FIRMWARE.read_text(encoding="utf-8")
+
+    def test_status_advertises_the_runtime_limit(self) -> None:
+        self.assertIn('doc["max_upload_payload_bytes"] = MAX_UPLOAD_PAYLOAD_BYTES;', self.source)
+        self.assertIn('doc["flash_payload_staging"] = true;', self.source)
+
+    def test_large_uploads_are_finished_and_queued_from_flash(self) -> None:
+        self.assertIn("uploadUsesFlash && !finishFlashPayload()", self.source)
+        self.assertIn("queuedInFlash = uploadUsesFlash;", self.source)
+        self.assertIn("queuedFlashSize = uploadUsesFlash ? payloadBytes : 0;", self.source)
+
+    def test_ble_worker_reads_flash_through_the_random_access_source(self) -> None:
+        self.assertIn("source.flash = payloadInFlash ? payloadPartition : nullptr;", self.source)
+        self.assertIn("payload.read(startOffset, block.data() + 4, dataLen)", self.source)
 
 
 if __name__ == "__main__":

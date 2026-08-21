@@ -1988,6 +1988,8 @@ async def async_render_camera_binding_data_url(
             # it is being drawn, because folding yellow into red afterwards
             # would have already merged them.
             preserve_yellow=preserve_yellow,
+            target_width=width,
+            target_height=height,
         )
         if radar_img is not None:
             def _prepare_radar() -> bytes:

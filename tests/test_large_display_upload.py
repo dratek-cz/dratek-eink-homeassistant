@@ -28,7 +28,8 @@ class LargeDisplayUploadTests(unittest.TestCase):
         self.assertIn('uploadExpectedSize = (size_t)server.arg("size").toInt();', firmware)
         self.assertIn("uploadPayload.reserve(uploadExpectedSize);", firmware)
         self.assertIn("nextSize > uploadExpectedSize", firmware)
-        self.assertIn("uploadPayload.size() != uploadExpectedSize", firmware)
+        self.assertIn("receivedSize != uploadExpectedSize", firmware)
+        self.assertIn("flashWriteOffset + flashStage.size()", firmware)
 
     def test_gateway_firmware_avoids_geometric_growth_for_96k_payload(self) -> None:
         firmware = GATEWAY_FIRMWARE.read_text(encoding="utf-8")

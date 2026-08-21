@@ -220,6 +220,8 @@ void handleStatus() {
   doc["hostname"] = hostname;
   doc["firmware"] = FIRMWARE_VERSION;
   doc["partial_update"] = true;
+  doc["max_upload_payload_bytes"] = MAX_UPLOAD_PAYLOAD_BYTES;
+  doc["flash_payload_staging"] = true;
   doc["chip"] = CHIP_FAMILY;
   doc["ip"] = WiFi.localIP().toString();
   doc["mac"] = WiFi.macAddress();
@@ -967,22 +969,31 @@ void handleTransferUploadComplete() {
     return;
   }
   if (uploadError.length()) {
+    uploadUsesFlash = false;
+    flashStage.clear();
+    flashStage.shrink_to_fit();
     doc["ok"] = false;
     doc["error"] = uploadError;
     int status = uploadError == "gateway_busy" ? 409 : 400;
     sendJson(doc, status);
     return;
   }
-  if (uploadPayload.empty()) {
+  size_t receivedSize = uploadUsesFlash
+    ? flashWriteOffset + flashStage.size()
+    : uploadPayload.size();
+  if (receivedSize == 0) {
     doc["ok"] = false;
     doc["error"] = "empty_payload";
     sendJson(doc, 400);
     return;
   }
-  if (uploadPayload.size() != uploadExpectedSize) {
+  if (receivedSize != uploadExpectedSize) {
+    uploadUsesFlash = false;
+    flashStage.clear();
+    flashStage.shrink_to_fit();
     doc["ok"] = false;
     doc["error"] = "payload_size_mismatch";
-    doc["received_size"] = uploadPayload.size();
+    doc["received_size"] = receivedSize;
     doc["expected_size"] = uploadExpectedSize;
     sendJson(doc, 400);
     return;
@@ -990,14 +1001,22 @@ void handleTransferUploadComplete() {
   if (uploadPartial) {
     uint64_t pixels = (uint64_t)uploadPartialWidth * (uint64_t)uploadPartialHeight;
     uint64_t expectedBytes = pixels * 2 / 8;
-    if (pixels % 8 != 0 || expectedBytes != uploadPayload.size()) {
+    if (pixels % 8 != 0 || expectedBytes != receivedSize) {
       doc["ok"] = false;
       doc["error"] = "partial_payload_size_mismatch";
       sendJson(doc, 400);
       return;
     }
   }
+  if (uploadUsesFlash && !finishFlashPayload()) {
+    uploadUsesFlash = false;
+    doc["ok"] = false;
+    doc["error"] = "payload_staging_failed";
+    sendJson(doc, 400);
+    return;
+  }
   if (gatewayOperationBusy()) {
+    uploadUsesFlash = false;
     doc["ok"] = false;
     doc["error"] = "gateway_busy";
     sendJson(doc, 409);
@@ -1005,9 +1024,12 @@ void handleTransferUploadComplete() {
   }
 
   String jobId = uploadJobId.length() ? uploadJobId : String(millis(), HEX) + "-" + String(++transferSequence, HEX);
-  size_t payloadBytes = uploadPayload.size();
+  size_t payloadBytes = receivedSize;
   xSemaphoreTake(transferMutex, portMAX_DELAY);
-  queuedPayload.swap(uploadPayload);
+  queuedInFlash = uploadUsesFlash;
+  queuedFlashSize = uploadUsesFlash ? payloadBytes : 0;
+  if (!uploadUsesFlash) queuedPayload.swap(uploadPayload);
+  uploadUsesFlash = false;
   queuedSoftwareVersion = uploadSoftwareVersion;
   queuedPartial = uploadPartial;
   queuedPartialX = uploadPartialX;
@@ -1065,6 +1087,8 @@ void runQueuedTransfer() {
   String address;
   uint8_t softwareVersion;
   bool partial;
+  bool payloadInFlash;
+  size_t payloadSize;
   uint32_t partialX, partialY, partialWidth, partialHeight;
   std::vector<uint8_t> payload;
   xSemaphoreTake(transferMutex, portMAX_DELAY);
@@ -1076,7 +1100,11 @@ void runQueuedTransfer() {
   partialY = queuedPartialY;
   partialWidth = queuedPartialWidth;
   partialHeight = queuedPartialHeight;
-  payload.swap(queuedPayload);
+  payloadInFlash = queuedInFlash;
+  payloadSize = payloadInFlash ? queuedFlashSize : queuedPayload.size();
+  if (!payloadInFlash) payload.swap(queuedPayload);
+  queuedInFlash = false;
+  queuedFlashSize = 0;
   transferJob.status = "running";
   transferJob.updatedMs = millis();
   xSemaphoreGive(transferMutex);
@@ -1084,10 +1112,13 @@ void runQueuedTransfer() {
   JobTransferLog log(jobId);
   ensureBleInitialized();
   addLog(log, "Transfer job " + jobId + " started.");
-  addLog(log, "Payload " + String(payload.size()) + " bytes loaded; free heap " + String(ESP.getFreeHeap()) + ".");
+  addLog(log, "Payload " + String(payloadSize) + " bytes loaded from " + String(payloadInFlash ? "flash" : "RAM") + "; free heap " + String(ESP.getFreeHeap()) + ".");
   addLog(log, "Largest free memory block " + String(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)) + " bytes.");
-  bool ok = sendPayloadToDisplay(address, payload, softwareVersion, log, partial, partialX, partialY, partialWidth, partialHeight);
-  payload.clear();
+  PayloadSource source;
+  source.ram = payloadInFlash ? nullptr : &payload;
+  source.flash = payloadInFlash ? payloadPartition : nullptr;
+  source.size = payloadSize;
+  bool ok = sendPayloadToDisplay(address, source, softwareVersion, log, partial, partialX, partialY, partialWidth, partialHeight);
   // Hand the buffer's capacity back to uploadPayload instead of freeing it -
   // transferJob.status is still "running" here, so gatewayOperationBusy()
   // keeps a concurrent HTTP upload from touching uploadPayload until this
@@ -1095,7 +1126,10 @@ void runQueuedTransfer() {
   // block in circulation for the life of the process instead of needing a
   // fresh contiguous allocation (and risking insufficient_contiguous_memory)
   // on every single transfer.
-  uploadPayload.swap(payload);
+  if (!payloadInFlash) {
+    payload.clear();
+    uploadPayload.swap(payload);
+  }
   addLog(log, "Payload released; free heap " + String(ESP.getFreeHeap()) + ".");
 
   xSemaphoreTake(transferMutex, portMAX_DELAY);
@@ -1166,6 +1200,8 @@ void startQueuedTransfer() {
   transferJob.updatedMs = millis();
   queuedPayload.clear();
   uploadPayload.swap(queuedPayload);
+  queuedInFlash = false;
+  queuedFlashSize = 0;
   xSemaphoreGive(transferMutex);
 }
 

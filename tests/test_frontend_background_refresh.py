@@ -23,6 +23,15 @@ class FrontendBackgroundRefreshTests(unittest.TestCase):
         self.assertIn("this._loadQueue(visible, true)", self.queue)
         self.assertIn("!onlyWhenChanged || queueChanged", self.queue)
 
+    def test_queue_log_progress_updates_only_live_nodes(self) -> None:
+        structural_signature = self.queue[
+            self.queue.index("  _queueRenderSignature") : self.queue.index("  _queueLogSignature")
+        ]
+        self.assertNotIn("log: job.log", structural_signature)
+        self.assertIn("_updateQueueLiveDom()", self.queue)
+        self.assertIn("data-queue-live-summary", self.queue)
+        self.assertIn("data-queue-log-lines", self.queue)
+
     def test_device_scan_has_only_initial_and_final_render_points(self) -> None:
         scan = self.devices[
             self.devices.index("  async _scan(") : self.devices.index("  _scheduleDeviceStatusPoll(")
