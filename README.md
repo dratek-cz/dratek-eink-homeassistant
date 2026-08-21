@@ -4,11 +4,6 @@
 
 # DRATEK eInk pro Home Assistant
 
-## Novinky ve verzi 0.1.337
-
-- **Silné srážky jsou nově žluto-černé na BWRY a červeno-černé na BWR**, takže se jasně odliší od běžných barevných srážek.
-- Černá se přidává až po překročení prahu intenzity; slabé srážky zůstávají pouze žluté nebo červené a extrémní odrazy zůstávají červené.
-
 ## Novinky ve verzi 0.1.336
 
 - **Srážky jsou tmavší a výraznější** – žlutý rastr na BWRY i červený rastr na BWR má vyšší hustotu, zejména u středních a silných srážek.

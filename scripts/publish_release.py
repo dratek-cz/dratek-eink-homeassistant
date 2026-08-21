@@ -74,12 +74,12 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.337",
-        name="DRATEK eInk v0.1.337",
-        body="""## Release 0.1.337
+        tag="v0.1.336",
+        name="DRATEK eInk v0.1.336",
+        body="""## Release 0.1.336
 
 ### Vylepšeno
-- **Černý kontrast pro silné srážky**: nad prahem intenzity se černá postupně přimíchává do barevného rastru.
-- **Jasné rozlišení intenzit**: slabé srážky zůstávají barevné bez černé, silné jsou tmavé a extrémní odrazy zůstávají červené.
+- **Výraznější srážky**: žlutý rastr na BWRY a červený rastr na BWR mají vyšší hustotu.
+- **Lepší čitelnost slabých i silných odrazů** při zachování bílých mezer a odstupňování intenzity.
 """,
     )

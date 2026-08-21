@@ -237,23 +237,6 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         self.assertLess(red_ratio, 0.90)
         self.assertNotIn(meteoradar.BORDER_COLOR, area)
 
-    def test_strong_cool_echo_adds_black_contrast_on_bwry(self) -> None:
-        source = Image.new("RGBA", (64, 64), (0, 180, 220, 255))
-        image = Image.new("RGB", source.size, "white")
-        meteoradar._paint_precipitation(image, source, preserve_yellow=True)
-        colors = set(image.getdata())
-        self.assertIn(meteoradar.PRECIPITATION_YELLOW, colors)
-        self.assertIn(meteoradar.BORDER_COLOR, colors)
-        self.assertNotIn(meteoradar.PRECIPITATION_COLOR, colors)
-
-    def test_strong_cool_echo_adds_black_contrast_on_bwr(self) -> None:
-        source = Image.new("RGBA", (64, 64), (0, 180, 220, 255))
-        image = Image.new("RGB", source.size, "white")
-        meteoradar._paint_precipitation(image, source, preserve_yellow=False)
-        colors = set(image.getdata())
-        self.assertIn(meteoradar.PRECIPITATION_COLOR, colors)
-        self.assertIn(meteoradar.BORDER_COLOR, colors)
-
     def test_bwry_warm_echo_uses_the_yellow_pigment(self) -> None:
         image = self._compose((244, 196, 0, 255), preserve_yellow=True)
         self.assertIn(meteoradar.PRECIPITATION_YELLOW, set(image.getdata()))

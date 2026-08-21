@@ -667,10 +667,10 @@ def _paint_precipitation(
     Sending those RGB values straight to an e-ink nearest-colour palette turns
     an opaque blue field into solid black. Instead, alpha plus the source colour
     controls the density of an accent-colour halftone: yellow on BWRY and red on
-    BWR. Strong cool echoes additionally gain black dots so they remain clearly
-    distinguishable from ordinary rain on a reflective e-ink panel; truly hot
-    red echoes use red on BWRY. The legacy ``dotted_light`` option remains
-    accepted for stored configurations but deliberately has no effect.
+    BWR. Truly hot red echoes use red on BWRY as well. Black remains reserved
+    for map outlines and labels, matching a conventional e-ink radar map. The
+    legacy ``dotted_light`` option remains accepted for stored configurations
+    but deliberately has no effect.
     """
     comp_rgba = composite.convert("RGBA")
     red, green, blue, alpha = comp_rgba.split()
@@ -753,28 +753,6 @@ def _paint_precipitation(
             ((255, 255, 255), PRECIPITATION_COLOR),
         )
         output.paste(red_dithered, mask=precipitation_mask)
-
-    # Accent ink alone becomes visually flat on a reflective panel once both
-    # medium and strong echoes are fairly dense. Above the strong-echo threshold
-    # progressively replace part of the accent raster with black. The overlay
-    # is deliberately limited to cool RainViewer colours: warm yellow/red cells
-    # retain their native warning colour and the weakest rain remains accent-only.
-    strong_dark_coverage = cool_strength.point([
-        0 if value <= 165 else round(190 * (value - 165) / 90)
-        for value in range(256)
-    ])
-    dark_dithered = _dither_to_palette(
-        tinted_source(BORDER_COLOR, strong_dark_coverage),
-        ((255, 255, 255), BORDER_COLOR),
-    )
-    dark_pixels = dark_dithered.convert("L").point(
-        [255 if value < 128 else 0 for value in range(256)], mode="1"
-    )
-    cool_mask = ImageChops.logical_and(
-        precipitation_mask, ImageChops.invert(warm)
-    )
-    dark_pixels = ImageChops.logical_and(dark_pixels, cool_mask)
-    output.paste(BORDER_COLOR, mask=dark_pixels)
 
 
 def _draw_wind_vectors(
