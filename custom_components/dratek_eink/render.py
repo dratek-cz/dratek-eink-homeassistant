@@ -13,7 +13,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageMath
 
 from . import svg_blocks, svg_render
 from .const import DEVICE_SIZES
-from .meteoradar import BORDER_COLOR, PRECIPITATION_COLOR, PRECIPITATION_YELLOW, fit_to_size
+from .meteoradar import fit_to_size
 from .svg_text import svg_text as build_text_element
 
 # The single black/white/red rule, shared verbatim with the panel's
@@ -1653,23 +1653,11 @@ def _replace_svg_image_href_by_id(document: str, element_id: str, data_url: str)
 
 
 _RADAR_SIDEBAR_MIN = 88
-# Raised from 168: that cap froze the sidebar at 21 % of an 800 px panel while
-# a 400 px one got the full 24 %, so the bigger the display the more cramped
-# its forecast column looked - and the fewer hourly rows fitted its width.
-# 200 keeps the fraction honest up to the largest panel the integration ships
-# for (800 px wide) without ever letting the sidebar outgrow the map.
 _RADAR_SIDEBAR_MAX = 200
 _RADAR_SIDEBAR_FRACTION = 0.24
 
 
-# How many hourly steps the sidebar will ever ask the weather integration for.
-# The panel draws as many of them as its own height has room for (see
-# _radar_forecast_rows); this only bounds the fetch so a display that could
-# show twenty rows does not turn one refresh into a twenty-hour lookahead.
 _RADAR_FORECAST_MAX_HOURS = 12
-# Narrowest a forecast column may be before the panel stops splitting into
-# another one - an icon beside a time and a temperature needs about this much.
-_RADAR_FORECAST_MIN_COLUMN = 150
 
 
 async def _async_radar_forecast_summary(hass: Any) -> dict[str, Any] | None:
@@ -1678,12 +1666,6 @@ async def _async_radar_forecast_summary(hass: Any) -> dict[str, Any] | None:
     Weather template's own forecast strip reads (automation.py's
     _async_forecast_days), so the radar sidebar does not invent a second data
     source for the same kind of value.
-
-    Returns ``{"temperature": str, "hourly": bool, "entries": [...]}`` where
-    each entry carries its own ``time`` ("14:00"), ``condition``,
-    ``temperature`` and a ``label`` that stays empty for hourly steps and
-    names the day for the daily fallback. The sidebar decides how many of
-    those entries it can actually fit; this just supplies them in order.
 
     Never raises: no configured weather.* entity, hourly forecasts being
     unsupported by whatever integration is configured (falls back to the
@@ -1740,29 +1722,18 @@ async def _async_radar_forecast_summary(hass: Any) -> dict[str, Any] | None:
         now = datetime.now(timezone.utc)
         entries: list[dict[str, str]] = []
         if hourly and dated:
-            # One entry per whole hour ahead. The nearest published sample to
-            # each hour is used rather than the raw list order, because an
-            # integration is free to publish at :30 or to skip an hour, and the
-            # rows are labelled by the offset the user asked for.
             for offset in range(1, _RADAR_FORECAST_MAX_HOURS + 1):
                 target = now + timedelta(hours=offset)
                 parsed, entry = min(dated, key=lambda pair: abs((pair[0] - target).total_seconds()))
                 if abs((parsed - target).total_seconds()) > 3600:
                     break
                 entries.append({
-                    # No "+3 h" prefix: the wall-clock time is what a glance
-                    # actually compares against, and on a column this narrow
-                    # the offset only crowded it out. The daily fallback below
-                    # does carry a label, because there a bare time would not
-                    # say which day it belongs to.
                     "label": "",
                     "time": parsed.astimezone().strftime("%H:%M"),
                     "condition": str(entry.get("condition") or ""),
                     "temperature": _temperature(entry),
                 })
         elif dated:
-            # No hourly data from this integration: one nearest daily entry,
-            # labelled by its day rather than pretending to be an hour offset.
             parsed, entry = min(dated, key=lambda pair: abs((pair[0] - now).total_seconds()))
             entries.append({
                 "label": parsed.astimezone().strftime("%a"),
@@ -1788,11 +1759,7 @@ def radar_sidebar_width(total_width: int) -> int:
 
 
 def _radar_forecast_rows(available_h: int, row_h: int, count: int) -> int:
-    """How many hourly rows genuinely fit in the height left under the legend.
-
-    Whole rows only. A row that would be clipped is worse than not drawing it:
-    on e-ink there is no scrolling, so a half-drawn icon just reads as damage.
-    """
+    """Return the number of complete hourly rows that fit in the sidebar."""
     if available_h <= 0 or row_h <= 0 or count <= 0:
         return 0
     return max(0, min(count, available_h // row_h))
@@ -1801,75 +1768,27 @@ def _radar_forecast_rows(available_h: int, row_h: int, count: int) -> int:
 def _draw_radar_sidebar(
     width: int, height: int, forecast: dict[str, Any] | None, preserve_yellow: bool
 ) -> Image.Image:
-    """Draw the precipitation-intensity legend plus as many hourly forecast
-    rows as this panel's own size has room for, onto a canvas sized to exactly
-    the sidebar block's box.
-
-    Every measurement below is a fraction of the box rather than a constant, so
-    the same code fills a 128 px tag and an 800x480 panel without either one
-    being laid out for the other's proportions. The row count is part of that:
-    a small panel shows the +1 h step alone, a large one keeps adding whole
-    hours until the space runs out (see _radar_forecast_rows).
+    """Draw the v0.1.330 hourly sidebar without the intensity legend.
 
     A separate image from the map itself (see radar_sidebar_width) - the two
     are placed side by side as two independent blocks, each fetched and
     rasterised at its own box's exact pixel size, rather than one bitmap
     letterboxed to fit into two differently-shaped boxes. Still the one
     shared function both the browser preview and an automatic refresh fetch
-    through, so the legend and forecast can never drift out of sync the way
-    a JS-only overlay drawn only for the browser preview could.
+    through, so the forecast can never drift out of sync between the browser
+    preview and the image sent to the display.
     """
-    from .meteoradar import _precipitation_intensity_fills
-
     canvas = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(canvas)
 
-    # Padding tracks the smaller edge, so a tall narrow sidebar does not lose a
-    # tenth of its width to margins on both sides.
     pad = max(3, round(min(width, height) * 0.07))
     x0, x1 = pad, width - pad
     inner_w = max(1, x1 - x0)
     y = pad
 
-    # Three swatches down the side of a narrow column, but across the top of a
-    # wide one: stacked, they ate the height a stacked portrait block needs for
-    # its forecast columns.
-    legend_across = inner_w >= 240
-    legend_w = inner_w // 3 if legend_across else inner_w
-    swatch_w = max(10, round(legend_w * (0.30 if legend_across else 0.34)))
-    swatch_h = max(9, min(round(height * (0.075 if legend_across else 0.055)), round(legend_w * 0.42)))
-    label_size = max(7, round(swatch_h * 0.62))
-    # The very same fills the map paints, so a swatch is a real key to it. On a
-    # BWR panel these are three coverage patterns rather than three colours -
-    # yellow folds into red there, and the legend used to show three identical
-    # red boxes beside a map whose intensities had collapsed the same way.
-    light_fill, moderate_fill = _precipitation_intensity_fills((swatch_w, swatch_h), preserve_yellow)
-    heavy_fill = Image.new("RGB", (swatch_w, swatch_h), PRECIPITATION_COLOR)
-    for index, (label, fill) in enumerate((("SLABÉ", light_fill), ("STŘEDNÍ", moderate_fill), ("SILNÉ", heavy_fill))):
-        cell_x = x0 + index * legend_w if legend_across else x0
-        canvas.paste(fill, (cell_x, y))
-        draw.rectangle((cell_x, y, cell_x + swatch_w, y + swatch_h), outline=BORDER_COLOR, width=1)
-        gap_x = max(4, round(legend_w * 0.06))
-        _draw_centered_text(
-            draw, label, cell_x + swatch_w + gap_x + (legend_w - swatch_w - gap_x) / 2,
-            y + swatch_h / 2, legend_w - swatch_w - gap_x, swatch_h, label_size, bold=False,
-        )
-        if not legend_across:
-            y += swatch_h + max(3, round(swatch_h * 0.35))
-    if legend_across:
-        y += swatch_h + max(3, round(swatch_h * 0.35))
-
     if not forecast:
         return canvas
 
-    gap = max(4, round(height * 0.02))
-    y += gap
-    draw.line((x0, y, x1, y), fill=BORDER_COLOR, width=1)
-    y += gap
-
-    # The entity's own current temperature stays the headline number: it is the
-    # one value a glance is usually after, and it is the only one that is not a
-    # prediction.
     if forecast.get("temperature"):
         temp_h = max(14, min(round(height * 0.11), round(inner_w * 0.55)))
         _draw_centered_text(
@@ -1882,53 +1801,31 @@ def _draw_radar_sidebar(
     if not entries:
         return canvas
 
-    # A stacked portrait block hands this function a box as wide as the whole
-    # display rather than a narrow column, and laying that out as one column of
-    # full-width rows left an icon marooned at the left edge with most of the
-    # box empty. Split it into as many forecast columns as the width genuinely
-    # supports instead; a real sidebar is simply the case where only one fits,
-    # so there is one layout here rather than two that could drift apart.
-    columns = max(1, min(3, inner_w // _RADAR_FORECAST_MIN_COLUMN))
-    column_w = inner_w // columns
-
-    # A row holds an icon beside two short lines of text, so what it needs is
-    # set by the column's width, not by the panel's height. Deriving it from
-    # the height instead made a 128 px tag squeeze in three rows too small to
-    # read, while a 640 px panel drew four enormous ones and wasted the rest -
-    # in both cases the wrong number for the space. Tied to the width, the row
-    # is always the same readable size and the height decides only how many of
-    # them there is room for.
-    row_h = max(22, min(64, round(column_w * 0.55)))
-    per_column = _radar_forecast_rows(max(0, (height - pad) - y), row_h, len(entries))
-    visible = min(len(entries), per_column * columns)
-    top = y
-    for index, entry in enumerate(entries[:visible]):
-        # Column-major: a column reads top to bottom in time order before the
-        # next one starts, which is how a forecast list is read.
-        column, row = divmod(index, per_column)
-        cell_x = x0 + column * column_w
-        cell_y = top + row * row_h
+    row_h = max(22, min(64, round(inner_w * 0.55)))
+    visible = _radar_forecast_rows(max(0, (height - pad) - y), row_h, len(entries))
+    for entry in entries[:visible]:
         icon_size = max(12, round(row_h * 0.82))
         icon = _weather_condition_icon_image(entry.get("condition", ""), icon_size, preserve_yellow)
-        text_x = cell_x
-        text_w = column_w
+        text_x = x0
+        text_w = inner_w
         if icon is not None:
-            canvas.paste(icon, (cell_x, cell_y + round((row_h - icon.height) / 2)), icon)
-            text_x = cell_x + icon.width + max(2, round(column_w * 0.04))
-            text_w = max(1, (cell_x + column_w) - text_x)
+            canvas.paste(icon, (x0, y + round((row_h - icon.height) / 2)), icon)
+            text_x = x0 + icon.width + max(2, round(inner_w * 0.04))
+            text_w = max(1, x1 - text_x)
         label = entry.get("label") or ""
         if entry.get("time"):
             label = f"{label} · {entry['time']}" if label else entry["time"]
         line_h = max(7, round(row_h * 0.46))
         _draw_centered_text(
-            draw, label, text_x + text_w / 2, cell_y + row_h * 0.28,
+            draw, label, text_x + text_w / 2, y + row_h * 0.28,
             text_w, line_h, round(line_h * 0.82), bold=False,
         )
         if entry.get("temperature"):
             _draw_centered_text(
-                draw, entry["temperature"], text_x + text_w / 2, cell_y + row_h * 0.72,
+                draw, entry["temperature"], text_x + text_w / 2, y + row_h * 0.72,
                 text_w, line_h, round(line_h * 0.95),
             )
+        y += row_h
 
     return canvas
 
@@ -1983,10 +1880,8 @@ async def async_render_camera_binding_data_url(
             show_precipitation=show_precipitation,
             dotted_light=dotted_light,
             show_wind=show_wind,
-            # Not only a quantisation detail: without the fourth pigment the
-            # map has to separate the three rain intensities by coverage while
-            # it is being drawn, because folding yellow into red afterwards
-            # would have already merged them.
+            # The map renderer needs the physical palette up front so it can
+            # dither the original radar raster directly into BWR or BWRY.
             preserve_yellow=preserve_yellow,
             target_width=width,
             target_height=height,
@@ -2030,11 +1925,9 @@ def _encode_radar_png(image: Image.Image, preserve_yellow: bool) -> bytes:
 async def async_render_meteoradar_sidebar_data_url(
     hass: Any, width: int, height: int, preserve_yellow: bool = False
 ) -> str | None:
-    """Render the Meteoradar template's left info panel (precipitation legend
-    plus a +3h forecast/temperature summary) as its own image, sized to
-    exactly (width, height) - the sidebar block sitting beside the map block,
-    not baked into it. Never raises: a display should still get its map even
-    if the weather-entity lookup this needs fails for any reason.
+    """Render the Meteoradar template's hourly forecast sidebar as its own
+    image, sized to exactly (width, height). Never raises: a display should
+    still get its map if the weather-entity lookup fails.
     """
     try:
         forecast_summary = await _async_radar_forecast_summary(hass)

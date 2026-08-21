@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.333] - 2026-08-21
+
+### Změněno
+- **Meteoradar se vrací ke grafice v0.1.330**: Mapa a boční předpověď jsou znovu vždy vedle sebe. Odstraněno je pozdější skládání mapy nad předpověď i vícesloupcové rozložení z v0.1.331.
+- **Hodinová předpověď bez číselných posunů**: Řádky zůstávají po jednotlivých hodinách, ale zobrazují pouze skutečný čas (`14:00`, `15:00`), nikoli `+1 h`, `+2 h` nebo `+3 h`.
+- **Srážky jsou opět uvnitř hranic státu**: Radarový obraz se stejně jako ve v0.1.330 ořezává maskou vybraného státu; u přehledu Evropy maskou všech zobrazených států.
+- **Přímý dithering radarového rastru**: Původní barvy a průhlednost snímku RainViewer se převádějí přímo pomocí Floyd-Steinberg ditheringu. Tříbarevné displeje používají pouze bílou, černou a červenou; čtyřbarevné navíc žlutou.
+- **Bez umělé stupnice intenzity**: Z levého panelu i nastavení zmizela legenda „slabé / střední / silné“ a volba tečkování slabých srážek. Staré uložené nastavení se dál bezpečně přijme, ale výsledek už neovlivňuje.
+- Výkonové opravy z v0.1.332 zůstávají zachované: sdílený probíhající render, jediná náročná kompozice současně, nativní operace Pillow a zpracování v cílovém rozlišení.
+
 ## [0.1.332] - 2026-08-21
 
 ### Přidáno a vylepšeno

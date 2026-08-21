@@ -38,19 +38,12 @@ const METEORADAR_CACHE_MS = 2 * 60 * 1000;
 // far sooner than a success is cached for, so the map appears on its own shortly
 // after the underlying cause clears instead of waiting out the full success TTL.
 const METEORADAR_RETRY_MS = 15 * 1000;
-// The map and its info sidebar (precipitation legend + forecast) are two
+// The map and its compact forecast sidebar are two
 // separate blocks placed side by side, not one image letterboxed across
 // both shapes - mirrors render.py's radar_sidebar_width exactly; both sides
 // must move together or the two blocks stop lining up edge to edge.
 const RADAR_SIDEBAR_MIN = 88;
 const RADAR_SIDEBAR_MAX = 200;
-// A block taller than this multiple of its width stacks the map above the info
-// panel instead of putting them side by side (see _radarBlockLayout).
-const RADAR_STACK_RATIO = 1.15;
-// The map band's height on a stacked block, as a fraction of the block width -
-// close to the widest aspect any of the shipped country borders actually has,
-// so the band is filled rather than letterboxed a second time.
-const RADAR_STACK_MAP_ASPECT = 0.62;
 const RADAR_SIDEBAR_FRACTION = 0.24;
 // A safety net for the interactive preview only: if callWS never settles (a
 // dropped connection with no error/close event, for instance) the pending
@@ -388,38 +381,6 @@ export const templateSvgMixin = {
     return Math.min(raw, Math.max(1, totalWidth - 60));
   },
 
-  // How the radar block splits into its map and its info panel.
-  //
-  // Side by side is right for a landscape block, but a portrait one is the
-  // wrong shape for a country map: every border this integration ships is
-  // wider than it is tall, so letterboxing one into a tall narrow column left
-  // a small map stranded in white - on a 480x800 panel the map came out
-  // 365x183 inside a 365x783 box, wasting three fifths of the display. There
-  // the two stack instead: the map takes a band across the full width at
-  // roughly the aspect it actually wants, and the info panel gets the whole
-  // remainder, which is a far better shape for the forecast list than a
-  // 115 px column ever was.
-  //
-  // The panel image itself needs no special case - _draw_radar_sidebar lays
-  // itself out from the box it is handed - so this is the only place that has
-  // to know which arrangement is in play.
-  _radarBlockLayout(x, y, width, height) {
-    if (height > width * RADAR_STACK_RATIO) {
-      const mapH = Math.max(60, Math.min(Math.round(height * 0.5), Math.round(width * RADAR_STACK_MAP_ASPECT)));
-      return {
-        stacked: true,
-        map: { x, y, w: width, h: mapH },
-        sidebar: { x, y: y + mapH, w: width, h: Math.max(1, height - mapH) },
-      };
-    }
-    const sidebarW = this._radarSidebarWidth(width);
-    return {
-      stacked: false,
-      sidebar: { x, y, w: sidebarW, h: height },
-      map: { x: x + sidebarW, y, w: Math.max(1, width - sidebarW), h: height },
-    };
-  },
-
   // Fetches (or reuses a cached) rendered radar map and its info sidebar, each
   // at its own block's exact size - two separate images placed side by side
   // (see _blockRadarMap), not one image letterboxed across both shapes.
@@ -433,16 +394,14 @@ export const templateSvgMixin = {
   async _ensureTemplateRadarImage(width, height) {
     const country = this._meteoradarCountry || this._displayTemplateConfig?.meteoradar_country || "cz";
     const showPrecipitation = this._displayTemplateConfig?.meteoradar_show_precipitation !== false;
-    const dottedLight = this._displayTemplateConfig?.meteoradar_dotted_light !== false;
     const showWind = this._displayTemplateConfig?.meteoradar_show_wind === true;
     const preserveYellow = this._displaySupportsYellow?.() === true;
-    const layout = this._radarBlockLayout(0, 0, Math.round(width), Math.round(height));
-    const mapW = Math.round(layout.map.w);
-    const mapH = Math.round(layout.map.h);
-    const sidebarW = Math.round(layout.sidebar.w);
-    const sidebarH = Math.round(layout.sidebar.h);
+    const sidebarW = this._radarSidebarWidth(width);
+    const mapW = Math.max(1, Math.round(width) - sidebarW);
+    const mapH = Math.round(height);
+    const sidebarH = Math.round(height);
 
-    const key = `${mapW}x${mapH}_${sidebarW}x${sidebarH}_${country}_p${showPrecipitation}_d${dottedLight}_w${showWind}_y${preserveYellow}`;
+    const key = `${mapW}x${mapH}_${sidebarW}_${country}_p${showPrecipitation}_w${showWind}_y${preserveYellow}`;
     const cached = this._meteoradarImageCache;
     const age = cached ? Date.now() - cached.fetchedAt : Infinity;
     const ttl = cached?.dataUrl ? METEORADAR_CACHE_MS : METEORADAR_RETRY_MS;
@@ -457,7 +416,6 @@ export const templateSvgMixin = {
         sidebar_height: sidebarH,
         country: country,
         show_precipitation: showPrecipitation,
-        dotted_light: dottedLight,
         show_wind: showWind,
         preserve_yellow: preserveYellow,
       });
@@ -1798,7 +1756,7 @@ export const templateSvgMixin = {
   },
 
   // Two blocks side by side, both raster in an otherwise all-vector renderer:
-  // an info sidebar (precipitation legend + forecast/temperature, drawn
+  // a compact forecast/temperature sidebar, drawn
   // server-side) on the left, always spanning the block's full height - the
   // same way every other template's own side panel does - and a live
   // snapshot of camera.meteoradar (camera.py) filling the rest. Both are
@@ -1816,19 +1774,16 @@ export const templateSvgMixin = {
     const x = row.bleed ? box.fullX : box.x;
     const w = row.bleed ? box.fullW : box.w;
     const cached = this._meteoradarImageCache;
-    const layout = this._radarBlockLayout(x, box.y, w, box.h);
+    const sidebarW = this._radarSidebarWidth(w);
+    const mapX = x + sidebarW;
+    const mapW = Math.max(1, w - sidebarW);
     if (cached?.dataUrl) {
       const sidebar = cached.sidebarDataUrl
-        ? `<image data-radar-part="sidebar" x="${layout.sidebar.x.toFixed(2)}" y="${layout.sidebar.y.toFixed(2)}"`
-          + ` width="${layout.sidebar.w.toFixed(2)}" height="${layout.sidebar.h.toFixed(2)}"`
+        ? `<image data-radar-part="sidebar" x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${sidebarW.toFixed(2)}" height="${box.h.toFixed(2)}"`
           + ` preserveAspectRatio="none" href="${cached.sidebarDataUrl}"></image>`
         : "";
-      // The seam runs along whichever edge the two boxes actually share.
-      const divider = layout.stacked
-        ? this._svgHairline(layout.sidebar.x, layout.sidebar.y, layout.sidebar.w, 2)
-        : this._svgHairline(layout.map.x, layout.map.y, 2, layout.map.h);
-      const map = `<image data-radar-part="map" x="${layout.map.x.toFixed(2)}" y="${layout.map.y.toFixed(2)}"`
-        + ` width="${layout.map.w.toFixed(2)}" height="${layout.map.h.toFixed(2)}"`
+      const divider = this._svgHairline(mapX, box.y, 1, box.h);
+      const map = `<image data-radar-part="map" x="${mapX.toFixed(2)}" y="${box.y.toFixed(2)}" width="${mapW.toFixed(2)}" height="${box.h.toFixed(2)}"`
         + ` preserveAspectRatio="xMidYMid meet" href="${cached.dataUrl}"></image>`;
       return sidebar + divider + map;
     }

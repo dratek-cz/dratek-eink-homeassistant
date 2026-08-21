@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.333
+
+- **Meteoradar má znovu rozložení z v0.1.330** – mapa a hodinová předpověď jsou vedle sebe bez pozdějšího skládání a vícesloupcového panelu.
+- **Předpověď ukazuje pouze skutečné časy** – například `14:00`, `15:00`; číselné popisky `+1 h`, `+2 h` a `+3 h` se nezobrazují.
+- **Radarový snímek se ditheringuje přímo do fyzické palety displeje** – BWR používá bílou, černou a červenou, BWRY navíc žlutou. Umělá legenda „slabé / střední / silné“ i volba tečkování byly odstraněny.
+- **Srážky jsou znovu oříznuté hranicí zvoleného státu**, zatímco optimalizace výkonu z v0.1.332 zůstávají zachované.
+
 ## Novinky ve verzi 0.1.332
 
 - **Mapa připojení ukazuje všechny právě naměřené cesty** – při otevření i každých 30 sekund se obnoví lokální Bluetooth a scany gatewayí. Ruční zámek už z mapy neschová ostatní gatewaye ani jádro Home Assistantu, které displej skutečně slyší; zámek nadále omezuje jen cestu použitou pro odesílání.

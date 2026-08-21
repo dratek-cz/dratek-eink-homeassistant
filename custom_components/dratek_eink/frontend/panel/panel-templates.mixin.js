@@ -194,7 +194,6 @@ export const templatesMixin = {
           this._tt(145, 4, 100, 16, "Česká republika", "white", true, "radar_stat", "right"),
           this._rr(0, 100, 250, 28, "white", "black", 1),
           this._tt(6, 104, 110, 14, "Met.no: 21.5°C • Déšť", "black", true, "radar_metno", "left"),
-          this._tt(120, 106, 60, 11, "■ Slabé ■ Silné", "red"),
           this._tt(185, 104, 60, 14, "12:40", "black", true, "radar_cas", "right"),
         ]
       },

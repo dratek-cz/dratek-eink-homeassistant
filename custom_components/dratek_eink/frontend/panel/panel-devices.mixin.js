@@ -1643,7 +1643,6 @@ export const devicesMixin = {
       designer_viewport: this._templateDesignerViewport || "wide",
       meteoradar_country: this._meteoradarCountry || "cz",
       meteoradar_show_precipitation: this._displayTemplateConfig?.meteoradar_show_precipitation !== false,
-      meteoradar_dotted_light: this._displayTemplateConfig?.meteoradar_dotted_light !== false,
       meteoradar_show_wind: this._displayTemplateConfig?.meteoradar_show_wind === true,
       custom_image_data: this._customImageDataUrl || "",
       custom_image_source: this._customImageSourceUrl || "",
@@ -1668,7 +1667,6 @@ export const devicesMixin = {
     this._displayTemplateConfig = {
       meteoradar_country: this._meteoradarCountry,
       meteoradar_show_precipitation: config?.meteoradar_show_precipitation !== false,
-      meteoradar_dotted_light: config?.meteoradar_dotted_light !== false,
       meteoradar_show_wind: config?.meteoradar_show_wind === true,
     };
     this._customImageDataUrl = String(config?.custom_image_data || "").startsWith("data:image/")
@@ -2186,7 +2184,6 @@ export const devicesMixin = {
 
     const config = this._displayTemplateConfig || {};
     const showPrecipitation = config.meteoradar_show_precipitation !== false;
-    const dottedLight = config.meteoradar_dotted_light !== false;
     const showWind = config.meteoradar_show_wind === true;
 
     return `<div class="interactive-country-map-widget">
@@ -2262,10 +2259,6 @@ export const devicesMixin = {
           <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
             <input type="checkbox" id="mrOptPrecipitation" ${showPrecipitation ? "checked" : ""} data-device-address="${this._escape(address)}" />
             <span>🌧️ Zobrazovat srážky</span>
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
-            <input type="checkbox" id="mrOptDotted" ${dottedLight ? "checked" : ""} data-device-address="${this._escape(address)}" />
-            <span>░ Slabé srážky tečkovaně</span>
           </label>
           <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
             <input type="checkbox" id="mrOptWind" ${showWind ? "checked" : ""} data-device-address="${this._escape(address)}" />
@@ -3350,7 +3343,6 @@ export const devicesMixin = {
       } else {
         binding.country = this._meteoradarCountry || this._displayTemplateConfig?.meteoradar_country || "cz";
         binding.show_precipitation = this._displayTemplateConfig?.meteoradar_show_precipitation !== false;
-        binding.dotted_light = this._displayTemplateConfig?.meteoradar_dotted_light !== false;
         binding.show_wind = this._displayTemplateConfig?.meteoradar_show_wind === true;
       }
       bindings.push(binding);

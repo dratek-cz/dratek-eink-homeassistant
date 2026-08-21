@@ -1015,7 +1015,6 @@ const EN_EXACT = new Map(Object.entries({
   "Žádný displej neodpovídá hledání": "No display matches the search",
   "🌧️ Zobrazovat srážky": "🌧️ Show precipitation",
   "💨 Aktuální směr větru (šipky)": "💨 Current wind direction (arrows)",
-  "░ Slabé srážky tečkovaně": "░ Light precipitation dotted",
   "Nahradit aktuální návrh prázdnou šablonou?": "Replace the current design with an empty template?",
   "Cena elektřiny": "Electricity price",
 

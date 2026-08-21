@@ -1934,7 +1934,6 @@ export const inspectorMixin = {
     }
     [
       { id: "mrOptPrecipitation", key: "meteoradar_show_precipitation" },
-      { id: "mrOptDotted", key: "meteoradar_dotted_light" },
       { id: "mrOptWind", key: "meteoradar_show_wind" },
     ].forEach(({ id, key }) => {
       const input = this.shadowRoot.querySelector(`#${id}`);

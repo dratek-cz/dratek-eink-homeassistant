@@ -74,15 +74,15 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.332",
-        name="DRATEK eInk v0.1.332",
-        body="""## Release 0.1.332
+        tag="v0.1.333",
+        name="DRATEK eInk v0.1.333",
+        body="""## Release 0.1.333
 
-### Přidáno a vylepšeno
-- **800×480 přes obyčejnou ESP32 gateway** díky ukládání velkého payloadu do flash a náhodnému čtení BLE bloků.
-- **Spolehlivější mapa připojení** se všemi aktuálně potvrzenými lokálními i gateway trasami.
-- **Meteoradar bez blokování HA** se sdíleným renderem, jednou náročnou kompozicí a nativními operacemi Pillow přímo v cílovém rozlišení.
-- **Plynulá fronta zápisu** aktualizuje během přenosu jen živý stav a log, nikoli celé rozhraní.
-- **Plně asynchronní zeroconf discovery** gatewayí.
+### Změněno
+- **Grafika Meteoradaru z v0.1.330**: mapa a hodinová předpověď jsou opět vedle sebe, bez pozdějšího skládání a vícesloupcového panelu.
+- **Čisté hodinové časy**: předpověď zobrazuje `14:00`, `15:00` atd., bez `+1 h`, `+2 h` nebo `+3 h`.
+- **Přímý dithering RainViewer rastru** do BWR (bílá, černá, červená) nebo BWRY (navíc žlutá).
+- **Odstraněná legenda intenzity a tečkování**; srážky jsou znovu oříznuté hranicí vybraného státu.
+- Výkonové opravy z v0.1.332 zůstávají zachované.
 """,
     )

@@ -645,35 +645,6 @@ def dither_to_eink_palette(image: Image.Image, preserve_yellow: bool = True) -> 
     ).convert("RGB")
 
 
-def _precipitation_intensity_fills(
-    size: tuple[int, int], preserve_yellow: bool
-) -> tuple[Image.Image, Image.Image]:
-    """The light and moderate fills for this palette, at ``size``.
-
-    Heavy is always solid PRECIPITATION_COLOR and needs no helper. Shared by
-    the map (_paint_precipitation) and the sidebar legend
-    (render._draw_radar_sidebar) so a swatch always shows exactly the fill the
-    map beside it uses - a legend that drifts from its map is worse than none.
-    """
-    w, h = size
-    if preserve_yellow:
-        light = Image.new("RGB", (w, h), PRECIPITATION_YELLOW)
-        mid_rgb = (
-            round((PRECIPITATION_YELLOW[0] + PRECIPITATION_COLOR[0]) / 2),
-            round((PRECIPITATION_YELLOW[1] + PRECIPITATION_COLOR[1]) / 2),
-            round((PRECIPITATION_YELLOW[2] + PRECIPITATION_COLOR[2]) / 2),
-        )
-        mod_raw = Image.new("RGB", (w, h), mid_rgb)
-        moderate = dither_to_eink_palette(mod_raw, preserve_yellow=True)
-        return light, moderate
-
-    light_raw = Image.new("RGB", (w, h), (255, 195, 195))
-    light = dither_to_eink_palette(light_raw, preserve_yellow=False)
-    mod_raw = Image.new("RGB", (w, h), (237, 105, 100))
-    moderate = dither_to_eink_palette(mod_raw, preserve_yellow=False)
-    return light, moderate
-
-
 def _paint_precipitation(
     output: Image.Image,
     composite: Image.Image,
@@ -683,60 +654,46 @@ def _paint_precipitation(
     dotted_light: bool = True,
     preserve_yellow: bool = True,
 ) -> None:
-    """Paint detailed shaded precipitation using native Pillow band operations."""
+    """Dither the actual RainViewer raster into the display's ink palette.
+
+    RainViewer already carries both precipitation intensity and hue. Inventing
+    three synthetic light/moderate/heavy fills threw that detail away and made
+    the map disagree with the source image. Here its RGBA pixels are first
+    flattened over white with their original alpha and then Floyd-Steinberg
+    dithered directly to BWR or BWRY. The legacy ``dotted_light`` option is
+    accepted for stored configurations but deliberately has no effect.
+    """
     comp_rgba = composite.convert("RGBA")
-    red, _green, blue, alpha = comp_rgba.split()
-    min_alpha = 40
-    low_intensity = alpha.point([
-        0 if value < min_alpha
-        else round((0.15 + 0.50 * min(1.0, (value - min_alpha) / 205.0)) * 255)
-        for value in range(256)
-    ])
-    high_mask = alpha.point([0 if value < 245 else 255 for value in range(256)], mode="1")
-    blue_diff = ImageChops.subtract(blue, red)
-    red_diff = ImageChops.subtract(red, blue)
-    blue_leads = blue_diff.point([0 if value == 0 else 255 for value in range(256)], mode="1")
-    high_blue_mask = ImageChops.logical_and(high_mask, blue_leads)
-    high_red_mask = ImageChops.logical_and(high_mask, ImageChops.invert(blue_leads))
-    high_blue = blue_diff.point([
-        round((0.65 + 0.15 * min(1.0, value / 200.0)) * 255)
-        for value in range(256)
-    ])
-    high_red = red_diff.point([
-        round((0.80 + 0.20 * min(1.0, value / 220.0)) * 255)
-        for value in range(256)
-    ])
-    intensity = low_intensity
-    intensity.paste(high_blue, mask=high_blue_mask)
-    intensity.paste(high_red, mask=high_red_mask)
-
-    def channel_lut(channel: int) -> list[int]:
-        values: list[int] = []
-        for raw in range(256):
-            v = raw / 255.0
-            if preserve_yellow:
-                if v <= 0.35:
-                    t = v / 0.35
-                    value = round(255 + t * (PRECIPITATION_YELLOW[channel] - 255))
-                elif v <= 0.72:
-                    t = (v - 0.35) / (0.72 - 0.35)
-                    value = round(PRECIPITATION_YELLOW[channel] + t * (PRECIPITATION_COLOR[channel] - PRECIPITATION_YELLOW[channel]))
-                else:
-                    value = PRECIPITATION_COLOR[channel]
-            elif v <= 0.75:
-                value = round(255 + (v / 0.75) * (PRECIPITATION_COLOR[channel] - 255))
-            else:
-                value = PRECIPITATION_COLOR[channel]
-            values.append(max(0, min(255, value)))
-        return values
-
-    shaded = Image.merge("RGB", tuple(intensity.point(channel_lut(index)) for index in range(3)))
-
-    dithered = dither_to_eink_palette(shaded, preserve_yellow=preserve_yellow)
+    red, green, blue, alpha = comp_rgba.split()
+    min_alpha = max(1, min(255, int(alpha_threshold) // 4))
+    precipitation_mask = alpha.point(
+        [0 if value < min_alpha else 255 for value in range(256)], mode="1"
+    )
     if area_mask is not None:
-        output.paste(dithered, mask=area_mask)
-    else:
-        output.paste(dithered)
+        precipitation_mask = ImageChops.logical_and(
+            precipitation_mask, area_mask.convert("1")
+        )
+
+    source = Image.new("RGB", comp_rgba.size, "white")
+    source.paste(Image.merge("RGB", (red, green, blue)), mask=alpha)
+
+    if not preserve_yellow:
+        # A three-colour panel has no yellow pigment. Preserve warm radar echoes
+        # as red before quantisation instead of letting equal-distance yellow
+        # collapse unpredictably to white. Cool blue/cyan echoes remain the
+        # black/white shading produced from the source raster itself.
+        warm = ImageChops.logical_and(
+            ImageChops.logical_and(
+                red.point([0 if value < 150 else 255 for value in range(256)], mode="1"),
+                green.point([0 if value < 70 else 255 for value in range(256)], mode="1"),
+            ),
+            blue.point([255 if value < 150 else 0 for value in range(256)], mode="1"),
+        )
+        warm = ImageChops.logical_and(warm, precipitation_mask)
+        source.paste(PRECIPITATION_COLOR, mask=warm)
+
+    dithered = dither_to_eink_palette(source, preserve_yellow=preserve_yellow)
+    output.paste(dithered, mask=precipitation_mask)
 
 
 def _draw_wind_vectors(
@@ -815,7 +772,7 @@ def compose_country_radar_image(
     preserve_yellow: bool = True,
     max_dimension: int = MAX_NATIVE_DIMENSION,
 ) -> Image.Image:
-    """Stitch fetched tiles and draw the unclipped precipitation map with black country outline.
+    """Stitch tiles and draw precipitation clipped to the black country outline.
 
     Pure and network-free: `tiles` are already-decoded images the caller fetched,
     keyed by (tile_x, tile_y). A missing tile is left transparent rather than
@@ -882,13 +839,15 @@ def compose_country_radar_image(
     ys = [point[1] for point in polygon]
     extent = max(max(xs) - min(xs), max(ys) - min(ys))
 
+    country_mask = Image.new("1", composite.size, 0)
+    ImageDraw.Draw(country_mask).polygon(polygon, fill=1)
     output = Image.new("RGB", composite.size, "white")
 
     if show_precipitation:
         _paint_precipitation(
             output,
             composite,
-            area_mask=None,
+            area_mask=country_mask,
             alpha_threshold=alpha_threshold,
             dotted_light=dotted_light,
             preserve_yellow=preserve_yellow,
@@ -1009,13 +968,17 @@ def compose_multi_country_radar_image(
     extent = max(max(xs) - min(xs), max(ys) - min(ys))
     scaled_width = _scaled_border_width(extent, border_width)
 
+    countries_mask = Image.new("1", composite.size, 0)
+    mask_draw = ImageDraw.Draw(countries_mask)
+    for polygon in polygons:
+        mask_draw.polygon(polygon, fill=1)
     output = Image.new("RGB", composite.size, "white")
 
     if show_precipitation:
         _paint_precipitation(
             output,
             composite,
-            area_mask=None,
+            area_mask=countries_mask,
             alpha_threshold=alpha_threshold,
             dotted_light=dotted_light,
             preserve_yellow=preserve_yellow,
@@ -1067,9 +1030,13 @@ def _render_cache_key(
     preserve_yellow: bool,
     max_dimension: int,
 ) -> str:
+    # ``dotted_light`` remains in the signature so old stored automations and
+    # websocket clients keep working, but direct raster dithering has no such
+    # mode. Excluding it also lets old and new clients share one render.
+    del dotted_light
     marker_key = "none" if home_location is None else f"{home_location[0]:.5f},{home_location[1]:.5f}"
     return (
-        f"{str(country or 'cz').lower()}_p{int(show_precipitation)}_d{int(dotted_light)}"
+        f"{str(country or 'cz').lower()}_p{int(show_precipitation)}"
         f"_w{int(show_wind)}_y{int(preserve_yellow)}_h{marker_key}"
         f"_m{max(1, int(max_dimension))}"
     )
