@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.334
+
+- **Opravené černé plochy srážek** – modrá a azurová data RainVieweru se nyní převádějí na postupně houstnoucí černobílý rastr, nikoli na souvislou černou.
+- **Teplé odrazy používají akcentní pigment** – na BWR červenou, na BWRY žlutou a červenou; běžná modrá srážka nemůže dostat falešné červené body.
+- **Hranice států mají jemný 1px obrys** a nepřekrývají radarová data.
+
 ## Novinky ve verzi 0.1.333
 
 - **Meteoradar má znovu rozložení z v0.1.330** – mapa a hodinová předpověď jsou vedle sebe bez pozdějšího skládání a vícesloupcového panelu.

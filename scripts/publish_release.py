@@ -74,15 +74,13 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.333",
-        name="DRATEK eInk v0.1.333",
-        body="""## Release 0.1.333
+        tag="v0.1.334",
+        name="DRATEK eInk v0.1.334",
+        body="""## Release 0.1.334
 
-### Změněno
-- **Grafika Meteoradaru z v0.1.330**: mapa a hodinová předpověď jsou opět vedle sebe, bez pozdějšího skládání a vícesloupcového panelu.
-- **Čisté hodinové časy**: předpověď zobrazuje `14:00`, `15:00` atd., bez `+1 h`, `+2 h` nebo `+3 h`.
-- **Přímý dithering RainViewer rastru** do BWR (bílá, černá, červená) nebo BWRY (navíc žlutá).
-- **Odstraněná legenda intenzity a tečkování**; srážky jsou znovu oříznuté hranicí vybraného státu.
-- Výkonové opravy z v0.1.332 zůstávají zachované.
+### Opraveno
+- **Žádné souvislé černé srážky**: modré a azurové RainViewer pixely nově určují hustotu černobílého rastru místo přímého převodu modré na černou.
+- **Správné akcentní barvy**: teplé odrazy používají na BWR červenou a na BWRY žlutou nebo červenou; běžná srážka zůstává bez falešných barevných bodů.
+- **Jemný 1px obrys států** místo příliš silné 3px linky.
 """,
     )

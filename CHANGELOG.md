@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.334] - 2026-08-21
+
+### Opraveno
+- **Srážky už nejsou souvisle černé**: RainViewer používá pro běžné srážky tmavou modrou a azurovou. Přímé hledání nejbližší barvy e-inku je proto chybně zařadilo k černé. Nově alfa kanál a barevná intenzita řídí hustotu černobílého Floyd-Steinberg rastru; běžný modrý odraz tak zůstává světlý a postupně houstne se silou srážek.
+- **Bez falešných červených bodů v modrých srážkách**: Neutrální vrstva se ditheringuje samostatně pouze do bílé a černé. Teprve skutečně teplé radarové odstíny dostanou červenou, na BWRY také žlutou.
+- **Jemné hranice států**: Obrys se po optimalizovaném zmenšení kreslí výchozí šířkou jednoho cílového pixelu místo tří, takže už nepřebíjí radarová data.
+
 ## [0.1.333] - 2026-08-21
 
 ### Změněno

@@ -625,6 +625,19 @@ def _draw_home_marker(
     )
 
 
+def _dither_to_palette(
+    image: Image.Image, colors: tuple[tuple[int, int, int], ...]
+) -> Image.Image:
+    """Floyd-Steinberg dither to an explicit physical-ink palette."""
+    palette = Image.new("P", (1, 1))
+    flat = [channel for color in colors for channel in color]
+    palette.putpalette(flat + [0] * (768 - len(flat)))
+    return image.convert("RGB").quantize(
+        palette=palette,
+        dither=Image.Dither.FLOYDSTEINBERG,
+    ).convert("RGB")
+
+
 def dither_to_eink_palette(image: Image.Image, preserve_yellow: bool = True) -> Image.Image:
     """Floyd-Steinberg dithering in Pillow's native C implementation.
 
@@ -636,13 +649,7 @@ def dither_to_eink_palette(image: Image.Image, preserve_yellow: bool = True) -> 
     if preserve_yellow:
         colors.append(PRECIPITATION_YELLOW)
     colors.extend((PRECIPITATION_COLOR, BORDER_COLOR))
-    palette = Image.new("P", (1, 1))
-    flat = [channel for color in colors for channel in color]
-    palette.putpalette(flat + [0] * (768 - len(flat)))
-    return image.convert("RGB").quantize(
-        palette=palette,
-        dither=Image.Dither.FLOYDSTEINBERG,
-    ).convert("RGB")
+    return _dither_to_palette(image, tuple(colors))
 
 
 def _paint_precipitation(
@@ -656,11 +663,12 @@ def _paint_precipitation(
 ) -> None:
     """Dither the actual RainViewer raster into the display's ink palette.
 
-    RainViewer already carries both precipitation intensity and hue. Inventing
-    three synthetic light/moderate/heavy fills threw that detail away and made
-    the map disagree with the source image. Here its RGBA pixels are first
-    flattened over white with their original alpha and then Floyd-Steinberg
-    dithered directly to BWR or BWRY. The legacy ``dotted_light`` option is
+    RainViewer's Universal Blue tiles use dark blue/cyan for ordinary rain.
+    Sending those RGB values straight to an e-ink nearest-colour palette turns
+    an opaque blue field into solid black. Instead, alpha plus the cool colour
+    signal controls black-dot coverage, while warm yellow/red echoes select the
+    accent ink. This keeps the source raster's detail without mistaking blue
+    screen colour for black pigment. The legacy ``dotted_light`` option remains
     accepted for stored configurations but deliberately has no effect.
     """
     comp_rgba = composite.convert("RGBA")
@@ -674,26 +682,74 @@ def _paint_precipitation(
             precipitation_mask, area_mask.convert("1")
         )
 
-    source = Image.new("RGB", comp_rgba.size, "white")
-    source.paste(Image.merge("RGB", (red, green, blue)), mask=alpha)
+    # Ordinary blue/cyan echoes become a neutral tone before dithering. Alpha
+    # supplies most of the density; red/green growth within RainViewer's ramp
+    # adds detail for stronger cyan/green cells. Quantising this layer against
+    # BW only is intentional: a mid-grey is numerically close to red, and an
+    # unrestricted palette would sprinkle false red into ordinary rain.
+    alpha_strength = alpha.point([
+        0 if value < min_alpha
+        else round(20 + 90 * (value - min_alpha) / max(1, 255 - min_alpha))
+        for value in range(256)
+    ])
+    cool_colour_strength = ImageChops.lighter(red, green).point([
+        min(72, round(value * 72 / 255)) for value in range(256)
+    ])
+    cool_strength = ImageChops.add(alpha_strength, cool_colour_strength)
+    cool_tone = ImageChops.invert(cool_strength)
+    cool_source = Image.merge("RGB", (cool_tone, cool_tone, cool_tone))
+    cool_dithered = _dither_to_palette(
+        cool_source, ((255, 255, 255), BORDER_COLOR)
+    )
 
-    if not preserve_yellow:
-        # A three-colour panel has no yellow pigment. Preserve warm radar echoes
-        # as red before quantisation instead of letting equal-distance yellow
-        # collapse unpredictably to white. Cool blue/cyan echoes remain the
-        # black/white shading produced from the source raster itself.
-        warm = ImageChops.logical_and(
-            ImageChops.logical_and(
-                red.point([0 if value < 150 else 255 for value in range(256)], mode="1"),
-                green.point([0 if value < 70 else 255 for value in range(256)], mode="1"),
-            ),
-            blue.point([255 if value < 150 else 0 for value in range(256)], mode="1"),
+    red_high = red.point([0 if value < 150 else 255 for value in range(256)], mode="1")
+    blue_low = blue.point([255 if value < 150 else 0 for value in range(256)], mode="1")
+    green_high = green.point([0 if value < 70 else 255 for value in range(256)], mode="1")
+    red_leads = ImageChops.subtract(red, green).point(
+        [0 if value < 70 else 255 for value in range(256)], mode="1"
+    )
+    warm = ImageChops.logical_and(
+        ImageChops.logical_and(red_high, blue_low),
+        ImageChops.logical_or(green_high, red_leads),
+    )
+    warm = ImageChops.logical_and(warm, precipitation_mask)
+    cool_mask = ImageChops.logical_and(precipitation_mask, ImageChops.invert(warm))
+    output.paste(cool_dithered, mask=cool_mask)
+
+    # Warm echoes retain their alpha as colour coverage rather than becoming a
+    # solid block merely because the source hue is red or yellow.
+    warm_coverage = alpha.point([
+        0 if value < min_alpha
+        else round(38 + 217 * (value - min_alpha) / max(1, 255 - min_alpha))
+        for value in range(256)
+    ])
+
+    def tinted_source(ink: tuple[int, int, int]) -> Image.Image:
+        return Image.merge("RGB", tuple(
+            warm_coverage.point([
+                round(255 + coverage * (channel - 255) / 255)
+                for coverage in range(256)
+            ])
+            for channel in ink
+        ))
+
+    if preserve_yellow:
+        hot_red = ImageChops.logical_and(warm, red_leads)
+        warm_yellow = ImageChops.logical_and(warm, ImageChops.invert(hot_red))
+        yellow_dithered = _dither_to_palette(
+            tinted_source(PRECIPITATION_YELLOW),
+            ((255, 255, 255), PRECIPITATION_YELLOW),
         )
-        warm = ImageChops.logical_and(warm, precipitation_mask)
-        source.paste(PRECIPITATION_COLOR, mask=warm)
+        output.paste(yellow_dithered, mask=warm_yellow)
+        red_mask = hot_red
+    else:
+        red_mask = warm
 
-    dithered = dither_to_eink_palette(source, preserve_yellow=preserve_yellow)
-    output.paste(dithered, mask=precipitation_mask)
+    red_dithered = _dither_to_palette(
+        tinted_source(PRECIPITATION_COLOR),
+        ((255, 255, 255), PRECIPITATION_COLOR),
+    )
+    output.paste(red_dithered, mask=red_mask)
 
 
 def _draw_wind_vectors(
@@ -762,7 +818,7 @@ def compose_country_radar_image(
     y_max: int,
     border: tuple[tuple[float, float], ...] = CZECH_BORDER,
     alpha_threshold: int = PRECIPITATION_ALPHA_THRESHOLD,
-    border_width: int = 3,
+    border_width: int = 1,
     margin: int = 12,
     show_precipitation: bool = True,
     dotted_light: bool = True,
@@ -886,7 +942,7 @@ def compose_multi_country_radar_image(
     y_max: int,
     borders: tuple[tuple[str, tuple[tuple[float, float], ...]], ...] = EUROPE_OVERVIEW_BORDERS,
     alpha_threshold: int = PRECIPITATION_ALPHA_THRESHOLD,
-    border_width: int = 3,
+    border_width: int = 1,
     margin: int = 12,
     show_precipitation: bool = True,
     dotted_light: bool = True,

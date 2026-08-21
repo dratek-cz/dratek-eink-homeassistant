@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import inspect
 import math
 from pathlib import Path
 import sys
@@ -199,6 +200,12 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         image = self._compose((0, 0, 0, 0), border_width=4)  # no precipitation at all
         self.assertIn(meteoradar.BORDER_COLOR, list(image.getdata()))
 
+    def test_the_default_country_outline_is_one_target_pixel(self) -> None:
+        signature = inspect.signature(meteoradar.compose_country_radar_image)
+        self.assertEqual(signature.parameters["border_width"].default, 1)
+        multi_signature = inspect.signature(meteoradar.compose_multi_country_radar_image)
+        self.assertEqual(multi_signature.parameters["border_width"].default, 1)
+
     def test_output_is_a_flat_rgb_image_safe_for_the_eink_palette(self) -> None:
         image_bwry = self._compose((220, 20, 12, 255), preserve_yellow=True)
         self.assertEqual(image_bwry.mode, "RGB")
@@ -216,6 +223,16 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         self.assertIn((255, 255, 255), colors)
         self.assertNotIn(meteoradar.PRECIPITATION_COLOR, colors)
         self.assertNotIn(meteoradar.PRECIPITATION_YELLOW, colors)
+
+        cx, cy = image.width // 2, image.height // 2
+        area = [
+            image.getpixel((x, y))
+            for y in range(cy - 25, cy + 26)
+            for x in range(cx - 25, cx + 26)
+        ]
+        black_ratio = sum(pixel == meteoradar.BORDER_COLOR for pixel in area) / len(area)
+        self.assertGreater(black_ratio, 0.08)
+        self.assertLess(black_ratio, 0.70)
 
     def test_bwry_warm_echo_uses_the_yellow_pigment(self) -> None:
         image = self._compose((244, 196, 0, 255), preserve_yellow=True)
