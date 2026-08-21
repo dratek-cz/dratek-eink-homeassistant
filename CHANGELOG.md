@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.330] - 2026-08-21
+
+### Přidáno a vylepšeno
+- **Meteoradar: boční panel se škáluje podle displeje a předpovídá po hodinách**: Panel dřív ukazoval jeden jediný krok na +3 h bez ohledu na to, jestli běžel na cenovce 250×128 nebo na osmisetpixelovém panelu. Nově začíná předpovědí **na hodinu dopředu** a podle výšky displeje přidává další celé hodiny - 1 krok na malé cenovce, 3 na 400×300, 4 na 800×480, 5 na 960×640 a 9 na 480×800. Každý řádek má svou ikonu počasí, **čas, na který předpověď platí** (14:00, ne „+1 h"), a teplotu pro tu hodinu; aktuální teplota zůstává velkým číslem nahoře.
+- Šířka panelu se drží poměru displeje i u velkých panelů. Strop 168 px zmrazil boční panel na 21 % osmisetpixelového displeje, zatímco čtyřsetpixelový dostal plných 24 % - čím větší displej, tím sevřenější sloupec. Nově je strop 200 px, takže 800px displej dostane 192 px.
+- Výška řádku se nově odvozuje od **šířky** sloupce, ne od výšky displeje. Řádek je ikona vedle dvou krátkých řádků textu, takže co potřebuje, určuje šířka; výška displeje rozhoduje jen o tom, kolik se jich vejde. Podle výšky vycházely na 128px cenovce tři nečitelné řádky a na 640px panelu čtyři obří - v obou případech špatný počet. Řádek, který by se ořízl, se nekreslí vůbec: na e-inku se neroluje a půlka ikony vypadá jako poškozený obraz.
+- Pokud zvolená entita počasí hodinová data nenabízí, zobrazí se jako dřív nejbližší denní předpověď - jen je teď označená dnem místo hodinového posunu.
+
 ## [0.1.329] - 2026-08-21
 
 ### Opraveno

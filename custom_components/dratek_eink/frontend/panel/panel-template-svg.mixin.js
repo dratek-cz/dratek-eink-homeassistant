@@ -42,8 +42,8 @@ const METEORADAR_RETRY_MS = 15 * 1000;
 // separate blocks placed side by side, not one image letterboxed across
 // both shapes - mirrors render.py's radar_sidebar_width exactly; both sides
 // must move together or the two blocks stop lining up edge to edge.
-const RADAR_SIDEBAR_MIN = 92;
-const RADAR_SIDEBAR_MAX = 168;
+const RADAR_SIDEBAR_MIN = 88;
+const RADAR_SIDEBAR_MAX = 200;
 const RADAR_SIDEBAR_FRACTION = 0.24;
 // A safety net for the interactive preview only: if callWS never settles (a
 // dropped connection with no error/close event, for instance) the pending
