@@ -199,15 +199,30 @@ export const projectsMixin = {
       this._applyDraft(null);
       return;
     }
+    // Every load takes a ticket, and only the newest one may touch shared
+    // state. _applyDraft writes the canvas, the template config and the
+    // orientation, none of which are per-address - so a slow response for a
+    // display the user had already navigated away from landed on top of the
+    // one they actually opened. Going back to the list and picking a different
+    // display then showed the first display's design, and the next autosave
+    // would have written it under the second display's address.
+    const normalizedAddress = String(address).toUpperCase();
+    const ticket = (this._draftLoadTicket = (this._draftLoadTicket || 0) + 1);
+    const superseded = () => this._draftLoadTicket !== ticket;
     this._loadingDraft = true;
     try {
       const result = await this._hass.callWS({ type: "dratek_eink/device_drafts/load", address });
-      const normalizedAddress = String(address).toUpperCase();
+      // Caching it is keyed by address and therefore always safe - and worth
+      // keeping, since the list view paints its preview from exactly this.
       this._deviceDrafts[normalizedAddress] = this._mergeDraftWithSentPreview(normalizedAddress, result.draft || null);
       this._saveCachedDeviceDrafts();
+      if (superseded()) return;
       this._applyDraft(result.draft || null);
       this._loadedDraftAddress = normalizedAddress;
     } catch (err) {
+      // A failure for a display the user has already left must not blank the
+      // one they are looking at, nor raise an error banner about it.
+      if (superseded()) return;
       // Do NOT clear the canvas here. _applyDraft(null) would blank it, and the
       // next edit would then autosave that blank over the stored design - one
       // dropped websocket call (HA restarting, connection blip) used to destroy
@@ -220,7 +235,7 @@ export const projectsMixin = {
         log: [],
       };
     } finally {
-      this._loadingDraft = false;
+      if (!superseded()) this._loadingDraft = false;
     }
   },
 

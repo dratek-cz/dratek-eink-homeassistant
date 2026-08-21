@@ -8,19 +8,34 @@
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
+#include <esp_partition.h>
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.59-gateway";
+static const char* FIRMWARE_VERSION = "0.1.60-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
-static const size_t MAX_UPLOAD_PAYLOAD_BYTES = 128UL * 1024UL;
 static const size_t INITIAL_UPLOAD_RESERVE_BYTES = 128UL * 1024UL;
+// Above this the payload goes to flash instead of the heap (see
+// beginFlashPayload). Kept at the old RAM ceiling so every transfer that
+// already worked keeps taking exactly the same, faster path.
+static const size_t RAM_PAYLOAD_LIMIT_BYTES = 128UL * 1024UL;
 #else
 static const char* CHIP_FAMILY = "esp32";
-static const size_t MAX_UPLOAD_PAYLOAD_BYTES = 98UL * 1024UL;
 static const size_t INITIAL_UPLOAD_RESERVE_BYTES = 64UL * 1024UL;
+static const size_t RAM_PAYLOAD_LIMIT_BYTES = 64UL * 1024UL;
 #endif
+// What the gateway will accept once the flash path is available. An 800x480
+// BWR panel frames to 100 504 bytes and an ESP32 could never hold that beside
+// Wi-Fi and NimBLE - roughly 25 kB is the largest contiguous block one has in
+// service. The spare OTA slot has 1.9 MB doing nothing between firmware
+// updates, so the image is staged there and the transfer reads blocks back out
+// of it. 512 kB covers every panel in the catalog (the largest, 1600x1200 BWR,
+// frames to 502 504) with room left over.
+static const size_t MAX_UPLOAD_PAYLOAD_BYTES = 512UL * 1024UL;
+// Flash is written and read a page at a time; esp_partition_write needs word
+// alignment, so uploads are staged through one full page.
+static const size_t FLASH_PAGE_BYTES = 4096;
 static const size_t MAX_TRANSFER_LOG_LINES = 80;
 static const uint32_t MDNS_REFRESH_INTERVAL_MS = 5UL * 60UL * 1000UL;
 static const uint32_t WIFI_RECONNECT_INTERVAL_MS = 15UL * 1000UL;
@@ -64,6 +79,39 @@ uint32_t uploadPartialX = 0, uploadPartialY = 0, uploadPartialWidth = 0, uploadP
 uint32_t queuedPartialX = 0, queuedPartialY = 0, queuedPartialWidth = 0, queuedPartialHeight = 0;
 String uploadError;
 bool uploadDuplicate = false;
+// The spare OTA slot, borrowed as a staging area for payloads too big for the
+// heap. Writing here costs the ability to roll back to the previous firmware,
+// which esp_ota_mark_app_valid_cancel_rollback() at boot has already given up
+// anyway - and a failed OTA rewrites this slot from scratch regardless.
+const esp_partition_t* payloadPartition = nullptr;
+bool uploadUsesFlash = false;
+size_t flashWriteOffset = 0;
+std::vector<uint8_t> flashStage;
+// Set while the queued job's bytes live in flash rather than in queuedPayload.
+bool queuedInFlash = false;
+size_t queuedFlashSize = 0;
+
+// Where a transfer reads its bytes from - the heap for ordinary images, the
+// spare flash partition for ones too large to hold. Random access either way:
+// the display is free to re-request a block it has already been sent (up to
+// five times, see sendPayloadToDisplay), so the bytes cannot simply be
+// streamed past and discarded.
+struct PayloadSource {
+  const std::vector<uint8_t>* ram = nullptr;
+  const esp_partition_t* flash = nullptr;
+  size_t size = 0;
+
+  bool read(size_t offset, uint8_t* out, size_t length) const {
+    if (offset + length > size) return false;
+    if (ram != nullptr) {
+      memcpy(out, ram->data() + offset, length);
+      return true;
+    }
+    if (flash == nullptr) return false;
+    return esp_partition_read(flash, offset, out, length) == ESP_OK;
+  }
+};
+
 SemaphoreHandle_t transferMutex = nullptr;
 SemaphoreHandle_t notificationMutex = nullptr;
 // The transfer worker is created once at boot and then parked on this
@@ -436,7 +484,7 @@ bool connectToDisplay(
   return false;
 }
 
-bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& payload, uint8_t softwareVersion, TransferLogSink& log, bool partial = false, uint32_t partialX = 0, uint32_t partialY = 0, uint32_t partialWidth = 0, uint32_t partialHeight = 0) {
+bool sendPayloadToDisplay(const String& address, const PayloadSource& payload, uint8_t softwareVersion, TransferLogSink& log, bool partial = false, uint32_t partialX = 0, uint32_t partialY = 0, uint32_t partialWidth = 0, uint32_t partialHeight = 0) {
   NimBLEClient* client = NimBLEDevice::createClient();
   client->setConnectTimeout(SCANNED_CONNECT_TIMEOUT_SECONDS);
   addLog(log, "Connecting to display " + address + ".");
@@ -489,8 +537,8 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
     return false;
   }
   int chunkSize = blockSize - 4;
-  int totalBlocks = (payload.size() + chunkSize - 1) / chunkSize;
-  addLog(log, "Block size " + String(blockSize) + ", payload " + String(payload.size()) + " bytes, blocks " + String(totalBlocks) + ".");
+  int totalBlocks = (payload.size + chunkSize - 1) / chunkSize;
+  addLog(log, "Block size " + String(blockSize) + ", payload " + String(payload.size) + " bytes, blocks " + String(totalBlocks) + ".");
 
   if (partial) {
     uint8_t area[21] = {0};
@@ -517,7 +565,7 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
   // receive all blocks and report 05 08, but never refresh the physical panel.
   uint8_t prepare[8] = {0};
   prepare[0] = 0x02;
-  uint32_t payloadSize = payload.size();
+  uint32_t payloadSize = payload.size;
   prepare[1] = payloadSize & 0xFF;
   prepare[2] = (payloadSize >> 8) & 0xFF;
   prepare[3] = (payloadSize >> 16) & 0xFF;
@@ -594,12 +642,17 @@ bool sendPayloadToDisplay(const String& address, const std::vector<uint8_t>& pay
     int endBlock = streamingMode ? totalBlocks : nextBlock + 1;
     for (int blockNumber = nextBlock; blockNumber < endBlock; blockNumber++) {
       int startOffset = blockNumber * chunkSize;
-      int dataLen = min(chunkSize, (int)payload.size() - startOffset);
+      int dataLen = min(chunkSize, (int)payload.size - startOffset);
       block[0] = blockNumber & 0xFF;
       block[1] = (blockNumber >> 8) & 0xFF;
       block[2] = (blockNumber >> 16) & 0xFF;
       block[3] = (blockNumber >> 24) & 0xFF;
-      memcpy(block.data() + 4, payload.data() + startOffset, dataLen);
+      if (!payload.read(startOffset, block.data() + 4, dataLen)) {
+        client->disconnect();
+        NimBLEDevice::deleteClient(client);
+        addLog(log, "Could not read block " + String(blockNumber) + " of the staged payload.");
+        return false;
+      }
 
       bool written = false;
       for (int writeAttempt = 1; writeAttempt <= 3; writeAttempt++) {
@@ -763,6 +816,50 @@ void handleOtaUploadComplete() {
   otaRestartAtMs = millis() + 1500;
 }
 
+// Erase exactly the pages this payload needs. Erasing the whole 1.9 MB slot
+// every time would cost seconds and wear the flash for nothing.
+bool beginFlashPayload(size_t expectedSize) {
+  if (payloadPartition == nullptr) payloadPartition = esp_ota_get_next_update_partition(nullptr);
+  if (payloadPartition == nullptr || payloadPartition->size < expectedSize) return false;
+  size_t eraseBytes = ((expectedSize + FLASH_PAGE_BYTES - 1) / FLASH_PAGE_BYTES) * FLASH_PAGE_BYTES;
+  if (esp_partition_erase_range(payloadPartition, 0, eraseBytes) != ESP_OK) return false;
+  flashStage.clear();
+  flashStage.reserve(FLASH_PAGE_BYTES);
+  flashWriteOffset = 0;
+  return true;
+}
+
+bool writeFlashPayload(const uint8_t* data, size_t length) {
+  if (payloadPartition == nullptr) return false;
+  while (length > 0) {
+    size_t room = FLASH_PAGE_BYTES - flashStage.size();
+    size_t take = length < room ? length : room;
+    flashStage.insert(flashStage.end(), data, data + take);
+    data += take;
+    length -= take;
+    if (flashStage.size() == FLASH_PAGE_BYTES) {
+      if (esp_partition_write(payloadPartition, flashWriteOffset, flashStage.data(), FLASH_PAGE_BYTES) != ESP_OK) return false;
+      flashWriteOffset += FLASH_PAGE_BYTES;
+      flashStage.clear();
+    }
+  }
+  return true;
+}
+
+// The tail is padded up to a word boundary: esp_partition_write needs the
+// length aligned, and the extra bytes sit past the payload where nothing reads
+// them.
+bool finishFlashPayload() {
+  if (payloadPartition == nullptr) return false;
+  if (flashStage.empty()) return true;
+  while (flashStage.size() % 4 != 0) flashStage.push_back(0xFF);
+  bool ok = esp_partition_write(payloadPartition, flashWriteOffset, flashStage.data(), flashStage.size()) == ESP_OK;
+  flashWriteOffset += flashStage.size();
+  flashStage.clear();
+  flashStage.shrink_to_fit();
+  return ok;
+}
+
 void handleTransferUploadChunk() {
   HTTPUpload& upload = server.upload();
   if (upload.status == UPLOAD_FILE_START) {
@@ -804,12 +901,22 @@ void handleTransferUploadChunk() {
     if (!uploadDuplicate && gatewayOperationBusy()) {
       uploadError = "gateway_busy";
     }
+    uploadUsesFlash = false;
     if (!uploadError.length() && !uploadDuplicate) {
-      // uploadPayload already carries capacity from the boot-time reserve (or
-      // from a previous transfer handing its buffer back, see transferTask),
-      // so this only needs a fresh contiguous heap block the first time a
-      // transfer asks for more than that high-water mark - normally never.
-      if (uploadPayload.capacity() < uploadExpectedSize) {
+      if (uploadExpectedSize > RAM_PAYLOAD_LIMIT_BYTES) {
+        // Too big for the heap on any chip this runs on. Stage it in the spare
+        // OTA slot instead of refusing the image outright, which is what used
+        // to happen to every 800x480 panel behind an ESP32 gateway.
+        if (!beginFlashPayload(uploadExpectedSize)) {
+          uploadError = "payload_staging_failed";
+          return;
+        }
+        uploadUsesFlash = true;
+      } else if (uploadPayload.capacity() < uploadExpectedSize) {
+        // uploadPayload already carries capacity from the boot-time reserve (or
+        // from a previous transfer handing its buffer back, see transferTask),
+        // so this only needs a fresh contiguous heap block the first time a
+        // transfer asks for more than that high-water mark - normally never.
         if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < uploadExpectedSize) {
           uploadError = "insufficient_contiguous_memory";
           return;
@@ -822,10 +929,15 @@ void handleTransferUploadChunk() {
 
   if (upload.status == UPLOAD_FILE_WRITE) {
     if (uploadError.length() || uploadDuplicate) return;
-    size_t nextSize = uploadPayload.size() + upload.currentSize;
+    size_t received = uploadUsesFlash ? (flashWriteOffset + flashStage.size()) : uploadPayload.size();
+    size_t nextSize = received + upload.currentSize;
     if (nextSize > uploadExpectedSize || nextSize > MAX_UPLOAD_PAYLOAD_BYTES) {
       uploadError = "payload_too_large";
       uploadPayload.clear();
+      return;
+    }
+    if (uploadUsesFlash) {
+      if (!writeFlashPayload(upload.buf, upload.currentSize)) uploadError = "payload_staging_failed";
       return;
     }
     uploadPayload.insert(uploadPayload.end(), upload.buf, upload.buf + upload.currentSize);
@@ -835,6 +947,9 @@ void handleTransferUploadChunk() {
   if (upload.status == UPLOAD_FILE_ABORTED) {
     uploadError = "upload_aborted";
     uploadPayload.clear();
+    uploadUsesFlash = false;
+    flashStage.clear();
+    flashStage.shrink_to_fit();
   }
 }
 

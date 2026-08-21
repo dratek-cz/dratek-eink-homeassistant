@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.331] - 2026-08-21
+
+### Přidáno a vylepšeno
+- **Meteoradar: celoplošné srážky bez ořezu na hranice států**: Srážková pole se nově vykreslují přes celou plochu mapového výřezu (včetně přesahu do okolních států). Černý obrys hranic států i domovská poloha se kreslí jako zřetelná vrstva přes srážky.
+- **Plynulé stínování srážek s adaptivním Floyd-Steinberg ditheringem**: Hrubé umělé šachovnice byly nahrazeny plynulým přechodem intenzity srážek s Floyd-Steinberg rozptylem chyby optimalizovaným pro konkrétní paletu e-inku (BWRY, BWR a BW). Výsledkem je autentické detailní meteoradarové zobrazení na všech velikostech displejů.
+- **Zvýrazněný předěl levého panelu**: Dělící linka mezi bočním panelem s předpovědí a mapou meteoradaru byla zesílena na zřetelnou 2px linku pro čistší oddělení obou částí.
+
 ## [0.1.330] - 2026-08-21
 
 ### Přidáno a vylepšeno

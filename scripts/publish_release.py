@@ -74,11 +74,13 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.315",
-        name="DRATEK eInk v0.1.315",
-        body="""## Release 0.1.315
+        tag="v0.1.331",
+        name="DRATEK eInk v0.1.331",
+        body="""## Release 0.1.331
 
-### Opraveno
-- **Barevná paleta náhledu pro velké displeje (BWR)**: Opraveno chybné přiřazení žlutého kanálu (`BWRY`) u velkých tříbarevných displejů (800x480, 400x300, 960x640, 1360x480 apod.). Ikony v šablonách se na náhledu hlavní stránky a v editoru nyní vykreslují správně v červené barvě odpovídající reálnému e-ink displeji.
+### Přidáno a vylepšeno
+- **Meteoradar: celoplošné srážky bez ořezu na hranice států**: Srážková pole se nově vykreslují přes celou plochu mapového výřezu (včetně přesahu do okolních států). Černý obrys hranic států i domovská poloha se kreslí jako zřetelná vrstva přes srážky.
+- **Plynulé stínování srážek s adaptivním Floyd-Steinberg ditheringem**: Hrubé umělé šachovnice byly nahrazeny plynulým přechodem intenzity srážek s Floyd-Steinberg rozptylem chyby optimalizovaným pro konkrétní paletu e-inku (BWRY, BWR a BW). Výsledkem je autentické detailní meteoradarové zobrazení na všech velikostech displejů.
+- **Zvýrazněný předěl levého panelu**: Dělící linka mezi bočním panelem s předpovědí a mapou meteoradaru byla zesílena na zřetelnou 2px linku pro čistší oddělení obou částí.
 """,
     )

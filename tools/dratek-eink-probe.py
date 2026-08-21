@@ -106,19 +106,35 @@ def test_pattern(width: int, height: int, caption: str) -> Image.Image:
     return image
 
 
-def send(gateway: str, address: str, payload: bytes, software: int, timeout: float) -> bool:
+def send(
+    gateway: str,
+    address: str,
+    payload: bytes,
+    software: int,
+    timeout: float,
+    partial: tuple[int, int, int, int] | None = None,
+) -> bool:
     job_id = uuid.uuid4().hex[:16]
-    response = requests.post(
-        f"http://{gateway}/api/transfer/upload",
-        params={
-            "address": address,
-            "id": job_id,
-            "software_version": software,
-            "size": len(payload),
-        },
-        files={"payload": ("display.bin", payload, "application/octet-stream")},
-        timeout=180,
-    )
+    params = {
+        "address": address,
+        "id": job_id,
+        "software_version": software,
+        "size": len(payload),
+    }
+    if partial is not None:
+        x, y, width, height = partial
+        params.update({"partial": 1, "x": x, "y": y, "width": width, "height": height})
+    upload_deadline = time.monotonic() + timeout
+    while True:
+        response = requests.post(
+            f"http://{gateway}/api/transfer/upload",
+            params=params,
+            files={"payload": ("display.bin", payload, "application/octet-stream")},
+            timeout=180,
+        )
+        if response.status_code != 409 or time.monotonic() >= upload_deadline:
+            break
+        time.sleep(0.25)
     if response.status_code >= 300:
         log(f"Gateway odmitla upload: {response.status_code} {response.text[:200]}")
         return False
@@ -156,8 +172,14 @@ def main() -> int:
     parser.add_argument("--gateway", required=True, help="IP adresa gatewaye")
     parser.add_argument("--address", help="MAC adresa displeje")
     parser.add_argument("--scan", action="store_true", help="jen vypsat displeje")
+    parser.add_argument(
+        "--partial-test",
+        action="store_true",
+        help="otestovat prikaz 0x60 malym vyrezem 31x32 v levem hornim rohu",
+    )
     parser.add_argument("--scan-seconds", type=int, default=10)
     parser.add_argument("--sdk-type", type=int, help="jinak podle inzerce")
+    parser.add_argument("--software-version", type=int, help="preskoci scan pri partial testu")
     parser.add_argument(
         "--mode",
         choices=("auto", "raw", "framed"),
@@ -168,7 +190,13 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=300.0)
     args = parser.parse_args()
 
-    devices = scan(args.gateway, args.scan_seconds)
+    direct_partial = bool(
+        args.partial_test
+        and args.address
+        and args.sdk_type
+        and args.software_version is not None
+    )
+    devices = {} if direct_partial else scan(args.gateway, args.scan_seconds)
     if args.scan:
         return 0
     if not args.address:
@@ -176,11 +204,38 @@ def main() -> int:
 
     address = args.address.upper()
     advertised = devices.get(address)
+    if direct_partial:
+        advertised = {
+            "sdk_type": args.sdk_type,
+            "raw_type": 0,
+            "software": args.software_version,
+        }
     if advertised is None:
         log(f"{address} neni v dosahu gatewaye.")
         return 1
 
     sdk_type = args.sdk_type or advertised["sdk_type"]
+    if args.partial_test:
+        width, height = 31, 32
+        image = Image.new("RGB", (width, height), "white")
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((0, 0, width - 1, height - 1), outline="black", width=4)
+        draw.rectangle((10, 10, 20, 21), fill="black")
+        payload = render.pack_bwr_region(image)
+        log(
+            f"Partial probe 0x60: oblast 0,0 {width}x{height}, payload {len(payload)} B."
+        )
+        ok = send(
+            args.gateway,
+            address,
+            payload,
+            advertised["software"],
+            args.timeout,
+            partial=(0, 0, width, height),
+        )
+        log("Partial probe dokoncen." if ok else "Partial probe byl odmitnut.")
+        return 0 if ok else 1
+
     width, height = render.display_size(sdk_type)
     if args.image:
         image = Image.open(args.image).convert("RGB").resize((width, height), Image.LANCZOS)

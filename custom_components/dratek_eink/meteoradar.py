@@ -625,98 +625,195 @@ def _draw_home_marker(
     )
 
 
-def _generate_precipitation_checkerboard(
-    size: tuple[int, int],
-    *,
-    ink: tuple[int, int, int] = PRECIPITATION_COLOR,
-    background: tuple[int, int, int] = PRECIPITATION_YELLOW,
-) -> Image.Image:
-    """A checkerboard of ink/background squares for moderate rain, scaled so
-    the squares survive the final downscale to device resolution.
+def dither_to_eink_palette(image: Image.Image, preserve_yellow: bool = True) -> Image.Image:
+    """Error-diffusion (Floyd-Steinberg) dithering to BWR or BWRY e-ink palette."""
+    rgb = image.convert("RGB")
+    w, h = rgb.size
+    raw_pixels = rgb.load()
 
-    A diagonal line hatch used to stand in for "moderate" here, but a diagonal
-    stroke draws thin at any one point along its own length - the exact
-    property that made the old dotted "light rain" pattern fade into pale
-    noise once a zoom-6 map got reduced to a 250x128 display (see the removed
-    dotted-pattern code this replaced). Square, axis-aligned pixel blocks next
-    to each other - the same fix already applied to "heavy" (solid) and now
-    "light" (solid) - carry a fixed minimum run length in both directions, so
-    the downscale can only ever merge same-colour neighbours, never thin a
-    mark down to nothing.
+    out = Image.new("RGB", (w, h), (255, 255, 255))
+    out_pixels = out.load()
+
+    cur_err = [[0.0, 0.0, 0.0] for _ in range(w)]
+    nxt_err = [[0.0, 0.0, 0.0] for _ in range(w)]
+
+    for y in range(h):
+        for x in range(w):
+            orig_r, orig_g, orig_b = raw_pixels[x, y]
+            err = cur_err[x]
+            r = max(0.0, min(255.0, float(orig_r) + err[0]))
+            g = max(0.0, min(255.0, float(orig_g) + err[1]))
+            b = max(0.0, min(255.0, float(orig_b) + err[2]))
+
+            # Fast-path for plain white without error
+            if (
+                orig_r == 255
+                and orig_g == 255
+                and orig_b == 255
+                and abs(err[0]) < 0.5
+                and abs(err[1]) < 0.5
+                and abs(err[2]) < 0.5
+            ):
+                out_pixels[x, y] = (255, 255, 255)
+                continue
+
+            # Pick candidate palette based on hue family of the source pixel
+            if preserve_yellow:
+                if orig_r >= 240 and orig_g >= 190 and orig_b <= 50:
+                    candidates = (PRECIPITATION_YELLOW,)
+                elif orig_g > 150 and orig_b < 100:
+                    candidates = ((255, 255, 255), PRECIPITATION_YELLOW)
+                elif orig_g > 60 and orig_b < 60:
+                    candidates = (PRECIPITATION_YELLOW, PRECIPITATION_COLOR)
+                elif orig_r > 150 and orig_g < 60:
+                    candidates = (PRECIPITATION_COLOR,)
+                elif orig_r < 50 and orig_g < 50 and orig_b < 50:
+                    candidates = (BORDER_COLOR,)
+                else:
+                    candidates = ((255, 255, 255), PRECIPITATION_YELLOW, PRECIPITATION_COLOR, BORDER_COLOR)
+            else:
+                if orig_r > 180 and orig_g < 50:
+                    candidates = (PRECIPITATION_COLOR,)
+                elif orig_r < 50 and orig_g < 50 and orig_b < 50:
+                    candidates = (BORDER_COLOR,)
+                elif orig_r > 150:
+                    candidates = ((255, 255, 255), PRECIPITATION_COLOR)
+                else:
+                    candidates = ((255, 255, 255), PRECIPITATION_COLOR, BORDER_COLOR)
+
+            best_col = candidates[0]
+            min_dist = float("inf")
+            for pr, pg, pb in candidates:
+                dr = r - float(pr)
+                dg = g - float(pg)
+                db = b - float(pb)
+                dist = dr * dr + dg * dg + db * db
+                if dist < min_dist:
+                    min_dist = dist
+                    best_col = (pr, pg, pb)
+
+            out_pixels[x, y] = best_col
+
+            er = r - float(best_col[0])
+            eg = g - float(best_col[1])
+            eb = b - float(best_col[2])
+
+            if x + 1 < w:
+                cur_err[x + 1][0] += er * (7.0 / 16.0)
+                cur_err[x + 1][1] += eg * (7.0 / 16.0)
+                cur_err[x + 1][2] += eb * (7.0 / 16.0)
+            if x > 0:
+                nxt_err[x - 1][0] += er * (3.0 / 16.0)
+                nxt_err[x - 1][1] += eg * (3.0 / 16.0)
+                nxt_err[x - 1][2] += eb * (3.0 / 16.0)
+            nxt_err[x][0] += er * (5.0 / 16.0)
+            nxt_err[x][1] += eg * (5.0 / 16.0)
+            nxt_err[x][2] += eb * (5.0 / 16.0)
+            if x + 1 < w:
+                nxt_err[x + 1][0] += er * (1.0 / 16.0)
+                nxt_err[x + 1][1] += eg * (1.0 / 16.0)
+                nxt_err[x + 1][2] += eb * (1.0 / 16.0)
+
+        cur_err = nxt_err
+        nxt_err = [[0.0, 0.0, 0.0] for _ in range(w)]
+
+    return out
+
+
+def _precipitation_intensity_fills(
+    size: tuple[int, int], preserve_yellow: bool
+) -> tuple[Image.Image, Image.Image]:
+    """The light and moderate fills for this palette, at ``size``.
+
+    Heavy is always solid PRECIPITATION_COLOR and needs no helper. Shared by
+    the map (_paint_precipitation) and the sidebar legend
+    (render._draw_radar_sidebar) so a swatch always shows exactly the fill the
+    map beside it uses - a legend that drifts from its map is worse than none.
     """
-    scale = max(1, math.ceil(max(size) / MAX_NATIVE_DIMENSION))
-    cell = 6 * scale
-    pattern = Image.new("RGB", size, background)
-    draw = ImageDraw.Draw(pattern)
-    for y in range(0, size[1], cell):
-        row = y // cell
-        for x in range(0, size[0], cell):
-            if (row + x // cell) % 2 == 0:
-                draw.rectangle((x, y, x + cell - 1, y + cell - 1), fill=ink)
-    return pattern
+    w, h = size
+    if preserve_yellow:
+        light = Image.new("RGB", (w, h), PRECIPITATION_YELLOW)
+        mid_rgb = (
+            round((PRECIPITATION_YELLOW[0] + PRECIPITATION_COLOR[0]) / 2),
+            round((PRECIPITATION_YELLOW[1] + PRECIPITATION_COLOR[1]) / 2),
+            round((PRECIPITATION_YELLOW[2] + PRECIPITATION_COLOR[2]) / 2),
+        )
+        mod_raw = Image.new("RGB", (w, h), mid_rgb)
+        moderate = dither_to_eink_palette(mod_raw, preserve_yellow=True)
+        return light, moderate
+
+    light_raw = Image.new("RGB", (w, h), (255, 195, 195))
+    light = dither_to_eink_palette(light_raw, preserve_yellow=False)
+    mod_raw = Image.new("RGB", (w, h), (237, 105, 100))
+    moderate = dither_to_eink_palette(mod_raw, preserve_yellow=False)
+    return light, moderate
 
 
 def _paint_precipitation(
     output: Image.Image,
     composite: Image.Image,
-    area_mask: Image.Image,
+    area_mask: Image.Image | None = None,
     *,
-    alpha_threshold: int,
-    dotted_light: bool,
+    alpha_threshold: int = PRECIPITATION_ALPHA_THRESHOLD,
+    dotted_light: bool = True,
+    preserve_yellow: bool = True,
 ) -> None:
-    """Paint three readable precipitation intensities into ``output``."""
-    alpha = composite.getchannel("A")
-    if not dotted_light:
-        precipitation_mask = alpha.point(lambda value: 255 if value >= 50 else 0).convert("1")
-        output.paste(
-            Image.new("RGB", composite.size, PRECIPITATION_COLOR),
-            mask=ImageChops.logical_and(area_mask, precipitation_mask),
-        )
-        return
+    """Paint detailed shaded precipitation onto ``output`` with Floyd-Steinberg dithering."""
+    comp_rgba = composite.convert("RGBA")
+    w, h = comp_rgba.size
+    comp_pixels = comp_rgba.load()
 
-    light_threshold = max(50, alpha_threshold // 3)
-    light_mask = alpha.point(
-        lambda value: 255 if light_threshold <= value < alpha_threshold else 0
-    ).convert("1")
-    translucent_moderate = alpha.point(
-        lambda value: 255 if alpha_threshold <= value < 255 else 0
-    ).convert("1")
+    shaded = Image.new("RGB", (w, h), (255, 255, 255))
+    shaded_pixels = shaded.load()
 
-    # Once Universal Blue reaches full opacity, its RGB carries the remaining
-    # reflectivity scale: ordinary rain is blue/cyan (B > R), while the strong
-    # yellow/orange/red/magenta echoes have R >= B.  Splitting those opaque
-    # pixels keeps genuinely strong cells solid without flattening every normal
-    # shower into the same red blob.
-    red, _green, blue, _alpha = composite.split()
-    opaque = alpha.point(lambda value: 255 if value == 255 else 0).convert("1")
-    blue_over_red = ImageChops.subtract(blue, red).point(
-        lambda value: 255 if value > 0 else 0
-    ).convert("1")
-    opaque_moderate = ImageChops.logical_and(opaque, blue_over_red)
-    moderate_mask = ImageChops.logical_or(translucent_moderate, opaque_moderate)
-    heavy_mask = ImageChops.logical_and(opaque, ImageChops.invert(blue_over_red))
+    min_alpha = 40
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = comp_pixels[x, y]
+            if a < min_alpha:
+                continue
 
-    # Light rain reads as its own intensity by colour alone (yellow vs. red),
-    # not by texture - a sparse dot pattern on white used to imply "barely
-    # raining, mostly clear," which is a claim about *coverage* this pixel
-    # does not make (the mask has already decided this exact pixel is
-    # raining). Flat ink keeps that claim to intensity only.
-    output.paste(
-        Image.new("RGB", composite.size, PRECIPITATION_YELLOW),
-        mask=ImageChops.logical_and(area_mask, light_mask),
-    )
-    output.paste(
-        _generate_precipitation_checkerboard(
-            composite.size,
-            ink=PRECIPITATION_COLOR,
-            background=PRECIPITATION_YELLOW,
-        ),
-        mask=ImageChops.logical_and(area_mask, moderate_mask),
-    )
-    output.paste(
-        Image.new("RGB", composite.size, PRECIPITATION_COLOR),
-        mask=ImageChops.logical_and(area_mask, heavy_mask),
-    )
+            if a < 245:
+                v = 0.15 + 0.50 * min(1.0, max(0.0, (float(a) - min_alpha) / (245.0 - min_alpha)))
+            else:
+                if b > r:
+                    diff = max(0.0, float(b - r))
+                    v = 0.65 + 0.15 * min(1.0, diff / 200.0)
+                else:
+                    diff = max(0.0, float(r - b))
+                    v = 0.80 + 0.20 * min(1.0, diff / 220.0)
+
+            v = max(0.0, min(1.0, v))
+
+            if preserve_yellow:
+                if v <= 0.35:
+                    t = v / 0.35
+                    tr = round(255 + t * (PRECIPITATION_YELLOW[0] - 255))
+                    tg = round(255 + t * (PRECIPITATION_YELLOW[1] - 255))
+                    tb = round(255 + t * (PRECIPITATION_YELLOW[2] - 255))
+                elif v <= 0.72:
+                    t = (v - 0.35) / (0.72 - 0.35)
+                    tr = round(PRECIPITATION_YELLOW[0] + t * (PRECIPITATION_COLOR[0] - PRECIPITATION_YELLOW[0]))
+                    tg = round(PRECIPITATION_YELLOW[1] + t * (PRECIPITATION_COLOR[1] - PRECIPITATION_YELLOW[1]))
+                    tb = round(PRECIPITATION_YELLOW[2] + t * (PRECIPITATION_COLOR[2] - PRECIPITATION_YELLOW[2]))
+                else:
+                    tr, tg, tb = PRECIPITATION_COLOR
+            else:
+                if v <= 0.75:
+                    t = v / 0.75
+                    tr = round(255 + t * (PRECIPITATION_COLOR[0] - 255))
+                    tg = round(255 + t * (PRECIPITATION_COLOR[1] - 255))
+                    tb = round(255 + t * (PRECIPITATION_COLOR[2] - 255))
+                else:
+                    tr, tg, tb = PRECIPITATION_COLOR
+
+            shaded_pixels[x, y] = (tr, tg, tb)
+
+    dithered = dither_to_eink_palette(shaded, preserve_yellow=preserve_yellow)
+    if area_mask is not None:
+        output.paste(dithered, mask=area_mask)
+    else:
+        output.paste(dithered)
 
 
 def _draw_wind_vectors(
@@ -792,8 +889,9 @@ def compose_country_radar_image(
     show_wind: bool = False,
     wind_samples: tuple[tuple[float, float, float, float], ...] = (),
     home_location: tuple[float, float] | None = None,
+    preserve_yellow: bool = True,
 ) -> Image.Image:
-    """Stitch fetched tiles and draw the black-outlined, red/white precipitation map.
+    """Stitch fetched tiles and draw the unclipped precipitation map with black country outline.
 
     Pure and network-free: `tiles` are already-decoded images the caller fetched,
     keyed by (tile_x, tile_y). A missing tile is left transparent rather than
@@ -819,10 +917,6 @@ def compose_country_radar_image(
         origin_y=origin_y,
     )
 
-    country_mask = Image.new("L", composite.size, 0)
-    ImageDraw.Draw(country_mask).polygon(polygon, fill=255)
-    country_mask = country_mask.convert("1")
-
     xs = [point[0] for point in polygon]
     ys = [point[1] for point in polygon]
     extent = max(max(xs) - min(xs), max(ys) - min(ys))
@@ -833,9 +927,10 @@ def compose_country_radar_image(
         _paint_precipitation(
             output,
             composite,
-            country_mask,
+            area_mask=None,
             alpha_threshold=alpha_threshold,
             dotted_light=dotted_light,
+            preserve_yellow=preserve_yellow,
         )
 
     draw = ImageDraw.Draw(output)
@@ -880,6 +975,7 @@ def compose_multi_country_radar_image(
     show_wind: bool = False,
     wind_samples: tuple[tuple[float, float, float, float], ...] = (),
     home_location: tuple[float, float] | None = None,
+    preserve_yellow: bool = True,
 ) -> Image.Image:
     """The Europe-overview counterpart to `compose_country_radar_image`."""
     grid_width = (x_max - x_min + 1) * tile_size
@@ -905,12 +1001,6 @@ def compose_multi_country_radar_image(
         origin_y=origin_y,
     )
 
-    countries_mask = Image.new("L", composite.size, 0)
-    mask_draw = ImageDraw.Draw(countries_mask)
-    for polygon in polygons:
-        mask_draw.polygon(polygon, fill=255)
-    countries_mask = countries_mask.convert("1")
-
     xs = [x for polygon in polygons for x, _y in polygon]
     ys = [y for polygon in polygons for _x, y in polygon]
     extent = max(max(xs) - min(xs), max(ys) - min(ys))
@@ -922,9 +1012,10 @@ def compose_multi_country_radar_image(
         _paint_precipitation(
             output,
             composite,
-            countries_mask,
+            area_mask=None,
             alpha_threshold=alpha_threshold,
             dotted_light=dotted_light,
+            preserve_yellow=preserve_yellow,
         )
 
     output_draw = ImageDraw.Draw(output)
@@ -1052,12 +1143,16 @@ async def _async_composed_base_image(
     dotted_light: bool = True,
     show_wind: bool = False,
     home_location: tuple[float, float] | None = None,
+    preserve_yellow: bool = True,
 ) -> Image.Image | None:
     """Return the current country (or "eu" overview) map at native resolution,
     refetching only when RainViewer's own frame timestamp has actually moved on.
     """
     marker_key = "none" if home_location is None else f"{home_location[0]:.5f},{home_location[1]:.5f}"
-    key = f"{str(country or 'cz').lower()}_p{int(show_precipitation)}_d{int(dotted_light)}_w{int(show_wind)}_h{marker_key}"
+    # The palette is part of the key: the same country rendered for a BWR and
+    # a BWRY panel are genuinely different bitmaps now, and sharing one cache
+    # entry between them would hand whichever asked second the wrong one.
+    key = f"{str(country or 'cz').lower()}_p{int(show_precipitation)}_d{int(dotted_light)}_w{int(show_wind)}_y{int(preserve_yellow)}_h{marker_key}"
     country_key = str(country or "cz").lower()
     is_europe = country_key == "eu"
     all_points = (
@@ -1129,6 +1224,7 @@ async def _async_composed_base_image(
                 show_wind=show_wind,
                 wind_samples=wind_samples,
                 home_location=home_location,
+                preserve_yellow=preserve_yellow,
             )
         )
     else:
@@ -1148,6 +1244,7 @@ async def _async_composed_base_image(
                 show_wind=show_wind,
                 wind_samples=wind_samples,
                 home_location=home_location,
+                preserve_yellow=preserve_yellow,
             )
         )
     _cache[key] = {
@@ -1165,6 +1262,7 @@ async def async_render_meteoradar(
     show_precipitation: bool = True,
     dotted_light: bool = True,
     show_wind: bool = False,
+    preserve_yellow: bool = True,
 ) -> Image.Image | None:
     """Return the live precipitation map for the requested country - or, for
     country="eu", the multi-country Europe overview - at its own cropped aspect.
@@ -1177,6 +1275,7 @@ async def async_render_meteoradar(
         dotted_light=dotted_light,
         show_wind=show_wind,
         home_location=home_location,
+        preserve_yellow=preserve_yellow,
     )
     if base is None:
         return None

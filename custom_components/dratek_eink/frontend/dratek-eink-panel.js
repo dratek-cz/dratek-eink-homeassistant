@@ -16,7 +16,7 @@ import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js?v=templates-4c
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
 import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=radar-hourly-sidebar-1";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.330";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.331";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {

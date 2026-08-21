@@ -106,11 +106,85 @@ class SidebarRowScalingTests(unittest.TestCase):
             image = render._draw_radar_sidebar(sidebar, height, _forecast(), False)
             self.assertEqual(image.size, (sidebar, height))
 
-    def test_the_row_height_is_set_by_the_width_not_the_height(self) -> None:
+    def test_the_row_height_is_set_by_the_column_width_not_the_height(self) -> None:
         # Same column width, wildly different heights: the rows must stay the
-        # same readable size and only their number may change.
+        # same readable size and only their number may change. Measured from
+        # the forecast column rather than the whole box, so a wide stacked
+        # panel that splits into several columns still sizes its rows to the
+        # column an icon and its text actually live in.
         source = (COMPONENT / "render.py").read_text(encoding="utf-8")
-        self.assertIn("row_h = max(22, min(64, round(inner_w * 0.55)))", source)
+        self.assertIn("row_h = max(22, min(64, round(column_w * 0.55)))", source)
+
+
+class WidePanelColumnTests(unittest.TestCase):
+    """A stacked portrait block hands the panel a box as wide as the display."""
+
+    def test_a_wide_panel_splits_into_several_forecast_columns(self) -> None:
+        # 480x502 is what a 480x800 display's stacked layout produces. One
+        # column of full-width rows left it two-thirds empty.
+        self.assertGreater(_rows_drawn(480, 502, _forecast()), 4)
+
+    def test_a_narrow_sidebar_stays_a_single_column(self) -> None:
+        # The classic side-by-side sidebar must not change shape.
+        self.assertEqual(_rows_drawn(192, 480, _forecast()), 4)
+
+    def test_columns_never_exceed_three(self) -> None:
+        source = (COMPONENT / "render.py").read_text(encoding="utf-8")
+        self.assertIn("columns = max(1, min(3, inner_w // _RADAR_FORECAST_MIN_COLUMN))", source)
+
+    def test_a_wide_panel_never_overflows_its_box(self) -> None:
+        for width, height in ((300, 214), (480, 502), (640, 563), (128, 217)):
+            image = render._draw_radar_sidebar(width, height, _forecast(), False)
+            self.assertEqual(image.size, (width, height))
+
+
+class BwrIntensityTests(unittest.TestCase):
+    """Three rain intensities must stay distinct without the yellow pigment."""
+
+    def _fills(self, preserve_yellow: bool):
+        from PIL import Image
+
+        import importlib.util as _il
+        spec = _il.spec_from_file_location(
+            "dratek_radar_sidebar_test.meteoradar", COMPONENT / "meteoradar.py"
+        )
+        meteoradar = _il.module_from_spec(spec)
+        sys.modules[spec.name] = meteoradar
+        spec.loader.exec_module(meteoradar)
+        light, moderate = meteoradar._precipitation_intensity_fills((60, 60), preserve_yellow)
+        heavy = Image.new("RGB", (60, 60), meteoradar.PRECIPITATION_COLOR)
+        return light, moderate, heavy
+
+    def test_bwr_separates_them_by_coverage(self) -> None:
+        light, moderate, heavy = self._fills(False)
+        coverage = [
+            sum(1 for pixel in image.convert("RGB").getdata() if pixel[0] > 180 and pixel[1] < 110)
+            / (60 * 60)
+            for image in (light, moderate, heavy)
+        ]
+        # Strictly increasing - that is the whole point.
+        self.assertLess(coverage[0], coverage[1])
+        self.assertLess(coverage[1], coverage[2])
+
+    def test_bwry_still_separates_them_by_colour(self) -> None:
+        light, moderate, heavy = self._fills(True)
+        self.assertNotEqual(list(light.getdata()), list(moderate.getdata()))
+        self.assertNotEqual(list(moderate.getdata()), list(heavy.getdata()))
+
+    def test_the_legend_uses_the_very_fills_the_map_paints(self) -> None:
+        # A legend drawn from its own constants would drift from the map.
+        source = (COMPONENT / "render.py").read_text(encoding="utf-8")
+        self.assertIn("from .meteoradar import _precipitation_intensity_fills", source)
+        self.assertIn("_precipitation_intensity_fills((swatch_w, swatch_h), preserve_yellow)", source)
+
+    def test_the_palette_reaches_the_map_itself_not_only_the_quantiser(self) -> None:
+        # Folding yellow into red after the fact had already merged the three
+        # intensities; the composition has to know.
+        source = (COMPONENT / "render.py").read_text(encoding="utf-8")
+        call = source[source.index("radar_img = await async_render_meteoradar(") :][:600]
+        self.assertIn("preserve_yellow=preserve_yellow,", call)
+        meteoradar = (COMPONENT / "meteoradar.py").read_text(encoding="utf-8")
+        self.assertIn("_y{int(preserve_yellow)}_h{marker_key}", meteoradar)
 
     def test_rows_are_capped_by_what_was_actually_fetched(self) -> None:
         rows = _rows_drawn(render.radar_sidebar_width(480), 800, _forecast(count=3))

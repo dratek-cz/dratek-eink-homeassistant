@@ -1667,6 +1667,9 @@ _RADAR_SIDEBAR_FRACTION = 0.24
 # _radar_forecast_rows); this only bounds the fetch so a display that could
 # show twenty rows does not turn one refresh into a twenty-hour lookahead.
 _RADAR_FORECAST_MAX_HOURS = 12
+# Narrowest a forecast column may be before the panel stops splitting into
+# another one - an icon beside a time and a temperature needs about this much.
+_RADAR_FORECAST_MIN_COLUMN = 150
 
 
 async def _async_radar_forecast_summary(hass: Any) -> dict[str, Any] | None:
@@ -1816,7 +1819,7 @@ def _draw_radar_sidebar(
     through, so the legend and forecast can never drift out of sync the way
     a JS-only overlay drawn only for the browser preview could.
     """
-    from .meteoradar import _generate_precipitation_checkerboard
+    from .meteoradar import _precipitation_intensity_fills
 
     canvas = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(canvas)
@@ -1828,19 +1831,32 @@ def _draw_radar_sidebar(
     inner_w = max(1, x1 - x0)
     y = pad
 
-    swatch_w = max(10, round(inner_w * 0.34))
-    swatch_h = max(9, min(round(height * 0.055), round(inner_w * 0.42)))
+    # Three swatches down the side of a narrow column, but across the top of a
+    # wide one: stacked, they ate the height a stacked portrait block needs for
+    # its forecast columns.
+    legend_across = inner_w >= 240
+    legend_w = inner_w // 3 if legend_across else inner_w
+    swatch_w = max(10, round(legend_w * (0.30 if legend_across else 0.34)))
+    swatch_h = max(9, min(round(height * (0.075 if legend_across else 0.055)), round(legend_w * 0.42)))
     label_size = max(7, round(swatch_h * 0.62))
-    for label, ink in (("SLABÉ", PRECIPITATION_YELLOW), ("STŘEDNÍ", None), ("SILNÉ", PRECIPITATION_COLOR)):
-        if ink is None:
-            canvas.paste(_generate_precipitation_checkerboard((swatch_w, swatch_h)), (x0, y))
-        else:
-            draw.rectangle((x0, y, x0 + swatch_w, y + swatch_h), fill=ink)
-        draw.rectangle((x0, y, x0 + swatch_w, y + swatch_h), outline=BORDER_COLOR, width=1)
+    # The very same fills the map paints, so a swatch is a real key to it. On a
+    # BWR panel these are three coverage patterns rather than three colours -
+    # yellow folds into red there, and the legend used to show three identical
+    # red boxes beside a map whose intensities had collapsed the same way.
+    light_fill, moderate_fill = _precipitation_intensity_fills((swatch_w, swatch_h), preserve_yellow)
+    heavy_fill = Image.new("RGB", (swatch_w, swatch_h), PRECIPITATION_COLOR)
+    for index, (label, fill) in enumerate((("SLABÉ", light_fill), ("STŘEDNÍ", moderate_fill), ("SILNÉ", heavy_fill))):
+        cell_x = x0 + index * legend_w if legend_across else x0
+        canvas.paste(fill, (cell_x, y))
+        draw.rectangle((cell_x, y, cell_x + swatch_w, y + swatch_h), outline=BORDER_COLOR, width=1)
+        gap_x = max(4, round(legend_w * 0.06))
         _draw_centered_text(
-            draw, label, x0 + swatch_w + max(4, round(inner_w * 0.06)) + (inner_w - swatch_w) / 2,
-            y + swatch_h / 2, inner_w - swatch_w, swatch_h, label_size, bold=False,
+            draw, label, cell_x + swatch_w + gap_x + (legend_w - swatch_w - gap_x) / 2,
+            y + swatch_h / 2, legend_w - swatch_w - gap_x, swatch_h, label_size, bold=False,
         )
+        if not legend_across:
+            y += swatch_h + max(3, round(swatch_h * 0.35))
+    if legend_across:
         y += swatch_h + max(3, round(swatch_h * 0.35))
 
     if not forecast:
@@ -1866,6 +1882,15 @@ def _draw_radar_sidebar(
     if not entries:
         return canvas
 
+    # A stacked portrait block hands this function a box as wide as the whole
+    # display rather than a narrow column, and laying that out as one column of
+    # full-width rows left an icon marooned at the left edge with most of the
+    # box empty. Split it into as many forecast columns as the width genuinely
+    # supports instead; a real sidebar is simply the case where only one fits,
+    # so there is one layout here rather than two that could drift apart.
+    columns = max(1, min(3, inner_w // _RADAR_FORECAST_MIN_COLUMN))
+    column_w = inner_w // columns
+
     # A row holds an icon beside two short lines of text, so what it needs is
     # set by the column's width, not by the panel's height. Deriving it from
     # the height instead made a 128 px tag squeeze in three rows too small to
@@ -1873,31 +1898,37 @@ def _draw_radar_sidebar(
     # in both cases the wrong number for the space. Tied to the width, the row
     # is always the same readable size and the height decides only how many of
     # them there is room for.
-    row_h = max(22, min(64, round(inner_w * 0.55)))
-    visible = _radar_forecast_rows(max(0, (height - pad) - y), row_h, len(entries))
-    for entry in entries[:visible]:
+    row_h = max(22, min(64, round(column_w * 0.55)))
+    per_column = _radar_forecast_rows(max(0, (height - pad) - y), row_h, len(entries))
+    visible = min(len(entries), per_column * columns)
+    top = y
+    for index, entry in enumerate(entries[:visible]):
+        # Column-major: a column reads top to bottom in time order before the
+        # next one starts, which is how a forecast list is read.
+        column, row = divmod(index, per_column)
+        cell_x = x0 + column * column_w
+        cell_y = top + row * row_h
         icon_size = max(12, round(row_h * 0.82))
         icon = _weather_condition_icon_image(entry.get("condition", ""), icon_size, preserve_yellow)
-        text_x = x0
-        text_w = inner_w
+        text_x = cell_x
+        text_w = column_w
         if icon is not None:
-            canvas.paste(icon, (x0, y + round((row_h - icon.height) / 2)), icon)
-            text_x = x0 + icon.width + max(2, round(inner_w * 0.04))
-            text_w = max(1, x1 - text_x)
+            canvas.paste(icon, (cell_x, cell_y + round((row_h - icon.height) / 2)), icon)
+            text_x = cell_x + icon.width + max(2, round(column_w * 0.04))
+            text_w = max(1, (cell_x + column_w) - text_x)
         label = entry.get("label") or ""
         if entry.get("time"):
             label = f"{label} · {entry['time']}" if label else entry["time"]
         line_h = max(7, round(row_h * 0.46))
         _draw_centered_text(
-            draw, label, text_x + text_w / 2, y + row_h * 0.28,
+            draw, label, text_x + text_w / 2, cell_y + row_h * 0.28,
             text_w, line_h, round(line_h * 0.82), bold=False,
         )
         if entry.get("temperature"):
             _draw_centered_text(
-                draw, entry["temperature"], text_x + text_w / 2, y + row_h * 0.72,
+                draw, entry["temperature"], text_x + text_w / 2, cell_y + row_h * 0.72,
                 text_w, line_h, round(line_h * 0.95),
             )
-        y += row_h
 
     return canvas
 
@@ -1952,6 +1983,11 @@ async def async_render_camera_binding_data_url(
             show_precipitation=show_precipitation,
             dotted_light=dotted_light,
             show_wind=show_wind,
+            # Not only a quantisation detail: without the fourth pigment the
+            # map has to separate the three rain intensities by coverage while
+            # it is being drawn, because folding yellow into red afterwards
+            # would have already merged them.
+            preserve_yellow=preserve_yellow,
         )
         if radar_img is not None:
             def _prepare_radar() -> bytes:
@@ -2213,14 +2249,23 @@ def render_automatic_refresh_image(
     and finally to plain PIL compositing, so a refresh always produces a
     complete image rather than erroring out.
     """
-    # Camera images sit below informational foreground layers in the captured
-    # template. Replacing the href in the complete SVG preserves that z-order;
-    # pasting a camera over clean_background would cover Meteoradar's legend.
-    has_camera = any(
-        isinstance(binding, dict) and binding.get("type") == "camera"
+    # A camera used to send the whole display down the SVG-substitution tier,
+    # because back then the clean-background tier had no camera case at all and
+    # pasting a frame over it would have covered Meteoradar's legend. That tier
+    # has since grown one, and the panel sends the x/y/w/h it needs to place
+    # the frame exactly where the <image> sat - so the exception now costs far
+    # more than it buys: a display pairing Meteoradar with any second template
+    # dropped *both* to the weaker tier, and the second one came back with its
+    # static icon and footer but every bound value and icon missing.
+    #
+    # Only a capture too old to carry that geometry still needs the old route.
+    camera_without_geometry = any(
+        isinstance(binding, dict)
+        and binding.get("type") == "camera"
+        and not (binding.get("w") and binding.get("h"))
         for binding in bindings
     )
-    if clean_background and not (has_camera and svg_template):
+    if clean_background and not (camera_without_geometry and svg_template):
         image = render_entity_bound_clean_background_image(clean_background, bindings, values, True)
         if image is not None:
             return image

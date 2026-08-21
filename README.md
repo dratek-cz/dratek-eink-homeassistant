@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.331
+
+- **Meteoradar vykresluje srážky přes celou mapu** – srážková pole se nově neořezávají pouze dovnitř vybraného polygonu státu, ale pokrývají celou plochu mapového výřezu i s přesahem za hranice. Obrys státu a domovský marker jsou zřetelně vykresleny jako černá/červená vrstva přes srážky.
+- **Detailní stínované srážky s adaptivním ditheringem** – nahrazení dřívějších hrubých šachovnic plynulým přechodem intenzity srážek s Floyd-Steinberg rozptylem chyby na míru konkrétnímu typu displeje (BWRY, BWR, BW).
+- **Zvýrazněný předěl levého panelu** – oddělovací linka mezi bočním panelem s předpovědí a mapou meteoradaru byla zesílena na zřetelnou 2px linku.
+
 ## Novinky ve verzi 0.1.327
 
 - **Při více šablonách v mřížce se aktualizovala jen jedna** – ostatní se odesílaly bez hodnot a grafů. Grafické bloky se hledaly v celém dokumentu, ale jejich pořadí se počítalo zvlášť pro každou šablonu, takže dvě šablony se stejným názvem bloku obě sáhly po prvním slotu. Nově se blok hledá i počítá v rámci konkrétního slotu.

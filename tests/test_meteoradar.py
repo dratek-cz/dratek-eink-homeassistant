@@ -166,22 +166,15 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
             **kwargs,
         )
 
-    def test_precipitation_is_clipped_to_the_country_shape(self) -> None:
-        # An opaque grid everywhere: without clipping, red would fill the frame.
+    def test_precipitation_covers_the_full_radar_view(self) -> None:
+        # Precipitation renders across the full radar canvas, not clipped to the country
         image = self._compose((220, 20, 12, 255))
-        corners = [
-            image.getpixel((0, 0)),
-            image.getpixel((image.width - 1, 0)),
-            image.getpixel((0, image.height - 1)),
-            image.getpixel((image.width - 1, image.height - 1)),
-        ]
-        # The crop is tight to the polygon's bbox, so every corner sits outside
-        # the diamond and must stay white, not red.
-        self.assertTrue(all(corner == (255, 255, 255) for corner in corners), corners)
         self.assertEqual(image.getpixel((image.width // 2, image.height // 2)), meteoradar.PRECIPITATION_COLOR)
+        # Corners have radar precipitation rendered across the map
+        self.assertEqual(image.getpixel((0, 0)), meteoradar.PRECIPITATION_COLOR)
 
     def test_low_alpha_trace_echo_does_not_count_as_precipitation(self) -> None:
-        image = self._compose((0, 100, 200, 40))  # below the default threshold
+        image = self._compose((0, 100, 200, 30))  # below the threshold
         self.assertNotIn(meteoradar.PRECIPITATION_COLOR, list(image.getdata()))
 
     def test_high_alpha_precipitation_is_drawn_in_the_display_red(self) -> None:
@@ -204,47 +197,30 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         self.assertIn(meteoradar.BORDER_COLOR, list(image.getdata()))
 
     def test_output_is_a_flat_rgb_image_safe_for_the_eink_palette(self) -> None:
-        image = self._compose((220, 20, 12, 255))
-        self.assertEqual(image.mode, "RGB")
-        colors = set(list(image.getdata()))
-        self.assertTrue(colors <= {(255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.BORDER_COLOR})
+        image_bwry = self._compose((220, 20, 12, 255), preserve_yellow=True)
+        self.assertEqual(image_bwry.mode, "RGB")
+        colors_bwry = set(list(image_bwry.getdata()))
+        self.assertTrue(colors_bwry <= {(255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.PRECIPITATION_YELLOW, meteoradar.BORDER_COLOR})
 
-    def test_light_precipitation_renders_solid_yellow(self) -> None:
-        # Light rain reads as its own intensity by colour alone - a sparse
-        # dot pattern on white used to fade into pale noise once a zoom-6 map
-        # was reduced to a small display (see _generate_precipitation_
-        # checkerboard's docstring), and implied "barely raining" for a pixel
-        # the mask had already decided was raining. Flat yellow, no white.
-        image = self._compose((0, 100, 200, 80))
-        cx, cy = image.width // 2, image.height // 2
-        patch = [image.getpixel((x, y)) for y in range(cy - 15, cy + 16) for x in range(cx - 15, cx + 16)]
-        self.assertTrue(all(pixel == meteoradar.PRECIPITATION_YELLOW for pixel in patch), set(patch))
+        image_bwr = self._compose((220, 20, 12, 255), preserve_yellow=False)
+        colors_bwr = set(list(image_bwr.getdata()))
+        self.assertTrue(colors_bwr <= {(255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.BORDER_COLOR})
+
+    def test_light_precipitation_renders_yellow_dither_without_red(self) -> None:
+        image = self._compose((0, 100, 200, 80), preserve_yellow=True)
+        colors = set(image.getdata())
+        self.assertIn(meteoradar.PRECIPITATION_YELLOW, colors)
+        self.assertNotIn(meteoradar.PRECIPITATION_COLOR, colors)
 
     def test_moderate_precipitation_mixes_yellow_and_red(self) -> None:
-        image = self._compose((0, 100, 200, 220))
+        image = self._compose((0, 100, 200, 220), preserve_yellow=True)
         colors = set(image.getdata())
         self.assertIn(meteoradar.PRECIPITATION_YELLOW, colors)
         self.assertIn(meteoradar.PRECIPITATION_COLOR, colors)
 
-    def test_moderate_precipitation_uses_a_checkerboard_not_a_hatch(self) -> None:
-        # Axis-aligned square blocks, not diagonal lines: a diagonal stroke
-        # draws thin at any one point along its own length, which is exactly
-        # what let the old dotted "light rain" pattern fade to noise on
-        # downscale. Sampling along one fixed row should see genuine runs of
-        # each colour (a block width), not an alternating diagonal streak.
-        moderate = self._compose((0, 100, 200, 220))
-        cx, cy = moderate.width // 2, moderate.height // 2
-        row = [moderate.getpixel((x, cy)) for x in range(cx - 30, cx + 31)]
-        longest_run = 1
-        current_run = 1
-        for previous, pixel in zip(row, row[1:]):
-            current_run = current_run + 1 if pixel == previous else 1
-            longest_run = max(longest_run, current_run)
-        self.assertGreater(longest_run, 2)
-
     def test_moderate_precipitation_has_more_red_than_light_rain(self) -> None:
-        light = self._compose((0, 100, 200, 80))
-        moderate = self._compose((0, 100, 200, 220))
+        light = self._compose((0, 100, 200, 80), preserve_yellow=True)
+        moderate = self._compose((0, 100, 200, 220), preserve_yellow=True)
         cx, cy = light.width // 2, light.height // 2
         area = [(x, y) for y in range(cy - 25, cy + 26) for x in range(cx - 25, cx + 26)]
         light_red = sum(light.getpixel(point) == meteoradar.PRECIPITATION_COLOR for point in area)
@@ -329,9 +305,7 @@ class ComposeMultiCountryRadarImageTests(unittest.TestCase):
             **kwargs,
         )
 
-    def test_precipitation_is_clipped_to_the_union_of_both_countries(self) -> None:
-        # An opaque grid everywhere: without per-country clipping, red would
-        # fill the whole crop, including the gap between the two rectangles.
+    def test_precipitation_covers_the_full_overview_area(self) -> None:
         image = self._compose((220, 20, 12, 255))
         width, height = image.size
         mid_y = height // 2
@@ -341,17 +315,21 @@ class ComposeMultiCountryRadarImageTests(unittest.TestCase):
 
         self.assertEqual(image.getpixel((left_country_x, mid_y)), meteoradar.PRECIPITATION_COLOR)
         self.assertEqual(image.getpixel((right_country_x, mid_y)), meteoradar.PRECIPITATION_COLOR)
-        self.assertEqual(image.getpixel((gap_x, mid_y)), (255, 255, 255))
+        self.assertEqual(image.getpixel((gap_x, mid_y)), meteoradar.PRECIPITATION_COLOR)
 
     def test_each_country_outline_is_drawn(self) -> None:
         image = self._compose((0, 0, 0, 0), border_width=3)  # no precipitation at all
         self.assertIn(meteoradar.BORDER_COLOR, list(image.getdata()))
 
     def test_output_is_a_flat_rgb_image_safe_for_the_eink_palette(self) -> None:
-        image = self._compose((220, 20, 12, 255))
-        self.assertEqual(image.mode, "RGB")
-        colors = set(list(image.getdata()))
-        self.assertTrue(colors <= {(255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.BORDER_COLOR})
+        image_bwry = self._compose((220, 20, 12, 255), preserve_yellow=True)
+        self.assertEqual(image_bwry.mode, "RGB")
+        colors_bwry = set(list(image_bwry.getdata()))
+        self.assertTrue(colors_bwry <= {(255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.PRECIPITATION_YELLOW, meteoradar.BORDER_COLOR})
+
+        image_bwr = self._compose((220, 20, 12, 255), preserve_yellow=False)
+        colors_bwr = set(list(image_bwr.getdata()))
+        self.assertTrue(colors_bwr <= {(255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.BORDER_COLOR})
 
 
 class FitToSizeTests(unittest.TestCase):

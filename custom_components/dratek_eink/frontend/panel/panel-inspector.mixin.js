@@ -43,6 +43,10 @@ export const inspectorMixin = {
     // backend first, so the custom image preview is correct on first open
     // instead of only appearing once something else happens to reload it.
     await this._selectDevice?.(address, { render: false });
+    // The await above can outlast the click that started it. If the user has
+    // since opened a different display, that one is the current selection and
+    // this call must not drag the page back onto the display they left.
+    if (String(this._selectedDeviceAddress || "").toUpperCase() !== String(address || "").toUpperCase()) return;
     this._displaySettingsView = "templates";
     this._activeTab = "display-settings";
     const openedDevice = this._device();
