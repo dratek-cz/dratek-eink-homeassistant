@@ -74,13 +74,12 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.335",
-        name="DRATEK eInk v0.1.335",
-        body="""## Release 0.1.335
+        tag="v0.1.336",
+        name="DRATEK eInk v0.1.336",
+        body="""## Release 0.1.336
 
-### Opraveno
-- **Žlutě stínované srážky na BWRY**: běžné srážky používají žlutý polotónový rastr s hustotou podle intenzity, nejsilnější odrazy jsou červené.
-- **Červeně stínované srážky na BWR**: tříbarevné displeje zachovají odstupňování bez žlutého pigmentu.
-- **Žádné černé srážkové plochy**: černá je vyhrazena hranicím mapy a textu.
+### Vylepšeno
+- **Výraznější srážky**: žlutý rastr na BWRY a červený rastr na BWR mají vyšší hustotu.
+- **Lepší čitelnost slabých i silných odrazů** při zachování bílých mezer a odstupňování intenzity.
 """,
     )

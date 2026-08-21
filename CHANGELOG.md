@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.336] - 2026-08-21
+
+### Vylepšeno
+- **Výraznější radarové srážky**: zvýšila se hustota žlutého rastru na BWRY a červeného rastru na BWR. Slabé srážky jsou lépe viditelné a střední až silné plochy působí sytěji, přitom zůstává zachované odstupňování intenzity i bílé mezery.
+
 ## [0.1.335] - 2026-08-21
 
 ### Opraveno

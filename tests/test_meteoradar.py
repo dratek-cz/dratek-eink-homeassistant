@@ -222,7 +222,7 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         meteoradar._paint_precipitation(image, source, preserve_yellow=True)
         area = list(image.getdata())
         yellow_ratio = sum(pixel == meteoradar.PRECIPITATION_YELLOW for pixel in area) / len(area)
-        self.assertGreater(yellow_ratio, 0.20)
+        self.assertGreater(yellow_ratio, 0.50)
         self.assertLess(yellow_ratio, 0.90)
         self.assertNotIn(meteoradar.BORDER_COLOR, area)
         self.assertNotIn(meteoradar.PRECIPITATION_COLOR, area)
@@ -233,7 +233,7 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         meteoradar._paint_precipitation(image, source, preserve_yellow=False)
         area = list(image.getdata())
         red_ratio = sum(pixel == meteoradar.PRECIPITATION_COLOR for pixel in area) / len(area)
-        self.assertGreater(red_ratio, 0.20)
+        self.assertGreater(red_ratio, 0.50)
         self.assertLess(red_ratio, 0.90)
         self.assertNotIn(meteoradar.BORDER_COLOR, area)
 

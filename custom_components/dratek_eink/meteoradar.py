@@ -689,7 +689,7 @@ def _paint_precipitation(
     # black ink.
     alpha_strength = alpha.point([
         0 if value < min_alpha
-        else round(28 + 132 * (value - min_alpha) / max(1, 255 - min_alpha))
+        else round(42 + 140 * (value - min_alpha) / max(1, 255 - min_alpha))
         for value in range(256)
     ])
     cool_colour_strength = ImageChops.lighter(red, green).point([

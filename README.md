@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.336
+
+- **Srážky jsou tmavší a výraznější** – žlutý rastr na BWRY i červený rastr na BWR má vyšší hustotu, zejména u středních a silných srážek.
+- Bílé mezery a odstupňování intenzity zůstávají zachované, takže radar není jednolitá barevná plocha.
+
 ## Novinky ve verzi 0.1.335
 
 - **BWRY meteoradar používá žlutý polotónový rastr pro běžné srážky** a červenou pro nejsilnější odrazy, podobně jako klasická e-ink radarová mapa.
