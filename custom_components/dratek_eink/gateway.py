@@ -471,6 +471,33 @@ async def async_scan_gateway(hass: HomeAssistant, gateway_id: str, seconds: int 
     }
 
 
+# Errors the gateway firmware itself reports when it never got as far as
+# talking to the display. transfer_task_start_failed is xTaskCreate() failing
+# for want of heap: the gateway accepted the upload, buffered the payload, and
+# then could not spawn its 12 kB transfer task. The display was never involved
+# and must not be blamed for it - see TransferQueue._execute.
+GATEWAY_SIDE_JOB_ERRORS = frozenset(
+    {
+        "transfer_task_start_failed",
+        "gateway_transfer_lost_after_restart",
+        "gateway_firmware_update_required",
+    }
+)
+
+
+def _exception_message(exc: BaseException) -> str:
+    """Readable text for exceptions whose str() is empty.
+
+    aiohttp raises ServerDisconnectedError() with no message at all, so
+    str(exc) is "". Code that decided "did this fail?" by the truthiness of
+    that string therefore read a hard disconnect as success and carried on
+    with an empty response body - which is how a dropped upload used to
+    surface as the bare KeyError 'job_id' several lines further down.
+    """
+    message = str(exc).strip()
+    return message or type(exc).__name__
+
+
 async def async_send_gateway_payload(
     hass: HomeAssistant,
     gateway_id: str,
@@ -534,6 +561,7 @@ async def async_send_gateway_payload(
         add_log(f"Streaming binary transfer job to gateway {base_url.removeprefix('http://')}.")
         data: dict[str, Any] = {}
         upload_error = ""
+        upload_failed = False
         for attempt in range(1, 3):
             try:
                 form = FormData()
@@ -556,15 +584,24 @@ async def async_send_gateway_payload(
                             "log": log
                             + ["Gateway firmware 0.1.33 or newer is required. Reflash the ESP32 gateway."],
                             "raw": data,
+                            "gateway_side": True,
                         }
                     if response.status >= 400 or not data.get("job_id"):
                         error = data.get("error") or f"HTTP {response.status}"
-                        return {"ok": False, "error": error, "log": log, "raw": data}
+                        return {
+                            "ok": False,
+                            "error": error,
+                            "log": log,
+                            "raw": data,
+                            "gateway_side": True,
+                        }
                 upload_error = ""
+                upload_failed = False
                 break
             except Exception as exc:
-                upload_error = str(exc)
-                add_log(f"Gateway upload attempt {attempt}/2 failed: {exc}")
+                upload_failed = True
+                upload_error = _exception_message(exc)
+                add_log(f"Gateway upload attempt {attempt}/2 failed: {upload_error}")
                 if attempt < 2:
                     await asyncio.sleep(2)
                     try:
@@ -578,10 +615,21 @@ async def async_send_gateway_payload(
                             f"BLE={status_data.get('ble_initialized', '?')}."
                         )
                     except Exception as status_exc:
-                        add_log(f"Gateway status after disconnect is unavailable: {status_exc}")
+                        add_log(
+                            "Gateway status after disconnect is unavailable: "
+                            f"{_exception_message(status_exc)}"
+                        )
                     add_log("Retrying the same idempotent transfer job.")
-        if upload_error:
-            return {"ok": False, "error": upload_error, "log": log}
+        # Keyed on the flag, not on the message: an exception that stringifies
+        # to "" is still a failure, and falling through to data["job_id"] on the
+        # empty dict below is what produced the bare KeyError 'job_id'.
+        if upload_failed:
+            return {
+                "ok": False,
+                "error": upload_error or "Gateway closed the connection during the upload.",
+                "log": log,
+                "gateway_side": True,
+            }
 
         job_id = str(data["job_id"])
         add_log(
@@ -606,6 +654,7 @@ async def async_send_gateway_payload(
                             "error": "gateway_transfer_lost_after_restart",
                             "log": log,
                             "raw": final_data,
+                            "gateway_side": True,
                         }
                     if response.status >= 400:
                         raise RuntimeError(final_data.get("error") or f"HTTP {response.status}")
@@ -626,13 +675,23 @@ async def async_send_gateway_payload(
                 break
             if status == "failed":
                 error = final_data.get("error") or "ble_transfer_failed"
-                return {"ok": False, "error": error, "log": log, "raw": final_data}
+                return {
+                    "ok": False,
+                    "error": error,
+                    "log": log,
+                    "raw": final_data,
+                    # ble_transfer_failed really is the display refusing to
+                    # answer; the errors listed in GATEWAY_SIDE_JOB_ERRORS never
+                    # reached it at all.
+                    "gateway_side": error in GATEWAY_SIDE_JOB_ERRORS,
+                }
         else:
             add_log("Timed out waiting for the gateway transfer job.")
             return {"ok": False, "error": "gateway_transfer_timeout", "log": log, "raw": final_data}
     except Exception as exc:
-        add_log(f"Gateway send failed: {exc}")
-        return {"ok": False, "error": str(exc), "log": log}
+        message = _exception_message(exc)
+        add_log(f"Gateway send failed: {message}")
+        return {"ok": False, "error": message, "log": log, "gateway_side": True}
 
     add_log("Gateway transfer finished.")
     return {"ok": True, "gateway_id": gateway_id, "address": address, "log": log}

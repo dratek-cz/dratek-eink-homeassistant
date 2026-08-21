@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.328] - 2026-08-21
+
+### Opraveno
+- **Vlastní obrázek vypadal v každém sloupci mřížky jinak**: Šest stejných dlaždic s toutéž fotkou se na displeji 400×300 vykreslilo jako tři různé obrázky - první sloupec barevný, druhý a třetí tmavé a zašpiněné. Nebyla to chyba obrázku, ale geometrie: displej se dělil prostým podílem, takže tři sloupce po 400 px měly 133,33 px a začínaly na x = 0, 133,33 a 266,67. Vše v takové dlaždici se pak muselo převzorkovat o třetinu pixelu stranou. U textu to není vidět; obsah šablony „Vlastní obrázek" je ale už hotový rastr z černých, červených a bílých bodů, a převzorkování z něj udělá šedou, kterou závěrečný převod do palety e-inku zaokrouhlí úplně jinam. Rozložení, jejichž sloupce vycházejí beze zbytku (2 nebo 4 na 400 px), byla vždy v pořádku - proto to vypadalo jako problém s obrázkem. Nově každá dlaždice leží na celých pixelech (133 / 134 / 133) a dohromady přesně pokryjí displej.
+- **Nemocná gateway umlčela všechny displeje, které obsluhovala**: Když gatewayi došla paměť a nedokázala spustit přenosovou úlohu (`transfer_task_start_failed`), zapsala se ta chyba jako selhání **displeje**. Tím se nastartovala minutová pauza „displej je nedostupný" - a ta pak přeskočila i záložní zápis přes Bluetooth Home Assistantu, který se o vteřinu později pokouší o totéž. Displej přitom celou dobu odpovídal na -51 dBm a nikdo se ho ani nezeptal. Ve výsledku jedna přetížená gateway zastavila zápisy na všech svých displejích a v logu z toho byla jen řada hlášek „backing off". Nově se rozlišuje, jestli selhala gateway, nebo displej: chyba gateway pauzu displeje nenastavuje, takže záložní trasa dostane šanci, a místo toho se na tři minuty upozadí sama gateway - pokud displej slyší i jiná, půjde zápis přes ni.
+- **Odpojení gateway během nahrávání se hlásilo jako `'job_id'`**: Chyby jako `ServerDisconnectedError` nemají žádný text, a kód poznával selhání právě podle toho, jestli je text neprázdný. Přerušené nahrávání proto propadlo dál a spadlo na interní chybě Pythonu, která skutečnou příčinu zakryla. Nově se pozná i němá výjimka a v logu je „Gateway closed the connection during the upload."
+- **Náhled displeje zmizel, když se stejná šablona použila podruhé**: Kliknutí na šablonu, která už na displeji je (nebo na tu samou dvakrát za sebou), nechalo v levém panelu prázdný rámeček místo obrázku. Překreslení plátna se totiž hlídá tak, aby se v rámci jedné akce kreslilo jen jednou - jenže přestavba stránky mezitím všechna plátna vyrobí znovu a prázdná. Při prvním použití šablony to nebylo vidět, protože se obrázek teprve renderoval a po jeho doručení přišlo další překreslení; při opakovaném použití byl už obrázek v cache, žádné další překreslení nepřišlo a plátno zůstalo prázdné až do nějaké nesouvisející změny. Nově se po každé přestavbě stránky kreslí znovu.
+
 ## [0.1.327] - 2026-08-20
 
 ### Opraveno

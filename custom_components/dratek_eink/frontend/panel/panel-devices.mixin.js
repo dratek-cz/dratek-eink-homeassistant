@@ -1421,6 +1421,33 @@ export const devicesMixin = {
       || this._displayTemplateLayoutDefinitions()[0];
   },
 
+  // Both edges of a slot are rounded independently, never its width - so two
+  // neighbours always agree on the boundary they share and the whole row still
+  // adds up to the panel exactly (400 px in three columns becomes 133/133/134,
+  // not 133.33 three times).
+  //
+  // Fractional geometry is what made the same photo look different in every
+  // column. A slot starting at x=133.33 forces the renderer to resample
+  // everything inside it a third of a pixel across; for text that is invisible,
+  // but the custom-image template's content is already a black/red/white
+  // halftone, and resampling blends neighbouring dots into greys that the final
+  // e-ink quantisation then snaps somewhere else entirely. Column 1 (x=0, whole
+  // pixel) kept its dots and its red; columns 2 and 3 lost well over half of it.
+  // Layouts whose columns happened to divide evenly - 2 or 4 across a 400 px
+  // panel - never showed the fault at all, which is why it looked like an image
+  // problem rather than a geometry one.
+  _snapLayoutSlot(x, y, w, h, width, height, index) {
+    const left = Math.round(x * width);
+    const top = Math.round(y * height);
+    return {
+      x: left,
+      y: top,
+      w: Math.round((x + w) * width) - left,
+      h: Math.round((y + h) * height) - top,
+      index,
+    };
+  },
+
   _displayTemplateLayoutSlots(layout, width, height) {
     const definition = this._displayTemplateLayoutDefinition(layout);
     const transposed = Number(height) > Number(width);
@@ -1433,20 +1460,20 @@ export const devicesMixin = {
         { x: 2 / 3, y: 1 / 3, w: 1 / 3, h: 2 / 3, index: 4 },
       ];
       return normalized.map((slot) => transposed
-        ? { x: slot.y * width, y: slot.x * height, w: slot.h * width, h: slot.w * height, index: slot.index }
-        : { x: slot.x * width, y: slot.y * height, w: slot.w * width, h: slot.h * height, index: slot.index });
+        ? this._snapLayoutSlot(slot.y, slot.x, slot.h, slot.w, width, height, slot.index)
+        : this._snapLayoutSlot(slot.x, slot.y, slot.w, slot.h, width, height, slot.index));
     }
     const columns = transposed ? definition.rows : definition.columns;
     const rows = transposed ? definition.columns : definition.rows;
-    const cellWidth = width / columns;
-    const cellHeight = height / rows;
-    return Array.from({ length: definition.capacity }, (_unused, index) => ({
-      x: (index % columns) * cellWidth,
-      y: Math.floor(index / columns) * cellHeight,
-      w: cellWidth,
-      h: cellHeight,
+    return Array.from({ length: definition.capacity }, (_unused, index) => this._snapLayoutSlot(
+      (index % columns) / columns,
+      Math.floor(index / columns) / rows,
+      1 / columns,
+      1 / rows,
+      width,
+      height,
       index,
-    }));
+    ));
   },
 
   _renderDisplayTemplateLayoutControls(activeLayout, orientation = this._displayTemplateOrientation) {

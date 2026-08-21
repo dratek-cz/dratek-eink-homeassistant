@@ -2037,21 +2037,25 @@ export const templateSvgMixin = {
     }
     const definition = this._displayTemplateLayoutDefinition?.(layout) || { columns: 1, rows: 1 };
     const transposed = height > width;
+    // Rounded the same way _snapLayoutSlot rounds the slots themselves, so the
+    // divider sits exactly on the seam instead of half a pixel inside one of
+    // the two cells it separates.
+    const edge = (position, total) => Math.round(position * total);
     if (definition.id === "mixed-5") {
       if (transposed) {
-        const splitX = width / 3;
+        const splitX = edge(1 / 3, width);
         bodies.push(`<rect x="${splitX.toFixed(2)}" y="0" width="1" height="${height}" fill="${BLACK}"></rect>`);
-        bodies.push(`<rect x="0" y="${(height / 2).toFixed(2)}" width="${splitX.toFixed(2)}" height="1" fill="${BLACK}"></rect>`);
+        bodies.push(`<rect x="0" y="${edge(1 / 2, height).toFixed(2)}" width="${splitX.toFixed(2)}" height="1" fill="${BLACK}"></rect>`);
         for (let row = 1; row < 3; row++) {
-          const y = height * row / 3;
+          const y = edge(row / 3, height);
           bodies.push(`<rect x="${splitX.toFixed(2)}" y="${y.toFixed(2)}" width="${(width - splitX).toFixed(2)}" height="1" fill="${BLACK}"></rect>`);
         }
       } else {
-        const splitY = height / 3;
+        const splitY = edge(1 / 3, height);
         bodies.push(`<rect x="0" y="${splitY.toFixed(2)}" width="${width}" height="1" fill="${BLACK}"></rect>`);
-        bodies.push(`<rect x="${(width / 2).toFixed(2)}" y="0" width="1" height="${splitY.toFixed(2)}" fill="${BLACK}"></rect>`);
+        bodies.push(`<rect x="${edge(1 / 2, width).toFixed(2)}" y="0" width="1" height="${splitY.toFixed(2)}" fill="${BLACK}"></rect>`);
         for (let column = 1; column < 3; column++) {
-          const x = width * column / 3;
+          const x = edge(column / 3, width);
           bodies.push(`<rect x="${x.toFixed(2)}" y="${splitY.toFixed(2)}" width="1" height="${(height - splitY).toFixed(2)}" fill="${BLACK}"></rect>`);
         }
       }
@@ -2059,11 +2063,11 @@ export const templateSvgMixin = {
       const columns = transposed ? definition.rows : definition.columns;
       const rows = transposed ? definition.columns : definition.rows;
       for (let column = 1; column < columns; column++) {
-        const x = width * column / columns;
+        const x = edge(column / columns, width);
         bodies.push(`<rect x="${x.toFixed(2)}" y="0" width="1" height="${height}" fill="${BLACK}"></rect>`);
       }
       for (let row = 1; row < rows; row++) {
-        const y = height * row / rows;
+        const y = edge(row / rows, height);
         bodies.push(`<rect x="0" y="${y.toFixed(2)}" width="${width}" height="1" fill="${BLACK}"></rect>`);
       }
     }

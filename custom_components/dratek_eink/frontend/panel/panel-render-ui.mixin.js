@@ -1314,6 +1314,16 @@ export const renderUiMixin = {
     this._bind();
     this._syncStickyOffset();
     this._ensureDesignerFont();
+    // Every canvas in the page was just replaced by the swap above, so whatever
+    // an earlier _paint() in this same task drew is gone. _paint() dedupes
+    // itself per task, which is right for repeated paints but wrong across a
+    // render: without clearing the flag here the paint below (and any the
+    // caller makes afterwards) silently does nothing and the new canvases stay
+    // blank. That is what made the display preview vanish when the same
+    // template was applied twice in a row - the second apply renders, and its
+    // dithered image is already cached, so no async image load ever arrives to
+    // trigger the late repaint that hides the problem on a first apply.
+    this._paintedInCurrentTask = false;
     this._paint();
   },
 

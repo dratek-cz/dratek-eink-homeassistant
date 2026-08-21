@@ -26,6 +26,10 @@ HISTORY_LIMIT = 100
 TRANSFER_JOB_TIMEOUT_SECONDS = 600
 AUTOMATIC_BLUETOOTH_RETRY_DELAY_SECONDS = 20
 OFFLINE_BACKOFF_SECONDS = 60  # 60s backoff for unreachable/failed displays
+# A gateway that just failed on its own account is deprioritised for this long
+# when another gateway also hears the display. Longer than the display backoff
+# because an out-of-heap ESP32 needs more than one cycle to recover.
+GATEWAY_BACKOFF_SECONDS = 180
 LEGACY_COMPLETION_TIMEOUT_MARKER = "waiting for the display to confirm the completed refresh"
 RETRYABLE_BLUETOOTH_ERROR_MARKERS = (
     "available connection slot",
@@ -55,6 +59,10 @@ class TransferQueue:
         self._preempted_jobs: set[str] = set()
         self._last_finish_at: dict[str, float] = {}
         self._last_failure_at: dict[str, float] = {}
+        # Keyed by resource ("gateway:<id>"), not by display: a gateway that
+        # cannot start transfers is a property of that gateway, and every
+        # display it serves would otherwise be punished for it individually.
+        self._gateway_failure_at: dict[str, float] = {}
         self._load_lock = asyncio.Lock()
 
         self._save_lock = asyncio.Lock()
@@ -262,16 +270,33 @@ class TransferQueue:
         )
         if not ranked:
             return None
-        for route in ranked:
-            if self._route_rssi(route) < GATEWAY_FALLBACK_MIN_RSSI_DBM:
-                continue
-            resource = f"gateway:{route['id']}"
-            if not any(
-                job.get("resource") == resource and self._is_active_job(job)
-                for job in self._jobs
-            ):
-                return route
+        # Two passes: a gateway that just failed on its own account is only
+        # considered once every healthy alternative has been ruled out. Pure
+        # ordering - a lone gateway in backoff is still used, because skipping
+        # it entirely would strand a display that nothing else can hear.
+        for allow_backed_off in (False, True):
+            for route in ranked:
+                if self._route_rssi(route) < GATEWAY_FALLBACK_MIN_RSSI_DBM:
+                    continue
+                resource = f"gateway:{route['id']}"
+                if not allow_backed_off and self._is_gateway_backing_off(resource):
+                    continue
+                if not any(
+                    job.get("resource") == resource and self._is_active_job(job)
+                    for job in self._jobs
+                ):
+                    return route
         return ranked[0]
+
+    def _is_gateway_backing_off(self, resource: str) -> bool:
+        """True while a gateway is still recovering from its own failure."""
+        failed_at = self._gateway_failure_at.get(resource)
+        if failed_at is None:
+            return False
+        if time.monotonic() - failed_at < GATEWAY_BACKOFF_SECONDS:
+            return True
+        self._gateway_failure_at.pop(resource, None)
+        return False
 
     @staticmethod
     def _route_rssi(route: dict[str, Any]) -> float:
@@ -331,6 +356,11 @@ class TransferQueue:
 
     async def _execute(self, job: dict[str, Any], runner: TransferRunner) -> dict[str, Any]:
         job["started_at"] = int(time.time())
+        # Set only from a result that explicitly says the gateway - not the
+        # display - is what failed. An exception escaping the runner is left
+        # False: that is the local Bluetooth path, where the display is the
+        # only thing that can have gone wrong.
+        gateway_side_failure = False
 
         def add_log(message: str) -> None:
             job["log"].append(str(message))
@@ -386,6 +416,7 @@ class TransferQueue:
             if result.get("ok") is False:
                 job["status"] = "failed"
                 job["error"] = str(result.get("error") or "Prenos selhal.")
+                gateway_side_failure = bool(result.get("gateway_side"))
             else:
                 job["status"] = "succeeded"
         except asyncio.CancelledError:
@@ -434,9 +465,21 @@ class TransferQueue:
         finally:
             self._last_finish_at[normalized_address] = time.monotonic()
             if job.get("status") == "failed" and job.get("error") != "Transfer cancelled.":
-                self._last_failure_at[normalized_address] = time.monotonic()
+                if gateway_side_failure:
+                    # The gateway ran out of heap, restarted, or dropped the
+                    # upload - the display was never contacted and is very
+                    # probably fine. Marking it unreachable here armed the
+                    # offline backoff, which then skipped the Home Assistant
+                    # Bluetooth fallback that automation.py submits straight
+                    # afterwards, so one sick gateway silently stopped every
+                    # write to every display it served. Back off the gateway
+                    # instead.
+                    self._gateway_failure_at[str(job.get("resource") or "")] = time.monotonic()
+                else:
+                    self._last_failure_at[normalized_address] = time.monotonic()
             elif job.get("status") == "succeeded":
                 self._last_failure_at.pop(normalized_address, None)
+                self._gateway_failure_at.pop(str(job.get("resource") or ""), None)
 
         job["finished_at"] = int(time.time())
         result["queue_job_id"] = job["id"]
