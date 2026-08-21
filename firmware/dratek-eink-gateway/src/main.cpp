@@ -11,7 +11,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.58-gateway";
+static const char* FIRMWARE_VERSION = "0.1.59-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 static const size_t MAX_UPLOAD_PAYLOAD_BYTES = 128UL * 1024UL;
@@ -66,6 +66,11 @@ String uploadError;
 bool uploadDuplicate = false;
 SemaphoreHandle_t transferMutex = nullptr;
 SemaphoreHandle_t notificationMutex = nullptr;
+// The transfer worker is created once at boot and then parked on this
+// semaphore for the life of the process. See ensureTransferWorker().
+SemaphoreHandle_t transferSignal = nullptr;
+TaskHandle_t transferTaskHandle = nullptr;
+static const uint32_t TRANSFER_TASK_STACK_WORDS = 12288;
 bool transferTaskActive = false;
 uint32_t transferSequence = 0;
 bool mdnsStarted = false;
@@ -940,7 +945,7 @@ void handleTransferStatus() {
   sendJson(doc);
 }
 
-void transferTask(void*) {
+void runQueuedTransfer() {
   String jobId;
   String address;
   uint8_t softwareVersion;
@@ -986,7 +991,41 @@ void transferTask(void*) {
   }
   transferTaskActive = false;
   xSemaphoreGive(transferMutex);
-  vTaskDelete(nullptr);
+}
+
+// One task, created once, parked on a semaphore between transfers.
+//
+// This used to spawn a fresh task per transfer and vTaskDelete it at the end.
+// A task's stack has to be one contiguous 12 kB block, and taking that block
+// then handing it back on every single transfer is precisely the pattern that
+// chops the heap into pieces too small to satisfy the next request. A gateway
+// with three displays and a weak Wi-Fi link reached that state after roughly
+// two days of uptime: 24 kB free in total but a largest free block of only
+// 8.4 kB, so xTaskCreate failed and every transfer through it died with
+// transfer_task_start_failed while the displays themselves were fine.
+//
+// Claimed at boot the stack costs the same 12 kB, but it is claimed while the
+// heap is still whole and is never given back, so fragmentation can no longer
+// take it away. It is the same reasoning that already keeps the payload buffer
+// in circulation rather than reallocating it per transfer (see setup()).
+void transferWorkerTask(void*) {
+  for (;;) {
+    if (xSemaphoreTake(transferSignal, portMAX_DELAY) != pdTRUE) continue;
+    runQueuedTransfer();
+  }
+}
+
+bool ensureTransferWorker() {
+  if (transferTaskHandle != nullptr) return true;
+  if (transferSignal == nullptr) {
+    transferSignal = xSemaphoreCreateBinary();
+    if (transferSignal == nullptr) return false;
+  }
+  // Retried from startQueuedTransfer() as well as called from setup(), so a
+  // gateway that somehow booted without the worker still recovers instead of
+  // refusing every transfer until it is power-cycled.
+  return xTaskCreate(transferWorkerTask, "dratek-transfer", TRANSFER_TASK_STACK_WORDS,
+                     nullptr, 1, &transferTaskHandle) == pdPASS;
 }
 
 void startQueuedTransfer() {
@@ -998,8 +1037,12 @@ void startQueuedTransfer() {
   xSemaphoreGive(transferMutex);
   if (!shouldStart) return;
 
-  BaseType_t created = xTaskCreate(transferTask, "dratek-transfer", 12288, nullptr, 1, nullptr);
-  if (created == pdPASS) return;
+  // transferTaskActive is already true, so the worker cannot be signalled
+  // twice for one job and the binary semaphore cannot lose a wake-up.
+  if (ensureTransferWorker()) {
+    xSemaphoreGive(transferSignal);
+    return;
+  }
 
   xSemaphoreTake(transferMutex, portMAX_DELAY);
   transferTaskActive = false;
@@ -1325,6 +1368,15 @@ void setup() {
   notificationMutex = xSemaphoreCreateMutex();
   if (!transferMutex || !notificationMutex) {
     Serial.println("Unable to create synchronization mutexes.");
+    delay(1000);
+    ESP.restart();
+  }
+
+  // Claim the transfer worker's stack first, while the heap is still whole.
+  // Everything below competes for contiguous memory, and a 12 kB block is the
+  // hardest of them to satisfy once the heap has been in use for a while.
+  if (!ensureTransferWorker()) {
+    Serial.println("Unable to start the transfer worker task.");
     delay(1000);
     ESP.restart();
   }

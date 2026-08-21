@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.329] - 2026-08-21
+
+### Opraveno
+- **Gateway firmware 0.1.59: konec chyby `transfer_task_start_failed`**: Firmware si pro každý přenos vytvářel úlohu s 12 kB zásobníkem a po dokončení ji zase rušil. Zásobník úlohy musí být v paměti **v jednom kuse**, a brát a vracet 12kB blok při každém zápisu je přesně to, co haldu rozdrobí na kousky, ze kterých už se další takový blok poskládat nedá. Změřeno na živé gatewayi (esp32s3, tři displeje, WiFi −71 dBm) po 45 hodinách běhu: volných 24 096 B, ale **největší souvislý blok jen 8 436 B** - méně, než těch potřebných 12 288. `xTaskCreate` proto selhal a přes tuhle gateway neprošel žádný zápis, přestože displeje samotné odpovídaly normálně. Nešlo o únik paměti, ale o fragmentaci - proto restart zabral vždy jen na pár dní. Nově se úloha vytvoří **jednou při startu**, kdy je paměť ještě celistvá, a mezi přenosy čeká na semaforu. Stojí to stejných 12 kB, ale fragmentace už jí je nemůže vzít.
+
+**Po aktualizaci nahrajte do gatewayí nový firmware** tlačítkem „Nahrát firmware" v panelu; do té doby běží stará 0.1.58 a chyba přetrvává.
+
 ## [0.1.328] - 2026-08-21
 
 ### Opraveno
