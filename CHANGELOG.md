@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.337] - 2026-08-21
+
+### Vylepšeno
+- **Silné srážky mají černý kontrastní rastr**: po překročení prahu intenzity se do žluté vrstvy BWRY nebo červené vrstvy BWR postupně přimíchává černá. Silná srážková pásma jsou tak na reflexním e-inku výrazně tmavší a nezaměnitelná se slabým deštěm.
+- **Slabé a extrémní odrazy zůstávají barevně oddělené**: slabé srážky jsou bez černé a skutečně horké radarové pixely zůstávají červené.
+
 ## [0.1.336] - 2026-08-21
 
 ### Vylepšeno
