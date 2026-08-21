@@ -1,4 +1,4 @@
-"""The Meteoradar camera draws the country shape and clips precipitation to it.
+"""The Meteoradar camera draws country outlines over full-section precipitation.
 
 meteoradar.py splits into a pure half (Mercator projection, tile-bounds math,
 compositing) and a network half (fetching RainViewer's frame index and tiles).
@@ -167,11 +167,18 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
             **kwargs,
         )
 
-    def test_precipitation_is_clipped_to_the_selected_country(self) -> None:
-        # v0.1.330 rendered echoes only inside the selected country border.
+    def test_precipitation_covers_the_whole_country_map_section(self) -> None:
         image = self._compose((220, 20, 12, 255))
-        self.assertEqual(image.getpixel((image.width // 2, image.height // 2)), meteoradar.PRECIPITATION_COLOR)
-        self.assertEqual(image.getpixel((0, 0)), (255, 255, 255))
+        precipitation_colors = {
+            meteoradar.PRECIPITATION_YELLOW,
+            meteoradar.PRECIPITATION_COLOR,
+            meteoradar.BORDER_COLOR,
+        }
+        self.assertIn(
+            image.getpixel((image.width // 2, image.height // 2)),
+            precipitation_colors,
+        )
+        self.assertIn(image.getpixel((0, 0)), precipitation_colors)
 
     def test_composition_is_bounded_before_palette_work(self) -> None:
         image = self._compose((220, 20, 12, 255), max_dimension=64)
@@ -202,9 +209,9 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
 
     def test_the_default_country_outline_is_one_target_pixel(self) -> None:
         signature = inspect.signature(meteoradar.compose_country_radar_image)
-        self.assertEqual(signature.parameters["border_width"].default, 1)
+        self.assertEqual(signature.parameters["border_width"].default, 2)
         multi_signature = inspect.signature(meteoradar.compose_multi_country_radar_image)
-        self.assertEqual(multi_signature.parameters["border_width"].default, 1)
+        self.assertEqual(multi_signature.parameters["border_width"].default, 2)
 
     def test_output_is_a_flat_rgb_image_safe_for_the_eink_palette(self) -> None:
         image_bwry = self._compose((220, 20, 12, 255), preserve_yellow=True)
@@ -216,16 +223,17 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         colors_bwr = set(list(image_bwr.getdata()))
         self.assertTrue(colors_bwr <= {(255, 255, 255), meteoradar.PRECIPITATION_COLOR, meteoradar.BORDER_COLOR})
 
-    def test_bwry_cool_radar_echo_is_a_yellow_halftone(self) -> None:
+    def test_bwry_cool_radar_echo_transitions_from_yellow_to_red(self) -> None:
         source = Image.new("RGBA", (64, 64), (0, 100, 200, 160))
         image = Image.new("RGB", source.size, "white")
         meteoradar._paint_precipitation(image, source, preserve_yellow=True)
         area = list(image.getdata())
         yellow_ratio = sum(pixel == meteoradar.PRECIPITATION_YELLOW for pixel in area) / len(area)
-        self.assertGreater(yellow_ratio, 0.50)
-        self.assertLess(yellow_ratio, 0.90)
+        self.assertGreater(yellow_ratio, 0.70)
+        self.assertLess(yellow_ratio, 0.98)
+        self.assertIn(meteoradar.PRECIPITATION_COLOR, area)
+        self.assertNotIn((255, 255, 255), area)
         self.assertNotIn(meteoradar.BORDER_COLOR, area)
-        self.assertNotIn(meteoradar.PRECIPITATION_COLOR, area)
 
     def test_bwr_cool_radar_echo_is_a_red_halftone(self) -> None:
         source = Image.new("RGBA", (64, 64), (0, 100, 200, 160))
@@ -233,13 +241,35 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         meteoradar._paint_precipitation(image, source, preserve_yellow=False)
         area = list(image.getdata())
         red_ratio = sum(pixel == meteoradar.PRECIPITATION_COLOR for pixel in area) / len(area)
-        self.assertGreater(red_ratio, 0.50)
+        self.assertGreater(red_ratio, 0.70)
         self.assertLess(red_ratio, 0.90)
         self.assertNotIn(meteoradar.BORDER_COLOR, area)
 
-    def test_bwry_warm_echo_uses_the_yellow_pigment(self) -> None:
+    def test_strong_cool_echo_is_mostly_red_with_sparse_black_on_bwry(self) -> None:
+        source = Image.new("RGBA", (64, 64), (0, 180, 220, 255))
+        image = Image.new("RGB", source.size, "white")
+        meteoradar._paint_precipitation(image, source, preserve_yellow=True)
+        colors = set(image.getdata())
+        self.assertIn(meteoradar.PRECIPITATION_YELLOW, colors)
+        self.assertIn(meteoradar.PRECIPITATION_COLOR, colors)
+        self.assertIn(meteoradar.BORDER_COLOR, colors)
+        black_ratio = list(image.getdata()).count(meteoradar.BORDER_COLOR) / (64 * 64)
+        self.assertLess(black_ratio, 0.18)
+
+    def test_strong_cool_echo_adds_black_contrast_on_bwr(self) -> None:
+        source = Image.new("RGBA", (64, 64), (0, 180, 220, 255))
+        image = Image.new("RGB", source.size, "white")
+        meteoradar._paint_precipitation(image, source, preserve_yellow=False)
+        colors = set(image.getdata())
+        self.assertIn(meteoradar.PRECIPITATION_COLOR, colors)
+        self.assertIn(meteoradar.BORDER_COLOR, colors)
+        black_ratio = list(image.getdata()).count(meteoradar.BORDER_COLOR) / (64 * 64)
+        self.assertGreater(black_ratio, 0.15)
+        self.assertLess(black_ratio, 0.35)
+
+    def test_bwry_warm_echo_reaches_red_with_sparse_darkening(self) -> None:
         image = self._compose((244, 196, 0, 255), preserve_yellow=True)
-        self.assertIn(meteoradar.PRECIPITATION_YELLOW, set(image.getdata()))
+        self.assertIn(meteoradar.PRECIPITATION_COLOR, set(image.getdata()))
 
     def test_bwr_warm_echo_is_preserved_as_red(self) -> None:
         image = self._compose((244, 196, 0, 255), preserve_yellow=False)
@@ -247,15 +277,15 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         self.assertIn(meteoradar.PRECIPITATION_COLOR, colors)
         self.assertNotIn(meteoradar.PRECIPITATION_YELLOW, colors)
 
-    def test_stronger_cool_echo_has_more_yellow_coverage(self) -> None:
+    def test_stronger_cool_echo_has_more_red_coverage(self) -> None:
         light = self._compose((0, 100, 200, 80), preserve_yellow=True)
         moderate = self._compose((0, 100, 200, 220), preserve_yellow=True)
         cx, cy = light.width // 2, light.height // 2
         area = [(x, y) for y in range(cy - 25, cy + 26) for x in range(cx - 25, cx + 26)]
-        light_yellow = sum(light.getpixel(point) == meteoradar.PRECIPITATION_YELLOW for point in area)
-        moderate_yellow = sum(moderate.getpixel(point) == meteoradar.PRECIPITATION_YELLOW for point in area)
-        self.assertGreater(moderate_yellow, light_yellow)
-        self.assertLess(moderate_yellow, len(area))
+        light_red = sum(light.getpixel(point) == meteoradar.PRECIPITATION_COLOR for point in area)
+        moderate_red = sum(moderate.getpixel(point) == meteoradar.PRECIPITATION_COLOR for point in area)
+        self.assertGreater(moderate_red, light_red)
+        self.assertLess(moderate_red, len(area))
 
     def test_wind_arrows_are_bold_and_clipped_to_the_country(self) -> None:
         plain = self._compose((0, 0, 0, 0), show_wind=False)
@@ -334,7 +364,7 @@ class ComposeMultiCountryRadarImageTests(unittest.TestCase):
             **kwargs,
         )
 
-    def test_precipitation_is_clipped_to_each_overview_country(self) -> None:
+    def test_precipitation_covers_the_whole_overview_map_section(self) -> None:
         image = self._compose((220, 20, 12, 255))
         width, height = image.size
         mid_y = height // 2
@@ -342,9 +372,14 @@ class ComposeMultiCountryRadarImageTests(unittest.TestCase):
         gap_x = width // 2
         right_country_x = width - width // 8
 
-        self.assertEqual(image.getpixel((left_country_x, mid_y)), meteoradar.PRECIPITATION_COLOR)
-        self.assertEqual(image.getpixel((right_country_x, mid_y)), meteoradar.PRECIPITATION_COLOR)
-        self.assertEqual(image.getpixel((gap_x, mid_y)), (255, 255, 255))
+        precipitation_colors = {
+            meteoradar.PRECIPITATION_YELLOW,
+            meteoradar.PRECIPITATION_COLOR,
+            meteoradar.BORDER_COLOR,
+        }
+        self.assertIn(image.getpixel((left_country_x, mid_y)), precipitation_colors)
+        self.assertIn(image.getpixel((right_country_x, mid_y)), precipitation_colors)
+        self.assertIn(image.getpixel((gap_x, mid_y)), precipitation_colors)
 
     def test_each_country_outline_is_drawn(self) -> None:
         image = self._compose((0, 0, 0, 0), border_width=3)  # no precipitation at all

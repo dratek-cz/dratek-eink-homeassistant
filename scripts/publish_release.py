@@ -74,12 +74,14 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.336",
-        name="DRATEK eInk v0.1.336",
-        body="""## Release 0.1.336
+        tag="v0.1.337",
+        name="DRATEK eInk v0.1.337",
+        body="""## Release 0.1.337
 
 ### Vylepšeno
-- **Výraznější srážky**: žlutý rastr na BWRY a červený rastr na BWR mají vyšší hustotu.
-- **Lepší čitelnost slabých i silných odrazů** při zachování bílých mezer a odstupňování intenzity.
+- **BWRY škála žlutá → červená** bez bílých děr ve slabých srážkách; jen maximum má řídké černé body.
+- **Tmavší BWR škála** s hustou červenou a černým stínováním silných odrazů, nikdy však zcela černou plochou.
+- **Celoplošné srážky přes hranice států** se zřetelnými 2px obrysy navrchu.
+- **Portrétní šablony mají meteoradar nahoře a horizontální hodinovou předpověď dole**; krajina zachovává panel vlevo.
 """,
     )

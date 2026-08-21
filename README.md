@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.337
+
+- **BWRY používá škálu žlutá → červená → tmavě červená** bez bílého vyšisování slabých srážek; černá simuluje tmavší červenou pouze několika body v maximu.
+- **BWR je výrazně červenější a silné odrazy stínuje černou**, která ani v maximu nepřekročí přibližně třetinu srážkové plochy.
+- **Srážky pokračují přes hranice států v celé mapové sekci** a zřetelné 2px obrysy se kreslí navrch.
+- **Na výšku je předpověď pod meteoradarem**, na šířku a ve čtverci zůstává vlevo.
+
 ## Novinky ve verzi 0.1.336
 
 - **Srážky jsou tmavší a výraznější** – žlutý rastr na BWRY i červený rastr na BWR má vyšší hustotu, zejména u středních a silných srážek.

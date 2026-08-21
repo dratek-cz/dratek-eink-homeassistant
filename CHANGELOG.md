@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.337] - 2026-08-21
+
+### Vylepšeno
+- **Nová barevná škála BWRY**: nejslabší srážky jsou plně žluté bez bílých děr, střední plynule přecházejí ze žluté do červené a pouze úplné maximum dostává několik černých bodů pro opticky tmavší červenou.
+- **Výraznější BWR meteoradar**: slabé až silné srážky používají přibližně 76–97 % červených pixelů. Černé stínování začíná až u silných odrazů a v maximu nepřekročí přibližně třetinu plochy, takže nevzniknou souvislé černé bloky.
+- **Srážky přes celou mapovou sekci**: radar už není oříznutý hranicemi zvolených států. Povrchový systém zůstává souvislý přes hranice a 2px obrysy států se kreslí zřetelně navrch.
+- **Portrétní rozložení**: pokud je sekce vyšší než širší, meteoradar je nahoře a aktuální teplota s hodinovou předpovědí jsou v horizontálním panelu pod ním. Krajina a čtverec zachovávají panel vlevo.
+
 ## [0.1.336] - 2026-08-21
 
 ### Vylepšeno

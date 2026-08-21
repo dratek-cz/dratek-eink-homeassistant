@@ -1768,7 +1768,7 @@ def _radar_forecast_rows(available_h: int, row_h: int, count: int) -> int:
 def _draw_radar_sidebar(
     width: int, height: int, forecast: dict[str, Any] | None, preserve_yellow: bool
 ) -> Image.Image:
-    """Draw the v0.1.330 hourly sidebar without the intensity legend.
+    """Draw the hourly forecast beside a landscape map or below a portrait map.
 
     A separate image from the map itself (see radar_sidebar_width) - the two
     are placed side by side as two independent blocks, each fetched and
@@ -1778,6 +1778,9 @@ def _draw_radar_sidebar(
     through, so the forecast can never drift out of sync between the browser
     preview and the image sent to the display.
     """
+    if width > height * 1.4:
+        return _draw_radar_footer(width, height, forecast, preserve_yellow)
+
     canvas = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(canvas)
 
@@ -1827,6 +1830,53 @@ def _draw_radar_sidebar(
             )
         y += row_h
 
+    return canvas
+
+
+def _draw_radar_footer(
+    width: int, height: int, forecast: dict[str, Any] | None, preserve_yellow: bool
+) -> Image.Image:
+    """Draw a compact horizontal forecast strip for portrait radar slots."""
+    canvas = Image.new("RGB", (width, height), "white")
+    if not forecast:
+        return canvas
+    draw = ImageDraw.Draw(canvas)
+    pad = max(3, round(min(width, height) * 0.06))
+    temperature = str(forecast.get("temperature") or "")
+    temp_w = min(round(width * 0.24), max(58, round(height * 0.9))) if temperature else 0
+    if temperature:
+        _draw_centered_text(
+            draw, temperature, pad + temp_w / 2, height / 2,
+            max(1, temp_w - pad), max(14, height - 2 * pad),
+            max(12, round(min(height * 0.34, temp_w * 0.34))),
+        )
+
+    entries = forecast.get("entries") or []
+    entries_x = pad + temp_w
+    available_w = max(1, width - entries_x - pad)
+    min_slot_w = max(44, min(72, round(height * 0.58)))
+    visible = min(len(entries), max(1, available_w // min_slot_w)) if entries else 0
+    if visible <= 0:
+        return canvas
+    slot_w = available_w / visible
+    icon_size = max(12, min(round(height * 0.38), round(slot_w * 0.52)))
+    for index, entry in enumerate(entries[:visible]):
+        cx = entries_x + slot_w * (index + 0.5)
+        icon = _weather_condition_icon_image(entry.get("condition", ""), icon_size, preserve_yellow)
+        if icon is not None:
+            canvas.paste(icon, (round(cx - icon.width / 2), pad), icon)
+        label = entry.get("time") or entry.get("label") or ""
+        text_w = max(1, round(slot_w - 4))
+        line_h = max(8, round(height * 0.20))
+        _draw_centered_text(
+            draw, label, cx, height * 0.62, text_w, line_h,
+            max(8, round(line_h * 0.78)), bold=False,
+        )
+        if entry.get("temperature"):
+            _draw_centered_text(
+                draw, entry["temperature"], cx, height * 0.84, text_w, line_h,
+                max(9, round(line_h * 0.88)),
+            )
     return canvas
 
 

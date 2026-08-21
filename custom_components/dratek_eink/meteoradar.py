@@ -7,9 +7,9 @@ Met.no / RainViewer ]" - instead of an actual map, and asked the user to configu
 exists any more: this module fetches RainViewer's public radar tiles directly on the
 backend, projects the chosen country's border (or, for the "eu" overview, every
 neighboring country's border at once) into the same Web Mercator space the tiles
-use, and composes a display-ready image - a black outline, filled white, with red
-wherever the clipped precipitation data says it is raining inside it. Nothing
-outside the outline(s) is drawn.
+use, and composes a display-ready image. RainViewer precipitation covers the
+whole cropped map section while black country outlines and the home marker are
+drawn over it, so weather systems remain continuous across national borders.
 
 The two stages are split on purpose:
 - `compose_country_radar_image` / `compose_multi_country_radar_image` are pure and
@@ -666,11 +666,12 @@ def _paint_precipitation(
     RainViewer's Universal Blue tiles use dark blue/cyan for ordinary rain.
     Sending those RGB values straight to an e-ink nearest-colour palette turns
     an opaque blue field into solid black. Instead, alpha plus the source colour
-    controls the density of an accent-colour halftone: yellow on BWRY and red on
-    BWR. Truly hot red echoes use red on BWRY as well. Black remains reserved
-    for map outlines and labels, matching a conventional e-ink radar map. The
-    legacy ``dotted_light`` option remains accepted for stored configurations
-    but deliberately has no effect.
+    controls a pigment ramp. On BWRY every visible echo starts at solid yellow,
+    then progressively replaces yellow pixels with red. Only the very strongest
+    red gets a sparse black overprint to simulate a darker red. BWR uses the
+    equivalent white-to-red ramp because no yellow pigment exists. The legacy
+    ``dotted_light`` option remains accepted for stored configurations but
+    deliberately has no effect.
     """
     comp_rgba = composite.convert("RGBA")
     red, green, blue, alpha = comp_rgba.split()
@@ -683,38 +684,18 @@ def _paint_precipitation(
             precipitation_mask, area_mask.convert("1")
         )
 
-    # Alpha supplies most of the coverage; red/green growth within RainViewer's
-    # ramp adds detail for stronger cyan/green cells. Keeping this as a scalar
-    # coverage plane prevents dark source-blue RGB from being confused with
-    # black ink.
+    # Alpha supplies most of the intensity; red/green growth within RainViewer's
+    # ramp raises stronger cyan, green, yellow and red cells. Keeping this as a
+    # scalar plane prevents source-blue RGB from being confused with black ink.
     alpha_strength = alpha.point([
         0 if value < min_alpha
-        else round(42 + 140 * (value - min_alpha) / max(1, 255 - min_alpha))
+        else round(70 + 125 * (value - min_alpha) / max(1, 255 - min_alpha))
         for value in range(256)
     ])
     cool_colour_strength = ImageChops.lighter(red, green).point([
-        min(80, round(value * 80 / 255)) for value in range(256)
+        min(60, round(value * 60 / 255)) for value in range(256)
     ])
-    cool_strength = ImageChops.add(alpha_strength, cool_colour_strength)
-
-    red_high = red.point([0 if value < 150 else 255 for value in range(256)], mode="1")
-    blue_low = blue.point([255 if value < 150 else 0 for value in range(256)], mode="1")
-    green_high = green.point([0 if value < 70 else 255 for value in range(256)], mode="1")
-    red_leads = ImageChops.subtract(red, green).point(
-        [0 if value < 70 else 255 for value in range(256)], mode="1"
-    )
-    warm = ImageChops.logical_and(
-        ImageChops.logical_and(red_high, blue_low),
-        ImageChops.logical_or(green_high, red_leads),
-    )
-    warm = ImageChops.logical_and(warm, precipitation_mask)
-    # Warm echoes retain their alpha as colour coverage rather than becoming a
-    # solid block merely because the source hue is red or yellow.
-    warm_coverage = alpha.point([
-        0 if value < min_alpha
-        else round(38 + 217 * (value - min_alpha) / max(1, 255 - min_alpha))
-        for value in range(256)
-    ])
+    intensity = ImageChops.add(alpha_strength, cool_colour_strength)
 
     def tinted_source(
         ink: tuple[int, int, int], coverage: Image.Image
@@ -728,31 +709,58 @@ def _paint_precipitation(
         ))
 
     if preserve_yellow:
-        hot_red = ImageChops.logical_and(warm, red_leads)
-        warm_yellow = ImageChops.logical_and(warm, ImageChops.invert(hot_red))
-        yellow_coverage = cool_strength.copy()
-        yellow_coverage.paste(warm_coverage, mask=warm_yellow)
-        yellow_dithered = _dither_to_palette(
-            tinted_source(PRECIPITATION_YELLOW, yellow_coverage),
-            ((255, 255, 255), PRECIPITATION_YELLOW),
-        )
-        yellow_mask = ImageChops.logical_and(
-            precipitation_mask, ImageChops.invert(hot_red)
-        )
-        output.paste(yellow_dithered, mask=yellow_mask)
-        red_dithered = _dither_to_palette(
-            tinted_source(PRECIPITATION_COLOR, warm_coverage),
-            ((255, 255, 255), PRECIPITATION_COLOR),
-        )
-        output.paste(red_dithered, mask=hot_red)
-    else:
-        red_coverage = cool_strength.copy()
-        red_coverage.paste(warm_coverage, mask=warm)
+        # No white holes inside a detected echo: yellow is the lightest rain.
+        output.paste(PRECIPITATION_YELLOW, mask=precipitation_mask)
+        red_coverage = intensity.point([
+            0 if value <= 135
+            else min(255, round(255 * ((value - 135) / 120) ** 2))
+            for value in range(256)
+        ])
         red_dithered = _dither_to_palette(
             tinted_source(PRECIPITATION_COLOR, red_coverage),
             ((255, 255, 255), PRECIPITATION_COLOR),
         )
+        red_pixels = red_dithered.convert("L").point(
+            [255 if value < 128 else 0 for value in range(256)], mode="1"
+        )
+        red_pixels = ImageChops.logical_and(red_pixels, precipitation_mask)
+        output.paste(PRECIPITATION_COLOR, mask=red_pixels)
+    else:
+        # A BWR panel has no yellow base. Keep even weak rain predominantly red
+        # so reflective white paper does not wash the radar out; intensity then
+        # closes the remaining white gaps before sparse black maximum shading.
+        bwr_red_coverage = intensity.point([
+            min(255, 130 + round(value * 125 / 255))
+            for value in range(256)
+        ])
+        red_dithered = _dither_to_palette(
+            tinted_source(PRECIPITATION_COLOR, bwr_red_coverage),
+            ((255, 255, 255), PRECIPITATION_COLOR),
+        )
         output.paste(red_dithered, mask=precipitation_mask)
+
+    # BWRY only needs sparse dark-red texture at the absolute maximum. BWR has
+    # no yellow pigment and benefits from a wider red-to-black ramp: black starts
+    # in strong rain and tops out near one third, never a solid black field.
+    if preserve_yellow:
+        strong_dark_coverage = intensity.point([
+            0 if value <= 225 else round(38 * (value - 225) / 30)
+            for value in range(256)
+        ])
+    else:
+        strong_dark_coverage = intensity.point([
+            0 if value <= 170 else round(82 * (value - 170) / 85)
+            for value in range(256)
+        ])
+    dark_dithered = _dither_to_palette(
+        tinted_source(BORDER_COLOR, strong_dark_coverage),
+        ((255, 255, 255), BORDER_COLOR),
+    )
+    dark_pixels = dark_dithered.convert("L").point(
+        [255 if value < 128 else 0 for value in range(256)], mode="1"
+    )
+    dark_pixels = ImageChops.logical_and(dark_pixels, precipitation_mask)
+    output.paste(BORDER_COLOR, mask=dark_pixels)
 
 
 def _draw_wind_vectors(
@@ -821,7 +829,7 @@ def compose_country_radar_image(
     y_max: int,
     border: tuple[tuple[float, float], ...] = CZECH_BORDER,
     alpha_threshold: int = PRECIPITATION_ALPHA_THRESHOLD,
-    border_width: int = 1,
+    border_width: int = 2,
     margin: int = 12,
     show_precipitation: bool = True,
     dotted_light: bool = True,
@@ -831,7 +839,7 @@ def compose_country_radar_image(
     preserve_yellow: bool = True,
     max_dimension: int = MAX_NATIVE_DIMENSION,
 ) -> Image.Image:
-    """Stitch tiles and draw precipitation clipped to the black country outline.
+    """Stitch tiles and draw full-section precipitation below the country outline.
 
     Pure and network-free: `tiles` are already-decoded images the caller fetched,
     keyed by (tile_x, tile_y). A missing tile is left transparent rather than
@@ -906,7 +914,6 @@ def compose_country_radar_image(
         _paint_precipitation(
             output,
             composite,
-            area_mask=country_mask,
             alpha_threshold=alpha_threshold,
             dotted_light=dotted_light,
             preserve_yellow=preserve_yellow,
@@ -945,7 +952,7 @@ def compose_multi_country_radar_image(
     y_max: int,
     borders: tuple[tuple[str, tuple[tuple[float, float], ...]], ...] = EUROPE_OVERVIEW_BORDERS,
     alpha_threshold: int = PRECIPITATION_ALPHA_THRESHOLD,
-    border_width: int = 1,
+    border_width: int = 2,
     margin: int = 12,
     show_precipitation: bool = True,
     dotted_light: bool = True,
@@ -1027,17 +1034,12 @@ def compose_multi_country_radar_image(
     extent = max(max(xs) - min(xs), max(ys) - min(ys))
     scaled_width = _scaled_border_width(extent, border_width)
 
-    countries_mask = Image.new("1", composite.size, 0)
-    mask_draw = ImageDraw.Draw(countries_mask)
-    for polygon in polygons:
-        mask_draw.polygon(polygon, fill=1)
     output = Image.new("RGB", composite.size, "white")
 
     if show_precipitation:
         _paint_precipitation(
             output,
             composite,
-            area_mask=countries_mask,
             alpha_threshold=alpha_threshold,
             dotted_light=dotted_light,
             preserve_yellow=preserve_yellow,

@@ -16,7 +16,7 @@
 // are identical by construction.
 
 import qrcode from "../qrcode-generator.js";
-import { DISPLAY_TEMPLATES } from "./templates/index.js?v=catalog-no-color-tests-1";
+import { DISPLAY_TEMPLATES } from "./templates/index.js?v=radar-layout-1";
 
 const RED = "#e31b1b";
 const BLACK = "#000000";
@@ -45,6 +45,9 @@ const METEORADAR_RETRY_MS = 15 * 1000;
 const RADAR_SIDEBAR_MIN = 88;
 const RADAR_SIDEBAR_MAX = 200;
 const RADAR_SIDEBAR_FRACTION = 0.24;
+const RADAR_FOOTER_MIN = 88;
+const RADAR_FOOTER_MAX = 180;
+const RADAR_FOOTER_FRACTION = 0.28;
 // A safety net for the interactive preview only: if callWS never settles (a
 // dropped connection with no error/close event, for instance) the pending
 // flag it guards would otherwise never clear, permanently wedging the
@@ -381,6 +384,33 @@ export const templateSvgMixin = {
     return Math.min(raw, Math.max(1, totalWidth - 60));
   },
 
+  _radarBlockLayout(width, height) {
+    if (height > width) {
+      const raw = Math.max(RADAR_FOOTER_MIN, Math.min(RADAR_FOOTER_MAX, Math.round(height * RADAR_FOOTER_FRACTION)));
+      const minimumForecastH = Math.min(raw, Math.max(1, Math.round(height) - 60));
+      const mapH = Math.max(1, Math.min(
+        Math.round(height) - minimumForecastH,
+        Math.round(width * 1.05),
+      ));
+      const forecastH = Math.max(1, Math.round(height) - mapH);
+      return {
+        portrait: true,
+        mapW: Math.max(1, Math.round(width)),
+        mapH,
+        forecastW: Math.max(1, Math.round(width)),
+        forecastH,
+      };
+    }
+    const forecastW = this._radarSidebarWidth(width);
+    return {
+      portrait: false,
+      mapW: Math.max(1, Math.round(width) - forecastW),
+      mapH: Math.max(1, Math.round(height)),
+      forecastW,
+      forecastH: Math.max(1, Math.round(height)),
+    };
+  },
+
   // Fetches (or reuses a cached) rendered radar map and its info sidebar, each
   // at its own block's exact size - two separate images placed side by side
   // (see _blockRadarMap), not one image letterboxed across both shapes.
@@ -396,12 +426,10 @@ export const templateSvgMixin = {
     const showPrecipitation = this._displayTemplateConfig?.meteoradar_show_precipitation !== false;
     const showWind = this._displayTemplateConfig?.meteoradar_show_wind === true;
     const preserveYellow = this._displaySupportsYellow?.() === true;
-    const sidebarW = this._radarSidebarWidth(width);
-    const mapW = Math.max(1, Math.round(width) - sidebarW);
-    const mapH = Math.round(height);
-    const sidebarH = Math.round(height);
+    const layout = this._radarBlockLayout(width, height);
+    const { mapW, mapH, forecastW, forecastH } = layout;
 
-    const key = `${mapW}x${mapH}_${sidebarW}_${country}_p${showPrecipitation}_w${showWind}_y${preserveYellow}`;
+    const key = `${layout.portrait ? "portrait" : "landscape"}_${mapW}x${mapH}_${forecastW}x${forecastH}_${country}_p${showPrecipitation}_w${showWind}_y${preserveYellow}`;
     const cached = this._meteoradarImageCache;
     const age = cached ? Date.now() - cached.fetchedAt : Infinity;
     const ttl = cached?.dataUrl ? METEORADAR_CACHE_MS : METEORADAR_RETRY_MS;
@@ -412,8 +440,8 @@ export const templateSvgMixin = {
         type: "dratek_eink/render_meteoradar",
         width: mapW,
         height: mapH,
-        sidebar_width: sidebarW,
-        sidebar_height: sidebarH,
+        sidebar_width: forecastW,
+        sidebar_height: forecastH,
         country: country,
         show_precipitation: showPrecipitation,
         show_wind: showWind,
@@ -1755,11 +1783,9 @@ export const templateSvgMixin = {
       + `<path d="${path}" fill="${BLACK}" shape-rendering="crispEdges"></path>`;
   },
 
-  // Two blocks side by side, both raster in an otherwise all-vector renderer:
-  // a compact forecast/temperature sidebar, drawn
-  // server-side) on the left, always spanning the block's full height - the
-  // same way every other template's own side panel does - and a live
-  // snapshot of camera.meteoradar (camera.py) filling the rest. Both are
+  // Two raster blocks in an otherwise all-vector renderer: landscape slots
+  // place the forecast on the left; portrait slots place it below the map.
+  // Both are
   // embedded as <image> rather than redrawn here so the sidebar's layout and
   // the map's projection/border-drawing code stay in one place (render.py),
   // not duplicated between Python and this file - see _ensureTemplateRadarImage
@@ -1774,18 +1800,28 @@ export const templateSvgMixin = {
     const x = row.bleed ? box.fullX : box.x;
     const w = row.bleed ? box.fullW : box.w;
     const cached = this._meteoradarImageCache;
-    const sidebarW = this._radarSidebarWidth(w);
-    const mapX = x + sidebarW;
-    const mapW = Math.max(1, w - sidebarW);
+    const layout = this._radarBlockLayout(w, box.h);
     if (cached?.dataUrl) {
-      const sidebar = cached.sidebarDataUrl
-        ? `<image data-radar-part="sidebar" x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${sidebarW.toFixed(2)}" height="${box.h.toFixed(2)}"`
+      if (layout.portrait) {
+        const forecastY = box.y + layout.mapH;
+        const map = `<image data-radar-part="map" x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${layout.mapW.toFixed(2)}" height="${layout.mapH.toFixed(2)}"`
+          + ` preserveAspectRatio="xMidYMid meet" href="${cached.dataUrl}"></image>`;
+        const divider = this._svgHairline(x, forecastY, w, 2);
+        const forecast = cached.sidebarDataUrl
+          ? `<image data-radar-part="sidebar" x="${x.toFixed(2)}" y="${forecastY.toFixed(2)}" width="${layout.forecastW.toFixed(2)}" height="${layout.forecastH.toFixed(2)}"`
+            + ` preserveAspectRatio="none" href="${cached.sidebarDataUrl}"></image>`
+          : "";
+        return map + divider + forecast;
+      }
+      const mapX = x + layout.forecastW;
+      const forecast = cached.sidebarDataUrl
+        ? `<image data-radar-part="sidebar" x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${layout.forecastW.toFixed(2)}" height="${layout.forecastH.toFixed(2)}"`
           + ` preserveAspectRatio="none" href="${cached.sidebarDataUrl}"></image>`
         : "";
-      const divider = this._svgHairline(mapX, box.y, 1, box.h);
-      const map = `<image data-radar-part="map" x="${mapX.toFixed(2)}" y="${box.y.toFixed(2)}" width="${mapW.toFixed(2)}" height="${box.h.toFixed(2)}"`
+      const divider = this._svgHairline(mapX, box.y, 2, box.h);
+      const map = `<image data-radar-part="map" x="${mapX.toFixed(2)}" y="${box.y.toFixed(2)}" width="${layout.mapW.toFixed(2)}" height="${layout.mapH.toFixed(2)}"`
         + ` preserveAspectRatio="xMidYMid meet" href="${cached.dataUrl}"></image>`;
-      return sidebar + divider + map;
+      return forecast + divider + map;
     }
     const label = cached?.error
       ? `Radarová mapa se nenačetla: ${cached.error}`

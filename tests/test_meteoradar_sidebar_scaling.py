@@ -1,4 +1,4 @@
-"""Regression tests for the v0.1.330 Meteoradar layout and direct dithering."""
+"""Regression tests for responsive Meteoradar layout and direct dithering."""
 
 from __future__ import annotations
 
@@ -119,10 +119,27 @@ class LayoutMirrorTests(unittest.TestCase):
             self._js_constant("RADAR_SIDEBAR_FRACTION"), render._RADAR_SIDEBAR_FRACTION
         )
 
-    def test_layout_is_always_side_by_side_as_in_v01330(self) -> None:
-        self.assertNotIn("_radarBlockLayout", self.js)
-        self.assertNotIn("RADAR_STACK_RATIO", self.js)
-        self.assertIn("const mapX = x + sidebarW;", self.js)
+    def test_portrait_layout_places_forecast_below_the_map(self) -> None:
+        self.assertIn("_radarBlockLayout(width, height)", self.js)
+        self.assertIn("if (height > width)", self.js)
+        self.assertIn("const forecastY = box.y + layout.mapH;", self.js)
+        self.assertIn('data-radar-part="sidebar"', self.js)
+
+    def test_landscape_layout_keeps_forecast_beside_the_map(self) -> None:
+        self.assertIn("const mapX = x + layout.forecastW;", self.js)
+
+    def test_portrait_footer_draws_hourly_items_horizontally(self) -> None:
+        drawn: list[int] = []
+        original = render._weather_condition_icon_image
+        render._weather_condition_icon_image = lambda condition, size, yellow=False: (
+            drawn.append(size), original(condition, size, yellow)
+        )[1]
+        try:
+            image = render._draw_radar_sidebar(480, 140, _forecast(), False)
+        finally:
+            render._weather_condition_icon_image = original
+        self.assertEqual(image.size, (480, 140))
+        self.assertGreaterEqual(len(drawn), 4)
 
     def test_palette_and_target_size_reach_the_map_renderer(self) -> None:
         source = (COMPONENT / "render.py").read_text(encoding="utf-8")
