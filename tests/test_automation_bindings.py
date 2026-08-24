@@ -358,7 +358,8 @@ class AutomationBindingTests(unittest.TestCase):
                 activated = all(
                     any(
                         isinstance(call, ast.Call)
-                        and getattr(call.func, "id", "") == "_activate_entity_automation"
+                        and getattr(call.func, "id", "")
+                        in {"_activate_entity_automation", "_after_successful_send"}
                         for call in ast.walk(runner)
                     )
                     for runner in runners
@@ -378,7 +379,7 @@ class AutomationBindingTests(unittest.TestCase):
                     any(
                         isinstance(call, ast.Call)
                         and getattr(call.func, "id", "")
-                        == "_request_entity_automation_refresh"
+                        in {"_request_entity_automation_refresh", "_after_successful_send"}
                         for call in ast.walk(runner)
                     )
                     for runner in runners
@@ -387,6 +388,19 @@ class AutomationBindingTests(unittest.TestCase):
                     reconciled,
                     f"{name} loses HA changes made while the image was uploading",
                 )
+
+        # The runners reach both through _after_successful_send now, so that
+        # helper has to be the thing that really arms the automation - otherwise
+        # accepting its name above would turn this whole test into a no-op.
+        tail = find_top_level_function("_after_successful_send")
+        tail_calls = {
+            getattr(call.func, "id", "")
+            for call in ast.walk(tail)
+            if isinstance(call, ast.Call)
+        }
+        self.assertIn("_activate_entity_automation", tail_calls)
+        self.assertIn("_request_entity_automation_refresh", tail_calls)
+        self.assertIn("async_save_display_preview", tail_calls)
 
         prepare = find_top_level_function("_install_entity_automation")
         prepare_calls = {

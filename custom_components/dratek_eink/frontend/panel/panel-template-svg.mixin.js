@@ -100,6 +100,8 @@ let TEMPLATE_ICONS_WARMED = false;
 // and re-dither the same handful of condition icons on every visit.
 const WEATHER_ICON_IMAGE_CACHE = new Map();
 const WEATHER_ICON_IMAGE_REQUESTS = new Map();
+const ICON_GEOMETRY_CACHE_LIMIT = 256;
+const WEATHER_ICON_CACHE_LIMIT = 96;
 
 // In-place Floyd-Steinberg error diffusion against an arbitrary small
 // palette. Pixels below the alpha threshold are treated as fully
@@ -286,7 +288,12 @@ export const templateSvgMixin = {
           // Only a hit is worth remembering. A miss almost always means Home
           // Assistant had not finished loading its icon chunk yet, and caching
           // that used to freeze the icon out of every later render for good.
-          if (resolved) ICON_GEOMETRY.set(name, resolved);
+          if (resolved) {
+            ICON_GEOMETRY.set(name, resolved);
+            if (ICON_GEOMETRY.size > ICON_GEOMETRY_CACHE_LIMIT) {
+              ICON_GEOMETRY.delete(ICON_GEOMETRY.keys().next().value);
+            }
+          }
           return resolved;
         });
       // Sharing the promise matters as much as the cache does: two preview slots
@@ -785,6 +792,9 @@ export const templateSvgMixin = {
           WEATHER_ICON_IMAGE_REQUESTS.delete(key);
           if (prepared) {
             WEATHER_ICON_IMAGE_CACHE.set(key, prepared);
+            if (WEATHER_ICON_IMAGE_CACHE.size > WEATHER_ICON_CACHE_LIMIT) {
+              WEATHER_ICON_IMAGE_CACHE.delete(WEATHER_ICON_IMAGE_CACHE.keys().next().value);
+            }
             this._scheduleTemplateIconRepaint();
           }
         })
@@ -2026,15 +2036,6 @@ export const templateSvgMixin = {
   // produce, windowed to just one variable's box via viewBox instead of a
   // redrawn miniature - so it is the actual template at 1:1, not a rendition
   // of it that could disagree on a font size or a color.
-  _templateVariableCropSvg(template, box, width, height, fullMarkup) {
-    if (!box) return "";
-    const x = box.x.toFixed(2), y = box.y.toFixed(2), w = Math.max(1, box.w).toFixed(2), h = Math.max(1, box.h).toFixed(2);
-    return `<svg class="template-variable-crop-svg" viewBox="${x} ${y} ${w} ${h}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">`
-      + `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#ffffff"></rect>`
-      + fullMarkup
-      + `</svg>`;
-  },
-
   // ---------------------------------------------------------------- export ---
 
   // Builds the complete SVG document for one or two templates at the display's

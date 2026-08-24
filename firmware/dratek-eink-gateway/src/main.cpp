@@ -12,7 +12,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.60-gateway";
+static const char* FIRMWARE_VERSION = "0.1.61-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 static const size_t INITIAL_UPLOAD_RESERVE_BYTES = 128UL * 1024UL;
@@ -1401,10 +1401,12 @@ void startMdns() {
   MDNS.setInstanceName("DRATEK eInk gateway");
   MDNS.addService("dratek-eink-gateway", "tcp", 80);
   MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "id", gatewayId.c_str());
+  MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "name", hostname.c_str());
   MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "fw", FIRMWARE_VERSION);
   MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "ip", WiFi.localIP().toString());
   MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "chip", CHIP_FAMILY);
   MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "ota", "1");
+  MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "model", "DRATEK eInk Gateway");
   MDNS.addService("http", "tcp", 80);
   MDNS.addServiceTxt("http", "tcp", "model", "DRATEK eInk gateway");
   mdnsStarted = true;

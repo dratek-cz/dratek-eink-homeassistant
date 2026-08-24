@@ -65,6 +65,15 @@ class MercatorProjectionTests(unittest.TestCase):
         self.assertTrue(math.isfinite(y))
 
 
+class CacheLimitTests(unittest.TestCase):
+    def test_render_cache_drops_oldest_entries(self) -> None:
+        cache = {str(index): object() for index in range(15)}
+        meteoradar._trim_oldest_cache_entries(cache, 12)
+        self.assertEqual(len(cache), 12)
+        self.assertNotIn("0", cache)
+        self.assertEqual(next(iter(cache)), "3")
+
+
 class TileBoundsTests(unittest.TestCase):
     def test_covers_a_small_square_border_with_one_or_a_few_tiles(self) -> None:
         # A tiny bounding box near the equator at a coarse zoom must fit in a

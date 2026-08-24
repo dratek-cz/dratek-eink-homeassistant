@@ -50,7 +50,7 @@ def _forecast(count: int = 12) -> dict:
 def _rows_drawn(width: int, height: int, forecast: dict | None) -> int:
     drawn: list[int] = []
     original = render._weather_condition_icon_image
-    render._weather_condition_icon_image = lambda condition, size, yellow=False: (
+    render._weather_condition_icon_image = lambda condition, size, yellow=False, night=False: (
         drawn.append(size),
         original(condition, size, yellow),
     )[1]
@@ -131,7 +131,7 @@ class LayoutMirrorTests(unittest.TestCase):
     def test_portrait_footer_draws_hourly_items_horizontally(self) -> None:
         drawn: list[int] = []
         original = render._weather_condition_icon_image
-        render._weather_condition_icon_image = lambda condition, size, yellow=False: (
+        render._weather_condition_icon_image = lambda condition, size, yellow=False, night=False: (
             drawn.append(size), original(condition, size, yellow)
         )[1]
         try:

@@ -2,6 +2,21 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.339] - 2026-08-24
+
+### Přidáno
+- **Automatické objevení gatewayí v Home Assistantu**: firmware publikuje službu `_dratek-eink-gateway._tcp.local.` s názvem, modelem a verzí a config flow ji převezme přes Zeroconf. Po nahrání firmware z Arduino IDE nebo PlatformIO se gateway nabídne mezi nalezenými zařízeními bez ručního zadávání adresy.
+- **Gatewaye jako zařízení DRATEK eInk**: nalezené i dříve uložené gatewaye se registrují v registru zařízení Home Assistantu s modelem, firmwarem, sériovým číslem a konfigurační URL.
+- **Displeje jako zařízení DRATEK eInk**: displeje nalezené přes Bluetooth, uložené v projektu i pravidelně skenované gatewayemi dostanou vlastní záznam zařízení. Pokud je obsluhuje gateway, Home Assistant zobrazí vazbu mezi displejem a gatewayí.
+
+### Opraveno
+- **Regrese vykreslování, náhledů a automatických zápisů**: sjednoceno zpracování scén mezi frontendem a backendem, opravené noční varianty ikon počasí a stabilnější uchování náhledů displejů.
+- **Odpojování a opakování BLE přenosu**: dočasné chyby už nezanechávají nekonzistentní stav a diagnostické záznamy se průběžně uklízejí.
+
+### Optimalizováno
+- **Pevné limity cache**: meteoradar, SVG šablony, náhledy, základní kreslení a údaje o zařízeních mají omezený počet položek a odstraňují nejstarší záznamy.
+- **Omezená vnitřní historie backendu**: zámky fronty, časování a bezpečnostní evidence odpojování už nemohou bez omezení růst při dlouhodobém provozu.
+
 ## [0.1.338] - 2026-08-24
 
 ### Opraveno

@@ -16,7 +16,7 @@ import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js?v=templates-4c
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
 import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=radar-gradient-layout-1";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.338";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.339";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -41,6 +41,7 @@ class DratekEinkPanel extends HTMLElement {
     this._selectedDisplayTemplateSecondaryId = "";
     this._displayTemplateOrientation = "portrait";
     this._displayTemplateLargeLayout = "single";
+    this._displayRefreshSettingsOpen = false;
     this._displayTemplateBindings = {};
     this._displayTemplateConfig = {};
     this._templateOrientationMenuOpen = false;
@@ -62,7 +63,6 @@ class DratekEinkPanel extends HTMLElement {
     this._customImageFitMode = "cover";
     this._customImagePreviewNow = Date.now();
     this._customImageCyclePreviewTimer = null;
-    this._customImageStudioTab = "gallery";
     this._customImageStudioZoom = 1;
     this._customImageViewportPan = { x: 0, y: 0 };
     this._templateOverlayDrag = null;

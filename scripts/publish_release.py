@@ -74,22 +74,24 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.338",
-        name="DRATEK eInk v0.1.338",
-        body="""## Release 0.1.338
+        tag="v0.1.339",
+        name="DRATEK eInk v0.1.339",
+        body="""## Release 0.1.339
+
+### Přidáno
+- **Automatické nalezení gatewaye přes Zeroconf/mDNS** po nahrání firmware z Arduino IDE nebo PlatformIO.
+- **Gatewaye jako zařízení DRATEK eInk** v registru zařízení Home Assistantu.
+- **Displeje jako samostatná zařízení DRATEK eInk**, včetně vazby na gateway, která je obsluhuje.
 
 ### Opraveno
-- **Mapa připojení ukazovala gateway jako nevyužitou**, i když displeje obsluhovala: sken gatewayí se přeskočil pokaždé, když běžel přenos přes Bluetooth Home Assistantu, a výběr trasy ignoroval zapamatovaná zachycení i sílu signálu.
-- **Z několika gatewayí nevyhrávala nejsilnější**, ale první v pořadí – mapa tak mohla ukazovat jinou gateway, než která zápis provedla.
-- **Chyba při vykreslení řádku „split“ s ikonou** shodila automatické překreslení.
-- **Teplota u vícedenní předpovědi bez jednotky** – dny nově ukazují „22°C“ stejně jako hlavní teplota.
-- **Zamrzlá stránka Gatewaye** během pravidelné kontroly a zastavení automatiky při neúspěšném odpojení integrace.
+- Regrese vykreslování, náhledů, nočních ikon počasí a automatických zápisů.
+- Bezpečnější opakování a odpojování BLE přenosů bez nekonzistentního stavu.
 
-### Zabezpečeno
-- **Ovládání panelu vyžaduje účet správce.** Všech 51 příkazů, včetně přehrání firmwaru gatewaye přes USB a odeslání údajů k Wi-Fi po sériové lince, bylo dostupných každému přihlášenému uživateli.
-- **Adresa gatewaye se ověřuje** místo toho, aby se neověřená skládala do webového požadavku.
+### Optimalizováno
+- Cache meteoradaru, SVG šablon, náhledů a zařízení mají pevné limity.
+- Vnitřní historie fronty a odpojování se průběžně uklízí a nemůže dlouhodobě zaplnit paměť.
 
-### Vylepšeno
-- **Podrobnosti skenu pod mapou připojení** vysvětlí, proč nějaká gateway zrovna nic neobsluhuje.
+### Firmware gatewaye
+- Verze **0.1.61-gateway** publikuje přes mDNS název, model a verzi zařízení.
 """,
     )

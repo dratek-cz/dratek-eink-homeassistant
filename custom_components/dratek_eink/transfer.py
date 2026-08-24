@@ -45,6 +45,7 @@ TEARDOWN_OPERATION_TIMEOUT = 5
 STREAM_WRITE_DELAY = 0.04
 LARGE_STREAM_WRITE_DELAY = 0.10
 MIN_RECONNECT_INTERVAL_SECONDS = 6.0
+DISCONNECT_HISTORY_LIMIT = 256
 
 
 # Keyed by normalised address, shared across every DratekTransfer instance for
@@ -161,6 +162,11 @@ class DratekTransfer:
                     "longer than usual to free."
                 )
             _LAST_DISCONNECT_AT[normalized_address] = asyncio.get_running_loop().time()
+            # Only the last few seconds affect reconnect pacing. Bound the map
+            # as a backstop for installations that rotate through many labels.
+            if len(_LAST_DISCONNECT_AT) > DISCONNECT_HISTORY_LIMIT:
+                oldest = min(_LAST_DISCONNECT_AT, key=_LAST_DISCONNECT_AT.get)
+                _LAST_DISCONNECT_AT.pop(oldest, None)
             if self._hass is not None:
                 try:
                     from homeassistant.components import bluetooth
@@ -310,21 +316,17 @@ class DratekTransfer:
                 int(blue),
             ]
         )
-        last_error: Exception | None = None
-        for attempt in range(1, 4):
-            self.log(f"RGB LED attempt {attempt}/3.")
-            try:
-                await self._set_rgb_led_once(address, packet)
-                self.log("RGB LED setting accepted by the display.")
-                return
-            except Exception as exc:  # BLE stack can raise platform-specific exceptions
-                last_error = exc
-                self.log(f"RGB LED attempt {attempt}/3 failed: {exc}")
-                if attempt < 3:
-                    await asyncio.sleep(attempt)
-        raise last_error or RuntimeError("RGB LED setting failed.")
+        await self._control_command_with_retries(
+            address, packet, RGB_LED_COMMAND, "RGB LED", "RGB LED control"
+        )
 
-    async def _set_rgb_led_once(self, address: str, packet: bytes) -> None:
+    # RGB LED and find-me are the same exchange with different bytes: connect,
+    # subscribe to the control point, write one packet, wait for its echo. They
+    # were two near-identical copies of this method, and every fix to the BLE
+    # handshake had to be made twice.
+    async def _control_command_once(
+        self, address: str, packet: bytes, command: int, label: str, purpose: str
+    ) -> None:
         responses: asyncio.Queue[bytes] = asyncio.Queue()
         loop = asyncio.get_running_loop()
 
@@ -334,7 +336,7 @@ class DratekTransfer:
             loop.call_soon_threadsafe(responses.put_nowait, response)
 
         connection_target = self._connection_target(address)
-        self.log(f"Connecting to {address} for RGB LED control...")
+        self.log(f"Connecting to {address} for {purpose}...")
         async with self._connected_client(connection_target, address) as client:
             if not client.is_connected:
                 raise RuntimeError("Could not connect to the display.")
@@ -345,66 +347,37 @@ class DratekTransfer:
             await self._start_notify(client, control_char, notify_handler)
             try:
                 await asyncio.sleep(0.25)
-                await self._write_char(client, control_char, packet, "RGB LED")
+                await self._write_char(client, control_char, packet, label)
                 await self._wait_for_response(
-                    responses,
-                    RGB_LED_COMMAND,
-                    ok_values={0},
-                    label="RGB LED setting",
-                    timeout=5,
+                    responses, command, ok_values={0}, label=label, timeout=5,
                 )
             finally:
                 await self._stop_notify(client, control_char)
+
+    async def _control_command_with_retries(
+        self, address: str, packet: bytes, command: int, label: str, purpose: str, attempts: int = 3
+    ) -> None:
+        """Three tries, backing off a second more each time."""
+        last_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            self.log(f"{label} attempt {attempt}/{attempts}.")
+            try:
+                await self._control_command_once(address, packet, command, label, purpose)
+                self.log(f"{label} accepted by the display.")
+                return
+            except Exception as exc:  # BLE stack can raise platform-specific exceptions
+                last_error = exc
+                self.log(f"{label} attempt {attempt}/{attempts} failed: {exc}")
+                if attempt < attempts:
+                    await asyncio.sleep(attempt)
+        raise last_error or RuntimeError(f"{label} failed.")
 
     async def flash_identify(self, address: str) -> None:
         """Blink the display's indicator once so it can be located ("find me")."""
         packet = bytes([FLASH_IDENTIFY_COMMAND])
-        last_error: Exception | None = None
-        for attempt in range(1, 4):
-            self.log(f"Find me attempt {attempt}/3.")
-            try:
-                await self._flash_identify_once(address, packet)
-                self.log("Find me command accepted by the display.")
-                return
-            except Exception as exc:  # BLE stack can raise platform-specific exceptions
-                last_error = exc
-                self.log(f"Find me attempt {attempt}/3 failed: {exc}")
-                if attempt < 3:
-                    await asyncio.sleep(attempt)
-        raise last_error or RuntimeError("Find me command failed.")
-
-    async def _flash_identify_once(self, address: str, packet: bytes) -> None:
-        responses: asyncio.Queue[bytes] = asyncio.Queue()
-        loop = asyncio.get_running_loop()
-
-        def notify_handler(_sender, data) -> None:
-            response = bytes(data)
-            self.log(f"Notification: {response.hex(' ').upper()}")
-            loop.call_soon_threadsafe(responses.put_nowait, response)
-
-        connection_target = self._connection_target(address)
-        self.log(f"Connecting to {address} for find-me flash...")
-        async with self._connected_client(connection_target, address) as client:
-            if not client.is_connected:
-                raise RuntimeError("Could not connect to the display.")
-            service_uuid, control_char, _write_char = self._find_transfer_chars(client)
-            if not control_char:
-                raise RuntimeError("DRATEK eInk control characteristic was not found.")
-            self.log(f"Using service {service_uuid}")
-            await self._start_notify(client, control_char, notify_handler)
-            try:
-                await asyncio.sleep(0.25)
-                await self._write_char(client, control_char, packet, "find me")
-                await self._wait_for_response(
-                    responses,
-                    FLASH_IDENTIFY_COMMAND,
-                    ok_values={0},
-                    label="find me",
-                    timeout=5,
-                )
-            finally:
-                await self._stop_notify(client, control_char)
-
+        await self._control_command_with_retries(
+            address, packet, FLASH_IDENTIFY_COMMAND, "find me", "find-me flash"
+        )
 
     async def _send_with_retries(
         self,

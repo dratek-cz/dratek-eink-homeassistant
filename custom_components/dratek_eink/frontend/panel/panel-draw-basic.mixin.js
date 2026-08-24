@@ -143,6 +143,9 @@ export const drawBasicMixin = {
           image.onload = () => this._paint();
           image.src = object.image;
           this._embeddedLayerImageCache.set(object.image, image);
+          if (this._embeddedLayerImageCache.size > 48) {
+            this._embeddedLayerImageCache.delete(this._embeddedLayerImageCache.keys().next().value);
+          }
         }
         if (image.complete && image.naturalWidth) this._drawTintedCanvasImage(ctx, image, x, y, w, h, object.tint || "original");
       } else {

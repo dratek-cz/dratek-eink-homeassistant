@@ -84,10 +84,6 @@ export const storageMixin = {
     return { ...(nextResult || {}), devices };
   },
 
-  _hasFreshDeviceCache(maxAgeMs = 10 * 60 * 1000) {
-    return Boolean(this._result?.devices?.length) && Date.now() - this._deviceCacheLoadedAt < maxAgeMs;
-  },
-
   _defaultGatewayName() {
     const now = new Date();
     const pad = (value) => String(value).padStart(2, "0");

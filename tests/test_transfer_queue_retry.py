@@ -71,6 +71,31 @@ class FakeHass:
 
 
 class TransferQueueRetryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_prune_releases_runtime_state_that_aged_out_of_history(self):
+        queue = queue_module.TransferQueue(FakeHass())
+        queue._loaded = True
+        for index in range(queue_module.HISTORY_LIMIT + 5):
+            address = f"AA:BB:CC:00:00:{index:02X}"
+            resource = f"gateway:{index}"
+            queue._jobs.append({
+                "id": str(index), "address": address, "resource": resource,
+                "status": "succeeded", "created_at": index,
+            })
+            queue._device_locks[address] = asyncio.Lock()
+            queue._locks[resource] = asyncio.Lock()
+            queue._last_finish_at[address] = float(index)
+            queue._last_failure_at[address] = float(index)
+            queue._gateway_failure_at[resource] = float(index)
+
+        queue._prune()
+
+        self.assertEqual(len(queue._jobs), queue_module.HISTORY_LIMIT)
+        self.assertEqual(len(queue._device_locks), queue_module.HISTORY_LIMIT)
+        self.assertEqual(len(queue._locks), queue_module.HISTORY_LIMIT)
+        self.assertEqual(len(queue._last_finish_at), queue_module.HISTORY_LIMIT)
+        self.assertEqual(len(queue._last_failure_at), queue_module.HISTORY_LIMIT)
+        self.assertEqual(len(queue._gateway_failure_at), queue_module.HISTORY_LIMIT)
+
     async def test_safety_timeout_reports_the_last_transfer_step(self):
         queue = queue_module.TransferQueue(FakeHass())
         queue._loaded = True

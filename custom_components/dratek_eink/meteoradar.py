@@ -818,6 +818,30 @@ def _draw_wind_vectors(
     image.paste(Image.new("RGB", image.size, BORDER_COLOR), mask=clipped_arrows)
 
 
+def _stitch_tiles(
+    tiles: dict[tuple[int, int], Image.Image],
+    x_min: int,
+    y_min: int,
+    x_max: int,
+    y_max: int,
+    tile_size: int,
+) -> tuple[Image.Image, int, int]:
+    """Paste a tile grid into one image, with the grid's pixel origin.
+
+    A missing tile is left transparent rather than failing the whole render, so
+    a partial fetch still produces a usable map. Shared by the single-country
+    and Europe composers, which had identical copies of this.
+    """
+    composite = Image.new(
+        "RGBA",
+        ((x_max - x_min + 1) * tile_size, (y_max - y_min + 1) * tile_size),
+        (0, 0, 0, 0),
+    )
+    for (tile_x, tile_y), tile in tiles.items():
+        composite.paste(tile, ((tile_x - x_min) * tile_size, (tile_y - y_min) * tile_size))
+    return composite, x_min * tile_size, y_min * tile_size
+
+
 def compose_country_radar_image(
     tiles: dict[tuple[int, int], Image.Image],
     *,
@@ -845,14 +869,7 @@ def compose_country_radar_image(
     keyed by (tile_x, tile_y). A missing tile is left transparent rather than
     failing the whole render, so a partial fetch still produces a usable map.
     """
-    grid_width = (x_max - x_min + 1) * tile_size
-    grid_height = (y_max - y_min + 1) * tile_size
-    composite = Image.new("RGBA", (grid_width, grid_height), (0, 0, 0, 0))
-    for (tile_x, tile_y), tile in tiles.items():
-        composite.paste(tile, ((tile_x - x_min) * tile_size, (tile_y - y_min) * tile_size))
-
-    origin_x = x_min * tile_size
-    origin_y = y_min * tile_size
+    composite, origin_x, origin_y = _stitch_tiles(tiles, x_min, y_min, x_max, y_max, tile_size)
     polygon = [
         (px - origin_x, py - origin_y)
         for px, py in (mercator_pixel(lat, lon, zoom, tile_size) for lon, lat in border)
@@ -963,14 +980,7 @@ def compose_multi_country_radar_image(
     max_dimension: int = MAX_NATIVE_DIMENSION,
 ) -> Image.Image:
     """The Europe-overview counterpart to `compose_country_radar_image`."""
-    grid_width = (x_max - x_min + 1) * tile_size
-    grid_height = (y_max - y_min + 1) * tile_size
-    composite = Image.new("RGBA", (grid_width, grid_height), (0, 0, 0, 0))
-    for (tile_x, tile_y), tile in tiles.items():
-        composite.paste(tile, ((tile_x - x_min) * tile_size, (tile_y - y_min) * tile_size))
-
-    origin_x = x_min * tile_size
-    origin_y = y_min * tile_size
+    composite, origin_x, origin_y = _stitch_tiles(tiles, x_min, y_min, x_max, y_max, tile_size)
     polygons = [
         [
             (px - origin_x, py - origin_y)
@@ -1080,6 +1090,14 @@ _wind_cache: dict[str, dict[str, object]] = {}
 _inflight_renders: dict[str, asyncio.Task[Image.Image | None]] = {}
 _compose_semaphore: asyncio.Semaphore | None = None
 _compose_semaphore_loop: asyncio.AbstractEventLoop | None = None
+RENDER_CACHE_LIMIT = 12
+WIND_CACHE_LIMIT = 16
+
+
+def _trim_oldest_cache_entries(cache: dict[str, object], limit: int) -> None:
+    """Keep process-wide image/weather caches bounded by insertion order."""
+    while len(cache) > limit:
+        cache.pop(next(iter(cache)))
 
 
 def _render_cache_key(
@@ -1164,6 +1182,7 @@ async def _async_current_wind_samples(
             "observation_key": observation_key,
             "checked_at": now,
         }
+        _trim_oldest_cache_entries(_wind_cache, WIND_CACHE_LIMIT)
         return result, observation_key
     except Exception:  # live weather must never prevent the radar from rendering
         if cached:
@@ -1173,6 +1192,7 @@ async def _async_current_wind_samples(
             "observation_key": "",
             "checked_at": now,
         }
+        _trim_oldest_cache_entries(_wind_cache, WIND_CACHE_LIMIT)
         return (), ""
 
 
@@ -1321,6 +1341,10 @@ async def _async_composed_base_image_uncached(
         "wind_key": wind_key,
         "checked_at": now,
     }
+    # The key includes location and output dimensions. Without an upper bound,
+    # editing a marker or preview size repeatedly retained every large Pillow
+    # image until Home Assistant restarted.
+    _trim_oldest_cache_entries(_cache, RENDER_CACHE_LIMIT)
     return composed
 
 

@@ -19,6 +19,7 @@ from .const import (
     PARTIAL_UPDATE_CONFIRMED_SDK_TYPES,
 )
 from .discovery import parse_dratek_advertisement, parse_dratek_manufacturer_data
+from .device_registry import integration_entry_id, register_display_device
 from .gateway import (
     async_load_gateways,
     async_scan_gateway,
@@ -481,6 +482,11 @@ async def websocket_scan(
         device["rssi"] = device["preferred_path"].get("rssi")
         device["display_name"] = str(device_names.get(address, ""))
 
+    entry_id = integration_entry_id(hass)
+    if entry_id:
+        for device in devices:
+            register_display_device(hass, entry_id, device, gateways)
+
     try:
         auto_manager = get_entity_auto_update_manager(hass)
         automation_configs = await auto_manager.async_list_configs()
@@ -540,6 +546,15 @@ async def websocket_set_device_name(
     else:
         data["device_names"].pop(address, None)
     await _project_store(hass).async_save(data)
+    entry_id = integration_entry_id(hass)
+    if entry_id:
+        cached = hass.data.get(DISCOVERY_CACHE_KEY, {}).get(address, {})
+        register_display_device(
+            hass,
+            entry_id,
+            {**cached, "address": address, "display_name": name},
+            await async_load_gateways(hass),
+        )
     connection.send_result(msg["id"], {"address": address, "name": name})
 
 

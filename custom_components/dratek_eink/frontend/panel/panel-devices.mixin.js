@@ -467,13 +467,6 @@ export const devicesMixin = {
     return haystack.includes(query);
   },
 
-  _automationForDevice(address) {
-    const normalized = String(address || "").toUpperCase();
-    return (this._automations || []).find(
-      (a) => String(a.address || "").toUpperCase() === normalized
-    );
-  },
-
   _formatCountdownTime(seconds) {
     const sec = Math.max(0, Math.round(Number(seconds) || 0));
     if (sec >= 3600) {
@@ -1177,7 +1170,13 @@ export const devicesMixin = {
     return `<section class="display-templates-inline">
       <div class="display-template-workspace">
         <aside class="card display-template-drop-panel ${largeDisplay ? "is-large-display" : "is-small-display"}">
-          <div class="display-template-device-info ${primaryTemplate ? "is-configurable" : ""}" ${primaryTemplate ? `data-display-template-configure="${this._escape(primaryTemplate.id)}" role="button" tabindex="0" title="Nastavit zdroje dat šablony ${this._escape(primaryTemplate.title)}"` : ""}>
+          <!-- The whole card used to carry data-display-template-configure with
+               role="button", so a click on the display name, on its address or
+               on any empty space in it opened the template's data-source dialog.
+               The trigger is an explicit button below instead: the card holds a
+               rename field, a power switch and a disclosure, none of which
+               belong inside another button. -->
+          <div class="display-template-device-info">
             <div class="display-template-device-info-top">
               <span class="display-template-device-info-icon"><ha-icon icon="mdi:tablet-dashboard"></ha-icon></span>
               <div class="display-template-device-info-identity">
@@ -1188,6 +1187,11 @@ export const devicesMixin = {
                 </div>
                 <span class="display-template-device-info-address">${this._escape(device.address)}</span>
               </div>
+              ${primaryTemplate ? `<button type="button" class="display-template-configure-button"
+                data-display-template-configure="${this._escape(primaryTemplate.id)}"
+                title="Nastavit zdroje dat šablony ${this._escape(primaryTemplate.title)}">
+                <ha-icon icon="mdi:database-cog-outline"></ha-icon><span>Zdroje dat</span>
+              </button>` : ""}
             </div>
             ${this._renderDisplayTemplateRefreshSettings(device)}
           </div>
@@ -1379,14 +1383,24 @@ export const devicesMixin = {
     }
     const enabled = automation.enabled !== false;
     const busy = this._automationBusyAddress === automation.address;
-    return `<div class="display-template-refresh-row">
+    // Collapsed by default: interval and trigger are set once and then only
+    // read, so they were taking permanent height above the preview for a
+    // setting nobody was changing. The open flag lives on the panel rather
+    // than in a <details> element because every poll re-renders the shadow
+    // root, which would snap a native disclosure shut mid-edit.
+    const settingsOpen = this._displayRefreshSettingsOpen === true;
+    return `<div class="display-template-refresh-row ${settingsOpen ? "is-expanded" : ""}">
       <ha-icon icon="mdi:autorenew"></ha-icon>
       <span><strong>Automatický zápis</strong><small>${enabled ? "Aktivní" : "Pozastaveno"}</small></span>
       <button type="button" class="automation-power ${enabled ? "is-on" : "is-off"}" data-automation-enabled="${this._escape(automation.address)}" data-automation-next-enabled="${enabled ? "0" : "1"}" aria-pressed="${enabled ? "true" : "false"}" title="${enabled ? "Pozastavit automatické aktualizace" : "Zapnout automatické aktualizace"}" ${busy ? "disabled" : ""}><ha-icon icon="mdi:${enabled ? "toggle-switch" : "toggle-switch-off-outline"}"></ha-icon><span>${enabled ? "ON" : "OFF"}</span></button>
-      <div class="display-template-refresh-fields">
+      <button type="button" class="display-template-refresh-toggle" data-display-refresh-settings
+        aria-expanded="${settingsOpen ? "true" : "false"}" title="Nastavení obnovy">
+        <ha-icon icon="mdi:chevron-${settingsOpen ? "up" : "down"}"></ha-icon>
+      </button>
+      ${settingsOpen ? `<div class="display-template-refresh-fields">
         ${this._automationIntervalSelect(automation)}
         ${this._automationTriggerSelect(automation)}
-      </div>
+      </div>` : ""}
     </div>`;
   },
 
@@ -1922,10 +1936,6 @@ export const devicesMixin = {
     return item;
   },
 
-  _userTemplateElementFromView(source, template = this._currentUserDisplayTemplate()) {
-    return this._normalizeTemplateEditorElement(source);
-  },
-
   _userTemplateCanvasRotationStyle(template = this._currentUserDisplayTemplate(), targetOrientation = this._displayTemplateOrientation, targetRatio = 0) {
     const turn = this._userTemplateQuarterTurn(template, targetOrientation);
     if (!turn) return { turn: 0, style: "" };
@@ -1946,47 +1956,6 @@ export const devicesMixin = {
     this._draftSaveTimer = null;
     const payload = this._projectPayload(device);
     return this._queueDeviceDraftSave(device, payload);
-  },
-
-  _handleCustomImageCardAction(choice = "images") {
-    if (choice === "download") {
-      const active = this._activeCustomImageAsset();
-      const source = active ? this._paletteImageSrc(active) : this._customImageDataUrl;
-      if (!source) return;
-      const anchor = document.createElement("a");
-      anchor.href = source;
-      anchor.download = String(active?.name || this._customImageName || "dratek-eink.png").replace(/\.[^.]+$/, "") + "-eink.png";
-      anchor.click();
-      this._render();
-      this._paint();
-      return;
-    }
-    const template = this._displayTemplateCards().find((item) => item.id === "custom_image");
-    if (!template) return;
-    if (!this._customImageDataUrl) {
-      this._useBundledCustomImageTemplate()
-        .then(() => { this._render(); this._paint(); })
-        .catch((error) => {
-          this._templateSendResult = { ok: false, message: this._message(error) };
-          this._render();
-        });
-    }
-    this._rememberActiveTemplateEditorState?.();
-    this._prepareDisplayTemplateBindings(template);
-    this._selectedDisplayTemplateId = "custom_image";
-    this._selectedDisplayTemplateSecondaryId = "";
-    this._selectedTemplateCanvasSlot = "primary";
-    this._displayTemplateLargeLayout = "single";
-    this._templateOrientationMenuOpen = false;
-    this._templateSettingsDialogOpen = false;
-    this._pendingDisplayTemplateConflict = null;
-    this._templateDesignerReturnView = "templates";
-    this._displaySettingsView = "designer";
-    this._applyTemplate("custom_image", true);
-    this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
-    if (choice === "gallery") {
-      requestAnimationFrame(() => this.shadowRoot.querySelector("[data-custom-image-gallery]")?.scrollIntoView({ behavior: "smooth", block: "start" }));
-    }
   },
 
   _renderCustomImageStudio(device) {
@@ -2315,7 +2284,7 @@ export const devicesMixin = {
     const status = this._templateBindingStatus(template);
     const statusBanner = status.total > 0 ? (
       status.state === "complete"
-        ? `<div class="template-setup-status-banner is-complete"><ha-icon icon="mdi:check-decagram"></ha-icon><span><strong>Hotovo automaticky</strong><small>Všech ${status.total} ${status.total === 1 ? "hodnota se" : status.total < 5 ? "hodnoty se" : "hodnot se"} už napojilo samo - kroky níž jsou jen pro kontrolu nebo změnu.</small></span></div>`
+        ? `<div class="template-setup-status-banner is-complete"><ha-icon icon="mdi:check-decagram"></ha-icon><span><strong>Hotovo automaticky</strong><small>Všech ${status.total} ${status.total === 1 ? "hodnota se" : status.total > 4 ? "hodnot se" : "hodnoty se"} už napojilo samo - kroky níž jsou jen pro kontrolu nebo změnu.</small></span></div>`
         : status.state === "partial"
           ? `<div class="template-setup-status-banner is-partial"><ha-icon icon="mdi:progress-check"></ha-icon><span><strong>${status.done} z ${status.total} hotovo automaticky</strong><small>Zbytek zatím ukazuje ukázková data - dokončete ho v Nastavit u šablony.</small></span></div>`
           : `<div class="template-setup-status-banner is-empty"><ha-icon icon="mdi:progress-alert"></ha-icon><span><strong>Zatím jen ukázková data</strong><small>Žádnou z ${status.total} hodnot se nepodařilo přiřadit automaticky - dokončete je v Nastavit u šablony.</small></span></div>`
@@ -2510,56 +2479,6 @@ export const devicesMixin = {
           </div>
         </div>
       `}
-    </div>`;
-  },
-
-  _renderPhotoshopLayersPanel(activeTemplate) {
-    const key = String(this._selectedTemplatePart || "");
-    const adjustments = this._templateElementAdjustments || {};
-    const items = Object.keys(adjustments).map((itemKey, idx) => {
-      const isSelected = itemKey === key;
-      const partNum = idx + 1;
-      const hidden = adjustments[itemKey]?.hidden || false;
-      const locked = adjustments[itemKey]?.locked || false;
-      return `<div class="photoshop-layer-item ${isSelected ? "is-selected" : ""} ${hidden ? "is-hidden" : ""}" data-layer-key="${this._escape(itemKey)}">
-        <button type="button" class="photoshop-layer-btn" data-layer-select="${this._escape(itemKey)}">
-          <ha-icon icon="mdi:${hidden ? "eye-off-outline" : "eye-outline"}"></ha-icon>
-          <span>Prvek šablony #${partNum}</span>
-        </button>
-        <div class="photoshop-layer-actions">
-          <button type="button" data-layer-toggle-hide="${this._escape(itemKey)}" title="${hidden ? "Zobrazit" : "Skrýt"}"><ha-icon icon="mdi:${hidden ? "eye-off-outline" : "eye-outline"}"></ha-icon></button>
-          <button type="button" data-layer-toggle-lock="${this._escape(itemKey)}" title="${locked ? "Odemknout" : "Zamknout"}"><ha-icon icon="mdi:${locked ? "lock-outline" : "lock-open-outline"}"></ha-icon></button>
-        </div>
-      </div>`;
-    });
-
-    return `<div class="photoshop-layers-panel">
-      <div class="photoshop-layers-header">
-        <ha-icon icon="mdi:layers-outline"></ha-icon>
-        <span>Vrstvy prvků (${items.length})</span>
-      </div>
-      <div class="photoshop-layers-list">
-        ${items.length ? items.join("") : '<div class="photoshop-layers-empty">Klikněte na prvek na plátně pro jeho úpravu.</div>'}
-      </div>
-    </div>`;
-  },
-
-  _renderPhotoshopContextBar(activeTemplate) {
-    const key = String(this._selectedTemplatePart || "");
-    const adjustment = this._templateElementAdjustments?.[key];
-    if (!key || !adjustment) return "";
-    const partNumber = Number(key.split(":").at(-1)) + 1;
-    const selectedColor = adjustment.color || "black";
-
-    return `<div class="photoshop-context-bar-inner">
-      <span class="photoshop-context-label"><ha-icon icon="mdi:cursor-move"></ha-icon> <strong>Prvek ${partNumber}</strong></span>
-      <div class="photoshop-options-colors">
-        <button type="button" class="color-swatch is-black ${selectedColor === "black" ? "is-selected" : ""}" data-template-part-color="black" title="Černá"></button>
-        <button type="button" class="color-swatch is-red ${selectedColor === "red" ? "is-selected" : ""}" data-template-part-color="red" title="Červená"></button>
-        ${this._displaySupportsYellow() ? `<button type="button" class="color-swatch is-yellow ${selectedColor === "yellow" ? "is-selected" : ""}" data-template-part-color="yellow" title="Žlutá"></button>` : ""}
-        <button type="button" class="color-swatch is-white ${selectedColor === "white" ? "is-selected" : ""}" data-template-part-color="white" title="Bílá"></button>
-      </div>
-      <button type="button" class="photoshop-btn" data-template-part-reset="${this._escape(key)}"><ha-icon icon="mdi:restore"></ha-icon> Obnovit polohu</button>
     </div>`;
   },
 
@@ -4053,22 +3972,6 @@ export const devicesMixin = {
     </div>`;
   },
 
-  _renderTemplatePartControls(activeTemplate) {
-    const key = String(this._selectedTemplatePart || "");
-    const adjustment = this._templateElementAdjustments?.[key];
-    if (!key || !adjustment) {
-      return `<div class="template-part-controls is-empty">
-        <ha-icon icon="mdi:cursor-move"></ha-icon>
-        <span><strong>Posouvejte prvky šablony</strong><small>Klikněte na jakýkoliv text, ikonu nebo blok v náhledu a tažením jej přesuňte na požadované místo.</small></span>
-      </div>`;
-    }
-    const partNumber = Number(key.split(":").at(-1)) + 1;
-    return `<div class="template-part-controls">
-      <div class="template-part-controls-head"><ha-icon icon="mdi:cursor-move"></ha-icon><span><strong>${this._escape(activeTemplate.title)} · prvek ${partNumber}</strong><small>Tažením myší změníte polohu prvku</small></span></div>
-      <button type="button" data-template-part-reset="${this._escape(key)}"><ha-icon icon="mdi:restore"></ha-icon>Obnovit původní polohu</button>
-    </div>`;
-  },
-
   _renderTemplatePartInspector(activeTemplate) {
     const key = String(this._selectedTemplatePart || "");
     const adjustment = this._templateElementAdjustments?.[key];
@@ -5283,6 +5186,9 @@ export const devicesMixin = {
     this._templateForecastCache ||= new Map();
     if (this._templateForecastCache.has(entityId)) return this._templateForecastCache.get(entityId);
     this._templateForecastCache.set(entityId, null);
+    if (this._templateForecastCache.size > 64) {
+      this._templateForecastCache.delete(this._templateForecastCache.keys().next().value);
+    }
     Promise.resolve()
       .then(() => this._hass.callService("weather", "get_forecasts", { type: "daily" }, { entity_id: entityId }, false, true))
       .then((result) => {
@@ -5304,6 +5210,9 @@ export const devicesMixin = {
     this._templateCalendarCache ||= new Map();
     if (this._templateCalendarCache.has(entityId)) return this._templateCalendarCache.get(entityId);
     this._templateCalendarCache.set(entityId, null);
+    if (this._templateCalendarCache.size > 64) {
+      this._templateCalendarCache.delete(this._templateCalendarCache.keys().next().value);
+    }
     Promise.resolve()
       // A duration avoids formatting a local timestamp by hand, which is the part
       // of calendar.get_events that goes wrong across time zones.
@@ -6013,25 +5922,6 @@ export const devicesMixin = {
     return `${voltage.toFixed(decimals).replace(".", ",")} V`;
   },
 
-  _batteryPercent(value) {
-    if (!Number.isFinite(value)) return 0;
-    return Math.max(0, Math.min(100, value));
-  },
-
-  _batteryClass(value) {
-    if (!Number.isFinite(value)) return "unknown";
-    if (value >= 50) return "high";
-    if (value >= 25) return "medium";
-    return "low";
-  },
-
-  _batteryIconName(value) {
-    if (!Number.isFinite(value)) return "mdi:battery-unknown";
-    if (value <= 5) return "mdi:battery-alert-variant-outline";
-    const step = Math.max(10, Math.min(90, Math.round(value / 10) * 10));
-    return step >= 90 ? "mdi:battery" : `mdi:battery-${step}`;
-  },
-
   _batteryLevel(value) {
     if (!Number.isFinite(value) || value <= 0) return 0;
     if (value >= 75) return 4;
@@ -6077,8 +5967,4 @@ export const devicesMixin = {
     return `<div class="signal-bars level-${level}" role="img" aria-label="${label}" title="${label}">${[1, 2, 3, 4].map((bar) => `<span class="${bar <= level ? "on" : ""}"></span>`).join("")}</div>`;
   },
 
-  _renderBleDevices(devices) {
-    if (!devices.length) return `<div style="color:var(--secondary-text-color);padding:10px 0">Home Assistant zatim nevratil zadne BLE zarizeni.</div>`;
-    return `<table><thead><tr><th>Nazev</th><th>Adresa</th><th>RSSI</th><th>Manufacturer IDs</th><th>Services</th></tr></thead><tbody>${devices.map((device) => `<tr><td>${this._escape(device.name || "-")}</td><td>${this._escape(device.address)}</td><td>${this._escape(device.rssi ?? "")}</td><td>${this._escape((device.manufacturer_ids || []).join(", "))}</td><td>${this._escape((device.service_uuids || []).join(", "))}</td></tr>`).join("")}</tbody></table>`;
-  },
 };

@@ -120,6 +120,9 @@ export const previewMixin = {
     image.onload = () => {
       if (this._devicePreviewRequests.get(address) !== key) return;
       this._devicePreviewImages.set(address, { key, image });
+      if (this._devicePreviewImages.size > 64) {
+        this._devicePreviewImages.delete(this._devicePreviewImages.keys().next().value);
+      }
       this._devicePreviewRequests.delete(address);
       // The same physical display can be visible in the overview, settings and
       // topology at once. Paint every matching surface after the shared image

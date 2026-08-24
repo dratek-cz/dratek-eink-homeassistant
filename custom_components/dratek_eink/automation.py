@@ -735,17 +735,27 @@ class EntityAutoUpdateManager:
             except Exception:
                 pass
         self._timers.clear()
-        for timer in list(getattr(self, "_interval_timers", {}).values()):
-            try:
-                timer()
-            except Exception:
-                pass
-        getattr(self, "_interval_timers", {}).clear()
+        # Bound once and reused: `getattr(self, "_interval_timers", {}).clear()`
+        # cleared a throwaway dict whenever the attribute was missing, so the
+        # cancel loop above ran and the timers stayed in the map afterwards.
+        interval_timers = getattr(self, "_interval_timers", None)
+        if isinstance(interval_timers, dict):
+            for timer in list(interval_timers.values()):
+                try:
+                    timer()
+                except Exception:
+                    pass
+            interval_timers.clear()
         for task in list(self._refresh_tasks.values()):
             if not task.done():
                 task.cancel()
         self._refresh_tasks.clear()
         self._pending_refreshes.clear()
+        # Cleared alongside _last_refresh_at, which they shadow: leaving them
+        # behind kept per-display schedule state for displays this manager no
+        # longer has a config for.
+        self._last_refresh_wall_time.clear()
+        self._next_scheduled_wall_time.clear()
         self._last_refresh_at.clear()
         self._initialized = False
 

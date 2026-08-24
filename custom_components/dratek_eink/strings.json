@@ -5,10 +5,21 @@
       "user": {
         "title": "Aktivovat DRATEK eInk",
         "description": "Klikni na Odeslat. Integrace se přidá do Home Assistantu a v levém menu se zobrazí položka DRATEK eInk. Vyhledávání displejů a Bluetooth diagnostika bude dostupná tam."
+      },
+      "zeroconf_confirm": {
+        "title": "Nalezená DRATEK eInk gateway",
+        "description": "Home Assistant našel gateway {name} na adrese {host}. Potvrď její přidání."
+      },
+      "bluetooth_confirm": {
+        "title": "Nalezený DRATEK eInk displej",
+        "description": "Home Assistant našel displej {name}. Potvrď přidání integrace."
       }
     },
     "abort": {
-      "already_configured": "Integrace DRATEK eInk už je v Home Assistantu přidaná."
+      "already_configured": "Integrace DRATEK eInk už je přidaná; nalezená gateway byla automaticky aktualizována.",
+      "not_dratek_gateway": "Zařízení neoznámilo platný identifikátor DRATEK gatewaye.",
+      "not_dratek_display": "Bluetooth zařízení není podporovaný DRATEK eInk displej.",
+      "cannot_connect": "Gateway nemá použitelnou síťovou adresu."
     }
   }
 }

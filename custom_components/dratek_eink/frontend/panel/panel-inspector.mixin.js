@@ -413,6 +413,12 @@ export const inspectorMixin = {
       this._displayTemplateSearchQuery = event.target.value;
       this._renderKeepingSearchFocus();
     });
+    this.shadowRoot.querySelector("[data-display-refresh-settings]")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this._displayRefreshSettingsOpen = !this._displayRefreshSettingsOpen;
+      this._render();
+      this._paint();
+    });
     this.shadowRoot.querySelector("[data-display-grid-layout-menu]")?.addEventListener("click", (event) => {
       event.stopPropagation();
       this._displayTemplateLayoutMenuOpen = !this._displayTemplateLayoutMenuOpen;
@@ -733,8 +739,24 @@ export const inspectorMixin = {
       dropZonesEl.style.height = `${screenRect.height}px`;
       const fx = (event.clientX - screenRect.left) / (screenRect.width || 1);
       const fy = (event.clientY - screenRect.top) / (screenRect.height || 1);
-      const slots = this._displayTemplateLayoutSlots(this._displayTemplateLargeLayout, 1, 1);
-      const matchedSlot = slots.find((slot) => fx >= slot.x && fx <= slot.x + slot.w && fy >= slot.y && fy <= slot.y + slot.h) || slots[0];
+      // Hit-test in the very grid _renderDisplayTemplateDropZones drew, so the
+      // zone that lights up under the cursor is the zone the drop uses.
+      //
+      // This used to ask for the slots in a 1x1 grid, where _snapLayoutSlot's
+      // Math.round pushes every edge onto 0 or 1 and most slots come out
+      // zero-sized - unhittable, with `|| slots[0]` quietly absorbing the miss.
+      // Only the "single" layout worked: "side-by-side" always dropped into
+      // the left half, "grid-4" always into the top-left quarter, and "grid-6"
+      // could never reach four of its six sections, however precisely the
+      // cursor was placed over them.
+      const portrait = this._displayTemplateOrientation !== "landscape";
+      const zoneWidth = portrait ? 60 : 100;
+      const zoneHeight = portrait ? 100 : 60;
+      const slots = this._displayTemplateLayoutSlots(this._displayTemplateLargeLayout, zoneWidth, zoneHeight);
+      // Clamped so the far edge belongs to the last slot rather than to nothing.
+      const zx = Math.min(zoneWidth - 0.001, Math.max(0, fx * zoneWidth));
+      const zy = Math.min(zoneHeight - 0.001, Math.max(0, fy * zoneHeight));
+      const matchedSlot = slots.find((slot) => zx >= slot.x && zx < slot.x + slot.w && zy >= slot.y && zy < slot.y + slot.h) || slots[0];
       const zone = `slot-${matchedSlot.index}`;
       this._pendingTemplateDropZone = zone;
       dropZoneElements.forEach((element) => element.classList.toggle("is-target", element.dataset.displayTemplateDropZone === zone));

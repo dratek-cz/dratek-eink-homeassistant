@@ -173,17 +173,27 @@ def quantize_bwr_preview(image: Image.Image, preserve_yellow: bool = False) -> I
     output.paste(BWR_WHITE, mask=white)
     output.paste(BWR_RED, mask=red)
     if preserve_yellow:
-        rgb = image.convert("RGB")
-        red_band, green_band, blue_band = rgb.split()
-        yellow = ImageChops.logical_and(
-            ImageChops.logical_and(
-                red_band.point(lambda value: 255 if value >= 161 else 0, mode="1"),
-                green_band.point(lambda value: 255 if value >= 128 else 0, mode="1"),
-            ),
-            blue_band.point(lambda value: 255 if value < 96 else 0, mode="1"),
-        )
+        yellow = yellow_mask(image.convert("RGB"))
         output.paste(BWR_YELLOW, mask=yellow)
     return output
+
+
+def yellow_mask(rgb: Image.Image) -> Image.Image:
+    """The pixels a four-colour panel prints with yellow pigment.
+
+    A channel test rather than a nearest-colour search: yellow is "red and
+    green both well up, blue well down", and the thresholds are the ones the
+    panel's own quantiser uses. Shared by the BWR preview and the BWRY-to-BWR
+    fallback, which carried identical copies of it.
+    """
+    red_band, green_band, blue_band = rgb.split()
+    return ImageChops.logical_and(
+        ImageChops.logical_and(
+            red_band.point(lambda value: 255 if value >= 161 else 0, mode="1"),
+            green_band.point(lambda value: 255 if value >= 128 else 0, mode="1"),
+        ),
+        blue_band.point(lambda value: 255 if value < 96 else 0, mode="1"),
+    )
 
 
 def _fit_text_font(
@@ -1091,7 +1101,7 @@ _WEATHER_CONDITION_ICON_NAMES = {
 }
 
 def _weather_condition_icon_image(
-    condition: str, size: int, preserve_yellow: bool = False
+    condition: str, size: int, preserve_yellow: bool = False, night: bool = False
 ) -> Image.Image | None:
     """Home Assistant's own weather glyph for a forecast day, matching what a
     manual send draws.
@@ -1112,7 +1122,11 @@ def _weather_condition_icon_image(
     icon_name = _WEATHER_CONDITION_ICON_NAMES.get(str(condition or "").lower())
     if not icon_name or size < 8:
         return None
-    return svg_blocks.weather_icon_image(icon_name, size, preserve_yellow)
+    # `night` only changes "partlycloudy": Home Assistant has no
+    # partlycloudy-night state, so without it a cloudy 2am drew the sun behind
+    # the cloud. Every other condition either carries its own night variant in
+    # the state itself ("clear-night") or has no night artwork at all.
+    return svg_blocks.weather_icon_image(icon_name, size, preserve_yellow, night)
 
 
 def _render_bound_forecast(
@@ -1660,6 +1674,36 @@ _RADAR_SIDEBAR_FRACTION = 0.24
 _RADAR_FORECAST_MAX_HOURS = 12
 
 
+def _sun_below_horizon_window(hass: Any) -> tuple[int, int] | None:
+    """Sunset and sunrise as local minutes-of-day, from Home Assistant's own sun.
+
+    Returns (sunset, sunrise). Home Assistant only publishes the *next* rising
+    and setting, but both move by minutes a day, so their time of day is a good
+    reading of "is it dark then" across the twelve-hour horizon the radar
+    sidebar forecasts. None when sun.sun is missing or unreadable - the caller
+    then treats every hour as daylight, which is what this module did before.
+    """
+    try:
+        state = hass.states.get("sun.sun")
+        rising = datetime.fromisoformat(str(state.attributes["next_rising"]).replace("Z", "+00:00"))
+        setting = datetime.fromisoformat(str(state.attributes["next_setting"]).replace("Z", "+00:00"))
+    except Exception:
+        return None
+    to_minutes = lambda moment: moment.astimezone().hour * 60 + moment.astimezone().minute
+    return to_minutes(setting), to_minutes(rising)
+
+
+def _is_night_at(moment: datetime, window: tuple[int, int] | None) -> bool:
+    """Whether the sun is down at `moment`, given a (sunset, sunrise) window."""
+    if window is None:
+        return False
+    sunset, sunrise = window
+    minutes = moment.astimezone().hour * 60 + moment.astimezone().minute
+    if sunset > sunrise:  # the ordinary case: dark from the evening until dawn
+        return minutes >= sunset or minutes < sunrise
+    return sunset <= minutes < sunrise
+
+
 async def _async_radar_forecast_summary(hass: Any) -> dict[str, Any] | None:
     """Hourly forecast steps starting at +1 h, plus the entity's current
     temperature - the same weather.* entity and get_forecasts service the
@@ -1721,7 +1765,8 @@ async def _async_radar_forecast_summary(hass: Any) -> dict[str, Any] | None:
             for entry in forecast if isinstance(entry, dict) and (parsed := _parsed(entry)) is not None
         ]
         now = datetime.now(timezone.utc)
-        entries: list[dict[str, str]] = []
+        night_window = _sun_below_horizon_window(hass)
+        entries: list[dict[str, Any]] = []
         if hourly and dated:
             for offset in range(1, _RADAR_FORECAST_MAX_HOURS + 1):
                 target = now + timedelta(hours=offset)
@@ -1733,6 +1778,7 @@ async def _async_radar_forecast_summary(hass: Any) -> dict[str, Any] | None:
                     "time": parsed.astimezone().strftime("%H:%M"),
                     "condition": str(entry.get("condition") or ""),
                     "temperature": _temperature(entry),
+                    "night": _is_night_at(parsed, night_window),
                 })
         elif dated:
             parsed, entry = min(dated, key=lambda pair: abs((pair[0] - now).total_seconds()))
@@ -1741,6 +1787,7 @@ async def _async_radar_forecast_summary(hass: Any) -> dict[str, Any] | None:
                 "time": parsed.astimezone().strftime("%H:%M"),
                 "condition": str(entry.get("condition") or ""),
                 "temperature": _temperature(entry),
+                "night": _is_night_at(parsed, night_window),
             })
         return {"temperature": temperature, "hourly": hourly, "entries": entries}
     except Exception:
@@ -1809,7 +1856,9 @@ def _draw_radar_sidebar(
     visible = _radar_forecast_rows(max(0, (height - pad) - y), row_h, len(entries))
     for entry in entries[:visible]:
         icon_size = max(12, round(row_h * 0.82))
-        icon = _weather_condition_icon_image(entry.get("condition", ""), icon_size, preserve_yellow)
+        icon = _weather_condition_icon_image(
+            entry.get("condition", ""), icon_size, preserve_yellow, bool(entry.get("night"))
+        )
         text_x = x0
         text_w = inner_w
         if icon is not None:
@@ -1863,7 +1912,9 @@ def _draw_radar_footer(
     icon_size = max(12, min(round(height * 0.38), round(slot_w * 0.52)))
     for index, entry in enumerate(entries[:visible]):
         cx = entries_x + slot_w * (index + 0.5)
-        icon = _weather_condition_icon_image(entry.get("condition", ""), icon_size, preserve_yellow)
+        icon = _weather_condition_icon_image(
+            entry.get("condition", ""), icon_size, preserve_yellow, bool(entry.get("night"))
+        )
         if icon is not None:
             canvas.paste(icon, (round(cx - icon.width / 2), pad), icon)
         label = entry.get("time") or entry.get("label") or ""
@@ -2456,14 +2507,7 @@ def pack_bwr_image(
     # requested fallback is explicit: yellow pigment becomes red rather than
     # disappearing into the white plane.
     rgb = image.convert("RGB")
-    red_band, green_band, blue_band = rgb.split()
-    yellow = ImageChops.logical_and(
-        ImageChops.logical_and(
-            red_band.point(lambda value: 255 if value >= 161 else 0, mode="1"),
-            green_band.point(lambda value: 255 if value >= 128 else 0, mode="1"),
-        ),
-        blue_band.point(lambda value: 255 if value < 96 else 0, mode="1"),
-    )
+    yellow = yellow_mask(rgb)
     if yellow.getbbox():
         image = rgb.copy()
         image.paste(BWR_RED, mask=yellow)

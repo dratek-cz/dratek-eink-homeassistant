@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 # API a user's own camera entities already go through.
 PLATFORMS: list[Platform] = [Platform.CAMERA, Platform.SENSOR]
 GATEWAY_MONITOR_INTERVAL = timedelta(seconds=30)
+GATEWAY_DISPLAY_DISCOVERY_INTERVAL_SECONDS = 5 * 60
 PANEL_URL_PATH = "dratek-eink"
 # The version belongs in the path, not in a ?v= query on the entry file alone.
 # dratek-eink-panel.js imports its mixins with plain relative specifiers, and those
@@ -98,6 +100,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await _async_register_panel(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    from .gateway import async_load_gateways, async_register_gateway_device
+    gateways = await async_load_gateways(hass)
+    for gateway in gateways:
+        async_register_gateway_device(hass, entry.entry_id, gateway)
+
+    # Migrate displays already known by an older integration version into HA's
+    # device registry immediately, without waiting for a new BLE advertisement.
+    from .device_registry import async_register_gateway_displays, register_display_device
+    from .ws_shared import _load_project_data
+
+    discovered_display = entry.data.get("discovered_display")
+    if isinstance(discovered_display, dict):
+        register_display_device(
+            hass, entry.entry_id, discovered_display, gateways
+        )
+    project_data = await _load_project_data(hass)
+    device_names = project_data.get("device_names", {})
+    for address, draft in project_data.get("device_drafts", {}).items():
+        if not isinstance(draft, dict):
+            continue
+        register_display_device(
+            hass,
+            entry.entry_id,
+            {
+                **draft,
+                "address": address,
+                "display_name": str(device_names.get(address, "")),
+            },
+            gateways,
+        )
+
     from .automation import get_entity_auto_update_manager
     auto_update = get_entity_auto_update_manager(hass)
     # async_unload_entry stops the manager. A config-entry reload does not run
@@ -109,7 +142,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         async def _async_refresh_known_gateways(_now: Any = None) -> None:
             try:
-                await async_refresh_all_gateways(hass)
+                gateways = await async_refresh_all_gateways(hass)
+                for gateway in gateways:
+                    async_register_gateway_device(hass, entry.entry_id, gateway)
+                now = time.monotonic()
+                last_scan = float(
+                    hass.data[DOMAIN].get("gateway_display_registry_scan_at") or 0
+                )
+                if now - last_scan >= GATEWAY_DISPLAY_DISCOVERY_INTERVAL_SECONDS:
+                    hass.data[DOMAIN]["gateway_display_registry_scan_at"] = now
+                    await async_register_gateway_displays(
+                        hass, entry.entry_id, gateways
+                    )
             except Exception as exc:
                 _LOGGER.debug("Automatic gateway refresh failed: %s", exc)
 

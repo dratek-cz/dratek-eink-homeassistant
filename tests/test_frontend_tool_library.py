@@ -553,7 +553,13 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('["devices", "display-settings"].includes(this._activeTab)', self.source)
         self.assertNotIn('class="card display-settings-device-summary"', self.source)
         self.assertNotIn('class="display-settings-preview"', self.source)
-        self.assertIn('class="display-template-device-info ${primaryTemplate ? "is-configurable" : ""}"', self.source)
+        # The data-source dialog opens from its own button, not from the whole
+        # device card. The card was a role="button" wrapping a rename field, a
+        # power switch and a disclosure, so a click on the display name, on its
+        # address or on any empty space in it opened that dialog unasked.
+        self.assertIn('class="display-template-configure-button"', self.source)
+        self.assertNotIn('"is-configurable"', self.source)
+        self.assertNotIn('class="display-template-device-info ${primaryTemplate', self.source)
         self.assertIn('data-display-template-configure="${this._escape(primaryTemplate.id)}"', self.source)
         self.assertIn('class="display-template-device-info-identity"', self.source)
         # The refresh-interval select was removed from this panel at user
@@ -1059,6 +1065,54 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".display-palette-color.is-yellow{background:#f2c500}", self.source)
         self.assertNotIn("display-palette-bookmark", self.source)
         self.assertIn('model:"EPA LCD 296x128 BWRY", sdk_type:46', self.harness)
+
+    def test_template_drop_zones_are_hit_tested_in_the_grid_they_are_drawn_in(self):
+        """Dropping a template must reach every section of a multi-slot layout.
+
+        The dragover handler asked _displayTemplateLayoutSlots for the slots in
+        a 1x1 grid. _snapLayoutSlot rounds every edge with Math.round, so in a
+        one-pixel grid most slots collapsed to zero width or height and could
+        never match the cursor - `|| slots[0]` then swallowed the miss. Only the
+        "single" layout worked: side-by-side always dropped left, grid-4 always
+        top-left, and grid-6 could not reach four of its six sections.
+
+        Source assertions rather than a behavioural check: the geometry lives in
+        the panel's JavaScript, and this suite cannot execute it without Node.
+        The measured behaviour was verified by hand in the local harness.
+        """
+        self.assertNotIn(
+            "this._displayTemplateLayoutSlots(this._displayTemplateLargeLayout, 1, 1)",
+            self.source,
+        )
+        # The zones are drawn in a 100x60 (landscape) / 60x100 (portrait) grid;
+        # the hit test has to ask for that same grid.
+        self.assertIn("const zoneWidth = portrait ? 60 : 100;", self.source)
+        self.assertIn("const zoneHeight = portrait ? 100 : 60;", self.source)
+        self.assertIn(
+            "this._displayTemplateLayoutSlots(this._displayTemplateLargeLayout, zoneWidth, zoneHeight)",
+            self.source,
+        )
+        # Half-open bounds, so two neighbouring slots cannot both claim an edge.
+        self.assertIn(
+            "zx >= slot.x && zx < slot.x + slot.w && zy >= slot.y && zy < slot.y + slot.h",
+            self.source,
+        )
+
+    def test_refresh_settings_collapse_behind_a_toggle(self):
+        """Interval and trigger are set once, so they start folded away.
+
+        The open flag lives on the panel, not in a native <details>: every queue
+        poll re-renders the shadow root, which would snap a disclosure element
+        shut while someone was still using it.
+        """
+        self.assertIn("data-display-refresh-settings", self.source)
+        self.assertIn("this._displayRefreshSettingsOpen = false;", self.source)
+        self.assertIn(
+            "this._displayRefreshSettingsOpen = !this._displayRefreshSettingsOpen;",
+            self.source,
+        )
+        self.assertIn('mdi:chevron-${settingsOpen ? "up" : "down"}', self.source)
+        self.assertIn(".display-template-refresh-toggle{", self.source)
 
     def test_the_old_two_pane_tool_sidebar_is_gone(self):
         """Layers are a rail category now, not a second pane beside the tools.

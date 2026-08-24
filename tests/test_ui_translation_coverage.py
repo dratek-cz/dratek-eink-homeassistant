@@ -172,6 +172,47 @@ class UiTranslationCoverageTests(unittest.TestCase):
             "if it is display content or a code fragment rather than UI copy.",
         )
 
+    def test_interpolated_copy_has_a_pattern(self) -> None:
+        """A text node that mixes Czech words with a ${...} value needs a rule.
+
+        _is_whole_phrase above drops anything containing "${", so the scan that
+        precedes this one never looked at interpolated copy at all - and that is
+        exactly the copy EN_EXACT cannot hold, because the string only exists
+        once a count or a name has been substituted into it. Sixteen such nodes
+        were reaching the English UI untranslated ("24 šablon", "Vrstvy prvků
+        (5)", "Prvek šablony #3", …). EN_PATTERNS is the mechanism for them.
+        """
+        patterns = _en_patterns()
+        expression = re.compile(r"\$\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}")
+        # Stands in for a substituted value while the Czech around it is checked.
+        SENTINEL = ""
+        missing: dict[str, set[str]] = {}
+        for path in sorted(PANEL.glob("*.js")) + [FRONTEND / "dratek-eink-panel.js"]:
+            if path.name == I18N.name:
+                continue
+            text = path.read_text(encoding="utf-8")
+            for node in re.finditer(r">([^<>`]*\$\{[^<>`]*)<", text):
+                value = node.group(1).strip()
+                if not value or len(value) > 200:
+                    continue
+                # Only the Czech that survives outside the substitutions matters.
+                outside = expression.sub(SENTINEL, value)
+                if not HAS_CZECH.search(outside):
+                    continue
+                if outside.replace(SENTINEL, "").strip() in ALLOWED_UNTRANSLATED:
+                    continue
+                probe = expression.sub("1", value).strip()
+                if any(rule.search(probe) for rule in patterns):
+                    continue
+                missing.setdefault(path.name, set()).add(value)
+        self.assertEqual(
+            missing,
+            {},
+            "Interpolated Czech copy with no EN_PATTERNS rule. Add a rule to "
+            "panel-i18n.mixin.js matching the string as it reads once the "
+            "values are substituted in.",
+        )
+
     def test_translation_map_has_no_duplicate_keys(self) -> None:
         # A duplicate silently overrides the earlier entry in a JS object
         # literal, so a translation can be replaced without any error.

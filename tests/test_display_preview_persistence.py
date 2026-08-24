@@ -38,8 +38,17 @@ class DisplayPreviewPersistenceTests(unittest.TestCase):
         self.assertIn("nahled se nepodarilo ulozit", gateways.lower())
         self.assertIn('vol.Optional("template_ids"): [str]', sending)
         self.assertIn('vol.Optional("template_ids"): [str]', gateways)
-        self.assertIn('list(msg.get("template_ids") or [])', sending)
+        self.assertIn('list(template_ids or [])', sending)
         self.assertIn('list(msg.get("template_ids") or [])', gateways)
+        # ws_sending.py reaches the save through one shared tail now
+        # (_after_successful_send) rather than four copies of it, so what has to
+        # hold is that every send path goes through that tail and hands it the
+        # template ids - not that the save call itself appears four times.
+        self.assertGreaterEqual(sending.count("await _after_successful_send("), 4)
+        self.assertEqual(
+            sending.count("await _after_successful_send("),
+            sending.count('msg.get("template_ids"), automation, add_log,'),
+        )
 
 
 if __name__ == "__main__":

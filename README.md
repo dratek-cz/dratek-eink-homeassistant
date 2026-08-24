@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.339
+
+- **Gatewaye se objeví v Home Assistantu automaticky** přes Zeroconf/mDNS a integrace je založí jako zařízení DRATEK eInk bez ručního zadávání adresy.
+- **Displeje jsou samostatná zařízení DRATEK eInk** a v registru zařízení jsou propojené s gatewayí, která je obsluhuje.
+- **Firmware gatewaye 0.1.61** oznamuje název, model a verzi, takže Home Assistant zařízení správně identifikuje hned po nahrání z Arduino IDE nebo PlatformIO.
+- **Cache a dlouhodobé diagnostické mapy mají pevné limity**, takže meteoradar, náhledy, fronta ani historie odpojování nemohou postupně zaplnit paměť Home Assistantu nebo prohlížeče.
+- **Opravené regrese vykreslování a přenosů** zahrnují noční ikony počasí, stabilnější náhledy a bezpečnější opakování či odpojování BLE přenosů.
+
 ## Novinky ve verzi 0.1.338
 
 - **Mapa připojení konečně odpovídá skutečnosti** – gateway, která displeje obsluhuje, se v ní zobrazí i během probíhajícího přenosu, a z několika gatewayí vyhrává ta nejsilnější.

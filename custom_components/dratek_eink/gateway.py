@@ -185,6 +185,93 @@ async def async_add_gateway(hass: HomeAssistant, name: str, host: str) -> dict[s
         return gateway
 
 
+async def async_upsert_discovered_gateway(
+    hass: HomeAssistant,
+    *,
+    gateway_id: str,
+    name: str,
+    host: str,
+    port: int = 80,
+    firmware: str = "",
+    chip: str = "",
+) -> dict[str, Any]:
+    """Insert an mDNS gateway or refresh its address without duplicating it."""
+    stable_id = str(gateway_id or "").strip()
+    if not stable_id:
+        raise ValueError("Discovered gateway did not advertise a stable id.")
+    bare_host = _normalize_host(host)
+    stored_host = bare_host if int(port or 80) == 80 else f"{bare_host}:{int(port)}"
+    stored_host = _validated_host(stored_host)
+    now = int(time.time())
+    async with _gateway_store_lock(hass):
+        gateways = await async_load_gateways(hass)
+        gateway = next(
+            (
+                item
+                for item in gateways
+                if _gateway_matches_discovery(
+                    item, {"gateway_id": stable_id, "host": bare_host}
+                )
+            ),
+            None,
+        )
+        if gateway is None:
+            gateway = {
+                "id": str(uuid.uuid4()),
+                "gateway_id": stable_id,
+                "name": str(name or stable_id).strip(),
+                "host": stored_host,
+                "created_at": now,
+                "status": {"ok": None, "message": "Nalezeno automaticky přes mDNS."},
+            }
+            gateways.append(gateway)
+        else:
+            # Keep a user-selected display name, but follow DHCP address changes.
+            gateway["host"] = stored_host
+            gateway["gateway_id"] = stable_id
+        gateway["discovered_at"] = now
+        gateway["updated_at"] = now
+        gateway["discovery"] = {
+            "firmware": str(firmware or ""),
+            "chip": str(chip or ""),
+        }
+        await async_save_gateways(hass, gateways)
+        return gateway
+
+
+def async_register_gateway_device(
+    hass: HomeAssistant, config_entry_id: str, gateway: dict[str, Any]
+) -> None:
+    """Expose one stored gateway as a first-class Home Assistant device."""
+    from homeassistant.helpers import device_registry as dr
+
+    status = gateway.get("status") if isinstance(gateway.get("status"), dict) else {}
+    discovery = (
+        gateway.get("discovery")
+        if isinstance(gateway.get("discovery"), dict)
+        else {}
+    )
+    stable_id = str(
+        gateway.get("gateway_id") or status.get("gateway_id") or gateway.get("id") or ""
+    ).strip()
+    if not stable_id:
+        return
+    host = _normalize_host(str(status.get("ip") or gateway.get("host") or ""))
+    chip = str(status.get("chip") or discovery.get("chip") or "").upper()
+    firmware = str(status.get("firmware") or discovery.get("firmware") or "")
+    registry = dr.async_get(hass)
+    registry.async_get_or_create(
+        config_entry_id=config_entry_id,
+        identifiers={(DOMAIN, f"gateway:{stable_id}")},
+        name=str(gateway.get("name") or status.get("hostname") or stable_id),
+        manufacturer="DRATEK.CZ",
+        model="DRATEK eInk Gateway",
+        hw_version=chip or None,
+        sw_version=firmware or None,
+        configuration_url=f"http://{host}" if host else None,
+    )
+
+
 async def async_delete_gateway(hass: HomeAssistant, gateway_id: str) -> bool:
     async with _gateway_store_lock(hass):
         gateways = await async_load_gateways(hass)

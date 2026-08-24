@@ -457,7 +457,13 @@ class TransferQueue:
             job["error"] = error
             result = {"ok": False, "address": job["address"], "error": error, "log": list(job["log"])}
         finally:
-            self._last_finish_at[normalized_address] = time.monotonic()
+            # The cooldown this stamps exists to wait out a physical e-ink
+            # refresh ("Waiting Ns for physical e-ink screen refresh to
+            # complete" above). A skipped job never wrote anything, so arming
+            # it there made the next real transfer sit out six to fifteen
+            # seconds for a refresh that never happened.
+            if job.get("status") != "skipped":
+                self._last_finish_at[normalized_address] = time.monotonic()
             if job.get("status") == "failed" and job.get("error") != "Transfer cancelled.":
                 if gateway_side_failure:
                     # The gateway ran out of heap, restarted, or dropped the
@@ -637,6 +643,35 @@ class TransferQueue:
         active = [job for job in self._jobs if self._is_active_job(job)]
         completed = [job for job in self._jobs if not self._is_active_job(job)]
         self._jobs = completed[-HISTORY_LIMIT:] + active
+        # These dictionaries used to remember every display and gateway ever
+        # seen, even after its final history entry had aged out. Keep state only
+        # for resources that are still represented by the bounded queue.
+        retained_addresses = {
+            str(job.get("address") or "").upper() for job in self._jobs
+        }
+        retained_resources = {
+            str(job.get("resource") or "") for job in self._jobs
+        }
+        self._device_locks = {
+            key: lock for key, lock in self._device_locks.items()
+            if key in retained_addresses or lock.locked()
+        }
+        self._locks = {
+            key: lock for key, lock in self._locks.items()
+            if key in retained_resources or lock.locked()
+        }
+        self._last_finish_at = {
+            key: value for key, value in self._last_finish_at.items()
+            if key in retained_addresses
+        }
+        self._last_failure_at = {
+            key: value for key, value in self._last_failure_at.items()
+            if key in retained_addresses
+        }
+        self._gateway_failure_at = {
+            key: value for key, value in self._gateway_failure_at.items()
+            if key in retained_resources
+        }
 
     async def _save_history(self) -> None:
         async with self._save_lock:

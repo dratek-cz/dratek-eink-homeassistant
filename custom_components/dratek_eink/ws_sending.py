@@ -58,6 +58,33 @@ async def _async_route_preference(
     )
 
 
+async def _after_successful_send(
+    hass: HomeAssistant,
+    address: str,
+    image: Any,
+    orientation: Any,
+    template_ids: Any,
+    automation: Any,
+    add_log: Any,
+) -> None:
+    """Persist the preview and arm the display's automatic refresh.
+
+    Four copies of this tail existed - two on the local Bluetooth path, two on
+    the gateway one - and they had already drifted apart in their log wording.
+    A preview that cannot be saved is reported and swallowed on purpose: the
+    pixels are on the display either way, and losing the thumbnail must not
+    turn a completed transfer into a failed one.
+    """
+    try:
+        await async_save_display_preview(
+            hass, address, image, orientation, list(template_ids or [])
+        )
+    except Exception as exc:
+        add_log(f"Display updated, but its preview could not be saved: {exc}")
+    await _activate_entity_automation(hass, address, automation)
+    await _request_entity_automation_refresh(hass, address, automation)
+
+
 async def _async_submit_routed_transfer(
     hass: HomeAssistant,
     *,
@@ -201,14 +228,10 @@ async def websocket_send_design(
                         log_callback=add_log,
                     )
                     if res and res.get("ok") is not False:
-                        try:
-                            await async_save_display_preview(
-                                hass, address, image, orientation, list(msg.get("template_ids") or [])
-                            )
-                        except Exception as exc:
-                            add_log(f"Display updated, but preview could not be saved: {exc}")
-                        await _activate_entity_automation(hass, address, automation)
-                        await _request_entity_automation_refresh(hass, address, automation)
+                        await _after_successful_send(
+                            hass, address, image, orientation,
+                            msg.get("template_ids"), automation, add_log,
+                        )
                         return res
                     return res or {"ok": False, "error": "Gateway transfer failed."}
                 except BaseException:
@@ -232,14 +255,10 @@ async def websocket_send_design(
                     msg.get("software_version"),
                 )
                 add_log("Design sent.")
-                try:
-                    await async_save_display_preview(
-                        hass, address, image, orientation, list(msg.get("template_ids") or [])
-                    )
-                except Exception as exc:
-                    add_log(f"Display updated, but its preview could not be saved: {exc}")
-                await _activate_entity_automation(hass, address, automation)
-                await _request_entity_automation_refresh(hass, address, automation)
+                await _after_successful_send(
+                    hass, address, image, orientation,
+                    msg.get("template_ids"), automation, add_log,
+                )
                 return {"ok": True, "address": address, "log": []}
             except BaseException:
                 await _clear_entity_automation_if_matches(hass, address, automation)
@@ -422,18 +441,10 @@ async def websocket_commit_design_upload(
                     msg.get("software_version"),
                 )
                 add_log("Design sent.")
-                try:
-                    await async_save_display_preview(
-                        hass,
-                        address,
-                        image,
-                        msg.get("orientation", "landscape"),
-                        list(msg.get("template_ids") or []),
-                    )
-                except Exception as exc:
-                    add_log(f"Display updated, but its preview could not be saved: {exc}")
-                await _activate_entity_automation(hass, address, automation)
-                await _request_entity_automation_refresh(hass, address, automation)
+                await _after_successful_send(
+                    hass, address, image, msg.get("orientation", "landscape"),
+                    msg.get("template_ids"), automation, add_log,
+                )
                 return {"ok": True, "address": address, "log": []}
             except BaseException:
                 await _clear_entity_automation_if_matches(hass, address, automation)
@@ -458,18 +469,10 @@ async def websocket_commit_design_upload(
                         log_callback=add_log,
                     )
                     if result and result.get("ok") is not False:
-                        try:
-                            await async_save_display_preview(
-                                hass,
-                                address,
-                                image,
-                                msg.get("orientation", "landscape"),
-                                list(msg.get("template_ids") or []),
-                            )
-                        except Exception as exc:
-                            add_log(f"Display updated, but its preview could not be saved: {exc}")
-                        await _activate_entity_automation(hass, address, automation)
-                        await _request_entity_automation_refresh(hass, address, automation)
+                        await _after_successful_send(
+                            hass, address, image, msg.get("orientation", "landscape"),
+                            msg.get("template_ids"), automation, add_log,
+                        )
                     return result or {"ok": False, "error": "Gateway transfer failed."}
                 except BaseException:
                     await _clear_entity_automation_if_matches(hass, address, automation)

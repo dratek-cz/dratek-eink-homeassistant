@@ -114,15 +114,6 @@ export const canvasInteractionMixin = {
     });
   },
 
-  _status() {
-    if (this._error) return { cls: "bad", text: "Chyba" };
-    if (!this._result) return { cls: "muted", text: "Cekam na scan" };
-    if (this._result.devices.length > 0) return { cls: "good", text: `Nalezeno ${this._result.devices.length} displeju` };
-    if (this._result.scanner_count === 0 && !this._gateways.some((gateway) => gateway.status?.ok)) return { cls: "bad", text: "Neni dostupna BLE cesta" };
-    if (this._result.devices.length === 0) return { cls: "warn", text: "Bluetooth funguje, DRATEK eInk nenalezen" };
-    return { cls: "good", text: "Bluetooth je pripraven" };
-  },
-
   _selectedObject() {
     if (this._selectedIds.length !== 1) return null;
     return this._objects.find((object) => object.id === this._selectedIds[0]) || null;
@@ -197,15 +188,6 @@ export const canvasInteractionMixin = {
     for (const object of this._objects.filter((item) => this._selectedIds.includes(item.id))) {
       object.flipH = !object.flipH;
     }
-    this._paint();
-    this._scheduleDraftSave();
-  },
-
-  _toggleInvertColors() {
-    this._pushHistory();
-    this._invertColors = !this._invertColors;
-    this._toolsMenuOpen = false;
-    this._render();
     this._paint();
     this._scheduleDraftSave();
   },

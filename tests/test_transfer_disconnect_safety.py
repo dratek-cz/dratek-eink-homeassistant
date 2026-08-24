@@ -35,6 +35,15 @@ import types
 import unittest
 
 
+# Keep this focused unit test independent from Home Assistant's optional BLE
+# runtime. The production integration declares bleak through HA; the fake is
+# replaced by each test before a connection is opened.
+if "bleak" not in sys.modules:
+    bleak = types.ModuleType("bleak")
+    bleak.BleakClient = object
+    sys.modules["bleak"] = bleak
+
+
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENT = ROOT / "custom_components" / "dratek_eink"
 
@@ -102,6 +111,20 @@ class ConnectedClientTests(unittest.TestCase):
 
     def _fresh_address(self) -> str:
         return f"AA:BB:CC:DD:EE:{self._address_counter:02X}"
+
+    def test_disconnect_history_is_bounded(self) -> None:
+        transfer._LAST_DISCONNECT_AT.clear()
+        factory, _captured = _install_fake_client()
+        transfer.BleakClient = factory
+
+        async def run() -> None:
+            for index in range(transfer.DISCONNECT_HISTORY_LIMIT + 2):
+                address = f"AA:BB:{index // 65536:02X}:{index // 256 % 256:02X}:{index % 256:02X}:01"
+                async with transfer.DratekTransfer()._connected_client(address, address):
+                    pass
+
+        asyncio.run(run())
+        self.assertEqual(len(transfer._LAST_DISCONNECT_AT), transfer.DISCONNECT_HISTORY_LIMIT)
 
     def test_normal_exit_connects_then_disconnects(self) -> None:
         factory, captured = _install_fake_client()
@@ -238,7 +261,16 @@ class ConnectionSiteWiringTests(unittest.TestCase):
         # A direct `async with BleakClient(...)` bypasses the shielded disconnect
         # and reintroduces the leaked-connection-slot bug for that operation.
         self.assertEqual(source.count("async with BleakClient("), 0)
-        self.assertEqual(source.count("self._connected_client(connection_target, address)"), 3)
+        # Counted as a ratio rather than a fixed number: the RGB LED and find-me
+        # paths used to open the client through two near-identical copies of the
+        # same method and now share _control_command_once, so pinning "3 sites"
+        # was pinning the duplication rather than the safety property. What has
+        # to hold is that every client this module opens is opened as a shielded
+        # context manager, and that the image transfer is not the only one.
+        opened = source.count("self._connected_client(connection_target, address)")
+        shielded = source.count("async with self._connected_client(connection_target, address)")
+        self.assertEqual(opened, shielded)
+        self.assertGreaterEqual(opened, 2)
 
     def test_local_transfer_does_not_use_retry_connector_write_acquisition(self) -> None:
         source = (COMPONENT / "transfer.py").read_text(encoding="utf-8")
