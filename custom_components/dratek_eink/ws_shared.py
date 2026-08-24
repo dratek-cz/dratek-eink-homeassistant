@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .automation import get_entity_auto_update_manager
-from .const import DISCOVERY_CACHE_KEY, DISCOVERY_GRACE_SECONDS, DOMAIN, LOCAL_ROUTE_ID
+from .const import DOMAIN, LOCAL_ROUTE_ID
 from .gateway_preferences import (
     async_load_gateway_preferences,
     async_save_gateway_preferences,

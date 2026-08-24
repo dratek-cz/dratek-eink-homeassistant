@@ -1892,7 +1892,11 @@ class GraphicBindingResolutionTests(unittest.TestCase):
 
         self.assertEqual(4, len(days))
         self.assertEqual("rainy", days[0]["condition"])
-        self.assertEqual("19°", days[0]["value"])
+        # Unit on every forecast cell, not just the main reading. render.py's
+        # _temperature and the panel's own cells format it identically - an
+        # automatic refresh redraws this strip, so a difference would show up
+        # as the image changing when nobody changed the design.
+        self.assertEqual("19°C", days[0]["value"])
         self.assertTrue(days[0]["label"])
 
     def test_async_forecast_days_without_entity_id_makes_no_call(self):

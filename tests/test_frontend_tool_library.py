@@ -36,11 +36,29 @@ class FrontendToolLibraryTests(unittest.TestCase):
         cls.harness = HARNESS.read_text(encoding="utf-8")
 
     def test_library_exposes_all_categories_and_direct_widgets(self):
-        for category in ("basic", "data", "status"):
-            self.assertIn(f'data-tool-category="{category}"', self.source)
+        """The designer's left rail and the palette it opens.
+
+        This used to pin _renderToolSidebar's basic/data/status folders and its
+        toolButton() calls. That method had had no caller since v0.1.131 - the
+        studio-pro layout replaced it with _renderTemplateEditorTools plus
+        _renderTemplateElementPalette - so the assertions passed against markup
+        no user could ever see while the rail that does render was unpinned.
+        """
+        # The rail builds its buttons from one array, so pin the array and the
+        # attribute it feeds rather than nine literal strings that never appear.
+        self.assertIn('data-template-palette-category="${id}"', self.source)
+        self.assertIn(
+            '["text", "shapes", "icons", "codes", "charts", "gauges", "controls", "images", "layers"]',
+            self.source,
+        )
+        for category in ("text", "shapes", "icons", "codes", "charts", "gauges", "controls", "images", "layers"):
+            self.assertIn(f'{category}: [', self.source)
         self.assertNotIn('data-tool-category="custom"', self.source)
-        for widget in ("chart", "bar_gauge", "pie", "slider", "gauge", "status"):
-            self.assertIn(f'toolButton("{widget}"', self.source)
+        # The dead folder renderer must not come back.
+        self.assertNotIn("_renderToolSidebar", self.source)
+        self.assertNotIn("toolButton(", self.source)
+        for element in ("text", "rect", "circle", "line", "icon", "qr", "barcode", "slider", "chart", "gauge", "signal"):
+            self.assertIn(f'tool("{element}"', self.source)
 
     def test_custom_image_studio_has_gallery_navigation_and_real_slideshow(self):
         self.assertIn('class="custom-image-studio"', self.source)
@@ -337,15 +355,23 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('</div>\n        <footer class="gateway-card-actions">', self.source)
         self.assertIn(".gateway-card-actions{display:flex", self.source)
         self.assertIn("border-top:1px solid var(--divider-color);background:var(--secondary-background-color)}", self.source)
-        # Stránka je pevný shell: pruh s čísly i rail stojí, roluje jen plocha
-        # s kartami. Bez toho rail vynucoval scroll celé stránky.
+        # Od v0.1.309 (b7c21fa) stránka není pevný shell s vlastní vnitřní
+        # rolovací plochou - ta dělala scroll traps a překrývání. Roluje celé
+        # okno, rail zůstává sticky. Pin drží, aby se pevná výška nevrátila.
         self.assertIn(
-            ".tab-panel.gateways-panel{display:grid;grid-template-rows:auto minmax(0,1fr)",
+            ".tab-panel.gateways-panel{display:grid;align-content:start;gap:14px;min-height:0}",
             self.source,
         )
-        self.assertIn("height:calc(100vh - var(--dratek-sticky-top,12px) - 34px)", self.source)
-        self.assertIn(".gateways-panel .gateway-workspace-content{min-height:0;height:100%;overflow-y:auto", self.source)
-        self.assertIn(".gateways-panel .gateway-workspace-tabs{position:static;height:100%;overflow:hidden}", self.source)
+        self.assertIn(
+            ".gateways-panel .gateway-workspace-tabs{position:sticky;"
+            "top:var(--dratek-sticky-top,12px);height:auto;overflow:visible}",
+            self.source,
+        )
+        self.assertIn(
+            ".gateways-panel .gateway-workspace-content{min-height:0;height:auto;overflow:visible}",
+            self.source,
+        )
+        self.assertNotIn("height:calc(100vh - var(--dratek-sticky-top,12px) - 34px)", self.source)
         # Vnitřní scroll musí přežít překreslení, jinak ho poll fronty odroluje nahoru.
         self.assertIn("this._gatewayScrollTop = gatewayScroller.scrollTop", self.source)
         self.assertNotIn('class="gateway-visual-slot"', self.source)
@@ -357,13 +383,26 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".gateway-workspace-tabs{position:sticky", self.source)
         self.assertIn('class="gateway-tab-copy"', self.source)
         self.assertNotIn('class="gateway-section-head"', self.source)
-        # Instalace nové gatewaye se na desktopu vejde do stejné výšky jako rail.
+        # Instalace nové gatewaye se skládá podle šířky okna (auto-fit) místo
+        # dřívějších pevných sloupců a pevných výšek řádků - ty na užších oknech
+        # přetékaly. Oba sloupce jsou flex, takže rostou podle svého obsahu.
         self.assertIn('class="gateway-create-block"', self.source)
-        self.assertIn(".gateway-workspace-content:has(.gateway-create-block){grid-template-rows:minmax(0,1fr);align-content:stretch;overflow:hidden}", self.source)
-        self.assertIn(".gateway-create-block .gateway-setup-grid{display:grid;grid-template-columns:minmax(285px,.72fr) minmax(500px,1.38fr)", self.source)
-        self.assertIn(".gateway-create-block .gateway-setup-left{grid-template-rows:145px minmax(220px,1fr)}", self.source)
-        self.assertIn(".gateway-create-block .gateway-setup-right{grid-template-rows:minmax(222px,1fr) minmax(220px,1fr)}", self.source)
-        self.assertIn(".gateway-create-block .gateway-form-fields{grid-template-columns:1fr", self.source)
+        self.assertIn(
+            ".gateway-create-block .gateway-setup-grid{display:grid;"
+            "grid-template-columns:repeat(auto-fit,minmax(280px,1fr))",
+            self.source,
+        )
+        self.assertIn(
+            ".gateway-create-block .gateway-setup-column{display:flex;flex-direction:column",
+            self.source,
+        )
+        self.assertIn('class="gateway-setup-column gateway-setup-left"', self.source)
+        self.assertIn('class="gateway-setup-column gateway-setup-right"', self.source)
+        self.assertIn(
+            ".gateway-create-block .gateway-form-fields{display:flex;flex-direction:column",
+            self.source,
+        )
+        self.assertNotIn("grid-template-columns:minmax(285px,.72fr)", self.source)
         self.assertIn('name: "ESP32-S3"', self.source)
         self.assertNotIn("ESP32-S3 N16R8", self.source)
         self.assertIn('class="gateway-install-checks"', self.source)
@@ -1021,12 +1060,28 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn("display-palette-bookmark", self.source)
         self.assertIn('model:"EPA LCD 296x128 BWRY", sdk_type:46', self.harness)
 
-    def test_layers_share_the_sticky_tool_sidebar(self):
-        self.assertIn('data-designer-side="tools"', self.source)
-        self.assertIn('data-designer-side="layers"', self.source)
-        self.assertIn('class="designer-layers-content"', self.source)
-        self.assertIn('class="layer-row-actions"', self.source)
-        self.assertNotIn('<div class="card layers-panel">', self.source)
+    def test_the_old_two_pane_tool_sidebar_is_gone(self):
+        """Layers are a rail category now, not a second pane beside the tools.
+
+        The Prvky/Vrstvy pane pair lived in _renderToolSidebar, which had had no
+        caller since v0.1.131 - so this test passed against markup that never
+        reached the DOM, while the rail users actually click went unpinned. Its
+        click handlers outlived it too: two querySelectorAll binders in
+        panel-inspector.mixin.js matched selectors no markup emitted any more.
+        """
+        for marker in (
+            "_renderToolSidebar",
+            "_renderLayersPanel",
+            "data-designer-side",
+            "data-tool-category",
+            "_designerSideView",
+            "_toolCategory",
+            '<div class="card layers-panel">',
+        ):
+            with self.subTest(marker=marker):
+                self.assertNotIn(marker, self.source)
+        # Layers survive as one of the rail's nine categories.
+        self.assertIn('["layers", "layers-triple-outline", "Vrstvy"]', self.source)
 
     def test_display_health_uses_aligned_original_indicators_in_one_row(self):
         self.assertIn(

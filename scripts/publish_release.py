@@ -74,14 +74,22 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.337",
-        name="DRATEK eInk v0.1.337",
-        body="""## Release 0.1.337
+        tag="v0.1.338",
+        name="DRATEK eInk v0.1.338",
+        body="""## Release 0.1.338
+
+### Opraveno
+- **Mapa připojení ukazovala gateway jako nevyužitou**, i když displeje obsluhovala: sken gatewayí se přeskočil pokaždé, když běžel přenos přes Bluetooth Home Assistantu, a výběr trasy ignoroval zapamatovaná zachycení i sílu signálu.
+- **Z několika gatewayí nevyhrávala nejsilnější**, ale první v pořadí – mapa tak mohla ukazovat jinou gateway, než která zápis provedla.
+- **Chyba při vykreslení řádku „split“ s ikonou** shodila automatické překreslení.
+- **Teplota u vícedenní předpovědi bez jednotky** – dny nově ukazují „22°C“ stejně jako hlavní teplota.
+- **Zamrzlá stránka Gatewaye** během pravidelné kontroly a zastavení automatiky při neúspěšném odpojení integrace.
+
+### Zabezpečeno
+- **Ovládání panelu vyžaduje účet správce.** Všech 51 příkazů, včetně přehrání firmwaru gatewaye přes USB a odeslání údajů k Wi-Fi po sériové lince, bylo dostupných každému přihlášenému uživateli.
+- **Adresa gatewaye se ověřuje** místo toho, aby se neověřená skládala do webového požadavku.
 
 ### Vylepšeno
-- **BWRY škála žlutá → červená** bez bílých děr ve slabých srážkách; jen maximum má řídké černé body.
-- **Tmavší BWR škála** s hustou červenou a černým stínováním silných odrazů, nikdy však zcela černou plochou.
-- **Celoplošné srážky přes hranice států** se zřetelnými 2px obrysy navrchu.
-- **Portrétní šablony mají meteoradar nahoře a horizontální hodinovou předpověď dole**; krajina zachovává panel vlevo.
+- **Podrobnosti skenu pod mapou připojení** vysvětlí, proč nějaká gateway zrovna nic neobsluhuje.
 """,
     )

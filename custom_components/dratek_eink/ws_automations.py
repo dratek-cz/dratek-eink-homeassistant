@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 from .automation import get_entity_auto_update_manager
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({"type": "dratek_eink/automations/list"})
 @websocket_api.async_response
 async def websocket_list_automations(
@@ -23,6 +24,7 @@ async def websocket_list_automations(
     )
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/automations/update_interval",
@@ -48,6 +50,7 @@ async def websocket_update_automation_interval(
     connection.send_result(msg["id"], {"ok": True})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/automations/update_trigger_mode",
@@ -73,6 +76,7 @@ async def websocket_update_automation_trigger_mode(
     connection.send_result(msg["id"], {"ok": True})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/automations/update_enabled",
@@ -96,6 +100,7 @@ async def websocket_update_automation_enabled(
     connection.send_result(msg["id"], {"ok": True})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/automations/update_always_send",
@@ -119,6 +124,7 @@ async def websocket_update_automation_always_send(
     connection.send_result(msg["id"], {"ok": True})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/automations/delete",

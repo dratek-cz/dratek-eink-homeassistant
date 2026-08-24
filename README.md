@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.338
+
+- **Mapa připojení konečně odpovídá skutečnosti** – gateway, která displeje obsluhuje, se v ní zobrazí i během probíhajícího přenosu, a z několika gatewayí vyhrává ta nejsilnější.
+- **Ovládání panelu je nově jen pro správce** – flashování gatewaye přes USB ani zásahy do nastavení integrace už nejsou dostupné běžnému uživateli Home Assistantu.
+- **Adresa gatewaye se ověřuje** a přijímá jen jméno počítače nebo IP adresu, volitelně s portem.
+- **Předpověď ukazuje jednotku u každého dne**, nejen u hlavní teploty.
+- **Pod mapou připojení přibyly podrobnosti skenu**, které vysvětlí, proč některá gateway zrovna nic neobsluhuje.
+
 ## Novinky ve verzi 0.1.337
 
 - **BWRY používá škálu žlutá → červená → tmavě červená** bez bílého vyšisování slabých srážek; černá simuluje tmavší červenou pouze několika body v maximu.

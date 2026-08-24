@@ -5391,13 +5391,13 @@ export const devicesMixin = {
     // like real data at every length it might be called with, not fall back
     // to blank cards past the fourth one.
     const sample = [
-      { label: "PÁ", icon: "weather-partly-cloudy", value: "22°" },
-      { label: "SO", icon: "weather-sunny", value: "25°" },
-      { label: "NE", icon: "weather-rainy", value: "18°" },
-      { label: "PO", icon: "weather-cloudy", value: "20°" },
-      { label: "ÚT", icon: "weather-lightning-rainy", value: "17°" },
-      { label: "ST", icon: "weather-snowy", value: "12°" },
-      { label: "ČT", icon: "weather-windy", value: "19°" },
+      { label: "PÁ", icon: "weather-partly-cloudy", value: "22°C" },
+      { label: "SO", icon: "weather-sunny", value: "25°C" },
+      { label: "NE", icon: "weather-rainy", value: "18°C" },
+      { label: "PO", icon: "weather-cloudy", value: "20°C" },
+      { label: "ÚT", icon: "weather-lightning-rainy", value: "17°C" },
+      { label: "ST", icon: "weather-snowy", value: "12°C" },
+      { label: "ČT", icon: "weather-windy", value: "19°C" },
     ][index] || { label: "", icon: "", value: "" };
     const forecast = this._templateForecast(this._templateEntityForKind(template, ["forecast", "weather"]));
     const entry = Array.isArray(forecast) ? forecast[index] : null;
@@ -5409,7 +5409,9 @@ export const devicesMixin = {
         ? sample.label
         : new Intl.DateTimeFormat("cs-CZ", { weekday: "short" }).format(date).replace(/\./g, "").toLocaleUpperCase("cs"),
       icon: this._weatherConditionIcon(entry.condition) || sample.icon,
-      value: Number.isFinite(temperature) ? `${Math.round(temperature)}°` : sample.value,
+      // Unit on every cell, matching render.py's _temperature and
+      // automation.py - an automatic refresh redraws this exact strip.
+      value: Number.isFinite(temperature) ? `${Math.round(temperature)}°C` : sample.value,
     };
   },
 

@@ -690,7 +690,7 @@ def block_split(halves: list[dict[str, Any]], box: dict[str, float], banner: boo
             )
         if half.get("icon"):
             parts.append(
-                svg_icon(
+                icon(
                     str(half.get("icon")), cx, box["y"] + box["h"] * 0.48,
                     min(box["h"] * 0.28, cell_width * 0.35), val_color,
                 )

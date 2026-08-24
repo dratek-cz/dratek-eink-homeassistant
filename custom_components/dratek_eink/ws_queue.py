@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 
 from .queue import get_transfer_queue
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({"type": "dratek_eink/queue/list"})
 @websocket_api.async_response
 async def websocket_transfer_queue(
@@ -20,6 +21,7 @@ async def websocket_transfer_queue(
     connection.send_result(msg["id"], await get_transfer_queue(hass).async_snapshot())
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({"type": "dratek_eink/queue/clear"})
 @websocket_api.async_response
 async def websocket_clear_queue(
@@ -32,6 +34,7 @@ async def websocket_clear_queue(
     connection.send_result(msg["id"], await queue.async_snapshot())
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/queue/cancel",

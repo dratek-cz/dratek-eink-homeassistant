@@ -13,6 +13,7 @@ from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN, PANEL_VERSION
 from .radio import async_radio_slot
+from .routing import route_preference_key, route_rssi
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -258,14 +259,10 @@ class TransferQueue:
         """Return strongest free acceptable route, or queue on the strongest."""
         ranked = sorted(
             (route for route in routes if str(route.get("id") or "")),
-            # Match the connection map: a gateway that received the display in
-            # the current scan beats a retained/missed route even when that
-            # route has an older, numerically stronger RSSI. RSSI only decides
-            # between routes with the same freshness.
-            key=lambda route: (
-                not bool(route.get("temporarily_unseen")),
-                self._route_rssi(route),
-            ),
+            # routing.route_preference_key is the single definition of this
+            # order, shared with the scheduler and the connection map so all
+            # three name the same gateway.
+            key=route_preference_key,
             reverse=True,
         )
         if not ranked:
@@ -300,10 +297,7 @@ class TransferQueue:
 
     @staticmethod
     def _route_rssi(route: dict[str, Any]) -> float:
-        try:
-            return float(route.get("rssi"))
-        except (TypeError, ValueError):
-            return -999.0
+        return route_rssi(route)
 
     def _preempt_automatic_update(self, address: str) -> None:
         active = self._automatic_tasks.get(address)

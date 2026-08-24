@@ -2012,16 +2012,6 @@ export const inspectorMixin = {
     this.shadowRoot.querySelector("#symbolSearch")?.addEventListener("input", (event) => { this._symbolSearch = event.target.value; this._renderKeepingSearchFocus(); });
     this.shadowRoot.querySelectorAll("[data-symbol-category]").forEach((button) => button.addEventListener("click", () => { this._symbolCategory = button.dataset.symbolCategory; this._render(); this._paint(); }));
     this.shadowRoot.querySelectorAll("[data-symbol]").forEach((button) => button.addEventListener("click", () => this._addSymbol(button.dataset.symbol)));
-    this.shadowRoot.querySelectorAll("[data-designer-side]").forEach((button) => button.addEventListener("click", () => {
-      this._designerSideView = button.dataset.designerSide;
-      this._render();
-      this._paint();
-    }));
-    this.shadowRoot.querySelectorAll("[data-tool-category]").forEach((button) => button.addEventListener("click", () => {
-      this._toolCategory = button.dataset.toolCategory;
-      this._render();
-      this._paint();
-    }));
     this.shadowRoot.querySelector("#addImage")?.addEventListener("click", () => this.shadowRoot.querySelector("#imageFile")?.click());
     this.shadowRoot.querySelector("#imageFile")?.addEventListener("change", (event) => this._addImage(event.target.files[0]));
     this.shadowRoot.querySelectorAll("[data-add]").forEach((button) => button.addEventListener("click", () => this._addObject(button.dataset.add)));

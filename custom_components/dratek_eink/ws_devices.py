@@ -13,6 +13,8 @@ import voluptuous as vol
 
 from .automation import get_entity_auto_update_manager
 from .const import (
+    DISCOVERY_CACHE_KEY,
+    DISCOVERY_GRACE_SECONDS,
     LOCAL_ROUTE_ID,
     PARTIAL_UPDATE_CONFIRMED_SDK_TYPES,
 )
@@ -22,12 +24,10 @@ from .gateway import (
     async_scan_gateway,
 )
 from .queue import get_transfer_queue
-from .radio import async_try_radio_slot
-from .routing import paths_allowed_by_gateway_lock
+from .radio import get_radio_lock
+from .routing import paths_allowed_by_gateway_lock, route_preference_key
 from .transfer import DratekTransfer
 from .ws_shared import (
-    DISCOVERY_CACHE_KEY,
-    DISCOVERY_GRACE_SECONDS,
     _battery_payload,
     _load_project_data,
     _normalize_address,
@@ -35,14 +35,8 @@ from .ws_shared import (
     _save_gateway_preferences,
 )
 
-# How long a discovery scan waits for an in-flight transfer to release the
-# radio. Long enough to ride out the gap between two queued transfers, short
-# enough that the panel never looks frozen; past it the scan returns what Home
-# Assistant already knows rather than queueing behind a transfer that can
-# legitimately run for minutes.
-GATEWAY_SCAN_RADIO_WAIT_SECONDS = 5.0
 
-
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/set_rgb_led",
@@ -93,6 +87,7 @@ async def websocket_set_rgb_led(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/flash_identify",
@@ -131,6 +126,7 @@ async def websocket_flash_identify(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/render_preview",
@@ -167,6 +163,7 @@ async def websocket_render_preview(
     )
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({"type": "dratek_eink/scan"})
 @websocket_api.async_response
 async def websocket_scan(
@@ -241,25 +238,33 @@ async def websocket_scan(
     gateways = await async_load_gateways(hass)
     # Scanning every gateway at once looked like free concurrency - each request
     # goes to a different ESP32 over HTTP. Physically it made every gateway
-    # transmit an active BLE scan into the same band at the same moment, on top
-    # of whatever the local adapter was already doing. Sequential scanning under
-    # the shared radio slot costs a few seconds of wall clock and stops
-    # discovery from being the noisiest thing this integration does.
+    # transmit an active BLE scan into the same band at the same moment, so the
+    # loop below stays sequential.
+    #
+    # It used to run under the local radio slot as well, and skip every gateway
+    # outright when that slot stayed busy for five seconds. But a gateway scan
+    # never touches Home Assistant's adapter: each ESP32 owns its own BLE radio
+    # (see radio.py) and the scheduler's own _async_load_gateways_and_scan has
+    # always scanned them with no radio gating at all. The only thing the gate
+    # achieved was that any local transfer - minutes, for an 800x480 image -
+    # blanked every gateway out of the connection map, so a gateway sitting
+    # right next to its displays was drawn as serving none of them while Home
+    # Assistant appeared to serve them all.
     scanned_gateways: list[dict[str, Any]] = []
     gateway_results: list[Any] = []
-    async with async_try_radio_slot(hass, GATEWAY_SCAN_RADIO_WAIT_SECONDS) as radio_free:
-        if gateways and not radio_free:
+    if gateways:
+        if get_radio_lock(hass).locked():
+            # Worth surfacing: RSSI read during a transfer is noisier than usual.
             debug.append(
-                "Gateway BLE scan skipped: a display transfer is currently using "
-                "the radio. Displays Home Assistant already knows are still listed."
+                "A display transfer is in flight; gateway scan results may be "
+                "noisier than usual."
             )
-        elif gateways:
-            for gateway in gateways:
-                scanned_gateways.append(gateway)
-                try:
-                    gateway_results.append(await async_scan_gateway(hass, gateway["id"], 5))
-                except Exception as exc:  # one unreachable gateway must not hide the rest
-                    gateway_results.append(exc)
+        for gateway in gateways:
+            scanned_gateways.append(gateway)
+            try:
+                gateway_results.append(await async_scan_gateway(hass, gateway["id"], 5))
+            except Exception as exc:  # one unreachable gateway must not hide the rest
+                gateway_results.append(exc)
 
     for gateway, scan_result in zip(scanned_gateways, gateway_results, strict=False):
         gateway_name = gateway.get("name") or "DRATEK eInk gateway"
@@ -438,12 +443,27 @@ async def websocket_scan(
         else:
             device["gateway_selection"] = "auto"
             device["selected_gateway_id"] = ""
-            active_paths = [p for p in device["paths"] if not p.get("temporarily_unseen")]
-            if active_paths:
-                active_gateways = [p for p in active_paths if p.get("type") == "gateway"]
-                device["preferred_path"] = active_gateways[0] if active_gateways else active_paths[0]
-            elif gateway_paths:
-                device["preferred_path"] = gateway_paths[0]
+            # Rank every gateway that heard this display - in this scan or
+            # carried forward from the discovery cache - by the same rule the
+            # write itself uses (routing.route_preference_key).
+            #
+            # This branch used to consider only gateways seen in the current
+            # scan, and among those took the first in store order rather than
+            # the strongest. BLE advertisements are intermittent by design, so
+            # one missed sweep dropped a display back onto local Bluetooth in
+            # the map even though _async_gateway_routes would still have routed
+            # the actual write through the gateway - the map and the transfer
+            # disagreed, and the map was the one that was wrong.
+            ranked_gateways = sorted(
+                (path for path in device["paths"] if path.get("type") == "gateway"),
+                key=route_preference_key,
+                reverse=True,
+            )
+            local_paths = [p for p in device["paths"] if p.get("type") == "local"]
+            if ranked_gateways:
+                device["preferred_path"] = ranked_gateways[0]
+            elif local_paths:
+                device["preferred_path"] = local_paths[0]
             elif device["paths"]:
                 device["preferred_path"] = device["paths"][0]
             else:
@@ -498,6 +518,7 @@ async def websocket_scan(
     )
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/devices/set_name",
@@ -522,6 +543,7 @@ async def websocket_set_device_name(
     connection.send_result(msg["id"], {"address": address, "name": name})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/devices/set_gateway",

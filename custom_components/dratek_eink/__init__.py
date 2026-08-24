@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import voluptuous as vol
 from homeassistant.components import frontend, panel_custom
@@ -139,13 +140,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    from .automation import get_entity_auto_update_manager
-    auto_update = get_entity_auto_update_manager(hass)
-    await auto_update.async_stop()
+    # Platforms first. Stopping the scheduler up front meant that whenever a
+    # platform refused to unload - the entry then stays loaded and Home
+    # Assistant carries on using it - automatic updates were already dead, with
+    # nothing to restart them short of restarting Home Assistant.
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unloaded:
-        hass.data.get(DOMAIN, {}).get("entries", {}).pop(entry.entry_id, None)
-    return unloaded
+    if not unloaded:
+        return False
+
+    from .automation import get_entity_auto_update_manager
+
+    await get_entity_auto_update_manager(hass).async_stop()
+    hass.data.get(DOMAIN, {}).get("entries", {}).pop(entry.entry_id, None)
+    return True
 
 
 async def _async_register_panel(hass: HomeAssistant) -> None:
@@ -223,7 +230,12 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
         sidebar_icon="mdi:tag-multiple-outline",
         module_url=f"{PANEL_STATIC_PATH}/dratek-eink-panel.js",
         embed_iframe=False,
-        require_admin=False,
+        # Every one of the panel's websocket commands is @require_admin: they
+        # reach the host's serial ports, run esptool against them, push
+        # firmware and edit the integration's own configuration. Leaving the
+        # sidebar entry visible to non-admins would only offer a panel whose
+        # every action comes back Unauthorized.
+        require_admin=True,
     )
     hass.data[DOMAIN]["panel_registered"] = True
     hass.data[DOMAIN]["panel_registered_version"] = PANEL_VERSION

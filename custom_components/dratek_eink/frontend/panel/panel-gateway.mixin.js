@@ -661,6 +661,18 @@ export const gatewayMixin = {
     });
   },
 
+  // Backend uz ten seznam davno posilal - jen ho nikdo nevykreslil, takze
+  // duvody typu "sken gatewaye se preskocil" dojely do prohlizece a zmizely.
+  // Prave takova hlaska vysvetluje gateway, ktera v mape neobsluhuje nic.
+  _renderScanDebug(result) {
+    const lines = Array.isArray(result?.debug) ? result.debug.filter((line) => String(line || "").trim()) : [];
+    if (!lines.length) return "";
+    const escape = (value) => String(value).replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch]));
+    return `<details class="scan-debug"><summary>Podrobnosti skenu</summary><ul>${
+      lines.map((line) => `<li>${escape(line)}</li>`).join("")
+    }</ul></details>`;
+  },
+
   _renderTopology(devices, preparedGroups = null) {
     const groups = preparedGroups || this._topologyGroups(devices);
     if (!groups.length) {

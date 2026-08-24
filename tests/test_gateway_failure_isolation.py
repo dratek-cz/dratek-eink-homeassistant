@@ -59,6 +59,9 @@ def _load_queue_module():
     const = types.ModuleType(f"{PACKAGE}.const")
     const.DOMAIN = "dratek_eink"
     const.PANEL_VERSION = "test"
+    # queue.py reaches routing.py for the shared route ranking, and that
+    # module reads LOCAL_ROUTE_ID from const at import time.
+    const.LOCAL_ROUTE_ID = "local"
     sys.modules[const.__name__] = const
 
     spec = importlib.util.spec_from_file_location(f"{PACKAGE}.queue", COMPONENT / "queue.py")

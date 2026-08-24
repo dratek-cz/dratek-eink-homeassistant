@@ -202,11 +202,24 @@ class DiscoveryScanTests(unittest.TestCase):
                 "fanning scans out concurrently makes every ESP32 transmit at once",
             )
 
-    def test_discovery_yields_the_radio_rather_than_blocking_the_panel(self) -> None:
+    def test_the_gateway_scan_does_not_wait_on_the_local_adapter(self) -> None:
+        """A gateway scan uses the ESP32's own radio, never Home Assistant's.
+
+        This used to run under async_try_radio_slot and skip every gateway when
+        the slot stayed busy, so any local transfer - minutes for an 800x480
+        image - erased the whole gateway topology from the connection map. The
+        scheduler's own _async_load_gateways_and_scan never gated on the radio,
+        so the map and the write disagreed about which route existed.
+        """
         scan = _function_named(WS_DEVICES_SOURCE, "websocket_scan")
         called = _called_names(scan)
-        self.assertIn("async_try_radio_slot", called)
         self.assertIn("async_scan_gateway", called)
+        self.assertNotIn(
+            "async_try_radio_slot",
+            called,
+            "an ESP32 gateway owns its own BLE adapter (see radio.py); making "
+            "its scan wait on the local one only hides gateways from the map",
+        )
 
 
 class GatewayFirmwareScanTests(unittest.TestCase):

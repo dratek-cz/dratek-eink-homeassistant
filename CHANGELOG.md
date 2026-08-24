@@ -2,6 +2,25 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.338] - 2026-08-24
+
+### Opraveno
+- **Mapa připojení ukazovala gateway jako nevyužitou, i když displeje obsluhovala**: seznam displejů, které gateway slyší, se přeskočil pokaždé, když zrovna běžel přenos přes Bluetooth Home Assistantu – tedy klidně několik minut u velkého obrázku. Gateway stojící přímo u displejů se pak kreslila s nulou a všechny displeje visely na Home Assistantu. Sken gatewaye přitom její vlastní Bluetooth nikdy nepotřeboval, ESP32 má svoje.
+- **Displej slyšený gatewayí i Home Assistantem se v mapě přiřadil špatně**: jedno vynechané zachycení reklamního paketu, které je u Bluetooth normální, ho vrátilo na lokální adaptér – přestože skutečný zápis by stejně šel přes gateway. Mapa teď počítá i s gatewayemi zapamatovanými z posledních třiceti minut, stejně jako plánovač.
+- **Z několika gatewayí nevyhrávala nejsilnější, ale první v pořadí**: mapa mohla ukazovat jinou gateway, než která zápis skutečně provedla. Pravidlo pro výběr trasy je teď na jednom místě a používá ho fronta, plánovač i mapa.
+- **Chyba při vykreslení řádku „split“ s ikonou**: automatické překreslení skončilo výjimkou kvůli překlepu v názvu funkce.
+- **Teplota u vícedenní předpovědi bez jednotky**: dny předpovědi ukazovaly jen „22°“, zatímco hlavní teplota měla „°C“. Nově má jednotku každá hodnota, v ručním odeslání i v automatickém překreslení.
+- **Zastavení automatiky při neúspěšném odpojení integrace**: plánovač se vypínal dřív, než se vědělo, jestli se odpojení povede. Když se nepovedlo, automatické zápisy zůstaly mrtvé až do restartu Home Assistantu.
+- **Zamrzlá stránka Gatewaye**: pravidelná kontrola gatewayí držela zámek úložiště po celou dobu síťové komunikace, takže přidání, přejmenování i smazání gatewaye čekalo většinu každého třicetivteřinového cyklu.
+
+### Zabezpečeno
+- **Ovládání panelu vyžaduje účet správce**: všech 51 příkazů, kterými panel komunikuje s Home Assistantem, bylo dostupných každému přihlášenému uživateli, i bez práv správce. Patří mezi ně přehrání firmwaru gatewaye přes USB, odeslání údajů k Wi-Fi po sériové lince a změny nastavení integrace.
+- **Kontrola adresy gatewaye**: adresa se zapisovala bez ověření a skládala se přímo do webového požadavku, takže šlo Home Assistant přimět sáhnout kamkoli do sítě. Nově se přijímá jen jméno počítače nebo IP adresa, volitelně s portem.
+
+### Vylepšeno
+- **Podrobnosti skenu pod mapou připojení**: integrace tyhle poznámky odjakživa posílala, ale panel je nikde neukazoval. Právě ony vysvětlují, proč nějaká gateway v mapě nic neobsluhuje.
+- **Úklid zbytků starého editoru**: postranní panel s nástroji nahrazený v verzi 0.1.131 se z kódu odstranil i s obsluhou kliknutí, která reagovala na tlačítka, jež se už dávno nevykreslovala.
+
 ## [0.1.337] - 2026-08-21
 
 ### Vylepšeno

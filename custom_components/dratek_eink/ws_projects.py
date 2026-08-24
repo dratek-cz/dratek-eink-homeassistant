@@ -18,6 +18,7 @@ from .ws_shared import (
 )
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({"type": "dratek_eink/user_templates/list"})
 @websocket_api.async_response
 async def websocket_list_user_templates(
@@ -30,6 +31,7 @@ async def websocket_list_user_templates(
     connection.send_result(msg["id"], {"templates": data["user_templates"]})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/user_templates/save",
@@ -65,6 +67,7 @@ async def websocket_save_user_template(
     connection.send_result(msg["id"], {"template": template})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/user_templates/delete",
@@ -87,6 +90,7 @@ async def websocket_delete_user_template(
     connection.send_result(msg["id"], {"ok": True, "template_id": template_id})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({"type": "dratek_eink/projects/list"})
 @websocket_api.async_response
 async def websocket_list_projects(
@@ -110,6 +114,7 @@ async def websocket_list_projects(
     connection.send_result(msg["id"], {"projects": projects})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/projects/save",
@@ -141,6 +146,7 @@ async def websocket_save_project(
     connection.send_result(msg["id"], {"project": project})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/projects/load",
@@ -161,6 +167,7 @@ async def websocket_load_project(
     connection.send_result(msg["id"], {"project": project})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/projects/delete",
@@ -179,6 +186,7 @@ async def websocket_delete_project(
     connection.send_result(msg["id"], {"ok": True})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/device_drafts/load",
@@ -199,6 +207,7 @@ async def websocket_load_device_draft(
     connection.send_result(msg["id"], {"draft": draft})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({"type": "dratek_eink/device_drafts/list"})
 @websocket_api.async_response
 async def websocket_list_device_drafts(
@@ -219,6 +228,7 @@ async def websocket_list_device_drafts(
     connection.send_result(msg["id"], {"drafts": drafts})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/device_drafts/save",
@@ -255,6 +265,7 @@ async def websocket_save_device_draft(
     connection.send_result(msg["id"], {"draft": {**draft, **(preview or {})}})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/device_drafts/delete_image",

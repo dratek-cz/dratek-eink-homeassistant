@@ -38,6 +38,7 @@ from .const import (
 from .gateway import async_gateway_status, async_load_gateways, async_scan_gateway, async_send_gateway_payload
 from .gateway_preferences import async_load_gateway_preferences
 from .queue import get_transfer_queue
+from .routing import route_preference_key
 from .render import (
     BWRY_CODES,
     async_render_camera_binding_data_url,
@@ -520,7 +521,9 @@ async def _async_forecast_days(hass: HomeAssistant, entity_id: str, count: int) 
         parsed = _parse_iso_datetime(entry.get("datetime"))
         label = _WEEKDAY_ABBR_CS[parsed.weekday()] if parsed else ""
         try:
-            value = f"{round(float(entry.get('temperature')))}°"
+            # Mirrors render.py's _temperature and the panel's own sample
+            # cells; see the comment there.
+            value = f"{round(float(entry.get('temperature')))}°C"
         except (TypeError, ValueError):
             value = ""
         days.append({"label": label, "condition": str(entry.get("condition") or ""), "value": value})
@@ -2107,13 +2110,9 @@ class EntityAutoUpdateManager:
                     live_ids.add(gateway_id)
 
             for device_routes in routes.values():
-                device_routes.sort(
-                    key=lambda route: (
-                        not bool(route.get("temporarily_unseen")),
-                        float(route["rssi"]),
-                    ),
-                    reverse=True,
-                )
+                # Shared with the transfer queue and the connection map; see
+                # routing.route_preference_key.
+                device_routes.sort(key=route_preference_key, reverse=True)
 
             self._gateway_route_cache = routes
             self._gateway_route_cache_at = time.monotonic()

@@ -28,6 +28,18 @@ from .meteoradar import async_render_meteoradar
 _LOGGER = logging.getLogger(__name__)
 
 
+def _encode_png(image) -> bytes:
+    """PNG-encode off the event loop.
+
+    A whole-country radar frame is large enough that encoding it inline blocked
+    the loop on every snapshot request, and a camera entity is polled by
+    anything that shows a preview.
+    """
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -68,6 +80,4 @@ class DratekMeteoradarCamera(Camera):
             return None
         if image is None:
             return None
-        buffer = io.BytesIO()
-        image.save(buffer, format="PNG")
-        return buffer.getvalue()
+        return await self.hass.async_add_executor_job(_encode_png, image)

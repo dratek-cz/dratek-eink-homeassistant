@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 from pathlib import Path
+import re
 import socket
 import subprocess
 import sys
@@ -70,14 +71,77 @@ async def async_save_gateways(hass: HomeAssistant, gateways: list[dict[str, Any]
 
 
 def _gateway_store_lock(hass: HomeAssistant) -> asyncio.Lock:
+    """Serialises read-modify-write on the gateway store - and nothing else.
+
+    Every hold has to be short. This lock is what every panel action takes to
+    add, rename or delete a gateway, so anything slow underneath it is felt
+    directly as an unresponsive gateway page. Network probing takes
+    _gateway_probe_lock instead.
+    """
     return hass.data.setdefault(DOMAIN, {}).setdefault(
         "gateway_refresh_lock", asyncio.Lock()
     )
 
 
+def _gateway_probe_lock(hass: HomeAssistant) -> asyncio.Lock:
+    """Serialises the slow part: status polls plus the mDNS discovery sweep.
+
+    Held for tens of seconds when a gateway is unreachable, so it is kept
+    strictly separate from the store lock. Its only job is to stop two monitor
+    cycles - or a monitor cycle and a panel refresh - from sweeping at once.
+    """
+    return hass.data.setdefault(DOMAIN, {}).setdefault(
+        "gateway_probe_lock", asyncio.Lock()
+    )
+
+
+# A bare "host" or "host:port" - a name, an IPv4 literal, or a bracketed IPv6
+# literal. Deliberately no userinfo, no path, no query: every gateway request
+# is built as f"http://{host}/api/...", so anything richer than this would be
+# attacker-chosen URL structure rather than an address.
+_HOST_PATTERN = re.compile(
+    r"^(?:"
+    r"\[[0-9A-Fa-f:.]{2,45}\]"
+    r"|[A-Za-z0-9](?:[A-Za-z0-9._-]{0,253}[A-Za-z0-9])?"
+    r")(?::(?P<port>\d{1,5}))?$"
+)
+
+
 def _normalize_host(host: str) -> str:
+    """Reduce user or discovery input to a bare host, dropping any URL tail.
+
+    Everything from the first path, query or fragment character is cut. Without
+    that, a stored host of "10.0.0.1/admin?x=" was interpolated straight into
+    f"http://{host}/api/status", which turned every status poll into a request
+    for a URL the caller chose - a way to reach hosts and paths from Home
+    Assistant's network position that the caller could not reach directly.
+    """
     host = str(host or "").strip()
-    return host.removeprefix("http://").removeprefix("https://").strip("/")
+    host = host.removeprefix("http://").removeprefix("https://")
+    return re.split(r"[/?#]", host, maxsplit=1)[0].strip()
+
+
+def _validated_host(host: str) -> str:
+    """Normalise a caller-supplied gateway address, or reject it.
+
+    _normalize_host alone cannot be trusted for stored configuration: it drops
+    a URL tail but still passes through "user@evil", spaces or an empty string.
+    This is the gate on the way into the store, so every later f"http://{host}"
+    is built from something that is only ever an address.
+    """
+    normalized = _normalize_host(host)
+    if not normalized:
+        raise ValueError("Gateway address cannot be empty.")
+    match = _HOST_PATTERN.match(normalized)
+    if match is None:
+        raise ValueError(
+            f"{host!r} is not a valid gateway address. "
+            "Expected a host name or IP address, optionally with :port."
+        )
+    port = match.group("port")
+    if port is not None and not 1 <= int(port) <= 65535:
+        raise ValueError(f"Gateway port {port} is outside the range 1-65535.")
+    return normalized
 
 
 def _gateway_base_url(gateway: dict[str, Any]) -> str:
@@ -104,7 +168,7 @@ def _gateway_send_base_url(gateway: dict[str, Any]) -> str:
 async def async_add_gateway(hass: HomeAssistant, name: str, host: str) -> dict[str, Any]:
     async with _gateway_store_lock(hass):
         gateways = await async_load_gateways(hass)
-        normalized_host = _normalize_host(host)
+        normalized_host = _validated_host(host)
         gateway_id = str(uuid.uuid4())
         now = int(time.time())
         gateway = {
@@ -153,6 +217,13 @@ async def async_gateway_status(hass: HomeAssistant, gateway: dict[str, Any]) -> 
             payload = await response.json(content_type=None)
             if response.status >= 400:
                 raise RuntimeError(f"HTTP {response.status}")
+            if not isinstance(payload, dict):
+                # Anything at this address that answers JSON but is not a
+                # gateway - a list, a bare string, null - used to reach the
+                # payload.get() calls below and raise AttributeError from
+                # outside this handler, instead of being reported as simply
+                # not a gateway.
+                raise RuntimeError("Address did not answer with a gateway status object.")
     except Exception as exc:
         return {
             "ok": False,
@@ -298,23 +369,60 @@ async def _async_refresh_gateway_set(
             gateway["updated_at"] = int(time.time())
 
 
+# What a probe is allowed to write back. Everything else in a stored record -
+# its name above all - belongs to the user and has to survive a probe that
+# raced with an edit.
+_PROBE_OWNED_FIELDS = ("status", "last_seen_at", "gateway_id", "host", "updated_at")
+
+
+async def _async_merge_probe_results(
+    hass: HomeAssistant, probed: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Fold probe results into whatever the store holds now, then save.
+
+    Probing deliberately runs without the store lock, so the store may have
+    changed underneath it. Saving the probed copies wholesale would undo a
+    rename made meanwhile and resurrect a gateway deleted meanwhile; matching
+    on id and copying only _PROBE_OWNED_FIELDS does neither.
+    """
+    by_id = {str(item.get("id")): item for item in probed if item.get("id")}
+    async with _gateway_store_lock(hass):
+        current = await async_load_gateways(hass)
+        for gateway in current:
+            result = by_id.get(str(gateway.get("id")))
+            if result is None:
+                continue
+            for field in _PROBE_OWNED_FIELDS:
+                if field in result:
+                    gateway[field] = result[field]
+        await async_save_gateways(hass, current)
+        return current
+
+
 async def async_refresh_gateway(hass: HomeAssistant, gateway_id: str) -> dict[str, Any] | None:
     async with _gateway_store_lock(hass):
         gateways = await async_load_gateways(hass)
-        gateway = next((item for item in gateways if item.get("id") == gateway_id), None)
-        if not gateway:
-            return None
+    gateway = next((item for item in gateways if item.get("id") == gateway_id), None)
+    if not gateway:
+        return None
+    async with _gateway_probe_lock(hass):
         await _async_refresh_gateway_set(hass, [gateway])
-        await async_save_gateways(hass, gateways)
-    return gateway
+        merged = await _async_merge_probe_results(hass, [gateway])
+    return next((item for item in merged if item.get("id") == gateway_id), None)
 
 
 async def async_refresh_all_gateways(hass: HomeAssistant) -> list[dict[str, Any]]:
+    # One unreachable gateway costs a status timeout, then a 4s discovery
+    # sweep, then a retry - tens of seconds of network I/O, on a 30s monitor
+    # interval. Holding the store lock across all of it meant add / rename /
+    # delete from the panel queued behind the monitor for most of every cycle,
+    # which is what made the gateway page look frozen. The store lock is now
+    # taken twice, briefly, with the probing in between.
     async with _gateway_store_lock(hass):
         gateways = await async_load_gateways(hass)
+    async with _gateway_probe_lock(hass):
         await _async_refresh_gateway_set(hass, gateways)
-        await async_save_gateways(hass, gateways)
-        return gateways
+        return await _async_merge_probe_results(hass, gateways)
 
 
 async def async_start_gateway_ota(
@@ -1140,27 +1248,32 @@ def _flash_gateway_sync(
                 )
             raise RuntimeError(f"OTA metadata erase failed with exit code {erase_proc.returncode}")
 
-        proc = subprocess.Popen(
+        # Popen as a context manager: it closes the pipe and reaps the child on
+        # the way out, including down the timeout path where the kill() below
+        # otherwise left a zombie and a leaked descriptor behind.
+        with subprocess.Popen(
             esptool_cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-        )
-        started = time.time()
-        assert proc.stdout is not None
-        while True:
-            line = proc.stdout.readline()
-            if line:
-                add_log(line.strip())
-            if proc.poll() is not None:
-                break
-            if time.time() - started > 180:
+        ) as proc:
+            started = time.time()
+            if proc.stdout is None:  # cannot happen with PIPE; -O drops asserts
                 proc.kill()
-                raise TimeoutError("esptool timed out")
-        for line in proc.stdout.read().splitlines():
-            if line.strip():
-                add_log(line.strip())
+                raise RuntimeError("esptool produced no output pipe.")
+            while True:
+                line = proc.stdout.readline()
+                if line:
+                    add_log(line.strip())
+                if proc.poll() is not None:
+                    break
+                if time.time() - started > 180:
+                    proc.kill()
+                    raise TimeoutError("esptool timed out")
+            for line in proc.stdout.read().splitlines():
+                if line.strip():
+                    add_log(line.strip())
     except Exception as exc:
         if job is not None:
             job["status"] = "failed"

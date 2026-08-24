@@ -9,10 +9,25 @@ the text, and the backend actually chooses the SVG renderer.
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _node() -> str:
+    """Path to the Node.js binary, or skip - these pins execute panel modules.
+
+    A missing binary used to surface as a bare FileNotFoundError from
+    subprocess, i.e. an error rather than a skip, which is what kept the suite
+    red on machines without Node. Matches the guard the other frontend tests
+    already use.
+    """
+    node = shutil.which("node")
+    if not node:
+        raise unittest.SkipTest("Node.js is not available")
+    return node
 COMPONENT = ROOT / "custom_components" / "dratek_eink"
 PANEL = COMPONENT / "frontend" / "panel"
 
@@ -283,7 +298,7 @@ class EmptyValueRunAlignmentTests(unittest.TestCase):
         console.log("ok");
         """ % (COMPONENT / "frontend" / "panel" / "panel-devices.mixin.js").as_uri()
         result = subprocess.run(
-            ["node", "--input-type=module", "-e", script],
+            [_node(), "--input-type=module", "-e", script],
             capture_output=True, text=True, encoding="utf-8",
         )
         self.assertEqual(0, result.returncode, result.stderr)
@@ -333,7 +348,7 @@ class AutomaticSlotWordBoundaryTests(unittest.TestCase):
         if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
         console.log("ok");
         """
-        result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
+        result = subprocess.run([_node(), "-e", script], capture_output=True, text=True)
         self.assertEqual(0, result.returncode, result.stderr)
 
 
@@ -400,7 +415,7 @@ class TextBindingBoxWidthTests(unittest.TestCase):
         }
         console.log("ok", listWidth, headlineWidth);
         """
-        result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
+        result = subprocess.run([_node(), "-e", script], capture_output=True, text=True)
         self.assertEqual(0, result.returncode, result.stderr)
 
 
@@ -435,7 +450,7 @@ class TemplateLiteralPrefixSuffixTests(unittest.TestCase):
         if (valueSuffix !== "") { console.error("suffix", valueSuffix); process.exit(1); }
         console.log("ok");
         """
-        result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
+        result = subprocess.run([_node(), "-e", script], capture_output=True, text=True)
         self.assertEqual(0, result.returncode, result.stderr)
 
     def test_backend_applies_prefix_and_suffix_around_a_word_translated_value(self) -> None:

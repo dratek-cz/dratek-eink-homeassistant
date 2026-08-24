@@ -17,6 +17,7 @@ from .automation import get_entity_auto_update_manager
 from .ws_shared import _load_project_data, _project_store
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({"type": "dratek_eink/custom_elements/list"})
 @websocket_api.async_response
 async def websocket_list_custom_elements(
@@ -232,6 +233,7 @@ def _sync_custom_element_object(
     return True
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/custom_elements/save",
@@ -376,6 +378,7 @@ async def websocket_save_custom_element(
     )
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/custom_elements/delete",

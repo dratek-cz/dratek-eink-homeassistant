@@ -19,6 +19,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import types
@@ -183,8 +184,11 @@ def _javascript_markup() -> dict[str, str]:
         {name: {"fn": block, "row": row, "box": box} for name, block, row, box, _python in CASES}
     )
     script = NODE_HARNESS % {"module": json.dumps(PANEL_SVG.as_uri())}
+    node = shutil.which("node")
+    if not node:
+        raise unittest.SkipTest("Node.js is not available")
     result = subprocess.run(
-        ["node", "--input-type=module", "-e", script, payload],
+        [node, "--input-type=module", "-e", script, payload],
         capture_output=True, text=True, encoding="utf-8",
     )
     if result.returncode:

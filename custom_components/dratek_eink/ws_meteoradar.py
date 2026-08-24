@@ -25,6 +25,7 @@ from .render import async_render_camera_binding_data_url, async_render_meteorada
 METEORADAR_CAMERA_ENTITY_ID = "camera.meteoradar"
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/render_meteoradar",

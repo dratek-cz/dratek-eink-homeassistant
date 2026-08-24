@@ -46,6 +46,7 @@ from .ws_shared import (
 )
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({"type": "dratek_eink/gateways/list"})
 @websocket_api.async_response
 async def websocket_list_gateways(
@@ -57,6 +58,7 @@ async def websocket_list_gateways(
     connection.send_result(msg["id"], {"gateways": gateways})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/gateways/add",
@@ -75,6 +77,7 @@ async def websocket_add_gateway(
     connection.send_result(msg["id"], {"gateway": gateway})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/gateways/delete",
@@ -107,6 +110,7 @@ async def websocket_delete_gateway(
     connection.send_result(msg["id"], {"ok": deleted})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/gateways/rename",
@@ -131,6 +135,7 @@ async def websocket_rename_gateway(
     connection.send_result(msg["id"], {"gateway": gateway})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/gateways/refresh",
@@ -155,6 +160,7 @@ async def websocket_refresh_gateway(
     connection.send_result(msg["id"], {"gateways": gateways})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/gateways/scan",
@@ -175,6 +181,7 @@ async def websocket_scan_gateway(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/gateways/send_design",
@@ -281,6 +288,7 @@ async def websocket_send_gateway_design(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/gateways/discover",
@@ -301,6 +309,7 @@ async def websocket_discover_gateways(
     connection.send_result(msg["id"], {"ok": True, "discovered": discovered})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command({"type": "dratek_eink/gateways/serial_ports"})
 @websocket_api.async_response
 async def websocket_gateway_serial_ports(
@@ -316,6 +325,7 @@ async def websocket_gateway_serial_ports(
     connection.send_result(msg["id"], {"ok": True, "ports": ports})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/gateways/flash",
@@ -343,6 +353,7 @@ async def websocket_flash_gateway(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/gateways/flash_start",
@@ -370,6 +381,7 @@ async def websocket_start_flash_gateway(
     connection.send_result(msg["id"], {"job": job})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/gateways/flash_job",
@@ -389,6 +401,7 @@ async def websocket_flash_gateway_job(
     connection.send_result(msg["id"], {"job": job})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/gateways/serial_status",
@@ -405,6 +418,7 @@ async def websocket_gateway_serial_status(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/gateways/serial_wifi",
@@ -430,6 +444,7 @@ async def websocket_gateway_serial_wifi(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/gateways/ota_start",
@@ -453,6 +468,7 @@ async def websocket_start_gateway_ota(
     connection.send_result(msg["id"], {"job": job})
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/gateways/ota_job",

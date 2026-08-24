@@ -116,6 +116,7 @@ async def _async_submit_routed_transfer(
     )
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/send_design",
@@ -304,6 +305,7 @@ def _design_uploads(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
     return uploads
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/upload_design_chunk",
@@ -354,6 +356,7 @@ async def websocket_upload_design_chunk(
     )
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/commit_design_upload",
@@ -496,6 +499,7 @@ async def websocket_commit_design_upload(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/send_partial_design",
@@ -600,6 +604,7 @@ async def websocket_send_partial_design(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         "type": "dratek_eink/send_text",

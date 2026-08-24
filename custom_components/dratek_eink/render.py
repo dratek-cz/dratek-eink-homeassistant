@@ -1710,8 +1710,9 @@ async def _async_radar_forecast_summary(hass: Any) -> dict[str, Any] | None:
             return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
         def _temperature(entry: dict[str, Any]) -> str:
+            # °C rather than a bare ° on the forecast cells too: the panel showed the unit only on the main reading, which read as an inconsistency rather than a convention. Both renderers have to change together - the backend redraws these same cells on an automatic refresh, and a difference here is exactly the manual/automatic drift svg_blocks.py exists to prevent.
             try:
-                return f"{round(float(entry.get('temperature')))}°"
+                return f"{round(float(entry.get('temperature')))}°C"
             except (TypeError, ValueError):
                 return ""
 

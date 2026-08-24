@@ -67,6 +67,11 @@ def _format_bytes(data: bytes, limit: int = 80) -> str:
     return text
 
 
+# Seconds to wait before attempt 2, then before attempt 3. The last entry
+# repeats for any further attempt.
+RETRY_BACKOFF_SECONDS = (2, 4)
+
+
 class DratekTransfer:
     def __init__(
         self,
@@ -446,7 +451,10 @@ class DratekTransfer:
                 transient = self._is_transient_connection_error(exc)
                 if attempt >= max_attempts or (attempt >= 2 and not transient):
                     break
-                delay = (2, 4)[attempt - 1]
+                # Indexed by attempt, so it has to cover every attempt that can
+                # still retry - raising max_attempts alone used to walk off the
+                # end of the tuple.
+                delay = RETRY_BACKOFF_SECONDS[min(attempt - 1, len(RETRY_BACKOFF_SECONDS) - 1)]
                 if transient:
                     self.log(f"Bluetooth connection is temporarily unavailable; retrying in {delay}s.")
                 await asyncio.sleep(delay)

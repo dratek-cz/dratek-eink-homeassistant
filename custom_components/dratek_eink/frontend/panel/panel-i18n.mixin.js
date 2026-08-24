@@ -4,6 +4,7 @@ const EN_EXACT = new Map(Object.entries({
   "BLE diagnostika · správa displejů": "BLE diagnostics · display management",
   "Nalezené displeje": "Discovered displays",
   "Mapa připojení": "Connection map",
+  "Podrobnosti skenu": "Scan details",
   "Fronta zápisu": "Write queue",
   "Gatewaye": "Gateways",
   "Čeština": "Czech",
