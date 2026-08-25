@@ -741,7 +741,9 @@ def _paint_precipitation(
 
     # BWRY only needs sparse dark-red texture at the absolute maximum. BWR has
     # no yellow pigment and benefits from a wider red-to-black ramp: black starts
-    # in strong rain and tops out near one third, never a solid black field.
+    # in strong rain and now reaches just under one half at the absolute maximum.
+    # That makes violent cells visibly darker on reflective three-colour paper
+    # without ever collapsing their red shape into a solid black field.
     if preserve_yellow:
         strong_dark_coverage = intensity.point([
             0 if value <= 225 else round(38 * (value - 225) / 30)
@@ -749,7 +751,7 @@ def _paint_precipitation(
         ])
     else:
         strong_dark_coverage = intensity.point([
-            0 if value <= 170 else round(82 * (value - 170) / 85)
+            0 if value <= 170 else round(118 * (value - 170) / 85)
             for value in range(256)
         ])
     dark_dithered = _dither_to_palette(

@@ -2004,6 +2004,13 @@ class FrontendToolLibraryTests(unittest.TestCase):
     def test_all_builtin_templates_use_the_shared_four_colour_theme(self):
         self.assertIn('_fourColorTemplateRows(rows)', self.source)
         self.assertIn('row.color = "yellow"', self.source)
+        self.assertIn('if (painted >= 2) break;', self.source)
+        self.assertIn('row.qr.accent = "yellow"', self.source)
+        self.assertIn('paint-order="stroke"', self.source)
+        self.assertIn('dratek-accent-shade-', self.source)
+        self.assertIn('const textColor = yellow ? BLACK : "#ffffff";', self.source)
+        for icon in ("tag-outline", "tram", "server", "shield-home-outline", "package-variant-closed"):
+            self.assertIn(f'icon: "{icon}"', self.source)
         self.assertIn('footer.color = "red"', self.source)
         self.assertIn('return this._fourColorTemplateRows(rows);', self.source)
 

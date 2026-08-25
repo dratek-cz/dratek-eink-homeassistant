@@ -16,9 +16,10 @@
 // are identical by construction.
 
 import qrcode from "../qrcode-generator.js";
-import { DISPLAY_TEMPLATES } from "./templates/index.js?v=compact-landscape-content-6";
+import { DISPLAY_TEMPLATES } from "./templates/index.js?v=yellow-shaded-accents-1";
 
 const RED = "#e31b1b";
+const YELLOW = "#f4c400";
 const BLACK = "#000000";
 const FONT = "Arial, Helvetica, sans-serif";
 // Ten native device pixels are the practical lower limit for Czech diacritics
@@ -359,9 +360,11 @@ export const templateSvgMixin = {
   _templateIconNames(rows) {
     const names = new Set();
     const cells = (list) => (list || []).forEach((cell) => cell?.icon && !WEATHER_ICON_TO_CONDITION.has(cell.icon) && names.add(cell.icon));
-    rows.forEach((row) => {
+    const walk = (row) => {
       if (!row) return;
       if (row.icon && !WEATHER_ICON_TO_CONDITION.has(row.icon)) names.add(row.icon);
+      if (row.band?.icon && !WEATHER_ICON_TO_CONDITION.has(row.band.icon)) names.add(row.band.icon);
+      if (row.stat?.icon && !WEATHER_ICON_TO_CONDITION.has(row.stat.icon)) names.add(row.stat.icon);
       cells(row.footer);
       cells(row.list);
       cells(row.grid);
@@ -371,7 +374,12 @@ export const templateSvgMixin = {
       cells(row.steps);
       cells(row.meters);
       cells(row.checklist);
-    });
+      if (row.duo) {
+        walk(row.duo.left);
+        walk(row.duo.right);
+      }
+    };
+    rows.forEach(walk);
     return [...names];
   },
 
@@ -733,8 +741,16 @@ export const templateSvgMixin = {
     const fitted = this._svgReadableText(text, size, options.maxWidth, bold, options.minSize);
     const fontSize = fitted.fontSize;
     const anchor = options.anchor || "middle";
+    const color = options.color || BLACK;
+    // Yellow pigment has excellent coverage as a surface, but a thin yellow
+    // glyph disappears against the white paper. If a template explicitly asks
+    // for yellow type, give every glyph a real black e-ink outline instead of
+    // relying on monitor antialiasing that the physical panel cannot reproduce.
+    const outline = color === YELLOW
+      ? ` stroke="${BLACK}" stroke-width="${Math.max(0.8, fontSize * 0.075).toFixed(2)}" paint-order="stroke" stroke-linejoin="round"`
+      : "";
     return `<text x="${x.toFixed(2)}" y="${y.toFixed(2)}" font-family="${FONT}" font-size="${fontSize.toFixed(2)}"`
-      + ` font-weight="${bold ? 700 : 400}" fill="${options.color || BLACK}" text-anchor="${anchor}"`
+      + ` font-weight="${bold ? 700 : 400}" fill="${color}"${outline} text-anchor="${anchor}"`
       + ` dominant-baseline="central" xml:space="preserve">${this._escape(fitted.text)}</text>`;
   },
 
@@ -745,6 +761,29 @@ export const templateSvgMixin = {
     }
     const resolved = ICON_GEOMETRY.get(name);
     if (!resolved?.inner) return "";
+    if (color === YELLOW || color === RED) {
+      const serial = this._accentIconSerial = (this._accentIconSerial || 0) + 1;
+      const safeName = String(name || "icon").replace(/[^a-z0-9_-]/gi, "-");
+      const clipId = `dratek-accent-clip-${safeName}-${serial}`;
+      const patternId = `dratek-accent-shade-${safeName}-${serial}`;
+      const radius = size * 0.46;
+      const shadow = Math.max(1, size * 0.07);
+      const glyphSize = size * 0.62;
+      const glyphX = cx - glyphSize / 2;
+      const glyphY = cy - glyphSize / 2;
+      const glyphColor = color === RED ? "#ffffff" : BLACK;
+      return `<defs>`
+        + `<clipPath id="${clipId}"><circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${radius.toFixed(2)}"></circle></clipPath>`
+        + `<pattern id="${patternId}" patternUnits="userSpaceOnUse" width="4" height="4" shape-rendering="crispEdges">`
+        + `<rect x="0" y="0" width="1" height="1" fill="${BLACK}"></rect><rect x="2" y="2" width="1" height="1" fill="${BLACK}"></rect>`
+        + `</pattern></defs>`
+        + `<circle cx="${(cx + shadow).toFixed(2)}" cy="${(cy + shadow).toFixed(2)}" r="${radius.toFixed(2)}" fill="${BLACK}"></circle>`
+        + `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${radius.toFixed(2)}" fill="${color}" stroke="${BLACK}" stroke-width="1.2"></circle>`
+        + `<rect x="${(cx - radius).toFixed(2)}" y="${cy.toFixed(2)}" width="${(radius * 2).toFixed(2)}" height="${radius.toFixed(2)}"`
+        + ` fill="url(#${patternId})" clip-path="url(#${clipId})"></rect>`
+        + `<svg x="${glyphX.toFixed(2)}" y="${glyphY.toFixed(2)}" width="${glyphSize.toFixed(2)}" height="${glyphSize.toFixed(2)}"`
+        + ` viewBox="${resolved.viewBox}" fill="${glyphColor}" color="${glyphColor}">${resolved.inner}</svg>`;
+    }
     const x = cx - size / 2;
     const y = cy - size / 2;
     // Nested <svg> re-establishes the icon's own viewBox, so it scales into the
@@ -1098,7 +1137,7 @@ export const templateSvgMixin = {
   },
 
   _templateInk(color) {
-    if (color === "yellow") return this._displaySupportsYellow?.() ? "#f4c400" : RED;
+    if (color === "yellow") return this._displaySupportsYellow?.() ? YELLOW : RED;
     return color === "red" ? RED : BLACK;
   },
 
@@ -1154,7 +1193,12 @@ export const templateSvgMixin = {
 
   _blockRule(row, box) {
     const ruleWidth = box.w * 0.82;
-    return this._svgHairline(box.x + (box.w - ruleWidth) / 2, box.y + box.h / 2, ruleWidth, 1, this._templateInk(row.color));
+    const x = box.x + (box.w - ruleWidth) / 2;
+    if (row.accent === "yellow" && this._displaySupportsYellow?.()) {
+      return this._svgHairline(x, box.y + box.h / 2 - 2, ruleWidth, 5, BLACK)
+        + this._svgHairline(x + 1, box.y + box.h / 2 - 1, Math.max(1, ruleWidth - 2), 3, YELLOW);
+    }
+    return this._svgHairline(x, box.y + box.h / 2, ruleWidth, 1, this._templateInk(row.color));
   },
 
   // Sizing from the row's own size/height ratio rather than from the panel keeps
@@ -1163,11 +1207,16 @@ export const templateSvgMixin = {
   _blockText(row, box) {
     const ratio = row.h ? (row.size || row.h * 0.62) / row.h : 0.62;
     const fontSize = Math.max(9, Math.min(box.h * ratio, box.h * 0.92));
-    return this._svgText(row.text, box.x + box.w / 2, box.y + box.h / 2, fontSize, {
+    const accented = row.accent === "yellow" && this._displaySupportsYellow?.();
+    const parts = accented
+      ? [`<rect x="${box.x.toFixed(2)}" y="${(box.y + box.h * 0.08).toFixed(2)}" width="${box.w.toFixed(2)}" height="${(box.h * 0.84).toFixed(2)}" rx="3" fill="${YELLOW}" stroke="${BLACK}" stroke-width="1.2"></rect>`]
+      : [];
+    parts.push(this._svgText(row.text, box.x + box.w / 2, box.y + box.h / 2, fontSize, {
       bold: !!row.bold,
-      color: this._templateInk(row.color),
+      color: accented ? BLACK : this._templateInk(row.color),
       maxWidth: box.w,
-    });
+    }));
+    return parts.join("");
   },
 
   _blockList(row, box) {
@@ -1217,15 +1266,19 @@ export const templateSvgMixin = {
     const unitSize = fontSize * unitRatio;
     const left = box.x + box.w / 2 - span(fontSize) / 2;
     const baseline = box.y + valueHeight * 0.54;
-    const parts = [this._svgText(val, left, baseline, fontSize, { anchor: "start", bold: true, color: this._templateInk(stat.color) })];
+    const accented = stat.accent === "yellow" && this._displaySupportsYellow?.();
+    const parts = accented
+      ? [`<rect x="${(box.x + box.w * 0.04).toFixed(2)}" y="${(box.y + box.h * 0.07).toFixed(2)}" width="${(box.w * 0.92).toFixed(2)}" height="${(box.h * 0.86).toFixed(2)}" rx="4" fill="${YELLOW}" stroke="${BLACK}" stroke-width="1.2"></rect>`]
+      : [];
+    parts.push(this._svgText(val, left, baseline, fontSize, { anchor: "start", bold: true, color: accented ? BLACK : this._templateInk(stat.color) }));
     if (stat.unit) {
       parts.push(this._svgText(stat.unit, left + this._svgTextWidth(val, fontSize, true) + unitSize * 0.3, baseline + fontSize * 0.22, unitSize, {
-        anchor: "start", color: this._templateInk(stat.unitColor),
+        anchor: "start", color: accented ? BLACK : this._templateInk(stat.unitColor),
       }));
     }
     if (stat.caption != null) {
       parts.push(this._svgText(stat.caption, box.x + box.w / 2, box.y + valueHeight + captionHeight * 0.5, Math.max(row.compact ? 10 : 8.5, captionHeight * 0.7), {
-        bold: false, minSize: row.compact ? 8.5 : undefined, color: this._templateInk(stat.captionColor), maxWidth: box.w,
+        bold: false, minSize: row.compact ? 8.5 : undefined, color: accented ? BLACK : this._templateInk(stat.captionColor), maxWidth: box.w,
       }));
     }
     return parts.join("");
@@ -1237,24 +1290,31 @@ export const templateSvgMixin = {
     const band = row.band;
     const x = row.bleed ? box.fullX : box.x;
     const w = row.bleed ? box.fullW : box.w;
-    const fill = band.color === "black" ? BLACK : RED;
-    const parts = [`<rect x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}" fill="${fill}"></rect>`];
-    const cx = x + w / 2;
+    const yellow = band.color === "yellow" && this._displaySupportsYellow?.();
+    const fill = band.color === "black" ? BLACK : yellow ? YELLOW : RED;
+    const textColor = yellow ? BLACK : "#ffffff";
+    const parts = [`<rect x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}" fill="${fill}"${yellow ? ` stroke="${BLACK}" stroke-width="1.2"` : ""}></rect>`];
+    const iconSize = band.icon ? Math.min(box.h * 0.72, w * 0.12) : 0;
+    const iconCx = x + iconSize * 0.82;
+    const textX = band.icon ? x + iconSize * 1.65 + (w - iconSize * 1.65) / 2 : x + w / 2;
+    const textWidth = band.icon ? Math.max(10, w - iconSize * 2.15) : w * 0.92;
+    const iconColor = yellow ? RED : this._displaySupportsYellow?.() ? YELLOW : "#ffffff";
+    if (band.icon) parts.push(this._svgIcon(band.icon, iconCx, box.y + box.h / 2, iconSize, iconColor));
     // On a 128 px landscape tag these bands are often only 16-26 native
     // pixels high. Two separate baselines at 30/70 % overlap after e-ink
     // rasterisation (SERVER / ONLINE was the most visible example), so the
     // compact design uses one deliberately heavy line instead.
     if (row.compact && band.label != null && band.value != null) {
-      parts.push(this._svgText(`${band.label}  ·  ${band.value}`, cx, box.y + box.h * 0.5, Math.max(11, box.h * 0.52), {
-        color: "#ffffff", bold: false, minSize: 9.5, maxWidth: w * 0.92,
+      parts.push(this._svgText(`${band.label}  ·  ${band.value}`, textX, box.y + box.h * 0.5, Math.max(11, box.h * 0.52), {
+        color: textColor, bold: false, minSize: 9.5, maxWidth: textWidth,
       }));
       return parts.join("");
     }
     if (band.label != null && band.value != null) {
-      parts.push(this._svgText(band.label, cx, box.y + box.h * 0.3, Math.max(8.5, box.h * 0.32), { color: "#ffffff", bold: true, maxWidth: w * 0.92 }));
-      parts.push(this._svgText(band.value, cx, box.y + box.h * 0.7, Math.max(10.5, box.h * 0.45), { color: "#ffffff", bold: true, maxWidth: w * 0.92 }));
+      parts.push(this._svgText(band.label, textX, box.y + box.h * 0.3, Math.max(8.5, box.h * 0.32), { color: textColor, bold: true, maxWidth: textWidth }));
+      parts.push(this._svgText(band.value, textX, box.y + box.h * 0.7, Math.max(10.5, box.h * 0.45), { color: textColor, bold: true, maxWidth: textWidth }));
     } else {
-      parts.push(this._svgText(band.value ?? band.label, cx, box.y + box.h * 0.5, Math.max(10.5, box.h * 0.56), { color: "#ffffff", bold: true, maxWidth: w * 0.92 }));
+      parts.push(this._svgText(band.value ?? band.label, textX, box.y + box.h * 0.5, Math.max(10.5, box.h * 0.56), { color: textColor, bold: true, maxWidth: textWidth }));
     }
     return parts.join("");
   },
@@ -1322,10 +1382,14 @@ export const templateSvgMixin = {
     const outer = Math.min(box.w, box.h) * 0.46;
     const inner = outer * 0.68;
     const percent = Math.max(0, Math.min(1, Number(ring.percent) || 0));
-    const parts = [
+    const parts = [];
+    if (ring.accent === "yellow" && this._displaySupportsYellow?.()) {
+      parts.push(`<path d="${this._svgArcPath(cx, cy, outer, inner, -90, 269.9)}" fill="${YELLOW}"></path>`);
+    }
+    parts.push(
       `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${outer.toFixed(2)}" fill="none" stroke="${BLACK}" stroke-width="1"></circle>`,
       `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${inner.toFixed(2)}" fill="none" stroke="${BLACK}" stroke-width="1"></circle>`,
-    ];
+    );
     if (percent > 0) parts.push(`<path d="${this._svgArcPath(cx, cy, outer, inner, -90, -90 + percent * 360)}" fill="${this._templateInk(ring.color)}"></path>`);
     if (ring.value != null) parts.push(this._svgText(ring.value, cx, cy - (ring.caption != null ? inner * 0.2 : 0), Math.max(row.compact ? 13 : 0, inner * 0.62), { bold: true, minSize: row.compact ? 10 : undefined, maxWidth: inner * 1.7 }));
     if (ring.caption != null) parts.push(this._svgText(ring.caption, cx, cy + inner * 0.46, Math.max(row.compact ? 9.5 : 0, inner * 0.34), { bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: inner * 1.7 }));
@@ -1341,7 +1405,11 @@ export const templateSvgMixin = {
     const inner = outer * 0.7;
     const cy = box.y + box.h * 0.5 + outer * 0.4;
     const percent = Math.max(0, Math.min(1, Number(dial.percent) || 0));
-    const parts = [`<path d="${this._svgArcPath(cx, cy, outer, inner, 180, 360)}" fill="none" stroke="${BLACK}" stroke-width="1"></path>`];
+    const parts = [];
+    if (dial.accent === "yellow" && this._displaySupportsYellow?.()) {
+      parts.push(`<path d="${this._svgArcPath(cx, cy, outer, inner, 180, 360)}" fill="${YELLOW}"></path>`);
+    }
+    parts.push(`<path d="${this._svgArcPath(cx, cy, outer, inner, 180, 360)}" fill="none" stroke="${BLACK}" stroke-width="1"></path>`);
     if (percent > 0) parts.push(`<path d="${this._svgArcPath(cx, cy, outer, inner, 180, 180 + percent * 180)}" fill="${this._templateInk(dial.color)}"></path>`);
     if (dial.value != null) parts.push(this._svgText(dial.value, cx, cy - outer * 0.28, Math.max(row.compact ? 13 : 0, outer * 0.42), { bold: true, minSize: row.compact ? 10 : undefined, maxWidth: inner * 1.8 }));
     if (dial.caption != null) parts.push(this._svgText(dial.caption, cx, cy + outer * 0.16, Math.max(row.compact ? 9.5 : 0, outer * 0.24), { bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: inner * 1.9 }));
@@ -1779,10 +1847,17 @@ export const templateSvgMixin = {
     const span = top - bottom || 1;
     const step = box.w / (values.length - 1);
     const points = values.map((value, index) => [box.x + step * index, box.y + box.h - ((value - bottom) / span) * box.h]);
+    const lineWidth = Math.max(row.compact ? 2.5 : 1, box.h * 0.05);
     const parts = [
       this._svgHairline(box.x, box.y + box.h, box.w, 1),
+      ...(row.spark.accent === "yellow" && this._displaySupportsYellow?.() ? [
+        `<polyline points="${points.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ")}" fill="none" stroke="${BLACK}"`
+          + ` stroke-width="${(lineWidth + 4).toFixed(2)}" stroke-linejoin="round" stroke-linecap="round"></polyline>`,
+        `<polyline points="${points.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ")}" fill="none" stroke="${YELLOW}"`
+          + ` stroke-width="${(lineWidth + 2).toFixed(2)}" stroke-linejoin="round" stroke-linecap="round"></polyline>`,
+      ] : []),
       `<polyline points="${points.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ")}" fill="none" stroke="${this._templateInk(row.spark.color)}"`
-        + ` stroke-width="${Math.max(row.compact ? 2.5 : 1, box.h * 0.05).toFixed(2)}" stroke-linejoin="round" stroke-linecap="round"></polyline>`,
+        + ` stroke-width="${lineWidth.toFixed(2)}" stroke-linejoin="round" stroke-linecap="round"></polyline>`,
     ];
     const [lastX, lastY] = points[points.length - 1];
     parts.push(`<circle cx="${lastX.toFixed(2)}" cy="${lastY.toFixed(2)}" r="${Math.max(1.5, box.h * 0.08).toFixed(2)}" fill="${RED}"></circle>`);
@@ -1825,6 +1900,10 @@ export const templateSvgMixin = {
     const tag = row.pricetag;
     const sale = !!tag.sale;
     const parts = [];
+    if (!sale && tag.accent === "yellow" && this._displaySupportsYellow?.()) {
+      parts.push(`<rect x="${(box.x + 3).toFixed(2)}" y="${(box.y + 3).toFixed(2)}" width="${Math.max(1, box.w - 6).toFixed(2)}" height="${Math.max(1, box.h - 6).toFixed(2)}" fill="none" stroke="${YELLOW}" stroke-width="5"></rect>`);
+      parts.push(`<rect x="${(box.x + 1).toFixed(2)}" y="${(box.y + 1).toFixed(2)}" width="${Math.max(1, box.w - 2).toFixed(2)}" height="${Math.max(1, box.h - 2).toFixed(2)}" fill="none" stroke="${BLACK}" stroke-width="1"></rect>`);
+    }
     if (sale) {
       parts.push(`<rect x="${box.x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${box.w.toFixed(2)}" height="${box.h.toFixed(2)}" fill="${RED}"></rect>`);
     }
@@ -1894,7 +1973,14 @@ export const templateSvgMixin = {
         }
       }
     }
-    return `<rect x="${(x - margin).toFixed(0)}" y="${(y - margin).toFixed(0)}" width="${(drawn + margin * 2).toFixed(0)}"`
+    const framed = row.qr.accent === "yellow" && this._displaySupportsYellow?.();
+    const frameX = x - margin;
+    const frameY = y - margin;
+    const frameSize = drawn + margin * 2;
+    const frame = framed
+      ? `<rect x="${(frameX - 3).toFixed(0)}" y="${(frameY - 3).toFixed(0)}" width="${(frameSize + 6).toFixed(0)}" height="${(frameSize + 6).toFixed(0)}" fill="${YELLOW}" stroke="${BLACK}" stroke-width="1" shape-rendering="crispEdges"></rect>`
+      : "";
+    return frame + `<rect x="${frameX.toFixed(0)}" y="${frameY.toFixed(0)}" width="${frameSize.toFixed(0)}"`
       + ` height="${(drawn + margin * 2).toFixed(0)}" fill="#ffffff"></rect>`
       + `<path d="${path}" fill="${BLACK}" shape-rendering="crispEdges"></path>`;
   },
@@ -2028,32 +2114,55 @@ export const templateSvgMixin = {
     );
   },
 
-  // Built-in templates are authored against the full BWRY palette.  The first
-  // identifying block gets a yellow accent, the footer remains the red status
-  // band, and the uncoloured content stays black on white.  Keeping this as one
-  // shared theme means every current and future catalog template really uses all
-  // four pigments without duplicating palette rules in two dozen design files.
+  // Built-in templates are authored against the full BWRY palette. Two content
+  // blocks get a yellow accent, the footer remains the red status band, and the
+  // uncoloured content stays black on white. Yellow is carried by real surfaces
+  // (outlined bands, shaded icon badges, chart underlays), not by a fragile thin
+  // glyph alone. Keeping this as one shared theme means every current and future
+  // catalog template uses all four pigments without duplicating palette rules.
   // _templateInk is the single hardware adaptation point: on a BWR display it
   // maps every yellow accent to red before the SVG is rasterized.
   _fourColorTemplateRows(rows) {
     const themed = structuredClone(Array.isArray(rows) ? rows : []);
     const paintYellow = (row) => {
       if (!row) return false;
-      if (row.icon || row.text != null || row.rule) { row.color = "yellow"; return true; }
-      for (const key of ["stat", "band", "ring", "dial", "spark", "datebox", "pricetag"]) {
-        if (row[key] && typeof row[key] === "object") { row[key].color = "yellow"; return true; }
+      if (row.duo) {
+        const left = paintYellow(row.duo.left);
+        const right = paintYellow(row.duo.right);
+        return left || right;
+      }
+      if (row.qr) { row.qr.accent = "yellow"; return true; }
+      if (row.icon) { row.color = "yellow"; return true; }
+      if (row.text != null || row.rule) { row.accent = "yellow"; row.color = "black"; return true; }
+      if (row.stat) { row.stat.accent = "yellow"; return true; }
+      if (row.band) {
+        if (row.band.color === "red") return false;
+        row.band.color = "yellow";
+        return true;
+      }
+      for (const key of ["ring", "dial", "spark", "pricetag"]) {
+        if (row[key] && typeof row[key] === "object") { row[key].accent = "yellow"; return true; }
+      }
+      if (row.datebox) {
+        row.datebox.color = "yellow";
+        return true;
       }
       for (const key of ["list", "meters", "grid", "steps", "checklist", "strip", "split", "board"]) {
         if (Array.isArray(row[key]) && row[key].length) {
-          row[key][0] = { ...row[key][0], color: "yellow" };
+          const index = row[key].findIndex((cell) => cell?.color !== "red");
+          const accentIndex = index >= 0 ? index : 0;
+          row[key][accentIndex] = { ...row[key][accentIndex], color: "yellow" };
           return true;
         }
       }
       return false;
     };
-    const identity = themed.find((row) => !row?.footer && !row?.flex && !row?.gap && !row?.radarMap && (row?.icon || row?.text != null))
-      || themed.find((row) => !row?.footer && !row?.flex && !row?.gap && !row?.radarMap && !row?.qr);
-    paintYellow(identity);
+    let painted = 0;
+    for (const row of themed) {
+      if (painted >= 2) break;
+      if (row?.footer || row?.flex || row?.gap || row?.radarMap || row?.customImage) continue;
+      if (paintYellow(row)) painted += 1;
+    }
     const footer = themed.find((row) => row?.footer);
     if (footer) footer.color = "red";
     return themed;

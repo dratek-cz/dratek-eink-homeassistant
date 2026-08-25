@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.343
+
+- **Žlutá je součástí grafiky, ne nečitelný text na bílé** – používá ohraničené panely, podkresy grafů a bezpečný rám QR kódu.
+- **Ikony mají nový e-ink vzhled** s černým obrysem, tvrdým stínem a pixelovým polotónem; další ikony jsou na cenovce, odjezdech, serveru, zabezpečení a zásilce.
+- **BWR meteoradar zvýrazňuje extrémy tmavším rastrem** přibližně do 46 % černé, přitom zachovává červený tvar srážek.
+- **BWR displeje bez žlutého pigmentu zůstávají čitelné** díky červenobílé náhradní variantě.
+
 ## Novinky ve verzi 0.1.342
 
 - **Malé displeje na šířku mají vlastní čitelné rozložení** s lehčím písmem, většími hlavními údaji a červenou patičkou.

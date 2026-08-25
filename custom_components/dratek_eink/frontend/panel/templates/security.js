@@ -33,7 +33,7 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     if (height <= 160 && width >= height) return [
-      { band: { label: "ALARM", value: v(0, "ZAPNUTO"), color: "black" }, bleed: true, h: 0.24 },
+      { band: { icon: "shield-home-outline", label: "ALARM", value: v(0, "ZAPNUTO"), color: "black" }, bleed: true, h: 0.24 },
       { checklist: [
         { label: `Dveře · ${v(1, "Zamčeno")}`, done: true, color: "red" },
         { label: `Okna · ${v(2, "Zavřeno")}`, done: true },
@@ -42,7 +42,7 @@ export const template = {
       { footer: [{ label: "OCHRANA", value: "aktivní" }], h: 0.12 },
     ];
     return [
-      { band: { label: "OCHRANA DOMU", value: v(0, "ZAPNUTO"), color: "black" }, bleed: true, h: lerp(0.22, 0.17) },
+      { band: { icon: "shield-home-outline", label: "OCHRANA DOMU", value: v(0, "ZAPNUTO"), color: "black" }, bleed: true, h: lerp(0.22, 0.17) },
       { strip: [
         { icon: "door-closed-lock", label: "Dveře", value: v(1, "Zamčeno"), color: "red" },
         { icon: "window-closed", label: "Okna", value: v(2, "Zavřeno") },

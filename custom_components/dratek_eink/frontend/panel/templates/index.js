@@ -17,17 +17,17 @@ import { template as living } from "./living.js?v=compact-landscape-content-6";
 import { template as presence } from "./presence.js?v=compact-landscape-content-6";
 import { template as wifi } from "./wifi.js?v=compact-landscape-content-6";
 import { template as calendar } from "./calendar.js";
-import { template as security } from "./security.js?v=compact-landscape-content-6";
-import { template as transport } from "./transport.js?v=compact-landscape-content-6";
+import { template as security } from "./security.js?v=yellow-shaded-accents-1";
+import { template as transport } from "./transport.js?v=yellow-shaded-accents-1";
 import { template as shopping } from "./shopping.js?v=compact-landscape-content-6";
 import { template as air } from "./air.js?v=compact-landscape-content-6";
 import { template as thermostat } from "./thermostat.js?v=compact-landscape-content-6";
 import { template as water } from "./water.js?v=compact-landscape-content-6";
-import { template as parcel } from "./parcel.js?v=compact-landscape-content-6";
+import { template as parcel } from "./parcel.js?v=yellow-shaded-accents-1";
 import { template as birthdays } from "./birthdays.js?v=compact-landscape-content-6";
-import { template as server } from "./server.js?v=compact-landscape-content-6";
+import { template as server } from "./server.js?v=yellow-shaded-accents-1";
 import { template as garden } from "./garden.js?v=compact-landscape-content-6";
-import { template as price } from "./price.js?v=compact-landscape-content-6";
+import { template as price } from "./price.js?v=yellow-shaded-accents-1";
 
 export const DISPLAY_TEMPLATES = [
   customImage,

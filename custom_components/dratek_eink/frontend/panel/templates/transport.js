@@ -31,7 +31,7 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     if (height <= 160 && width >= height) return [
-      { band: { label: "ZASTÁVKA", value: v(0, "Hlavní nádraží"), color: "black" }, bleed: true, h: 0.22 },
+      { band: { icon: "tram", label: "ZASTÁVKA", value: v(0, "Hlavní nádraží"), color: "black" }, bleed: true, h: 0.22 },
       { board: [
         { badge: v(1, "9"), label: "Centrum", value: v(2, "3 min"), color: "red" },
         { badge: "4", label: "Univerzita", value: "8 min" },
@@ -40,7 +40,7 @@ export const template = {
       { footer: [{ label: "PĚŠKY", value: v(3, "240 m") }], h: 0.12 },
     ];
     return [
-      { band: { label: "ODJEZDY", value: v(0, "Hlavní nádraží"), color: "black" }, bleed: true, h: lerp(0.19, 0.14) },
+      { band: { icon: "tram", label: "ODJEZDY", value: v(0, "Hlavní nádraží"), color: "black" }, bleed: true, h: lerp(0.19, 0.14) },
       { split: [
         { icon: "tram", value: v(1, "9"), label: "nejbližší linka", color: "red" },
         { icon: "clock-fast", value: v(2, "3 min"), label: "odjezd" },

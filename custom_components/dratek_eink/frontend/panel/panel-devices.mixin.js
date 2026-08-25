@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.342";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.343";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=compact-landscape-content-6";
 
 // The standard Czech civil name-day calendar, indexed [month][day - 1]

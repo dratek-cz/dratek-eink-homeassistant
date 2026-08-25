@@ -32,7 +32,7 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     if (height <= 160 && width >= height) return [
-      { band: { label: v(1, "RR 458 921 730 CZ"), value: v(0, "NA CESTĚ"), color: "black" }, bleed: true, h: 0.22 },
+      { band: { icon: "package-variant-closed", label: v(1, "RR 458 921 730 CZ"), value: v(0, "NA CESTĚ"), color: "black" }, bleed: true, h: 0.22 },
       { steps: [
         { label: "Převzato", done: true },
         { label: "Depo", done: true },
@@ -42,7 +42,7 @@ export const template = {
       { footer: [{ label: "DORUČENÍ", value: v(3, "13–15 h") }], h: 0.12 },
     ];
     return [
-      { band: { label: v(1, "RR 458 921 730 CZ"), value: v(0, "NA CESTĚ"), color: "black" }, bleed: true, h: lerp(0.20, 0.15) },
+      { band: { icon: "package-variant-closed", label: v(1, "RR 458 921 730 CZ"), value: v(0, "NA CESTĚ"), color: "black" }, bleed: true, h: lerp(0.20, 0.15) },
       { steps: [
         { label: "Převzato", done: true },
         { label: "Depo", done: true },

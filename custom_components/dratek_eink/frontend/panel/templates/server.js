@@ -42,7 +42,7 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     if (height <= 160 && width >= height) return [
-      { band: { label: "SERVER", value: v(0, "ONLINE"), color: "black" }, bleed: true, h: 0.14 },
+      { band: { icon: "server", label: "SERVER", value: v(0, "ONLINE"), color: "black" }, bleed: true, h: 0.14 },
       { meters: [
         { label: "CPU", value: v(1, "24 %"), percent: ratio(1, 24) },
         { label: "RAM", value: v(2, "61 %"), percent: ratio(2, 61) },
@@ -52,7 +52,7 @@ export const template = {
       { footer: [{ label: "PROVOZ", value: v(5, "18 dní") }], h: 0.12 },
     ];
     return [
-      { band: { label: "HOME SERVER", value: v(0, "ONLINE"), color: "black" }, bleed: true, h: lerp(0.18, 0.13) },
+      { band: { icon: "server", label: "HOME SERVER", value: v(0, "ONLINE"), color: "black" }, bleed: true, h: lerp(0.18, 0.13) },
       { meters: [
         { label: "CPU", value: v(1, "24 %"), percent: ratio(1, 24) },
         { label: "RAM / paměť", value: v(2, "61 %"), percent: ratio(2, 61) },

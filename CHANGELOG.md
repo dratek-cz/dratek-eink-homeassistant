@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.343] - 2026-08-25
+
+### Vylepšeno
+- **Výraznější využití žlutého pigmentu**: vestavěné šablony používají až dva kontrastní žluté akcenty jako ohraničené plochy, podkres grafů nebo bezpečný rám QR kódu místo špatně čitelného samostatného žlutého textu.
+- **Stínované ikonové odznaky**: barevné ikony mají černý obrys, tvrdý stín a pixelový polotón. Nové ikony přibyly na cenovku, odjezdy, server, zabezpečení a zásilku.
+- **Tmavší extrémy meteoradaru na BWR**: nejsilnější srážkové buňky používají přibližně 40–46 % černého rastru, ale stále zachovávají červenou strukturu a neslévají se do plné černé.
+
+### Opraveno
+- **Čitelný návrat na tříbarevných displejích**: žluté motivy se na BWR převádějí na červené panely s bílými ikonami; žádný akcent nezmizí na pozadí.
+- **Přednačítání ikon v horních pruzích**: nově přidané ikonky se načtou před vytvořením náhledu i exportu a nezůstávají prázdné.
+
 ## [0.1.342] - 2026-08-25
 
 ### Vylepšeno

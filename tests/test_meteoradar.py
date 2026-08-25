@@ -273,8 +273,18 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         self.assertIn(meteoradar.PRECIPITATION_COLOR, colors)
         self.assertIn(meteoradar.BORDER_COLOR, colors)
         black_ratio = list(image.getdata()).count(meteoradar.BORDER_COLOR) / (64 * 64)
-        self.assertGreater(black_ratio, 0.15)
-        self.assertLess(black_ratio, 0.35)
+        self.assertGreater(black_ratio, 0.28)
+        self.assertLess(black_ratio, 0.48)
+
+    def test_bwr_absolute_extreme_is_heavily_shaded_but_not_solid_black(self) -> None:
+        source = Image.new("RGBA", (64, 64), (255, 255, 0, 255))
+        image = Image.new("RGB", source.size, "white")
+        meteoradar._paint_precipitation(image, source, preserve_yellow=False)
+        pixels = list(image.getdata())
+        black_ratio = pixels.count(meteoradar.BORDER_COLOR) / len(pixels)
+        self.assertGreater(black_ratio, 0.42)
+        self.assertLess(black_ratio, 0.50)
+        self.assertIn(meteoradar.PRECIPITATION_COLOR, pixels)
 
     def test_bwry_warm_echo_reaches_red_with_sparse_darkening(self) -> None:
         image = self._compose((244, 196, 0, 255), preserve_yellow=True)

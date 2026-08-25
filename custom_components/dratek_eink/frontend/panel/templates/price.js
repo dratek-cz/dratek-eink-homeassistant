@@ -32,7 +32,7 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     if (height <= 160 && width >= height) return [
-      { band: { label: isSale ? "AKCE" : "CENOVKA", value: v(0, "JABLKA GOLDEN"), color: isSale ? "red" : "black" }, bleed: true, h: 0.16 },
+      { band: { icon: "tag-outline", label: isSale ? "AKCE" : "CENOVKA", value: v(0, "JABLKA GOLDEN"), color: isSale ? "red" : "black" }, bleed: true, h: 0.16 },
       { pricetag: {
         price: v(1, "149,-"),
         currency: "Kč",
@@ -43,7 +43,7 @@ export const template = {
     ];
     if (!isSale) {
       return [
-        { band: { label: "REGÁL", value: v(0, "JABLKA GOLDEN"), color: "black" }, bleed: true, h: lerp(0.20, 0.15) },
+        { band: { icon: "tag-outline", label: "REGÁL", value: v(0, "JABLKA GOLDEN"), color: "black" }, bleed: true, h: lerp(0.20, 0.15) },
         { pricetag: {
           price: v(1, "149,-"),
           currency: "Kč",
@@ -55,7 +55,7 @@ export const template = {
     }
     // Sale variant: red band, struck old price, big new price, code in red footer
     return [
-      { band: { label: "AKCE", value: v(0, "JABLKA GOLDEN"), color: "red" }, bleed: true, h: lerp(0.20, 0.15) },
+      { band: { icon: "tag-outline", label: "AKCE", value: v(0, "JABLKA GOLDEN"), color: "red" }, bleed: true, h: lerp(0.20, 0.15) },
       { pricetag: {
         price: v(1, "149,-"),
         currency: "Kč",
