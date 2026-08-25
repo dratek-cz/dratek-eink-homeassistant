@@ -38,21 +38,21 @@ export const template = {
     const area = width && height ? width * height : 296 * 128;
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
-    return [
-      // A small icon leads so the shared one-accent-per-tile auto-colour
-      // (_fourColorTemplateRows) paints it yellow instead of the title text
-      // below - yellow letterforms are close to unreadable on this hardware,
-      // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
-      { icon: "trash-can-outline", h: lerp(0.1, 0.075) },
-      // No title text: "Odpady" only restated what the two collection
-      // tiles right below it already are.
-      { rule: true, h: 0.02 },
+    if (height <= 160 && width >= height) return [
       { split: [
-        { icon: "trash-can-outline", value: v(0, "ZÍTRA"), label: "Plast", color: "red" },
-        { icon: "recycle", value: v(1, "za 7 dní"), label: "Papír" },
-      ], h: lerp(0.68, 0.76) },
+        { icon: "trash-can-outline", label: "PLAST", value: v(0, "ZÍTRA"), color: "red" },
+        { icon: "recycle", label: "PAPÍR", value: v(1, "za 7 dní") },
+      ], h: 0.88 },
+      { footer: [{ label: "TERMÍNY SVOZU", value: v(2, "út 24. 5.") }], h: 0.12 },
+    ];
+    return [
+      { datebox: { day: "01", month: "SVOZ", lines: ["NEJBLIŽŠÍ TERMÍN", v(0, "ZÍTRA")], color: "red" }, h: lerp(0.36, 0.43) },
+      { split: [
+        { icon: "trash-can-outline", label: "Plast", value: v(0, "ZÍTRA"), color: "red" },
+        { icon: "recycle", label: "Papír", value: v(1, "za 7 dní") },
+      ], h: lerp(0.43, 0.49) },
       { flex: true },
-      { footer: [{ label: "NEJBLIŽŠÍ SVOZ", value: v(2, "út 24. 5.") }], h: lerp(0.14, 0.08) },
+      { footer: [{ label: "KALENDÁŘ SVOZU", value: v(2, "út 24. 5.") }], h: lerp(0.14, 0.08) },
     ];
   },
 };

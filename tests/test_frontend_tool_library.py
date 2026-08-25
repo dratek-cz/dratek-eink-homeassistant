@@ -60,6 +60,15 @@ class FrontendToolLibraryTests(unittest.TestCase):
         for element in ("text", "rect", "circle", "line", "icon", "qr", "barcode", "slider", "chart", "gauge", "signal"):
             self.assertIn(f'tool("{element}"', self.source)
 
+    def test_authored_qr_and_price_values_can_be_typed_or_bound(self):
+        """Credentials and shelf-label copy must never auto-bind one sensor everywhere."""
+        self.assertGreaterEqual(self.source.count("manualValues: true"), 2)
+        self.assertIn('if (template?.manualValues) return "";', self.source)
+        self.assertIn('binding?.startsWith("literal:")', self.source)
+        self.assertIn('data-template-literal-value=', self.source)
+        self.assertIn('binding.startsWith("literal:")', self.source)
+        self.assertIn("Ruční hodnota", self.source)
+
     def test_custom_image_studio_has_gallery_navigation_and_real_slideshow(self):
         self.assertIn('class="custom-image-studio"', self.source)
         self.assertIn('data-custom-image-download', self.source)

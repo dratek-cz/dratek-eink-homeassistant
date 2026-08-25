@@ -74,19 +74,20 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.341",
-        name="DRATEK eInk v0.1.341",
-        body="""## Release 0.1.341
+        tag="v0.1.342",
+        name="DRATEK eInk v0.1.342",
+        body="""## Release 0.1.342
+
+### Vylepšeno
+- Osvěžené kompaktní rozložení osmnácti šablon pro malé displeje na šířku s čitelnějším písmem a jasnou prioritou hlavního obsahu.
+- Fotovoltaika má velký ukazatel vedle tří hodnot, nákup šest položek ve dvou řádcích a odjezdy tři spoje.
+- Wi-Fi upřednostňuje velký skenovatelný QR kód; cenovka jednu velkou cenu, název a samostatný EAN.
 
 ### Opraveno
-- **Karty displejů už nejsou prázdné**: známé displeje se obnoví před načtením entit a dostanou baterii, napětí, signál, poslední kontakt, dostupnost, trasu a náhled.
-- Kamera posledního obrazu bezpečně načte uložený náhled při přidání entity.
+- Lehčí doprovodné písmo a větší minimální velikosti omezují slévání pixelů na nejmenších panelech.
+- Cenovka už automaticky neopakuje hodnotu jednoho obecného senzoru ve všech polích.
 
-### Změněno
-- **Rozhraní, Automatické zápisy, Přenos do zařízení a Meteoradar mají samostatné rozbalovací skupiny služeb** po vzoru Google Gemini.
-- Existující servisní zařízení a entity se přesunou do odpovídajících skupin bez duplicit a bez ztráty historie.
-
-### Optimalizováno
-- Entity zůstávají push-only a živé hodnoty aktualizuje pouze skutečný BLE nebo gateway scan.
+### Přidáno
+- SSID, heslo a údaje cenovky lze napsat přímo, nebo každé pole napojit na samostatnou entitu Home Assistantu.
 """,
     )

@@ -13,7 +13,7 @@ export const template = {
   },
   prepared: true,
   setup: {
-    summary: "Nákupní seznam se zaškrtnutými položkami - pět řádků na displeji, ale dva z nich jsou napojitelné na skutečná data, zbytek je ukázka (viz poznámka).",
+    summary: "Papírově čistý nákupní lístek: velký počet zbývajících položek a kompaktní seznam s odškrtnutými řádky.",
     integrations: [
       {
         name: "Nákupní seznam",
@@ -36,28 +36,28 @@ export const template = {
     const area = width && height ? width * height : 296 * 128;
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
-    return [
-      // A small icon leads so the shared one-accent-per-tile auto-colour
-      // (_fourColorTemplateRows) paints it yellow instead of the title text
-      // below - yellow letterforms are close to unreadable on this hardware,
-      // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
-      { icon: "format-list-checks", h: lerp(0.1, 0.075) },
-      // No title text: "Nákupní seznam" only restated what the checklist
-      // right below it already is.
-      { rule: true, h: 0.02 },
-      // 0.55 left over a fifth of the panel as bare flex before the footer -
-      // checklist rows scale with their own share of box height, so growing
-      // this gives all five lines more room instead of leaving it unused. The
-      // lerp grows that further still on a genuinely large panel.
+    if (height <= 160 && width >= height) return [
       { checklist: [
         { label: v(1, "Mléko"), done: true },
         { label: "Chléb", done: true },
-        { label: v(0, "Jablka") },
+        { label: v(0, "Jablka"), color: "red" },
         { label: "Káva" },
         { label: "Prací gel" },
-      ], marker: "box", strike: true, h: lerp(0.79, 0.85) },
+        { label: "Vejce" },
+      ], columns: 3, marker: "box", strike: true, h: 0.88 },
+      { footer: [{ label: "NÁKUP", value: "seznam připraven" }], h: 0.12 },
+    ];
+    return [
+      { stat: { value: v(2, "3"), caption: "POLOŽKY ZBÝVAJÍ" }, h: lerp(0.26, 0.31) },
+      { checklist: [
+        { label: v(1, "Mléko"), done: true },
+        { label: "Chléb", done: true },
+        { label: v(0, "Jablka"), color: "red" },
+        { label: "Káva" },
+        { label: "Prací gel" },
+      ], marker: "box", strike: true, h: lerp(0.58, 0.64) },
       { flex: true },
-      { footer: [{ label: "ZBÝVÁ", value: v(2, "3 položky") }], h: lerp(0.14, 0.08) },
+      { footer: [{ label: "NÁKUP", value: "vezmi seznam s sebou" }], h: lerp(0.14, 0.08) },
     ];
   },
 };

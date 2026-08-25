@@ -23,7 +23,7 @@ export const template = {
   // dial fill otherwise assumes.
   automation: { ratio: [{ variableIndex: 0, divisor: 2 }] },
   setup: {
-    summary: "Index kvality vzduchu na budíku (0–200) nahoře, hodnoty CO₂, PM2.5 a vlhkosti jako seznam pod ním.",
+    summary: "Kruhový přístroj AQI a tři samostatné laboratorní karty pro CO₂, PM2.5 a vlhkost.",
     integrations: [
       { name: "Airly", domain: "sensor", core: true, why: "Venkovní kvalita ovzduší podle nejbližší veřejné stanice - nevyžaduje vlastní čidlo, jen zadání polohy." },
       { name: "Netatmo", domain: "sensor", core: true, why: "Vnitřní senzor CO₂ a kvality vzduchu, pokud máte stanici Netatmo doma." },
@@ -42,20 +42,23 @@ export const template = {
     const area = width && height ? width * height : 296 * 128;
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
-    return [
-      // A small icon leads so the shared one-accent-per-tile auto-colour
-      // (_fourColorTemplateRows) paints it yellow instead of the title text
-      // below - yellow letterforms are close to unreadable on this hardware,
-      // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
-      { icon: "air-filter", h: lerp(0.1, 0.075) },
-      { text: "Kvalita vzduchu", h: lerp(0.06, 0.04), size: 0.046, bold: true },
-      { dial: { percent: ratio(0, 21) / 2, value: v(0, "42"), caption: "AQI", min: "0", max: "200" }, group: "ratio", h: lerp(0.33, 0.38) },
-      { rule: true, h: 0.02 },
-      { list: [
+    if (height <= 160 && width >= height) return [
+      { dial: { percent: ratio(0, 21) / 2, value: v(0, "42"), caption: "AQI", min: "0", max: "200" }, group: "ratio", h: 0.68 },
+      { strip: [
         { icon: "molecule-co2", label: "CO₂", value: v(1, "612 ppm") },
         { icon: "blur", label: "PM2.5", value: v(2, "8 µg") },
         { icon: "water-percent", label: "Vlhkost", value: v(3, "46 %") },
-      ], h: lerp(0.42, 0.46) },
+      ], h: 0.20 },
+      { footer: [{ label: "VĚTRÁNÍ", value: "Není třeba" }], h: 0.12 },
+    ];
+    return [
+      { strip: [
+        { icon: "molecule-co2", label: "CO₂", value: v(1, "612 ppm"), color: "red" },
+        { icon: "blur", label: "PM2.5", value: v(2, "8 µg") },
+        { icon: "water-percent", label: "VLHKOST", value: v(3, "46 %") },
+      ], h: lerp(0.31, 0.36) },
+      { dial: { percent: ratio(0, 21) / 2, value: v(0, "42"), caption: "AQI / 200", min: "ČISTÝ", max: "ZÁTĚŽ" }, group: "ratio", h: lerp(0.38, 0.43) },
+      { band: { label: "LABORATOŘ VZDUCHU", value: "ŽIVÉ MĚŘENÍ", color: "black" }, bleed: true, h: lerp(0.10, 0.08) },
       { flex: true },
       { footer: [{ label: "VĚTRÁNÍ", value: "Není třeba" }], h: lerp(0.13, 0.07) },
     ];

@@ -1,5 +1,5 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.327";
-import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=catalog-no-color-tests-1";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.342";
+import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=compact-landscape-content-6";
 
 // The standard Czech civil name-day calendar, indexed [month][day - 1]
 // (getMonth() is already 0-based). Days with no name day (state/religious
@@ -1067,7 +1067,7 @@ export const devicesMixin = {
 
   _templateLiveDataChanged(previousHass, nextHass) {
     if (!previousHass?.states || !nextHass?.states || this._activeTab !== "display-settings") return false;
-    const watched = new Set(Object.values(this._displayTemplateBindings || {}).filter((value) => typeof value === "string" && !value.startsWith("internal:")));
+    const watched = new Set(Object.values(this._displayTemplateBindings || {}).filter((value) => typeof value === "string" && !value.startsWith("internal:") && !value.startsWith("literal:")));
     Object.keys(nextHass.states)
       .filter((entityId) => /^(sensor|binary_sensor)\.(?:current_)?(?:buy|spot)_.*electricity|^sensor\.(?:buy|spot)_(?:cheapest|most_expensive)_electricity/.test(entityId))
       .forEach((entityId) => watched.add(entityId));
@@ -2363,7 +2363,11 @@ export const devicesMixin = {
     // the Automations tab now (see panel-automations.mixin.js).
     const variableList = `<div class="template-variables-header">
       <h4><ha-icon icon="mdi:${isCustomImageTemplate ? "image-edit-outline" : "tune-vertical"}"></ha-icon> ${isCustomImageTemplate ? "Import obrázku" : "Napojení proměnných"}</h4>
-      <p class="template-settings-intro">${isCustomImageTemplate ? "Vyberte barevnou fotografii; převod do stínované palety proběhne přímo v prohlížeči a uloží se k tomuto displeji." : "U každé položky vyberte entitu v Home Assistantu. Systémové údaje (čas, datum) se doplňují automaticky."}</p>
+      <p class="template-settings-intro">${isCustomImageTemplate
+        ? "Vyberte barevnou fotografii; převod do stínované palety proběhne přímo v prohlížeči a uloží se k tomuto displeji."
+        : activeTemplate?.manualValues
+          ? "U každé položky napište přímo hodnotu, nebo nechte ruční pole prázdné a vyberte entitu Home Assistantu."
+          : "U každé položky vyberte entitu v Home Assistantu. Systémové údaje (čas, datum) se doplňují automaticky."}</p>
     </div>
     ${mapWidget}
     ${customImageWidget}
@@ -2863,7 +2867,7 @@ export const devicesMixin = {
           if (!variable) return null;
           const meta = this._templateVariableMeta(variable, variableIndex);
           const entityId = String(this._templateBinding(template, meta) || "").trim();
-          if (!entityId.includes(".") || entityId.startsWith("internal:")) return null;
+          if (!entityId.includes(".") || entityId.startsWith("internal:") || entityId.startsWith("literal:")) return null;
           const source = sources[index] || {};
           return {
             entity_id: entityId,
@@ -2891,7 +2895,7 @@ export const devicesMixin = {
       if (!variable) return null;
       const meta = this._templateVariableMeta(variable, index);
       const entityId = String(this._templateBinding(template, meta) || "").trim();
-      if (!entityId.includes(".") || entityId.startsWith("internal:")) return null;
+      if (!entityId.includes(".") || entityId.startsWith("internal:") || entityId.startsWith("literal:")) return null;
       const chartType = row.bars ? "bar" : "line";
       const caption = row.spark?.caption != null ? String(row.spark.caption) : "";
       // _blockBars reads row.bars.labels/highlight to draw the tick labels and
@@ -3128,7 +3132,7 @@ export const devicesMixin = {
         const meta = { ...this._templateVariableMeta(template.variables[index], index), templateId: template.id };
         const rawBinding = String(this._templateBinding(template, meta) || "").trim();
         const entityId = rawBinding || (meta.automatic ? `internal:${meta.key}` : "");
-        if (!entityId || (!entityId.includes(".") && !entityId.startsWith("internal:"))) continue;
+        if (!entityId || entityId.startsWith("literal:") || (!entityId.includes(".") && !entityId.startsWith("internal:"))) continue;
         const bindingKey = `${template.id}:${meta.key}`;
         const marker = `QZ${index}X`;
         this._templateAutomationBindingOverrides[bindingKey] = marker;
@@ -5247,7 +5251,7 @@ export const devicesMixin = {
       const meta = this._templateVariableMeta(variables[index], index);
       if (!kinds.includes(this._templateSlotKind(meta.label, meta.icon))) continue;
       const binding = this._templateBinding(template, meta);
-      if (binding && !binding.startsWith("internal:")) return binding;
+      if (binding && !binding.startsWith("internal:") && !binding.startsWith("literal:")) return binding;
     }
     return "";
   },
@@ -5394,6 +5398,7 @@ export const devicesMixin = {
     const meta = this._templateVariableMeta(variable, variableIndex);
     const binding = this._templateBinding(template, meta);
     if (!binding) return fallback;
+    if (binding.startsWith("literal:")) return binding.slice("literal:".length);
     if (!binding.includes(".") && !binding.startsWith("internal:")) {
       return binding;
     }
@@ -5817,6 +5822,10 @@ export const devicesMixin = {
       const index = Number(String(meta.key || "").split("-", 1)[0]);
       return this._czSpotTemplateBindings()[index] || "";
     }
+    // Wi-Fi credentials and price-tag fields are authored values first. Do
+    // not guess the same generic sensor for title, price and code; the user can
+    // still explicitly choose an entity in the selector next to the text box.
+    if (template?.manualValues) return "";
     return meta.automatic ? `internal:${meta.key}` : this._suggestTemplateEntity(meta);
   },
 
@@ -5824,6 +5833,10 @@ export const devicesMixin = {
     const meta = this._templateVariableMeta(variable, index);
     const binding = this._templateBinding(template, meta);
     const sample = this._templateSampleValue(meta.label);
+    const manualValue = binding?.startsWith("literal:")
+      ? binding.slice("literal:".length)
+      : (template?.manualValues && binding && !binding.includes(".") && !binding.startsWith("internal:") ? binding : "");
+    const entityBinding = binding && !binding.startsWith("literal:") && binding.includes(".") ? binding : "";
     return `<section class="template-variable-setting ${meta.automatic ? "is-automatic" : ""}">
       <div class="template-variable-preview ${meta.automatic ? "is-automatic" : ""}" aria-label="Náhled proměnné ${this._escape(meta.label)}">
         <ha-icon icon="mdi:${meta.icon}"></ha-icon><strong>${this._escape(sample)}</strong><small>${this._escape(meta.label)}</small>
@@ -5832,8 +5845,9 @@ export const devicesMixin = {
         <div class="template-variable-setting-head"><div><strong>${this._escape(meta.label)}</strong><small>${this._escape(meta.description)}</small></div></div>
         ${meta.automatic
           ? `<div class="template-internal-value"><ha-icon icon="mdi:home-assistant"></ha-icon><span><strong>Automaticky z Home Assistantu</strong><small>Interní systémová proměnná</small></span><ha-icon icon="mdi:check-circle"></ha-icon></div>`
-          : `<ha-selector data-template-entity-picker="${this._escape(`${template.id}:${meta.key}`)}" data-template-default-entity="${this._escape(binding)}"></ha-selector>
-             <small class="template-picker-help">Vyberte senzor, pomocníka nebo jinou entitu odpovídající tomuto údaji.</small>`}
+          : `${template?.manualValues ? `<label class="template-literal-setting"><span>Ruční hodnota</span><input type="text" data-template-literal-value="${this._escape(`${template.id}:${meta.key}`)}" value="${this._escape(manualValue)}" placeholder="${this._escape(sample)}"></label><small class="template-picker-help">Vyplněná ruční hodnota má přednost. Pole můžete nechat prázdné a níže vybrat entitu.</small>` : ""}
+             <ha-selector data-template-entity-picker="${this._escape(`${template.id}:${meta.key}`)}" data-template-default-entity="${this._escape(entityBinding)}"></ha-selector>
+             <small class="template-picker-help">${template?.manualValues ? "Nebo vyberte proměnnou z entity či pomocníka Home Assistantu." : "Vyberte senzor, pomocníka nebo jinou entitu odpovídající tomuto údaji."}</small>`}
       </div>
     </section>`;
   },

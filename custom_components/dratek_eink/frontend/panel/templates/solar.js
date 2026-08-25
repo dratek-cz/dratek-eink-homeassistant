@@ -18,7 +18,7 @@ export const template = {
   // why this can't be recovered from the row itself).
   automation: { ratio: [{ variableIndex: 0 }] },
   setup: {
-    summary: "Okamžitý výkon fotovoltaiky mezikružím, výroba za den/měsíc/celkem a odhad úspory CO₂ dole.",
+    summary: "Solární energetický tok s živým výkonovým kruhem a dlaždicemi výroby za den, měsíc a celkem.",
     integrations: [
       { name: "Integrace vašeho střídače", domain: "sensor", core: true, why: "Fronius, GoodWe, SolarEdge, SolaX, Huawei Solar a další jsou součástí Home Assistantu a po přidání dodají senzory výkonu i výroby přímo." },
       { name: "Envertech / SMA / jiný výrobce", domain: "sensor", why: "Řada dalších výrobců má vlastní nebo HACS integraci - hledejte podle značky střídače." },
@@ -35,20 +35,25 @@ export const template = {
     const area = width && height ? width * height : 296 * 128;
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
+    if (height <= 160 && width >= height) return [
+      { duo: {
+        ratio: 0.48,
+        left: { ring: { percent: ratio(0, 47), value: v(0, "2,35 kW"), caption: "VÝKON", color: "red" }, group: "ratio" },
+        right: { list: [
+          { label: "DNES", value: v(1, "8,2 kWh"), color: "red" },
+          { label: "MĚSÍC", value: v(2, "152 kWh") },
+          { label: "CELKEM", value: v(3, "3,45 MWh") },
+        ] },
+      }, h: 0.88 },
+      { footer: [{ label: "ÚSPORA CO₂", value: v(4, "125 kg") }], h: 0.12 },
+    ];
     return [
-      // A small icon leads so the shared one-accent-per-tile auto-colour
-      // (_fourColorTemplateRows) paints it yellow instead of the title text
-      // below - yellow letterforms are close to unreadable on this hardware,
-      // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
-      { icon: "solar-power", h: lerp(0.09, 0.065) },
-      // No title text: "Fotovoltaika" only restated the icon above the
-      // power ring that is the whole point of glancing at this tile.
-      { ring: { percent: ratio(0, 47), value: v(0, "2,35"), caption: "kW" }, group: "ratio", h: lerp(0.47, 0.52) },
-      { list: [
-        { icon: "weather-sunny", label: "Dnes", value: v(1, "8,2 kWh") },
+      { ring: { percent: ratio(0, 47), value: v(0, "2,35 kW"), caption: "VÝKON NYNÍ" }, group: "ratio", h: lerp(0.43, 0.49) },
+      { grid: [
+        { icon: "weather-sunny", label: "Dnes", value: v(1, "8,2 kWh"), color: "red" },
         { icon: "calendar-month", label: "Měsíc", value: v(2, "152 kWh") },
         { icon: "counter", label: "Celkem", value: v(3, "3,45 MWh") },
-      ], h: lerp(0.37, 0.4) },
+      ], columns: 3, h: lerp(0.40, 0.46) },
       { flex: true },
       { footer: [{ label: "ÚSPORA CO₂", value: v(4, "125 kg") }], h: lerp(0.13, 0.07) },
     ];

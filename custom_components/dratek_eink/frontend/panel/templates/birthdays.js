@@ -19,7 +19,7 @@ export const template = {
   },
   prepared: true,
   setup: {
-    summary: "Kdo dnes slaví velkým jménem nahoře, kdo je na řadě příště jako datum dole.",
+    summary: "Narozeninová pozvánka s oslavencem, věkem a výraznou kartou dalšího jubilea.",
     integrations: [
       { name: "Místní kalendář", domain: "calendar", core: true, why: "Založte kalendář Narozeniny s celodenními opakovanými událostmi - jedna událost na osobu, název události je jméno." },
     ],
@@ -35,11 +35,24 @@ export const template = {
     const area = width && height ? width * height : 296 * 128;
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
+    if (height <= 160 && width >= height) return [
+      { duo: {
+        ratio: 0.55,
+        left: { stat: { value: v(0, "Lucie"), caption: "DNES SLAVÍ", color: "red" } },
+        right: { list: [
+          { label: "VĚK", value: v(1, "32 let"), color: "red" },
+          { label: "DALŠÍ", value: v(2, "Tomáš") },
+        ] },
+      }, h: 0.88 },
+      { footer: [{ label: "PŘIPOMÍNKA", value: v(3, "Popřát ráno") }], h: 0.12 },
+    ];
     return [
-      { icon: "cake-variant", h: lerp(0.15, 0.12) },
-      { stat: { value: v(0, "Lucie"), caption: v(1, "32 let"), color: "red" }, h: lerp(0.28, 0.32) },
-      { rule: true, h: 0.02 },
-      { datebox: { day: "27", month: "KVĚ", lines: [v(2, "Tomáš"), "za 4 dny"] }, h: lerp(0.4, 0.44) },
+      { band: { label: "DNES SLAVÍ", value: v(0, "LUCIE"), color: "red" }, bleed: true, h: lerp(0.22, 0.17) },
+      { split: [
+        { icon: "cake-variant", value: v(1, "32 let"), label: "JUBILEUM", color: "red" },
+        { icon: "gift-outline", value: v(2, "Tomáš"), label: "DALŠÍ OSLAVENEC" },
+      ], h: lerp(0.42, 0.49) },
+      { datebox: { day: "27", month: "KVĚ", lines: ["DALŠÍ TERMÍN", "za 4 dny"] }, h: lerp(0.22, 0.27) },
       { flex: true },
       { footer: [{ label: "PŘIPOMÍNKA", value: v(3, "Popřát ráno") }], h: lerp(0.14, 0.07) },
     ];

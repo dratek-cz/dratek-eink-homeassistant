@@ -1061,13 +1061,25 @@ export const inspectorMixin = {
       const bindingKey = picker.dataset.templateEntityPicker;
       picker.hass = this._hass;
       picker.selector = this._variableEntitySelector();
-      picker.value = this._displayTemplateBindings?.[bindingKey]
-        || picker.dataset.templateDefaultEntity
-        || "";
+      const storedBinding = this._displayTemplateBindings?.[bindingKey] || picker.dataset.templateDefaultEntity || "";
+      picker.value = String(storedBinding).startsWith("literal:") ? "" : storedBinding;
       picker.required = false;
       picker.addEventListener("value-changed", (event) => {
         this._displayTemplateBindings ||= {};
         this._displayTemplateBindings[bindingKey] = String(event.detail?.value || "");
+        this._render();
+        this._paint();
+      });
+    });
+    this.shadowRoot.querySelectorAll("[data-template-literal-value]").forEach((input) => {
+      const bindingKey = input.dataset.templateLiteralValue;
+      input.addEventListener("input", () => {
+        this._displayTemplateBindings ||= {};
+        const value = String(input.value || "");
+        this._displayTemplateBindings[bindingKey] = value ? `literal:${value}` : "";
+        this._paint();
+      });
+      input.addEventListener("change", () => {
         this._render();
         this._paint();
       });

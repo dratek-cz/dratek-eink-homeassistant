@@ -30,26 +30,28 @@ export const template = {
     const area = width && height ? width * height : 296 * 128;
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
-    return [
-      // A small icon leads so the shared one-accent-per-tile auto-colour
-      // (_fourColorTemplateRows) paints it yellow instead of the stop name
-      // below - yellow letterforms are close to unreadable on this hardware,
-      // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
-      { icon: "map-marker-outline", h: lerp(0.11, 0.08) },
-      { text: v(0, "Hlavní nádraží"), h: lerp(0.075, 0.05), size: 0.052, bold: true },
-      { rule: true, h: 0.02 },
-      // 0.55 left a 20%-of-panel gap before the footer - board rows scale with
-      // their own share of box height, so growing this fills that space with
-      // bigger, easier-to-read departure rows instead of leaving it blank. The
-      // lerp grows that further still on a genuinely large panel.
+    if (height <= 160 && width >= height) return [
+      { band: { label: "ZASTÁVKA", value: v(0, "Hlavní nádraží"), color: "black" }, bleed: true, h: 0.22 },
       { board: [
-        { badge: v(1, "9"), label: "Náměstí", value: v(2, "3 min"), color: "red" },
+        { badge: v(1, "9"), label: "Centrum", value: v(2, "3 min"), color: "red" },
+        { badge: "4", label: "Univerzita", value: "8 min" },
+        { badge: "12", label: "Nemocnice", value: "14 min" },
+      ], h: 0.66 },
+      { footer: [{ label: "PĚŠKY", value: v(3, "240 m") }], h: 0.12 },
+    ];
+    return [
+      { band: { label: "ODJEZDY", value: v(0, "Hlavní nádraží"), color: "black" }, bleed: true, h: lerp(0.19, 0.14) },
+      { split: [
+        { icon: "tram", value: v(1, "9"), label: "nejbližší linka", color: "red" },
+        { icon: "clock-fast", value: v(2, "3 min"), label: "odjezd" },
+      ], h: lerp(0.34, 0.39) },
+      { board: [
         { badge: "4", label: "Univerzita", value: "8 min" },
         { badge: "12", label: "Nemocnice", value: "14 min" },
         { badge: "N2", label: "Depo", value: "21 min" },
-      ], h: lerp(0.72, 0.78) },
+      ], h: lerp(0.31, 0.38) },
       { flex: true },
-      { footer: [{ label: "ZASTÁVKA", value: v(3, "240 m") }], h: lerp(0.14, 0.08) },
+      { footer: [{ label: "PĚŠKY NA ZASTÁVKU", value: v(3, "240 m") }], h: lerp(0.14, 0.08) },
     ];
   },
 };

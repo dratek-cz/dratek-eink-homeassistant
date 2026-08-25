@@ -2,6 +2,20 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.342] - 2026-08-25
+
+### Vylepšeno
+- **Samostatné rozložení pro malé displeje na šířku**: osmnáct šablon dostalo kompaktní návrh s jasnou hierarchií, čitelnější typografií a stálou červenou patičkou; počasí, meteoradar, spotové ceny, kalendář a vlastní obrázek zůstávají beze změny.
+- **Fotovoltaika, seznamy a odjezdy využívají celou plochu**: velký ukazatel výkonu je vedle tří hodnot, nákup má šest položek ve dvou řádcích a odjezdy zobrazují tři spoje.
+- **QR kód je hlavní prvek Wi-Fi šablony** a cenovka zvýrazňuje jednu velkou cenu s odděleným názvem a kódem/EAN.
+
+### Opraveno
+- **Slévání textu na nejmenších panelech**: doprovodné údaje používají lehčí řez písma, větší minimální velikost a méně přeplněné bloky.
+- **Duplicitní automatické hodnoty na cenovce**: název, cena, původní cena a kód se už nenapojí samy na tentýž obecný senzor.
+
+### Přidáno
+- **Přímé hodnoty nebo entity**: SSID, heslo a všechny údaje cenovky lze napsat přímo do nastavení; kdo chce automatizaci, může místo toho zvolit entitu nebo pomocníka Home Assistantu.
+
 ## [0.1.341] - 2026-08-25
 
 ### Opraveno

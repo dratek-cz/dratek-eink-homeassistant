@@ -30,17 +30,20 @@ export const template = {
     const area = width && height ? width * height : 296 * 128;
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
-    return [
-      { icon: "thermostat", h: lerp(0.15, 0.12) },
-      // No separate unit field: a bound climate entity's value already
-      // comes back with "°C" appended (automation.py's climate temperature
-      // branch), so a second literal unit here used to draw twice after a
-      // live update - see weather.js's temperature stat for the same fix.
-      { stat: { value: v(0, "21,5°C"), caption: "aktuálně" }, h: lerp(0.3, 0.36) },
+    if (height <= 160 && width >= height) return [
+      { dial: { percent: 54, value: v(0, "21,5 °C"), caption: "NYNÍ", min: "15°", max: "28°" }, h: 0.70 },
       { split: [
-        { value: v(1, "22 °C"), label: "Cíl" },
-        { value: v(2, "60 %"), label: "Výkon", color: "red" },
-      ], h: lerp(0.4, 0.42) },
+        { icon: "thermostat", label: "CÍL", value: v(1, "22 °C"), color: "red" },
+        { icon: "fire", label: "VÝKON", value: v(2, "60 %") },
+      ], h: 0.18 },
+      { footer: [{ label: "DALŠÍ ZMĚNA", value: v(3, "22:00") }], h: 0.12 },
+    ];
+    return [
+      { dial: { percent: 54, value: v(0, "21,5 °C"), caption: "AKTUÁLNĚ", min: "15°", max: "28°" }, h: lerp(0.48, 0.55) },
+      { strip: [
+        { icon: "thermostat", label: "CÍL", value: v(1, "22 °C") },
+        { icon: "fire", label: "VÝKON", value: v(2, "60 %"), color: "red" },
+      ], h: lerp(0.34, 0.38) },
       { flex: true },
       { footer: [{ label: "DALŠÍ ZMĚNA", value: v(3, "22:00") }], h: lerp(0.14, 0.07) },
     ];

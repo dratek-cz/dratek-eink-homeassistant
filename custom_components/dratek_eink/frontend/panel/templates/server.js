@@ -20,7 +20,7 @@ export const template = {
   // recovered from the row itself).
   automation: { ratio: [{ variableIndex: 1 }, { variableIndex: 2 }, { variableIndex: 3 }, { variableIndex: 4 }] },
   setup: {
-    summary: "Dostupnost pruhem nahoře, čtyři vodorovné ukazatele (CPU/RAM/Disk/Teplota) uprostřed, doba provozu dole.",
+    summary: "Technická konzole se stavovým pruhem, čtyřmi živými ukazateli zátěže a dobou provozu.",
     integrations: [
       {
         name: "System Monitor",
@@ -41,25 +41,30 @@ export const template = {
     const area = width && height ? width * height : 296 * 128;
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
-    return [
-      // A small icon leads so the shared one-accent-per-tile auto-colour
-      // (_fourColorTemplateRows) paints it yellow instead of the title text
-      // below - yellow letterforms are close to unreadable on this hardware,
-      // a filled icon glyph reads fine (see cz_spot_prices.js for the same fix).
-      { icon: "server-network", h: lerp(0.09, 0.065) },
-      // No title text: "Home server" only restated what the status band
-      // right below it already announces. Both the band and the four
-      // meters grow into the space that used to go to a caption nobody
-      // needed to read twice.
-      { band: { label: "STAV", value: v(0, "ONLINE") }, bleed: true, h: 0.17 },
+    if (height <= 160 && width >= height) return [
+      { band: { label: "SERVER", value: v(0, "ONLINE"), color: "black" }, bleed: true, h: 0.14 },
       { meters: [
         { label: "CPU", value: v(1, "24 %"), percent: ratio(1, 24) },
         { label: "RAM", value: v(2, "61 %"), percent: ratio(2, 61) },
-        { label: "Disk", value: v(3, "73 %"), percent: ratio(3, 73), color: "red" },
-        { label: "Teplota", value: v(4, "48 °C"), percent: ratio(4, 48) },
-      ], group: "ratio", h: lerp(0.68, 0.75) },
+        { label: "DISK", value: v(3, "73 %"), percent: ratio(3, 73), color: "red" },
+        { label: "TEPLOTA", value: v(4, "48 °C"), percent: ratio(4, 48) },
+      ], group: "ratio", h: 0.74 },
+      { footer: [{ label: "PROVOZ", value: v(5, "18 dní") }], h: 0.12 },
+    ];
+    return [
+      { band: { label: "HOME SERVER", value: v(0, "ONLINE"), color: "black" }, bleed: true, h: lerp(0.18, 0.13) },
+      { meters: [
+        { label: "CPU", value: v(1, "24 %"), percent: ratio(1, 24) },
+        { label: "RAM / paměť", value: v(2, "61 %"), percent: ratio(2, 61) },
+        { label: "DISK / úložiště", value: v(3, "73 %"), percent: ratio(3, 73), color: "red" },
+        { label: "TEMP / teplota", value: v(4, "48 °C"), percent: ratio(4, 48) },
+      ], group: "ratio", h: lerp(0.58, 0.68) },
+      { strip: [
+        { icon: "server-network", label: "UPTIME", value: v(5, "18 dní"), color: "red" },
+        { icon: "lan-connect", label: "SÍŤ", value: "AKTIVNÍ" },
+      ], h: lerp(0.16, 0.19) },
       { flex: true },
-      { footer: [{ label: "PROVOZ", value: v(5, "18 dní") }], h: lerp(0.13, 0.07) },
+      { footer: [{ label: "MONITORING", value: "systémová konzole" }], h: lerp(0.13, 0.07) },
     ];
   },
 };

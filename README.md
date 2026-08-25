@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.342
+
+- **Malé displeje na šířku mají vlastní čitelné rozložení** s lehčím písmem, většími hlavními údaji a červenou patičkou.
+- **Fotovoltaika má velký ukazatel a tři hodnoty vedle něj**, nákupní seznam šest položek ve dvou řádcích a odjezdy tři viditelné spoje.
+- **Wi-Fi upřednostňuje velký QR kód** a SSID s heslem lze napsat přímo nebo převzít z entit Home Assistantu.
+- **Cenovka už neopakuje jednu cenu třikrát** – název, cena, původní cena a EAN mají vlastní ruční hodnotu nebo vlastní zvolenou entitu.
+
 ## Novinky ve verzi 0.1.341
 
 - **Karty displejů v Home Assistantu už nejsou prázdné** – známé displeje se obnoví z registru ještě před načtením platforem a vždy dostanou entity baterie, napětí, signálu, posledního kontaktu, dostupnosti, trasy připojení a posledního náhledu.

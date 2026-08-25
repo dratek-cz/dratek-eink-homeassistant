@@ -36,25 +36,25 @@ export const template = {
     const area = width && height ? width * height : 296 * 128;
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
-    return [
-      // No title text: "Dům" only ever repeated what the icon and the four
-      // readings below already say, so it cost a whole row to say nothing -
-      // and made this the fourth template in the catalog with the same
-      // icon-then-title opening. Dropping it also means the readings grid
-      // isn't fighting a caption for the panel's own identity anymore, so it
-      // gets to be the thing someone actually reads.
-      // No explicit colour: this is the template's identity row, and
-      // _fourColorTemplateRows always repaints the first icon/text row
-      // yellow regardless of what colour it starts with.
-      { icon: "home", h: lerp(0.13, 0.1) },
+    if (height <= 160 && width >= height) return [
       { grid: [
-        { icon: "thermometer", label: "Teplota", value: v(0, "21,5 °C") },
+        { icon: "home", label: "Teplota", value: v(0, "21,5 °C"), color: "red" },
         { icon: "water-percent", label: "Vlhkost", value: v(1, "45 %") },
-        { icon: "lightbulb-on", label: "Světla", value: v(2, "3 ON") },
-        { icon: "lock", label: "Zámky", value: v(3, "Zamčeno") },
-      ], columns: 2, h: lerp(0.73, 0.79) },
+        { icon: "lightbulb-on-outline", label: "Světla", value: v(2, "Vypnuto") },
+        { icon: "lock-outline", label: "Zámky", value: v(3, "Zamčeno") },
+      ], columns: 2, h: 0.88 },
+      { footer: [{ label: "DŮM", value: "rychlý přehled" }], h: 0.12 },
+    ];
+    return [
+      { band: { label: "DŮM", value: "RYCHLÝ PŘEHLED", color: "black" }, bleed: true, h: lerp(0.16, 0.11) },
+      { grid: [
+        { icon: "home", label: "Teplota uvnitř", value: v(0, "21,5 °C"), color: "red" },
+        { icon: "water-percent", label: "Vlhkost", value: v(1, "45 %") },
+        { icon: "lightbulb-on-outline", label: "Světla", value: v(2, "Vypnuto") },
+        { icon: "lock-outline", label: "Zámky", value: v(3, "Zamčeno") },
+      ], columns: 2, h: lerp(0.70, 0.80) },
       { flex: true },
-      { footer: [{ label: "STAV", value: "Vše v pořádku" }], h: lerp(0.14, 0.08) },
+      { footer: [{ label: "DOMÁCNOST", value: "vše na jednom místě" }], h: lerp(0.14, 0.08) },
     ];
   },
 };

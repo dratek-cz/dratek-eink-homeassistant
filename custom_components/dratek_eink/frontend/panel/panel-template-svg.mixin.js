@@ -16,7 +16,7 @@
 // are identical by construction.
 
 import qrcode from "../qrcode-generator.js";
-import { DISPLAY_TEMPLATES } from "./templates/index.js?v=radar-layout-1";
+import { DISPLAY_TEMPLATES } from "./templates/index.js?v=compact-landscape-content-6";
 
 const RED = "#e31b1b";
 const BLACK = "#000000";
@@ -943,13 +943,16 @@ export const templateSvgMixin = {
   // Rows are re-grouped rather than re-authored, so a template says the same thing
   // on a 296x128 tag as it does on a 240x416 one.
   _layoutTemplateSvgColumns(rows, width, height, collector) {
-    const pad = Math.max(3, Math.round(Math.min(width, height) * 0.045));
+    const compactLandscape = rows.some((row) => row?.compact);
+    const pad = compactLandscape ? 3 : Math.max(3, Math.round(Math.min(width, height) * 0.045));
     const footerRow = rows.find((row) => row.footer);
     // Horizontal rules separate stacked rows; side by side there is nothing left
     // for them to separate, and the column divider below does that job instead.
     const flowRows = rows.filter((row) => !row.footer && !row.flex && !row.rule && !row.gap);
     const footerHeight = footerRow
-      ? Math.max(14, Math.round(height * Math.min(0.26, (footerRow.h || 0.16) * 1.3)))
+      ? (compactLandscape
+        ? Math.max(14, Math.round(height * 0.125))
+        : Math.max(14, Math.round(height * Math.min(0.26, (footerRow.h || 0.16) * 1.3))))
       : 0;
     const columnHeight = Math.max(1, height - footerHeight - pad * 2);
 
@@ -1032,8 +1035,18 @@ export const templateSvgMixin = {
       if (index > 0) {
         parts.push(`<rect x="${(cellWidth * index).toFixed(2)}" y="${(top + footerHeight * 0.15).toFixed(2)}" width="1" height="${(footerHeight * 0.7).toFixed(2)}" fill="#ffffff" opacity="0.5"></rect>`);
       }
-      const labelSize = Math.max(8.5, footerHeight * 0.32);
-      const valueSize = Math.max(10, footerHeight * 0.4);
+      const labelSize = Math.max(footerRow.compact ? 9.5 : 8.5, footerHeight * 0.32);
+      const valueSize = Math.max(footerRow.compact ? 11 : 10, footerHeight * 0.4);
+      // The 128 px landscape tags cannot afford a tall two-line footer. Keep
+      // the mandatory red status bar, but render its supporting information on
+      // one bold line so the graph/QR/dial above remains the visual priority.
+      if (footerRow.compact && !cell.icon) {
+        const compactText = [cell.label, cell.value].filter((part) => part != null && part !== "").join("  ·  ");
+        parts.push(this._svgText(compactText, cx, top + footerHeight * 0.5, Math.max(10, footerHeight * 0.48), {
+          color: "#ffffff", bold: false, minSize: 9, maxWidth: cellWidth * 0.92,
+        }));
+        return;
+      }
       if (cell.icon) {
         parts.push(this._svgText(cell.label, cx, top + footerHeight * 0.2, labelSize, { color: "#ffffff", bold: true, maxWidth: cellWidth * 0.9 }));
         parts.push(this._svgIcon(cell.icon, cx, top + footerHeight * 0.5, footerHeight * 0.3, "#ffffff"));
@@ -1072,6 +1085,7 @@ export const templateSvgMixin = {
     if (row.checklist) return this._blockChecklist(row, box);
     if (row.strip) return this._blockStrip(row, box);
     if (row.split) return this._blockSplit(row, box);
+    if (row.duo) return this._blockDuo(row, box);
     if (row.splitDates) return this._blockSplitDates(row, box);
     if (row.spark) return this._blockSpark(row, box);
     if (row.datebox) return this._blockDatebox(row, box);
@@ -1159,7 +1173,7 @@ export const templateSvgMixin = {
   _blockList(row, box) {
     const cells = row.list;
     const lineHeight = box.h / (cells.length || 1);
-    const fontSize = Math.max(8.5, Math.min(lineHeight * 0.7, box.w * 0.13));
+    const fontSize = Math.max(row.compact ? 10 : 8.5, Math.min(lineHeight * 0.7, box.w * 0.13));
     const right = box.x + box.w;
     const parts = [];
     cells.forEach((cell, index) => {
@@ -1171,10 +1185,10 @@ export const templateSvgMixin = {
         textX = box.x + iconSize + Math.max(2, iconSize * 0.25);
       }
       if (cell.value != null && cell.label != null) {
-        parts.push(this._svgText(cell.label, textX, lineY, fontSize, { anchor: "start", maxWidth: (right - textX) * 0.6 }));
-        parts.push(this._svgText(cell.value, right, lineY, fontSize, { anchor: "end", bold: true, color: this._templateInk(cell.color), maxWidth: (right - textX) * 0.44 }));
+        parts.push(this._svgText(cell.label, textX, lineY, fontSize, { anchor: "start", bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: (right - textX) * 0.6 }));
+        parts.push(this._svgText(cell.value, right, lineY, fontSize, { anchor: "end", bold: !row.compact, color: this._templateInk(cell.color), maxWidth: (right - textX) * 0.44 }));
       } else {
-        parts.push(this._svgText(cell.label ?? cell.value, textX, lineY, fontSize, { anchor: "start", bold: !!cell.bold, color: this._templateInk(cell.color), maxWidth: right - textX }));
+        parts.push(this._svgText(cell.label ?? cell.value, textX, lineY, fontSize, { anchor: "start", bold: !!cell.bold, minSize: row.compact ? 8.5 : undefined, color: this._templateInk(cell.color), maxWidth: right - textX }));
       }
     });
     return parts.join("");
@@ -1210,8 +1224,8 @@ export const templateSvgMixin = {
       }));
     }
     if (stat.caption != null) {
-      parts.push(this._svgText(stat.caption, box.x + box.w / 2, box.y + valueHeight + captionHeight * 0.5, Math.max(8.5, captionHeight * 0.7), {
-        color: this._templateInk(stat.captionColor), maxWidth: box.w,
+      parts.push(this._svgText(stat.caption, box.x + box.w / 2, box.y + valueHeight + captionHeight * 0.5, Math.max(row.compact ? 10 : 8.5, captionHeight * 0.7), {
+        bold: false, minSize: row.compact ? 8.5 : undefined, color: this._templateInk(stat.captionColor), maxWidth: box.w,
       }));
     }
     return parts.join("");
@@ -1226,6 +1240,16 @@ export const templateSvgMixin = {
     const fill = band.color === "black" ? BLACK : RED;
     const parts = [`<rect x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}" fill="${fill}"></rect>`];
     const cx = x + w / 2;
+    // On a 128 px landscape tag these bands are often only 16-26 native
+    // pixels high. Two separate baselines at 30/70 % overlap after e-ink
+    // rasterisation (SERVER / ONLINE was the most visible example), so the
+    // compact design uses one deliberately heavy line instead.
+    if (row.compact && band.label != null && band.value != null) {
+      parts.push(this._svgText(`${band.label}  ·  ${band.value}`, cx, box.y + box.h * 0.5, Math.max(11, box.h * 0.52), {
+        color: "#ffffff", bold: false, minSize: 9.5, maxWidth: w * 0.92,
+      }));
+      return parts.join("");
+    }
     if (band.label != null && band.value != null) {
       parts.push(this._svgText(band.label, cx, box.y + box.h * 0.3, Math.max(8.5, box.h * 0.32), { color: "#ffffff", bold: true, maxWidth: w * 0.92 }));
       parts.push(this._svgText(band.value, cx, box.y + box.h * 0.7, Math.max(10.5, box.h * 0.45), { color: "#ffffff", bold: true, maxWidth: w * 0.92 }));
@@ -1277,12 +1301,12 @@ export const templateSvgMixin = {
     const parts = [];
     meters.forEach((meter, index) => {
       const top = box.y + lineHeight * index;
-      const labelSize = Math.max(7, Math.min(lineHeight * 0.42, box.w * 0.1));
-      const barHeight = Math.max(2, lineHeight * 0.28);
+      const labelSize = Math.max(row.compact ? 9.5 : 7, Math.min(lineHeight * 0.42, box.w * 0.1));
+      const barHeight = Math.max(row.compact ? 3 : 2, lineHeight * 0.28);
       const barY = top + lineHeight * 0.55;
       const percent = Math.max(0, Math.min(1, Number(meter.percent) || 0));
-      parts.push(this._svgText(meter.label, box.x, top + lineHeight * 0.26, labelSize, { anchor: "start", maxWidth: box.w * 0.58 }));
-      parts.push(this._svgText(meter.value, box.x + box.w, top + lineHeight * 0.26, labelSize, { anchor: "end", bold: true, color: this._templateInk(meter.color), maxWidth: box.w * 0.4 }));
+      parts.push(this._svgText(meter.label, box.x, top + lineHeight * 0.26, labelSize, { anchor: "start", bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: box.w * 0.58 }));
+      parts.push(this._svgText(meter.value, box.x + box.w, top + lineHeight * 0.26, labelSize, { anchor: "end", bold: !row.compact, color: this._templateInk(meter.color), maxWidth: box.w * 0.4 }));
       parts.push(`<rect x="${box.x.toFixed(2)}" y="${barY.toFixed(2)}" width="${box.w.toFixed(2)}" height="${barHeight.toFixed(2)}" fill="none" stroke="${BLACK}" stroke-width="1"></rect>`);
       if (percent > 0) {
         parts.push(`<rect x="${box.x.toFixed(2)}" y="${barY.toFixed(2)}" width="${(box.w * percent).toFixed(2)}" height="${barHeight.toFixed(2)}" fill="${this._templateInk(meter.color)}"></rect>`);
@@ -1303,8 +1327,8 @@ export const templateSvgMixin = {
       `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${inner.toFixed(2)}" fill="none" stroke="${BLACK}" stroke-width="1"></circle>`,
     ];
     if (percent > 0) parts.push(`<path d="${this._svgArcPath(cx, cy, outer, inner, -90, -90 + percent * 360)}" fill="${this._templateInk(ring.color)}"></path>`);
-    if (ring.value != null) parts.push(this._svgText(ring.value, cx, cy - (ring.caption != null ? inner * 0.2 : 0), inner * 0.62, { bold: true, maxWidth: inner * 1.7 }));
-    if (ring.caption != null) parts.push(this._svgText(ring.caption, cx, cy + inner * 0.46, inner * 0.34, { maxWidth: inner * 1.7 }));
+    if (ring.value != null) parts.push(this._svgText(ring.value, cx, cy - (ring.caption != null ? inner * 0.2 : 0), Math.max(row.compact ? 13 : 0, inner * 0.62), { bold: true, minSize: row.compact ? 10 : undefined, maxWidth: inner * 1.7 }));
+    if (ring.caption != null) parts.push(this._svgText(ring.caption, cx, cy + inner * 0.46, Math.max(row.compact ? 9.5 : 0, inner * 0.34), { bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: inner * 1.7 }));
     return parts.join("");
   },
 
@@ -1319,8 +1343,8 @@ export const templateSvgMixin = {
     const percent = Math.max(0, Math.min(1, Number(dial.percent) || 0));
     const parts = [`<path d="${this._svgArcPath(cx, cy, outer, inner, 180, 360)}" fill="none" stroke="${BLACK}" stroke-width="1"></path>`];
     if (percent > 0) parts.push(`<path d="${this._svgArcPath(cx, cy, outer, inner, 180, 180 + percent * 180)}" fill="${this._templateInk(dial.color)}"></path>`);
-    if (dial.value != null) parts.push(this._svgText(dial.value, cx, cy - outer * 0.28, outer * 0.42, { bold: true, maxWidth: inner * 1.8 }));
-    if (dial.caption != null) parts.push(this._svgText(dial.caption, cx, cy + outer * 0.16, outer * 0.24, { maxWidth: inner * 1.9 }));
+    if (dial.value != null) parts.push(this._svgText(dial.value, cx, cy - outer * 0.28, Math.max(row.compact ? 13 : 0, outer * 0.42), { bold: true, minSize: row.compact ? 10 : undefined, maxWidth: inner * 1.8 }));
+    if (dial.caption != null) parts.push(this._svgText(dial.caption, cx, cy + outer * 0.16, Math.max(row.compact ? 9.5 : 0, outer * 0.24), { bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: inner * 1.9 }));
     if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, cy + outer * 0.22, outer * 0.2, { maxWidth: outer * 0.7 }));
     if (dial.max != null) parts.push(this._svgText(dial.max, cx + outer, cy + outer * 0.22, outer * 0.2, { maxWidth: outer * 0.7 }));
     return parts.join("");
@@ -1426,10 +1450,10 @@ export const templateSvgMixin = {
       const cx = box.x + cellWidth * (index % columns) + cellWidth / 2;
       const top = box.y + cellHeight * Math.floor(index / columns) + (cellHeight - contentHeight) / 2;
       if (cell.icon) parts.push(this._svgIcon(cell.icon, cx, top + contentHeight * 0.26, Math.min(contentHeight * 0.32, cellWidth * 0.32), this._templateInk(cell.color)));
-      parts.push(this._svgText(cell.value, cx, top + contentHeight * (cell.icon ? 0.6 : 0.42), Math.max(9.5, Math.min(contentHeight * (cell.icon ? 0.29 : 0.38), cellWidth * 0.36)), {
-        bold: true, color: this._templateInk(cell.color), maxWidth: cellWidth * 0.9,
+      parts.push(this._svgText(cell.value, cx, top + contentHeight * (cell.icon ? 0.6 : 0.42), Math.max(row.compact ? 11 : 9.5, Math.min(contentHeight * (cell.icon ? 0.29 : 0.38), cellWidth * 0.36)), {
+        bold: true, minSize: row.compact ? 9 : undefined, color: this._templateInk(cell.color), maxWidth: cellWidth * 0.9,
       }));
-      parts.push(this._svgText(cell.label, cx, top + contentHeight * (cell.icon ? 0.85 : 0.74), Math.max(8.5, Math.min(contentHeight * 0.22, cellWidth * 0.23)), { maxWidth: cellWidth * 0.9 }));
+      parts.push(this._svgText(cell.label, cx, top + contentHeight * (cell.icon ? 0.85 : 0.74), Math.max(row.compact ? 9.5 : 8.5, Math.min(contentHeight * 0.22, cellWidth * 0.23)), { bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: cellWidth * 0.9 }));
     });
     return parts.join("");
   },
@@ -1456,7 +1480,7 @@ export const templateSvgMixin = {
         // above - the same glyph-estimate margin problem, just reached from a
         // wildly oversized starting point instead of a merely tight one. Capping
         // the ask by the step's own width keeps the correction small.
-        parts.push(this._svgText(item.label, cx, box.y + box.h * 0.75, Math.max(8.5, Math.min(box.h * 0.28, step * 0.3)), { bold: !!item.done, color: this._templateInk(item.color), maxWidth: step * 0.94 }));
+        parts.push(this._svgText(item.label, cx, box.y + box.h * 0.75, Math.max(row.compact ? 9.5 : 8.5, Math.min(box.h * 0.28, step * 0.3)), { bold: !!item.done && !row.compact, minSize: row.compact ? 8.5 : undefined, color: this._templateInk(item.color), maxWidth: step * 0.94 }));
       });
       return parts.join("");
     }
@@ -1470,8 +1494,8 @@ export const templateSvgMixin = {
         ? `<circle cx="${railX.toFixed(2)}" cy="${cy.toFixed(2)}" r="${dot.toFixed(2)}" fill="${this._templateInk(item.color)}"></circle>`
         : `<circle cx="${railX.toFixed(2)}" cy="${cy.toFixed(2)}" r="${dot.toFixed(2)}" fill="#ffffff" stroke="${BLACK}" stroke-width="1"></circle>`);
       const textX = railX + dot * 1.8;
-      parts.push(this._svgText(item.label, textX, cy, Math.max(8.5, Math.min(lineHeight * 0.58, box.w * 0.12)), {
-        anchor: "start", bold: !!item.done, color: this._templateInk(item.color), maxWidth: box.x + box.w - textX,
+      parts.push(this._svgText(item.label, textX, cy, Math.max(row.compact ? 9.5 : 8.5, Math.min(lineHeight * 0.58, box.w * 0.12)), {
+        anchor: "start", bold: !!item.done && !row.compact, minSize: row.compact ? 8.5 : undefined, color: this._templateInk(item.color), maxWidth: box.x + box.w - textX,
       }));
     });
     return parts.join("");
@@ -1479,9 +1503,41 @@ export const templateSvgMixin = {
 
   _blockChecklist(row, box) {
     const items = row.checklist;
+    const columns = Math.max(1, Number(row.columns) || 1);
+    if (columns > 1) {
+      const lines = Math.max(1, Math.ceil(items.length / columns));
+      const cellWidth = box.w / columns;
+      const lineHeight = box.h / lines;
+      const mark = Math.min(lineHeight * 0.42, cellWidth * 0.12);
+      const parts = [];
+      items.forEach((item, index) => {
+        const column = index % columns;
+        const line = Math.floor(index / columns);
+        const left = box.x + column * cellWidth;
+        const cy = box.y + lineHeight * (line + 0.5);
+        if (column > 0) parts.push(this._svgHairline(left, box.y + box.h * 0.08, 1, box.h * 0.84));
+        parts.push(`<rect x="${(left + 3).toFixed(2)}" y="${(cy - mark / 2).toFixed(2)}" width="${mark.toFixed(2)}" height="${mark.toFixed(2)}"`
+          + ` fill="${item.done ? this._templateInk(item.color) : "#ffffff"}" stroke="${BLACK}" stroke-width="1"></rect>`);
+        if (item.done) {
+          parts.push(`<path d="M${(left + 3 + mark * 0.22).toFixed(2)} ${cy.toFixed(2)} L${(left + 3 + mark * 0.44).toFixed(2)} ${(cy + mark * 0.24).toFixed(2)}`
+            + ` L${(left + 3 + mark * 0.8).toFixed(2)} ${(cy - mark * 0.26).toFixed(2)}" fill="none" stroke="#ffffff" stroke-width="${Math.max(1, mark * 0.13).toFixed(2)}"></path>`);
+        }
+        const textX = left + mark + 7;
+        const right = left + cellWidth - 3;
+        const fontSize = Math.max(10, Math.min(lineHeight * 0.42, cellWidth * 0.14));
+        parts.push(this._svgText(item.label, textX, cy, fontSize, {
+          anchor: "start", bold: false, minSize: 9, color: this._templateInk(item.color), maxWidth: right - textX,
+        }));
+        if (item.done && row.strike) {
+          const width = Math.min(this._svgTextWidth(item.label, fontSize, false), right - textX);
+          parts.push(this._svgHairline(textX, cy, width, 1));
+        }
+      });
+      return parts.join("");
+    }
     const lineHeight = box.h / (items.length || 1);
     const mark = Math.min(lineHeight * 0.5, box.w * 0.11);
-    const fontSize = Math.max(8.5, Math.min(lineHeight * 0.6, box.w * 0.12));
+    const fontSize = Math.max(row.compact ? 10 : 8.5, Math.min(lineHeight * 0.6, box.w * 0.12));
     const parts = [];
     items.forEach((item, index) => {
       const cy = box.y + lineHeight * (index + 0.5);
@@ -1500,7 +1556,7 @@ export const templateSvgMixin = {
       }
       const textX = left + mark + Math.max(2, mark * 0.4);
       const right = box.x + box.w;
-      parts.push(this._svgText(item.label, textX, cy, fontSize, { anchor: "start", bold: !!item.bold, color: this._templateInk(item.color), maxWidth: right - textX }));
+      parts.push(this._svgText(item.label, textX, cy, fontSize, { anchor: "start", bold: !!item.bold, minSize: row.compact ? 8.5 : undefined, color: this._templateInk(item.color), maxWidth: right - textX }));
       // A struck-through line says "already handled" without spending a column on
       // a second state word next to every item.
       if (item.done && row.strike) {
@@ -1531,8 +1587,23 @@ export const templateSvgMixin = {
     const inline = iconed && !!row.valueIcon;
     const labelY = box.y + box.h * (inline ? 0.26 : iconed ? 0.16 : 0.3);
     const valueY = box.y + box.h * (inline ? 0.68 : iconed ? 0.85 : 0.72);
-    const valueFontSize = Math.max(10, Math.min(box.h * 0.32, cellWidth * 0.33));
+    let valueFontSize = Math.max(10, Math.min(box.h * 0.32, cellWidth * 0.33));
+    if (row.compact) valueFontSize = Math.max(11, valueFontSize);
     const parts = [];
+    // A short secondary strip cannot carry label + icon + value as three
+    // vertical rows. Collapse it to a single bold fact per cell before the
+    // glyphs touch; the primary graph/dial above keeps the visual hierarchy.
+    if (row.compact && box.h < 34) {
+      cells.forEach((cell, index) => {
+        const cx = box.x + cellWidth * (index + 0.5);
+        if (index > 0) parts.push(this._svgHairline(box.x + cellWidth * index, box.y + box.h * 0.12, 1, box.h * 0.76));
+        const fact = [cell.label, cell.value].filter((part) => part != null && part !== "").join(" ");
+        parts.push(this._svgText(fact, cx, box.y + box.h * 0.5, Math.max(10, box.h * 0.46), {
+          bold: false, minSize: 9, maxWidth: cellWidth * 0.9,
+        }));
+      });
+      return parts.join("");
+    }
     cells.forEach((cell, index) => {
       const cx = box.x + cellWidth * (index + 0.5);
       if (index > 0) parts.push(this._svgHairline(box.x + cellWidth * index, box.y + box.h * 0.12, 1, box.h * 0.76));
@@ -1544,7 +1615,7 @@ export const templateSvgMixin = {
       // enough that a small estimation error tipped it into ellipsis-clipping
       // instead of just shrinking a few px. Sizing a bit under the box's own
       // ceiling leaves that error margin instead of spending it.
-      parts.push(this._svgText(cell.label, cx, labelY, Math.max(8.5, Math.min(box.h * 0.25, cellWidth * 0.3)), { bold: true, maxWidth: cellWidth * 0.92 }));
+      parts.push(this._svgText(cell.label, cx, labelY, Math.max(row.compact ? 9.5 : 8.5, Math.min(box.h * 0.25, cellWidth * 0.3)), { bold: !row.compact, minSize: row.compact ? 8.5 : undefined, maxWidth: cellWidth * 0.92 }));
       if (cell.icon && inline) {
         // Roughly double the classic layout's icon again (bounded by
         // min(h*0.34, cw*0.5)) - it only has to share one line with the value
@@ -1620,6 +1691,23 @@ export const templateSvgMixin = {
       const stroke = row.color === "red" ? "none" : BLACK;
       parts.push(`<rect x="${box.x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${box.w.toFixed(2)}" height="${box.h.toFixed(2)}" rx="4" fill="${fill}" stroke="${stroke}" stroke-width="1.2"></rect>`);
     }
+    if (row.compact && box.h < 38) {
+      halves.forEach((half, index) => {
+        const cx = box.x + cellWidth * (index + 0.5);
+        if (index > 0) {
+          const divColor = (isBanner && row.color === "red") ? "#ffffff" : BLACK;
+          parts.push(this._svgHairline(box.x + cellWidth * index, box.y + box.h * 0.12, 1, box.h * 0.76, divColor));
+        }
+        const fact = [half.label, half.value].filter((part) => part != null && part !== "").join(" ");
+        parts.push(this._svgText(fact, cx, box.y + box.h * 0.5, Math.max(10.5, box.h * 0.45), {
+          bold: false,
+          minSize: 9,
+          color: (isBanner && row.color === "red") ? "#ffffff" : BLACK,
+          maxWidth: cellWidth * 0.9,
+        }));
+      });
+      return parts.join("");
+    }
     halves.forEach((half, index) => {
       const cx = box.x + cellWidth * (index + 0.5);
       if (index > 0) {
@@ -1629,8 +1717,8 @@ export const templateSvgMixin = {
       const hasIcon = Boolean(half.icon);
       const labelY = box.y + box.h * (hasIcon ? 0.22 : 0.28);
       const valY = box.y + box.h * (hasIcon ? 0.76 : 0.72);
-      const labelSize = Math.max(9, Math.min(box.h * 0.22, cellWidth * 0.22));
-      const valSize = Math.max(12, Math.min(box.h * 0.44, cellWidth * 0.42));
+      const labelSize = Math.max(row.compact ? 10 : 9, Math.min(box.h * 0.22, cellWidth * 0.22));
+      const valSize = Math.max(row.compact ? 13 : 12, Math.min(box.h * 0.44, cellWidth * 0.42));
 
       const isRedBanner = isBanner && row.color === "red";
       const defaultTextColor = isRedBanner ? "#ffffff" : BLACK;
@@ -1648,6 +1736,24 @@ export const templateSvgMixin = {
       }
     });
     return parts.join("");
+  },
+
+  // Two deliberately independent panels. Unlike the generic landscape row
+  // regrouping this keeps a visual (ring/stat/date) beside a vertical fact
+  // list, which is essential on 250x128 where stacking makes both too small.
+  _blockDuo(row, box) {
+    const ratio = Math.max(0.3, Math.min(0.7, Number(row.duo.ratio) || 0.5));
+    const gap = row.compact ? 5 : Math.max(5, box.w * 0.025);
+    const leftWidth = Math.max(1, (box.w - gap) * ratio);
+    const rightX = box.x + leftWidth + gap;
+    const rightWidth = Math.max(1, box.w - leftWidth - gap);
+    const left = { ...(row.duo.left || {}), compact: row.compact };
+    const right = { ...(row.duo.right || {}), compact: row.compact };
+    const leftBox = { x: box.x, y: box.y, w: leftWidth, h: box.h, fullX: box.x, fullW: leftWidth };
+    const rightBox = { x: rightX, y: box.y, w: rightWidth, h: box.h, fullX: rightX, fullW: rightWidth };
+    return this._renderTemplateBlock(left, leftBox)
+      + this._svgHairline(box.x + leftWidth + gap / 2, box.y + box.h * 0.08, 1, box.h * 0.84)
+      + this._renderTemplateBlock(right, rightBox);
   },
 
   _blockSplitDates(row, box) {
@@ -1676,11 +1782,11 @@ export const templateSvgMixin = {
     const parts = [
       this._svgHairline(box.x, box.y + box.h, box.w, 1),
       `<polyline points="${points.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ")}" fill="none" stroke="${this._templateInk(row.spark.color)}"`
-        + ` stroke-width="${Math.max(1, box.h * 0.05).toFixed(2)}" stroke-linejoin="round" stroke-linecap="round"></polyline>`,
+        + ` stroke-width="${Math.max(row.compact ? 2.5 : 1, box.h * 0.05).toFixed(2)}" stroke-linejoin="round" stroke-linecap="round"></polyline>`,
     ];
     const [lastX, lastY] = points[points.length - 1];
     parts.push(`<circle cx="${lastX.toFixed(2)}" cy="${lastY.toFixed(2)}" r="${Math.max(1.5, box.h * 0.08).toFixed(2)}" fill="${RED}"></circle>`);
-    if (row.spark.caption != null) parts.push(this._svgText(row.spark.caption, box.x, box.y + box.h * 0.14, Math.max(8.5, box.h * 0.22), { anchor: "start", maxWidth: box.w * 0.6 }));
+    if (row.spark.caption != null) parts.push(this._svgText(row.spark.caption, box.x, box.y + box.h * 0.14, Math.max(row.compact ? 10 : 8.5, box.h * 0.22), { anchor: "start", bold: false, minSize: row.compact ? 9 : undefined, maxWidth: box.w * 0.6 }));
     return parts.join("");
   },
 
@@ -1693,16 +1799,16 @@ export const templateSvgMixin = {
     const top = box.y + (box.h - side) / 2;
     const parts = [`<rect x="${left.toFixed(2)}" y="${top.toFixed(2)}" width="${side.toFixed(2)}" height="${side.toFixed(2)}" fill="none" stroke="${BLACK}" stroke-width="1"></rect>`];
     parts.push(`<rect x="${left.toFixed(2)}" y="${top.toFixed(2)}" width="${side.toFixed(2)}" height="${(side * 0.28).toFixed(2)}" fill="${this._templateInk(date.color)}"></rect>`);
-    parts.push(this._svgText(date.month, left + side / 2, top + side * 0.15, Math.max(8.5, side * 0.22), { color: "#ffffff", bold: true, maxWidth: side * 0.92 }));
-    parts.push(this._svgText(date.day, left + side / 2, top + side * 0.64, Math.max(11, side * 0.5), { bold: true, maxWidth: side * 0.86 }));
+    parts.push(this._svgText(date.month, left + side / 2, top + side * 0.15, Math.max(row.compact ? 9.5 : 8.5, side * 0.22), { color: "#ffffff", bold: true, minSize: row.compact ? 8.5 : undefined, maxWidth: side * 0.92 }));
+    parts.push(this._svgText(date.day, left + side / 2, top + side * 0.64, Math.max(row.compact ? 13 : 11, side * 0.5), { bold: true, minSize: row.compact ? 10 : undefined, maxWidth: side * 0.86 }));
     const textX = left + side + Math.max(3, side * 0.16);
     const right = box.x + box.w;
     const lines = (date.lines || []).filter((line) => line != null && line !== "");
     const lineHeight = box.h / Math.max(1, lines.length);
     lines.forEach((line, index) => {
       const size = index === 0 ? lineHeight * 0.56 : lineHeight * 0.42;
-      parts.push(this._svgText(line, textX, box.y + lineHeight * (index + 0.5), Math.max(8.5, size), {
-        anchor: "start", bold: index === 0, color: index === 0 ? this._templateInk(date.color) : BLACK, maxWidth: right - textX,
+      parts.push(this._svgText(line, textX, box.y + lineHeight * (index + 0.5), Math.max(row.compact ? 9.5 : 8.5, size), {
+        anchor: "start", bold: index === 0 && !row.compact, minSize: row.compact ? 8.5 : undefined, color: index === 0 ? this._templateInk(date.color) : BLACK, maxWidth: right - textX,
       }));
     });
     return parts.join("");
@@ -1854,14 +1960,14 @@ export const templateSvgMixin = {
       const cy = box.y + lineHeight * (index + 0.5);
       parts.push(`<rect x="${box.x.toFixed(2)}" y="${(cy - badgeHeight / 2).toFixed(2)}" width="${badgeWidth.toFixed(2)}" height="${badgeHeight.toFixed(2)}"`
         + ` fill="${this._templateInk(item.color)}"></rect>`);
-      parts.push(this._svgText(item.badge, box.x + badgeWidth / 2, cy, Math.max(8.5, badgeHeight * 0.65), { color: "#ffffff", bold: true, maxWidth: badgeWidth * 0.88 }));
+      parts.push(this._svgText(item.badge, box.x + badgeWidth / 2, cy, Math.max(row.compact ? 10 : 8.5, badgeHeight * 0.65), { color: "#ffffff", bold: true, minSize: row.compact ? 8.5 : undefined, maxWidth: badgeWidth * 0.88 }));
       const textX = box.x + badgeWidth + Math.max(3, badgeWidth * 0.2);
       const valueWidth = box.w * 0.26;
-      parts.push(this._svgText(item.label, textX, cy, Math.max(8.5, Math.min(lineHeight * 0.52, box.w * 0.12)), {
-        anchor: "start", maxWidth: right - textX - valueWidth,
+      parts.push(this._svgText(item.label, textX, cy, Math.max(row.compact ? 10 : 8.5, Math.min(lineHeight * 0.52, box.w * 0.12)), {
+        anchor: "start", bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: right - textX - valueWidth,
       }));
-      parts.push(this._svgText(item.value, right, cy, Math.max(9.5, Math.min(lineHeight * 0.56, box.w * 0.13)), {
-        anchor: "end", bold: true, color: this._templateInk(item.color), maxWidth: valueWidth,
+      parts.push(this._svgText(item.value, right, cy, Math.max(row.compact ? 11 : 9.5, Math.min(lineHeight * 0.56, box.w * 0.13)), {
+        anchor: "end", bold: !row.compact, minSize: row.compact ? 9 : undefined, color: this._templateInk(item.color), maxWidth: valueWidth,
       }));
     });
     return parts.join("");
@@ -1957,11 +2063,18 @@ export const templateSvgMixin = {
     const baseTemplate = this._templateBaseDefinition(template);
     if (baseTemplate?.id === "blank" || (baseTemplate?.user_created && !baseTemplate?.base_template_id)) return [];
     const build = this._templateSvgSpecs(baseTemplate, undefined, width, height)[baseTemplate?.id];
-    const rows = build ? build() : [
+    let rows = build ? build() : [
       { icon: "shape-outline", h: 0.22 },
       { text: baseTemplate?.title || "Šablona", h: 0.1, size: 0.07, bold: true },
       { flex: true },
     ];
+    const compactLandscapeIds = new Set([
+      "air", "birthdays", "garden", "home", "living", "parcel", "presence", "price", "security",
+      "server", "shopping", "solar", "thermostat", "transport", "washer", "waste", "water", "wifi",
+    ]);
+    const compactLandscape = compactLandscapeIds.has(baseTemplate?.id)
+      && Number(width) >= Number(height) && Number(height) <= 160;
+    if (compactLandscape) rows = rows.map((row) => ({ ...row, compact: true }));
     return this._fourColorTemplateRows(rows);
   },
 
