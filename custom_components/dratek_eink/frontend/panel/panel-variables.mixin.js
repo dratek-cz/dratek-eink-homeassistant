@@ -1,5 +1,22 @@
 export const variablesMixin = {
 
+  _isDratekDisplayDiagnosticEntity(entityId) {
+    const registryEntry = this._hass?.entities?.[String(entityId || "")];
+    if (registryEntry?.platform !== "dratek_eink") return false;
+    const uniqueId = String(registryEntry.unique_id || "");
+    return /^display_.+_(battery|battery_voltage|signal|last_seen|route|connectivity|preview)$/.test(uniqueId);
+  },
+
+  _variableEntitySelector() {
+    // These entities exist to make a physical display's HA device page useful.
+    // Offering them back as design inputs is circular and clutters every
+    // variable picker. HA's supported exclude_entities option hides them only
+    // here; the entities remain enabled and visible on their own device.
+    const excludeEntities = Object.keys(this._hass?.states || {})
+      .filter((entityId) => this._isDratekDisplayDiagnosticEntity(entityId));
+    return { entity: excludeEntities.length ? { exclude_entities: excludeEntities } : {} };
+  },
+
 
   _normalizeVariableName(value) {
     const cleaned = String(value || "")

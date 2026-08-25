@@ -26,7 +26,7 @@ _LOGGER = logging.getLogger(__name__)
 # Assistant, so it is a real camera entity instead - inspectable in Developer
 # Tools like any other camera, and read through the same camera.async_get_image
 # API a user's own camera entities already go through.
-PLATFORMS: list[Platform] = [Platform.CAMERA, Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.CAMERA, Platform.SENSOR]
 GATEWAY_MONITOR_INTERVAL = timedelta(seconds=30)
 GATEWAY_DISPLAY_DISCOVERY_INTERVAL_SECONDS = 5 * 60
 PANEL_URL_PATH = "dratek-eink"
@@ -98,6 +98,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN].setdefault("entries", {})
     hass.data[DOMAIN]["entries"][entry.entry_id] = entry.data
     await _async_register_panel(hass)
+    _register_internal_service_devices(hass, entry.entry_id)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     from .gateway import async_load_gateways, async_register_gateway_device
@@ -181,6 +182,46 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_on_stop)
     )
     return True
+
+
+def _register_internal_service_devices(
+    hass: HomeAssistant, config_entry_id: str
+) -> None:
+    """Create or migrate integration-only blocks into HA's Services section.
+
+    Re-registering the stable identifiers updates installations that created
+    these records as ordinary devices in an older release. Physical gateways
+    and displays use different identifiers and deliberately keep entry_type
+    unset, so they remain in the Devices section.
+    """
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers.device_registry import DeviceEntryType
+
+    registry = dr.async_get(hass)
+    internal_services = (
+        (config_entry_id, "DRATEK eInk · Interní · Meteoradar", "Interní obrazová služba"),
+        (f"{config_entry_id}_ui", "DRATEK eInk · Interní · Rozhraní", "Interní diagnostika"),
+        (
+            f"{config_entry_id}_scheduler",
+            "DRATEK eInk · Interní · Automatické zápisy",
+            "Interní diagnostika",
+        ),
+        (
+            f"{config_entry_id}_transfer",
+            "DRATEK eInk · Interní · Přenos do zařízení",
+            "Interní diagnostika",
+        ),
+    )
+    for identifier, name, model in internal_services:
+        registry.async_get_or_create(
+            config_entry_id=config_entry_id,
+            identifiers={(DOMAIN, identifier)},
+            name=name,
+            manufacturer="DRATEK.CZ",
+            model=model,
+            sw_version=PANEL_VERSION,
+            entry_type=DeviceEntryType.SERVICE,
+        )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

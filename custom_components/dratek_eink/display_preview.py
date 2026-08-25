@@ -89,6 +89,17 @@ async def async_save_display_preview(
             ]
         previews[normalized_address] = preview
         await _preview_store(hass).async_save({"previews": previews})
+    # Refresh the display camera immediately; this is an in-memory notification
+    # and does not trigger another render or contact the physical display.
+    try:
+        from homeassistant.helpers.dispatcher import async_dispatcher_send
+        from .device_registry import display_update_signal, integration_entry_id
+
+        entry_id = integration_entry_id(hass)
+        if entry_id:
+            async_dispatcher_send(hass, display_update_signal(entry_id), normalized_address)
+    except (ImportError, RuntimeError):
+        pass
     return preview
 
 

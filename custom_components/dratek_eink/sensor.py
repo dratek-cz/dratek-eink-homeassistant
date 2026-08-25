@@ -31,7 +31,17 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.const import (
+    PERCENTAGE,
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    UnitOfElectricPotential,
+)
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
+
+from datetime import UTC, datetime
 
 from .const import DOMAIN, PANEL_VERSION
 
@@ -40,9 +50,9 @@ BLOCK_SCHEDULER = "scheduler"
 BLOCK_TRANSFER = "transfer"
 
 BLOCK_NAMES = {
-    BLOCK_UI: "DRATEK eInk · Rozhraní",
-    BLOCK_SCHEDULER: "DRATEK eInk · Automatické zápisy",
-    BLOCK_TRANSFER: "DRATEK eInk · Přenos do zařízení",
+    BLOCK_UI: "DRATEK eInk · Interní · Rozhraní",
+    BLOCK_SCHEDULER: "DRATEK eInk · Interní · Automatické zápisy",
+    BLOCK_TRANSFER: "DRATEK eInk · Interní · Přenos do zařízení",
 }
 
 
@@ -61,6 +71,38 @@ async def async_setup_entry(
             TransferLastJobSensor(entry.entry_id),
             TransferQueueSensor(entry.entry_id),
         ]
+    )
+
+    from .device_registry import display_states, display_update_signal
+
+    display_entities: dict[str, list[DratekDisplaySensor]] = {}
+
+    def _add_or_refresh(address: str) -> None:
+        normalized = str(address or "").strip().upper()
+        if not normalized:
+            return
+        existing = display_entities.get(normalized)
+        if existing is not None:
+            for entity in existing:
+                if entity.hass is not None:
+                    entity.async_write_ha_state()
+            return
+        entities = [
+            DisplayBatterySensor(normalized),
+            DisplayBatteryVoltageSensor(normalized),
+            DisplaySignalSensor(normalized),
+            DisplayLastSeenSensor(normalized),
+            DisplayRouteSensor(normalized),
+        ]
+        display_entities[normalized] = entities
+        async_add_entities(entities)
+
+    for address in display_states(hass):
+        _add_or_refresh(address)
+    entry.async_on_unload(
+        async_dispatcher_connect(
+            hass, display_update_signal(entry.entry_id), _add_or_refresh
+        )
     )
 
 
@@ -84,8 +126,9 @@ class _BlockSensor(SensorEntity):
             "identifiers": {(DOMAIN, f"{entry_id}_{self.block}")},
             "name": BLOCK_NAMES[self.block],
             "manufacturer": "DRATEK.CZ",
-            "model": "Diagnostika",
+            "model": "Interní diagnostika",
             "sw_version": PANEL_VERSION,
+            "entry_type": DeviceEntryType.SERVICE,
         }
         self._attr_extra_state_attributes: dict[str, Any] = {}
 
@@ -250,4 +293,113 @@ class TransferQueueSensor(_BlockSensor):
             "neúspěšné": counts["failed"],
             "přeskočené": counts["skipped"],
             "celkem_v_historii": len(jobs),
+        }
+
+
+class DratekDisplaySensor(SensorEntity):
+    """Base class for telemetry belonging to one physical display."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    key = "value"
+
+    def __init__(self, address: str) -> None:
+        self.address = address
+        self._attr_unique_id = f"display_{address}_{self.key}"
+
+    @property
+    def device_info(self) -> dict[str, Any]:
+        from .device_registry import display_device_info
+
+        return display_device_info(self.hass, self.address)
+
+    @property
+    def _display(self) -> dict[str, Any]:
+        from .device_registry import display_state
+
+        return display_state(self.hass, self.address)
+
+
+class DisplayBatterySensor(DratekDisplaySensor):
+    key = "battery"
+    _attr_name = "Baterie"
+    _attr_icon = "mdi:battery"
+    _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int | None:
+        value = self._display.get("battery_percent")
+        return int(value) if isinstance(value, (int, float)) else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"odhad_z_napětí": bool(self._display.get("battery_estimated"))}
+
+
+class DisplayBatteryVoltageSensor(DratekDisplaySensor):
+    key = "battery_voltage"
+    _attr_name = "Napětí baterie"
+    _attr_icon = "mdi:sine-wave"
+    _attr_device_class = SensorDeviceClass.VOLTAGE
+    _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> float | None:
+        value = self._display.get("battery_voltage")
+        return round(float(value), 2) if isinstance(value, (int, float)) else None
+
+
+class DisplaySignalSensor(DratekDisplaySensor):
+    key = "signal"
+    _attr_name = "Síla signálu"
+    _attr_icon = "mdi:signal"
+    _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
+    _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int | None:
+        value = self._display.get("rssi")
+        return round(float(value)) if isinstance(value, (int, float)) else None
+
+
+class DisplayLastSeenSensor(DratekDisplaySensor):
+    key = "last_seen"
+    _attr_name = "Poslední kontakt"
+    _attr_icon = "mdi:clock-check-outline"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    @property
+    def native_value(self) -> datetime | None:
+        value = self._display.get("last_seen_at")
+        if not isinstance(value, (int, float)) or value <= 0:
+            return None
+        return datetime.fromtimestamp(float(value), tz=UTC)
+
+
+class DisplayRouteSensor(DratekDisplaySensor):
+    key = "route"
+    _attr_name = "Připojení"
+    _attr_icon = "mdi:access-point-network"
+
+    @property
+    def native_value(self) -> str | None:
+        route = self._display.get("preferred_path")
+        if not isinstance(route, dict):
+            return None
+        return str(route.get("name") or route.get("type") or "") or None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        route = self._display.get("preferred_path")
+        if not isinstance(route, dict):
+            return {}
+        return {
+            "typ": route.get("type"),
+            "gateway_id": route.get("id") if route.get("type") == "gateway" else None,
+            "host": route.get("host"),
         }

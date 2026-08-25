@@ -39,10 +39,13 @@ class DiagnosticBlockWiringTests(unittest.TestCase):
     def test_every_sensor_belongs_to_a_known_block(self) -> None:
         tree = ast.parse(self.sensor_source)
         known = {"BLOCK_UI", "BLOCK_SCHEDULER", "BLOCK_TRANSFER"}
+        # Physical display telemetry is a separate entity hierarchy and must
+        # not be forced into one of the integration's three internal service
+        # blocks. Only direct _BlockSensor subclasses belong to this contract.
         sensor_classes = [
             node for node in tree.body
-            if isinstance(node, ast.ClassDef) and node.name.endswith("Sensor")
-            and not node.name.startswith("_")
+            if isinstance(node, ast.ClassDef)
+            and any(getattr(base, "id", "") == "_BlockSensor" for base in node.bases)
         ]
         self.assertGreaterEqual(len(sensor_classes), 6)
         for klass in sensor_classes:

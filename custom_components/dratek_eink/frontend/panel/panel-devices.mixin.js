@@ -5743,7 +5743,8 @@ export const devicesMixin = {
 
   _suggestTemplateEntity(meta) {
     const states = this._hass?.states || {};
-    const entries = Object.entries(states);
+    const entries = Object.entries(states)
+      .filter(([entityId]) => !this._isDratekDisplayDiagnosticEntity(entityId));
     if (!entries.length) return "";
     const kind = this._templateSlotKind(meta.label, meta.icon);
     const { domains = [], classes = [], units = [] } = this._templateSlotTargets(kind);

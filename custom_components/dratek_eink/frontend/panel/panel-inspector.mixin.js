@@ -1060,7 +1060,7 @@ export const inspectorMixin = {
     this.shadowRoot.querySelectorAll("[data-template-entity-picker]").forEach((picker) => {
       const bindingKey = picker.dataset.templateEntityPicker;
       picker.hass = this._hass;
-      picker.selector = { entity: {} };
+      picker.selector = this._variableEntitySelector();
       picker.value = this._displayTemplateBindings?.[bindingKey]
         || picker.dataset.templateDefaultEntity
         || "";
@@ -1273,7 +1273,7 @@ export const inspectorMixin = {
       const item = this._templateEditorElement?.();
       if (!item || item.id !== picker.dataset.templateElementEntityPicker) return;
       picker.hass = this._hass;
-      picker.selector = { entity: {} };
+      picker.selector = this._variableEntitySelector();
       picker.value = item.entityId || "";
       picker.required = false;
       picker.addEventListener("value-changed", (event) => setTemplateElementEntity(event.detail?.value));
@@ -2151,7 +2151,7 @@ export const inspectorMixin = {
     };
     const configureEntitySelector = (selector, value) => {
       selector.hass = this._hass;
-      selector.selector = { entity: {} };
+      selector.selector = this._variableEntitySelector();
       selector.value = value || "";
       selector.required = false;
     };

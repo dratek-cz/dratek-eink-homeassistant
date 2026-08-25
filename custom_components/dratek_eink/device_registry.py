@@ -6,6 +6,50 @@ from typing import Any
 
 from .const import DEVICE_SIZES, DOMAIN, SDK_MODELS
 
+DISPLAY_STATE_DATA_KEY = "display_entity_states"
+
+
+def display_update_signal(config_entry_id: str) -> str:
+    """Return the dispatcher signal shared by a display's HA entities."""
+    return f"{DOMAIN}_display_update_{config_entry_id}"
+
+
+def display_states(hass: Any) -> dict[str, dict[str, Any]]:
+    """Return the in-memory last-known telemetry for physical displays."""
+    return hass.data.setdefault(DOMAIN, {}).setdefault(DISPLAY_STATE_DATA_KEY, {})
+
+
+def display_state(hass: Any, address: str) -> dict[str, Any]:
+    """Return one normalized display state without performing I/O."""
+    return display_states(hass).get(str(address or "").strip().upper(), {})
+
+
+def display_device_info(hass: Any, address: str) -> dict[str, Any]:
+    """Build entity device_info matching the physical registry device."""
+    normalized = str(address or "").strip().upper()
+    state = display_state(hass, normalized)
+    try:
+        sdk_type = int(state.get("sdk_type") or 0)
+    except (TypeError, ValueError):
+        sdk_type = 0
+    width = state.get("width")
+    height = state.get("height")
+    if (not width or not height) and sdk_type in DEVICE_SIZES:
+        width, height = DEVICE_SIZES[sdk_type]
+    model = str(state.get("model") or SDK_MODELS.get(sdk_type) or "DRATEK eInk Display")
+    if width and height and f"{width}x{height}" not in model:
+        model = f"{model} ({width}×{height})"
+    return {
+        "identifiers": {(DOMAIN, f"display:{normalized}")},
+        "name": str(
+            state.get("display_name")
+            or state.get("name")
+            or f"DRATEK eInk {normalized}"
+        ),
+        "manufacturer": "DRATEK.CZ",
+        "model": model,
+    }
+
 
 def integration_entry_id(hass: Any) -> str | None:
     """Return the integration entry that owns physical DRATEK devices."""
@@ -33,6 +77,16 @@ def register_display_device(
     ).strip().upper()
     if not address:
         return
+
+    # Preserve the last real telemetry when a later project migration only
+    # supplies static metadata. Every entity reads this one push-updated map,
+    # so adding sensors never causes another BLE scan or drains the display.
+    states = display_states(hass)
+    current_state = states.setdefault(address, {"address": address})
+    for key, value in display.items():
+        if value is not None:
+            current_state[key] = value
+    current_state["address"] = address
     try:
         sdk_type = int(display.get("sdk_type") or 0)
     except (TypeError, ValueError):
@@ -83,6 +137,13 @@ def register_display_device(
         serial_number=physical_code or address,
         via_device=via_device,
     )
+    try:
+        from homeassistant.helpers.dispatcher import async_dispatcher_send
+
+        async_dispatcher_send(hass, display_update_signal(config_entry_id), address)
+    except (ImportError, RuntimeError):
+        # Static test harnesses and early HA startup may not expose dispatcher.
+        pass
 
 
 async def async_register_gateway_displays(
@@ -91,6 +152,7 @@ async def async_register_gateway_displays(
     """Discover displays behind gateways without requiring the panel to open."""
     from .discovery import parse_dratek_manufacturer_data
     from .gateway import async_scan_gateway
+    import time
 
     registered = 0
     for gateway in gateways:
@@ -126,6 +188,14 @@ async def async_register_gateway_displays(
                     "model": parsed.model,
                     "hw": parsed.hw,
                     "sw": parsed.sw,
+                    "battery": parsed.battery,
+                    "battery_raw": parsed.battery,
+                    "battery_voltage": parsed.battery_voltage,
+                    "battery_percent": parsed.battery_percent,
+                    "battery_estimated": True,
+                    "rssi": parsed.rssi,
+                    "last_seen_at": int(time.time()),
+                    "temporarily_unseen": False,
                     "preferred_path": {"type": "gateway", "id": gateway.get("id")},
                 },
                 gateways,

@@ -47,7 +47,7 @@ def create_release(tag: str, name: str, body: str) -> None:
                 for asset in release.get("assets", []):
                     if asset["name"] == "dratek_eink.zip":
                         del_req = urllib.request.Request(asset["url"], headers=headers, method="DELETE")
-                        with urllib.request.urlopen(del_req) as del_resp:
+                        with urllib.request.urlopen(del_req):
                             print(f"Deleted previous asset {asset['id']}")
         else:
             raise RuntimeError(f"Failed to create release: {e} - {err}")
@@ -74,24 +74,20 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.339",
-        name="DRATEK eInk v0.1.339",
-        body="""## Release 0.1.339
+        tag="v0.1.340",
+        name="DRATEK eInk v0.1.340",
+        body="""## Release 0.1.340
 
 ### Přidáno
-- **Automatické nalezení gatewaye přes Zeroconf/mDNS** po nahrání firmware z Arduino IDE nebo PlatformIO.
-- **Gatewaye jako zařízení DRATEK eInk** v registru zařízení Home Assistantu.
-- **Displeje jako samostatná zařízení DRATEK eInk**, včetně vazby na gateway, která je obsluhuje.
+- **Baterie, napětí, síla signálu, poslední kontakt, dostupnost a cesta připojení** přímo na stránce fyzického displeje.
+- **Náhled posledního úspěšně odeslaného obrazu** jako kamera příslušného displeje.
 
-### Opraveno
-- Regrese vykreslování, náhledů, nočních ikon počasí a automatických zápisů.
-- Bezpečnější opakování a odpojování BLE přenosů bez nekonzistentního stavu.
+### Změněno
+- **Rozhraní, Automatické zápisy, Přenos do zařízení a Meteoradar jsou služby**, zatímco gatewaye a displeje zůstávají fyzickými zařízeními.
+- Existující interní záznamy se migrují pomocí stabilních identifikátorů bez duplicit.
+- Diagnostické entity displejů se nezobrazují ve výběrech proměnných panelu DRATEK eInk.
 
 ### Optimalizováno
-- Cache meteoradaru, SVG šablon, náhledů a zařízení mají pevné limity.
-- Vnitřní historie fronty a odpojování se průběžně uklízí a nemůže dlouhodobě zaplnit paměť.
-
-### Firmware gatewaye
-- Verze **0.1.61-gateway** publikuje přes mDNS název, model a verzi zařízení.
+- Nové entity jsou push-only: nepollují displej, nespouštějí další BLE skeny a aktualizují se pouze ze skutečně přijatých dat.
 """,
     )

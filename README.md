@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.340
+
+- **Interní části integrace jsou služby** – Rozhraní, Automatické zápisy, Přenos do zařízení a Meteoradar se přesunou ze seznamu fyzických zařízení do části Služby. Existující záznamy se migrují pod stejnými identifikátory bez duplicit.
+- **Stránka každého displeje je užitečnější** – obsahuje baterii, napětí, sílu signálu, poslední kontakt, dostupnost a použitou cestu přes Home Assistant nebo gateway.
+- **Náhled posledního úspěšně odeslaného obrazu** je dostupný jako kamera přímo u fyzického displeje, pokud už integrace náhled má.
+- **Diagnostika displejů nezatěžuje Bluetooth ani baterii** – entity jsou aktualizované událostmi pouze při skutečném skenu nebo úspěšném přenosu a samy nic pravidelně nedotazují.
+- **Technické entity displejů nezaplňují výběry proměnných** v editoru DRATEK eInk, ale zůstávají dostupné na stránce příslušného zařízení v Home Assistantu.
+
 ## Novinky ve verzi 0.1.339
 
 - **Gatewaye se objeví v Home Assistantu automaticky** přes Zeroconf/mDNS a integrace je založí jako zařízení DRATEK eInk bez ručního zadávání adresy.

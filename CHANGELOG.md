@@ -2,6 +2,19 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.340] - 2026-08-25
+
+### Přidáno
+- **Diagnostika fyzických displejů v Home Assistantu**: stránka displeje zobrazuje stav baterie, napětí, RSSI, poslední kontakt, dostupnost a aktuální cestu připojení.
+- **Náhled displeje**: poslední úspěšně odeslaný obraz je dostupný jako kamera patřící k fyzickému displeji.
+
+### Změněno
+- **Interní bloky jsou služby**: Rozhraní, Automatické zápisy, Přenos do zařízení a Meteoradar používají `DeviceEntryType.SERVICE`; fyzické gatewaye a displeje zůstávají zařízeními. Stabilní identifikátory zajistí migraci bez duplicit.
+- **Čistší výběry proměnných**: technické entity displejů se nenabízejí jako vstupní proměnné ani automatické návrhy v panelu DRATEK eInk.
+
+### Optimalizováno
+- **Událostní aktualizace bez pollingu**: nové entity pouze převezmou data ze skutečného BLE nebo gateway skenu a z dokončeného přenosu. Nevytvářejí další komunikaci s displejem ani pravidelnou zátěž Home Assistantu.
+
 ## [0.1.339] - 2026-08-24
 
 ### Přidáno

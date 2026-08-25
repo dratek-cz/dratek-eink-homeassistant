@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import voluptuous as vol
@@ -99,6 +100,14 @@ class DratekEinkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             "model": parsed.model,
             "hw": parsed.hw,
             "sw": parsed.sw,
+            "battery": parsed.battery,
+            "battery_raw": parsed.battery,
+            "battery_voltage": parsed.battery_voltage,
+            "battery_percent": parsed.battery_percent,
+            "battery_estimated": True,
+            "rssi": parsed.rssi,
+            "last_seen_at": int(time.time()),
+            "temporarily_unseen": False,
         }
         entries = self._async_current_entries()
         if entries:

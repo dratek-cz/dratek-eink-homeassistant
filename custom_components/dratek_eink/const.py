@@ -5,7 +5,7 @@ DRATEK_COMPANY_ID = 0x5053
 PANEL_TITLE = "DRATEK eInk"
 PANEL_ICON = "mdi:view-dashboard-outline"
 PANEL_URL = "dratek-eink"
-PANEL_VERSION = "0.1.339"
+PANEL_VERSION = "0.1.340"
 GATEWAY_FIRMWARE_VERSION = "0.1.61-gateway"
 
 CONTROL_CHARS = {

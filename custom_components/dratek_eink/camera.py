@@ -16,14 +16,24 @@ from __future__ import annotations
 
 import io
 import logging
+import base64
+from typing import Any
 
 from homeassistant.components.camera import Camera
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.device_registry import DeviceEntryType
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import DOMAIN
 from .meteoradar import async_render_meteoradar
+from .device_registry import (
+    display_device_info,
+    display_states,
+    display_update_signal,
+)
+from .display_preview import async_display_preview
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,6 +57,28 @@ async def async_setup_entry(
 ) -> None:
     async_add_entities([DratekMeteoradarCamera(entry.entry_id)])
 
+    display_cameras: dict[str, DratekDisplayPreviewCamera] = {}
+
+    def _add_or_refresh(address: str) -> None:
+        normalized = str(address or "").strip().upper()
+        if not normalized:
+            return
+        camera = display_cameras.get(normalized)
+        if camera is None:
+            camera = DratekDisplayPreviewCamera(normalized)
+            display_cameras[normalized] = camera
+            async_add_entities([camera], update_before_add=True)
+        elif camera.hass is not None:
+            camera.hass.async_create_task(camera.async_update_ha_state(force_refresh=True))
+
+    for address in display_states(hass):
+        _add_or_refresh(address)
+    entry.async_on_unload(
+        async_dispatcher_connect(
+            hass, display_update_signal(entry.entry_id), _add_or_refresh
+        )
+    )
+
 
 class DratekMeteoradarCamera(Camera):
     """Snapshot camera for the whole-country precipitation map used by templates."""
@@ -66,8 +98,10 @@ class DratekMeteoradarCamera(Camera):
         self._attr_unique_id = f"{entry_id}_meteoradar"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry_id)},
-            "name": "DRATEK eInk",
+            "name": "DRATEK eInk · Interní · Meteoradar",
             "manufacturer": "DRATEK.CZ",
+            "model": "Interní obrazová služba",
+            "entry_type": DeviceEntryType.SERVICE,
         }
 
     async def async_camera_image(
@@ -81,3 +115,60 @@ class DratekMeteoradarCamera(Camera):
         if image is None:
             return None
         return await self.hass.async_add_executor_job(_encode_png, image)
+
+
+def _decode_png_data_url(data_url: str) -> bytes | None:
+    """Decode only the PNG data URLs written by display_preview.py."""
+    prefix = "data:image/png;base64,"
+    if not isinstance(data_url, str) or not data_url.startswith(prefix):
+        return None
+    try:
+        return base64.b64decode(data_url[len(prefix):], validate=True)
+    except (ValueError, TypeError):
+        return None
+
+
+class DratekDisplayPreviewCamera(Camera):
+    """The image most recently transferred successfully to one display."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Poslední obraz"
+    _attr_icon = "mdi:image-outline"
+    _attr_should_poll = False
+    _attr_content_type = "image/png"
+
+    def __init__(self, address: str) -> None:
+        super().__init__()
+        self.address = address
+        self._attr_unique_id = f"display_{address}_preview"
+        self._attr_available = False
+        self._preview: dict[str, Any] | None = None
+
+    @property
+    def device_info(self) -> dict[str, Any]:
+        return display_device_info(self.hass, self.address)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        preview = self._preview or {}
+        return {
+            "aktualizováno": preview.get("preview_updated_at"),
+            "šířka": preview.get("preview_width"),
+            "výška": preview.get("preview_height"),
+            "orientace": preview.get("preview_orientation"),
+        }
+
+    async def async_update(self) -> None:
+        self._preview = await async_display_preview(self.hass, self.address)
+        self._attr_available = bool(
+            self._preview and self._preview.get("preview_image")
+        )
+
+    async def async_camera_image(
+        self, width: int | None = None, height: int | None = None
+    ) -> bytes | None:
+        preview = await async_display_preview(self.hass, self.address)
+        if not preview:
+            return None
+        data_url = preview.get("preview_image")
+        return await self.hass.async_add_executor_job(_decode_png_data_url, data_url)
