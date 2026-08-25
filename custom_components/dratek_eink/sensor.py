@@ -32,7 +32,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.device_registry import DeviceEntryType
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.const import (
     PERCENTAGE,
@@ -44,34 +44,46 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from datetime import UTC, datetime
 
 from .const import DOMAIN, PANEL_VERSION
+from .service_groups import (
+    INTERNAL_SERVICE_GROUP_BY_TYPE,
+    internal_service_subentry_id,
+)
 
 BLOCK_UI = "ui"
 BLOCK_SCHEDULER = "scheduler"
 BLOCK_TRANSFER = "transfer"
 
 BLOCK_NAMES = {
-    BLOCK_UI: "DRATEK eInk · Interní · Rozhraní",
-    BLOCK_SCHEDULER: "DRATEK eInk · Interní · Automatické zápisy",
-    BLOCK_TRANSFER: "DRATEK eInk · Interní · Přenos do zařízení",
+    block: INTERNAL_SERVICE_GROUP_BY_TYPE[block].title
+    for block in (BLOCK_UI, BLOCK_SCHEDULER, BLOCK_TRANSFER)
 }
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    async_add_entities(
-        [
+    internal_entities = {
+        BLOCK_UI: [
             PanelBlockSensor(entry.entry_id),
+        ],
+        BLOCK_SCHEDULER: [
             SchedulerHeartbeatSensor(entry.entry_id),
             SchedulerDisplaysSensor(entry.entry_id),
             SchedulerLastScheduleSensor(entry.entry_id),
             SchedulerLastRenderSensor(entry.entry_id),
+        ],
+        BLOCK_TRANSFER: [
             TransferLastJobSensor(entry.entry_id),
             TransferQueueSensor(entry.entry_id),
-        ]
-    )
+        ],
+    }
+    for block, entities in internal_entities.items():
+        async_add_entities(
+            entities,
+            config_subentry_id=internal_service_subentry_id(entry, block),
+        )
 
     from .device_registry import display_states, display_update_signal
 

@@ -2,6 +2,18 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.341] - 2026-08-25
+
+### Opraveno
+- **Prázdné stránky displejů po restartu**: entity platformy se dříve načetly před obnovením známých displejů a závisely na pozdější události skenu. Integrace nyní obnoví displeje z registru zařízení a projektových dat ještě před inicializací senzorů, binárních senzorů a kamer.
+- **První načtení náhledu**: kamera posledního obrazu načte uložený náhled při přidání entity bez rizikového `update_before_add`.
+
+### Změněno
+- **Služby seskupené pomocí config subentries**: Rozhraní, Automatické zápisy, Přenos do zařízení a Meteoradar mají samostatné rozbalovací karty po vzoru Google Generative AI. Entity a servisní zařízení se migrují pod odpovídající podzáznam bez změny jejich identity.
+
+### Optimalizováno
+- **Bez dalšího dotazování displejů**: diagnostické entity zůstávají push-only; obnova registru vytvoří entity z trvalých metadat a živé hodnoty aktualizuje pouze skutečný BLE nebo gateway scan.
+
 ## [0.1.340] - 2026-08-25
 
 ### Přidáno

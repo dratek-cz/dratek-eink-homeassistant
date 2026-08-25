@@ -21,5 +21,19 @@
       "not_dratek_display": "Bluetooth zařízení není podporovaný DRATEK eInk displej.",
       "cannot_connect": "Gateway nemá použitelnou síťovou adresu."
     }
+  },
+  "config_subentries": {
+    "ui": {
+      "entry_type": "Rozhraní integrace"
+    },
+    "scheduler": {
+      "entry_type": "Plánování automatických zápisů"
+    },
+    "transfer": {
+      "entry_type": "Přenos obrazu do zařízení"
+    },
+    "meteoradar": {
+      "entry_type": "Obrazová služba meteoradaru"
+    }
   }
 }

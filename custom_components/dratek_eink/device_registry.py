@@ -51,6 +51,38 @@ def display_device_info(hass: Any, address: str) -> dict[str, Any]:
     }
 
 
+def restore_registered_display_states(hass: Any, config_entry_id: str) -> int:
+    """Seed entity state for displays already persisted in HA's registry.
+
+    The device registry survives a restart, while display_states is deliberately
+    in memory only. Restoring the stable metadata before entity platforms are
+    forwarded guarantees that every existing display gets its entities at
+    startup; the next real BLE/gateway observation fills in live telemetry.
+    """
+    from homeassistant.helpers import device_registry as dr
+
+    registry = dr.async_get(hass)
+    states = display_states(hass)
+    restored = 0
+    for device in dr.async_entries_for_config_entry(registry, config_entry_id):
+        address = ""
+        for domain, identifier in device.identifiers:
+            if domain == DOMAIN and identifier.startswith("display:"):
+                address = identifier.removeprefix("display:").strip().upper()
+                break
+        if not address:
+            continue
+        state = states.setdefault(address, {"address": address})
+        state.setdefault("display_name", device.name_by_user or device.name)
+        state.setdefault("name", device.name)
+        state.setdefault("model", device.model)
+        state.setdefault("physical_code", device.serial_number)
+        state.setdefault("hw", device.hw_version)
+        state.setdefault("sw", device.sw_version)
+        restored += 1
+    return restored
+
+
 def integration_entry_id(hass: Any) -> str | None:
     """Return the integration entry that owns physical DRATEK devices."""
     config_entries = getattr(hass, "config_entries", None)

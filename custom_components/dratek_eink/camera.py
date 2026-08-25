@@ -22,7 +22,7 @@ from typing import Any
 from homeassistant.components.camera import Camera
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
@@ -34,6 +34,10 @@ from .device_registry import (
     display_update_signal,
 )
 from .display_preview import async_display_preview
+from .service_groups import (
+    INTERNAL_SERVICE_GROUP_BY_TYPE,
+    internal_service_subentry_id,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,9 +57,12 @@ def _encode_png(image) -> bytes:
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    async_add_entities([DratekMeteoradarCamera(entry.entry_id)])
+    async_add_entities(
+        [DratekMeteoradarCamera(entry.entry_id)],
+        config_subentry_id=internal_service_subentry_id(entry, "meteoradar"),
+    )
 
     display_cameras: dict[str, DratekDisplayPreviewCamera] = {}
 
@@ -67,7 +74,7 @@ async def async_setup_entry(
         if camera is None:
             camera = DratekDisplayPreviewCamera(normalized)
             display_cameras[normalized] = camera
-            async_add_entities([camera], update_before_add=True)
+            async_add_entities([camera])
         elif camera.hass is not None:
             camera.hass.async_create_task(camera.async_update_ha_state(force_refresh=True))
 
@@ -98,7 +105,7 @@ class DratekMeteoradarCamera(Camera):
         self._attr_unique_id = f"{entry_id}_meteoradar"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry_id)},
-            "name": "DRATEK eInk · Interní · Meteoradar",
+            "name": INTERNAL_SERVICE_GROUP_BY_TYPE["meteoradar"].title,
             "manufacturer": "DRATEK.CZ",
             "model": "Interní obrazová služba",
             "entry_type": DeviceEntryType.SERVICE,
@@ -157,6 +164,12 @@ class DratekDisplayPreviewCamera(Camera):
             "výška": preview.get("preview_height"),
             "orientace": preview.get("preview_orientation"),
         }
+
+    async def async_added_to_hass(self) -> None:
+        """Load persisted preview once without polling the display."""
+        await super().async_added_to_hass()
+        await self.async_update()
+        self.async_write_ha_state()
 
     async def async_update(self) -> None:
         self._preview = await async_display_preview(self.hass, self.address)

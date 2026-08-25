@@ -8,12 +8,14 @@ import voluptuous as vol
 from homeassistant import config_entries
 
 from .const import DOMAIN
+from .service_groups import internal_service_subentries_data
 
 
 class DratekEinkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for DRATEK eInk."""
 
-    VERSION = 1
+    VERSION = 2
+    MINOR_VERSION = 0
 
     def __init__(self) -> None:
         super().__init__()
@@ -25,7 +27,11 @@ class DratekEinkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._abort_if_unique_id_configured()
 
         if user_input is not None:
-            return self.async_create_entry(title="DRATEK eInk", data={})
+            return self.async_create_entry(
+                title="DRATEK eInk",
+                data={},
+                subentries=internal_service_subentries_data(),
+            )
 
         return self.async_show_form(step_id="user", data_schema=vol.Schema({}))
 
@@ -76,7 +82,11 @@ class DratekEinkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 step_id="zeroconf_confirm", data_schema=vol.Schema({})
             )
         await self._async_store_discovery()
-        return self.async_create_entry(title="DRATEK eInk", data={})
+        return self.async_create_entry(
+            title="DRATEK eInk",
+            data={},
+            subentries=internal_service_subentries_data(),
+        )
 
     async def _async_store_discovery(self) -> dict[str, Any]:
         from .gateway import async_upsert_discovered_gateway
@@ -137,4 +147,5 @@ class DratekEinkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(
             title="DRATEK eInk",
             data={"discovered_display": self._discovered_display},
+            subentries=internal_service_subentries_data(),
         )

@@ -74,20 +74,19 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.340",
-        name="DRATEK eInk v0.1.340",
-        body="""## Release 0.1.340
+        tag="v0.1.341",
+        name="DRATEK eInk v0.1.341",
+        body="""## Release 0.1.341
 
-### Přidáno
-- **Baterie, napětí, síla signálu, poslední kontakt, dostupnost a cesta připojení** přímo na stránce fyzického displeje.
-- **Náhled posledního úspěšně odeslaného obrazu** jako kamera příslušného displeje.
+### Opraveno
+- **Karty displejů už nejsou prázdné**: známé displeje se obnoví před načtením entit a dostanou baterii, napětí, signál, poslední kontakt, dostupnost, trasu a náhled.
+- Kamera posledního obrazu bezpečně načte uložený náhled při přidání entity.
 
 ### Změněno
-- **Rozhraní, Automatické zápisy, Přenos do zařízení a Meteoradar jsou služby**, zatímco gatewaye a displeje zůstávají fyzickými zařízeními.
-- Existující interní záznamy se migrují pomocí stabilních identifikátorů bez duplicit.
-- Diagnostické entity displejů se nezobrazují ve výběrech proměnných panelu DRATEK eInk.
+- **Rozhraní, Automatické zápisy, Přenos do zařízení a Meteoradar mají samostatné rozbalovací skupiny služeb** po vzoru Google Gemini.
+- Existující servisní zařízení a entity se přesunou do odpovídajících skupin bez duplicit a bez ztráty historie.
 
 ### Optimalizováno
-- Nové entity jsou push-only: nepollují displej, nespouštějí další BLE skeny a aktualizují se pouze ze skutečně přijatých dat.
+- Entity zůstávají push-only a živé hodnoty aktualizuje pouze skutečný BLE nebo gateway scan.
 """,
     )

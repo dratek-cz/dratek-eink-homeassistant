@@ -98,8 +98,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN].setdefault("entries", {})
     hass.data[DOMAIN]["entries"][entry.entry_id] = entry.data
     await _async_register_panel(hass)
-    _register_internal_service_devices(hass, entry.entry_id)
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    from .service_groups import ensure_internal_service_subentries
+
+    ensure_internal_service_subentries(hass, entry)
+    _register_internal_service_devices(hass, entry)
+    _migrate_internal_service_entities(hass, entry)
 
     from .gateway import async_load_gateways, async_register_gateway_device
     gateways = await async_load_gateways(hass)
@@ -108,9 +111,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Migrate displays already known by an older integration version into HA's
     # device registry immediately, without waiting for a new BLE advertisement.
-    from .device_registry import async_register_gateway_displays, register_display_device
+    from .device_registry import (
+        async_register_gateway_displays,
+        register_display_device,
+        restore_registered_display_states,
+    )
     from .ws_shared import _load_project_data
 
+    # Entity platforms used to be forwarded before this state existed. After a
+    # restart they therefore saw zero displays and the already persisted device
+    # page stayed empty until a later scan happened to add entities dynamically.
+    # Restore registry-known displays first, then overlay fresher config/project
+    # metadata, and only then let sensor/camera/binary_sensor enumerate them.
+    restore_registered_display_states(hass, entry.entry_id)
     discovered_display = entry.data.get("discovered_display")
     if isinstance(discovered_display, dict):
         register_display_device(
@@ -131,6 +144,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             },
             gateways,
         )
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     from .automation import get_entity_auto_update_manager
     auto_update = get_entity_auto_update_manager(hass)
@@ -184,8 +199,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+async def async_migrate_entry(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> bool:
+    """Add service subentries to installations created before version 2."""
+    from .service_groups import ensure_internal_service_subentries
+
+    ensure_internal_service_subentries(hass, entry)
+    if entry.version < 2:
+        hass.config_entries.async_update_entry(entry, version=2, minor_version=0)
+    return True
+
+
 def _register_internal_service_devices(
-    hass: HomeAssistant, config_entry_id: str
+    hass: HomeAssistant, entry: ConfigEntry
 ) -> None:
     """Create or migrate integration-only blocks into HA's Services section.
 
@@ -197,31 +224,79 @@ def _register_internal_service_devices(
     from homeassistant.helpers import device_registry as dr
     from homeassistant.helpers.device_registry import DeviceEntryType
 
-    registry = dr.async_get(hass)
-    internal_services = (
-        (config_entry_id, "DRATEK eInk · Interní · Meteoradar", "Interní obrazová služba"),
-        (f"{config_entry_id}_ui", "DRATEK eInk · Interní · Rozhraní", "Interní diagnostika"),
-        (
-            f"{config_entry_id}_scheduler",
-            "DRATEK eInk · Interní · Automatické zápisy",
-            "Interní diagnostika",
-        ),
-        (
-            f"{config_entry_id}_transfer",
-            "DRATEK eInk · Interní · Přenos do zařízení",
-            "Interní diagnostika",
-        ),
+    from .service_groups import (
+        INTERNAL_SERVICE_GROUPS,
+        internal_service_subentry_id,
     )
-    for identifier, name, model in internal_services:
+
+    registry = dr.async_get(hass)
+    for group in INTERNAL_SERVICE_GROUPS:
+        identifier = group.identifier(entry.entry_id)
+        subentry_id = internal_service_subentry_id(entry, group.subentry_type)
+        identifiers = {(DOMAIN, identifier)}
+        device = registry.async_get_device_by_identifier(
+            (DOMAIN, identifier), entry.entry_id
+        )
+        if (
+            device is not None
+            and device.config_subentry_id != subentry_id
+        ):
+            registry.async_update_device(
+                device.id,
+                new_config_subentry_id=subentry_id,
+                name=group.title,
+            )
         registry.async_get_or_create(
-            config_entry_id=config_entry_id,
-            identifiers={(DOMAIN, identifier)},
-            name=name,
+            config_entry_id=entry.entry_id,
+            config_subentry_id=subentry_id,
+            identifiers=identifiers,
+            name=group.title,
             manufacturer="DRATEK.CZ",
-            model=model,
+            model=group.model,
             sw_version=PANEL_VERSION,
             entry_type=DeviceEntryType.SERVICE,
         )
+
+
+def _migrate_internal_service_entities(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Move existing internal entities under their matching service cards."""
+    from homeassistant.helpers import entity_registry as er
+
+    from .service_groups import internal_service_subentry_id
+
+    registry = er.async_get(hass)
+    targets = {
+        "ui": internal_service_subentry_id(entry, "ui"),
+        "scheduler": internal_service_subentry_id(entry, "scheduler"),
+        "transfer": internal_service_subentry_id(entry, "transfer"),
+        "meteoradar": internal_service_subentry_id(entry, "meteoradar"),
+    }
+    prefixes = {
+        f"{entry.entry_id}_ui_": targets["ui"],
+        f"{entry.entry_id}_scheduler_": targets["scheduler"],
+        f"{entry.entry_id}_transfer_": targets["transfer"],
+    }
+    meteoradar_unique_id = f"{entry.entry_id}_meteoradar"
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        target = (
+            targets["meteoradar"]
+            if entity.unique_id == meteoradar_unique_id
+            else next(
+                (
+                    subentry_id
+                    for prefix, subentry_id in prefixes.items()
+                    if str(entity.unique_id).startswith(prefix)
+                ),
+                None,
+            )
+        )
+        if target is not None and entity.config_subentry_id != target:
+            registry.async_update_entity(
+                entity.entity_id,
+                config_subentry_id=target,
+            )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

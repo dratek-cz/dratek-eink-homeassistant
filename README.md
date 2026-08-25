@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.341
+
+- **Karty displejů v Home Assistantu už nejsou prázdné** – známé displeje se obnoví z registru ještě před načtením platforem a vždy dostanou entity baterie, napětí, signálu, posledního kontaktu, dostupnosti, trasy připojení a posledního náhledu.
+- **Živé hodnoty se doplní skutečným BLE nebo gateway skenem** bez samostatného pollingu, dalšího zatěžování Home Assistantu nebo vybíjení displeje.
+- **Interní služby jsou seskupené jako u Google Gemini** – Rozhraní, Automatické zápisy, Přenos do zařízení a Meteoradar mají vlastní rozbalovací skupinu, popis a příslušné entity.
+- **Automatická migrace zachová existující entity a historii** a přesune interní servisní záznamy do nových skupin bez duplicit.
+
 ## Novinky ve verzi 0.1.340
 
 - **Interní části integrace jsou služby** – Rozhraní, Automatické zápisy, Přenos do zařízení a Meteoradar se přesunou ze seznamu fyzických zařízení do části Služby. Existující záznamy se migrují pod stejnými identifikátory bez duplicit.

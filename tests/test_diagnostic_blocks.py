@@ -28,13 +28,14 @@ class DiagnosticBlockWiringTests(unittest.TestCase):
         init_source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
         self.assertIn("Platform.SENSOR", init_source)
 
-    def test_three_distinct_blocks_become_three_devices(self) -> None:
-        # One device per block is the whole point: the integration page has to
-        # list them separately, which only happens with distinct identifiers.
+    def test_three_distinct_blocks_become_three_service_groups(self) -> None:
+        # Each block keeps a stable device identifier and is assigned to its own
+        # config subentry so HA renders separate expandable service cards.
         self.assertIn('BLOCK_UI = "ui"', self.sensor_source)
         self.assertIn('BLOCK_SCHEDULER = "scheduler"', self.sensor_source)
         self.assertIn('BLOCK_TRANSFER = "transfer"', self.sensor_source)
         self.assertIn('f"{entry_id}_{self.block}"', self.sensor_source)
+        self.assertIn("config_subentry_id=", self.sensor_source)
 
     def test_every_sensor_belongs_to_a_known_block(self) -> None:
         tree = ast.parse(self.sensor_source)
