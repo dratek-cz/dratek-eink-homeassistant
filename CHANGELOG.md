@@ -2,6 +2,23 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.344] - 2026-08-26
+
+### Přidáno
+- **Jízdní řády přímo v integraci Drátek**: šablona Odjezdy vyhledá zastávku podle názvu bez další HACS integrace a uloží její identifikátor ke konkrétnímu displeji.
+- **České a slovenské odjezdy z otevřených dat**: backend přes Transitous načítá linku, směr, čas do odjezdu, nástupiště a dostupnou informaci v reálném čase; požadavky mají krátkou cache a korektní identifikaci klienta.
+- **Živé automatické překreslení celé odjezdové tabule**: všechny čtyři řádky se obnovují při pravidelné automatizaci stejně jako ruční náhled.
+
+### Vylepšeno
+- **Kdo je doma využívá celou plochu**: na šířku má tři výrazné sloupce, na výšku tři plnohodnotné karty osob.
+- **Stav serveru je čitelná konzole**: čtyři tenké měřáky nahradila mřížka CPU, RAM, disku a teploty; na výšku se hodnoty skládají pod sebe.
+- **Odjezdy na šířku i na výšku** používají plně vybarvené značky linek a zobrazují čtyři skutečné spoje.
+
+### Opraveno
+- **Ukazatele a prstence** správně pracují se zlomkem 0–1 a chrání se proti neplatným hodnotám; ruční a automatické vykreslení se znovu shodují.
+- **Termostat na malém širokém displeji** už nepřekrývá krajní hodnoty stupnice následujícím řádkem.
+- **Serverové hodnoty a další bloky** mají opravené rozestupy v kompaktních i portrétních rozloženích.
+
 ## [0.1.343] - 2026-08-25
 
 ### Vylepšeno

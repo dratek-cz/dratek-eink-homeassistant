@@ -74,17 +74,20 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.343",
-        name="DRATEK eInk v0.1.343",
-        body="""## Release 0.1.343
+        tag="v0.1.344",
+        name="DRATEK eInk v0.1.344",
+        body="""## Release 0.1.344
+
+### Přidáno
+- Jízdní řády jsou přímo součástí integrace Drátek. V nastavení šablony Odjezdy stačí vyhledat a vybrat zastávku bez další HACS integrace a bez API klíče.
+- Čtyři nejbližší odjezdy se načítají z otevřených dat Transitous pro Česko a Slovensko a automaticky obnovují linku, směr a čas.
 
 ### Vylepšeno
-- Žlutý pigment se používá jako ohraničená plocha, podkres grafu nebo bezpečný rám QR kódu místo nečitelného žlutého textu na bílé.
-- Barevné ikony mají černý obrys, tvrdý stín a pixelový polotón; nové ikony přibyly na cenovku, odjezdy, server, zabezpečení a zásilku.
-- BWR meteoradar vykresluje nejsilnější extrémy přibližně 40–46 % černým rastrem, ale zachovává červený tvar srážek.
+- Kdo je doma a Stav serveru využívají celou plochu na šířku i na výšku.
+- Čísla linek jsou v plně vybarvených značkách a všechny čtyři řádky odjezdů jsou živé.
 
 ### Opraveno
-- Na displejích bez žlutého pigmentu se motiv bezpečně převádí na červené panely s bílými ikonami.
-- Ikony v horních pruzích se správně přednačtou pro náhled i export.
+- Ukazatele a prstence správně pracují se zlomkem 0–1 a automatický render odpovídá ručnímu náhledu.
+- Termostat ani serverové hodnoty se na kompaktních a portrétních displejích nepřekrývají.
 """,
     )

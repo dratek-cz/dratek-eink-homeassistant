@@ -1071,6 +1071,16 @@ export const inspectorMixin = {
         this._paint();
       });
     });
+    this.shadowRoot.querySelector("[data-transit-stop-search]")?.addEventListener("click", () => this._searchTransitStops?.());
+    this.shadowRoot.querySelector("[data-transit-stop-query]")?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        this._searchTransitStops?.();
+      }
+    });
+    this.shadowRoot.querySelectorAll("[data-transit-stop-id]").forEach((button) => button.addEventListener("click", () => {
+      this._selectTransitStop?.(button.dataset.transitStopId, button.dataset.transitStopName);
+    }));
     this.shadowRoot.querySelectorAll("[data-template-literal-value]").forEach((input) => {
       const bindingKey = input.dataset.templateLiteralValue;
       input.addEventListener("input", () => {

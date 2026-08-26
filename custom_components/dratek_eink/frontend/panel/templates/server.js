@@ -15,10 +15,6 @@ export const template = {
     ],
   },
   prepared: true,
-  // Which variable index feeds each meter bar's live percent fill, in the
-  // same order as the meters row below (see air.js for why this can't be
-  // recovered from the row itself).
-  automation: { ratio: [{ variableIndex: 1 }, { variableIndex: 2 }, { variableIndex: 3 }, { variableIndex: 4 }] },
   setup: {
     summary: "Technická konzole se stavovým pruhem, čtyřmi živými ukazateli zátěže a dobou provozu.",
     integrations: [
@@ -36,29 +32,46 @@ export const template = {
       "Dostupnost je volitelná - System Monitor sám o sobě dostupnost nehlásí (běží-li Home Assistant, běží i on); pro skutečné sledování jiného stroje použijte binary_sensor s device_class connectivity (např. z integrace Ping).",
     ],
   },
-  design: ({ v, ratio, width, height }) => {
+  design: ({ v, width, height }) => {
     // See home.js for why sqrt(area) rather than width alone.
     const area = width && height ? width * height : 296 * 128;
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
+    if (height > width) return [
+      { band: { icon: "server", label: "SERVER", value: v(0, "ONLINE"), color: "black" }, bleed: true, h: 0.13 },
+      // A portrait screen cannot give a two-column console enough width for
+      // labels such as temperature and storage. Stack four full-width status
+      // tiles instead; the values stay large and none of the labels truncate.
+      { grid: [
+        { icon: "chip", value: v(1, "24 %"), label: "CPU" },
+        { icon: "memory", value: v(2, "61 %"), label: "RAM" },
+        { icon: "harddisk", value: v(3, "73 %"), label: "DISK", color: "red" },
+        { icon: "thermometer", value: v(4, "48 °C"), label: "TEPLOTA" },
+      ], columns: 1, h: 0.77 },
+      { footer: [{ label: "PROVOZ", value: v(5, "18 dní") }], h: 0.10 },
+    ];
     if (height <= 160 && width >= height) return [
-      { band: { icon: "server", label: "SERVER", value: v(0, "ONLINE"), color: "black" }, bleed: true, h: 0.14 },
-      { meters: [
-        { label: "CPU", value: v(1, "24 %"), percent: ratio(1, 24) },
-        { label: "RAM", value: v(2, "61 %"), percent: ratio(2, 61) },
-        { label: "DISK", value: v(3, "73 %"), percent: ratio(3, 73), color: "red" },
-        { label: "TEPLOTA", value: v(4, "48 °C"), percent: ratio(4, 48) },
-      ], group: "ratio", h: 0.74 },
+      { band: { icon: "server", label: "SERVER", value: v(0, "ONLINE"), color: "black" }, bleed: true, h: 0.20 },
+      // Four thin progress bars turned this into a diagnostics table that had
+      // to be studied. A 2 x 2 console gives every reading a real typographic
+      // centre: the value is large, the icon says what it is, and the red disk
+      // tile remains the warning the eye finds first.
+      { grid: [
+        { icon: "chip", value: v(1, "24 %"), label: "CPU" },
+        { icon: "memory", value: v(2, "61 %"), label: "RAM" },
+        { icon: "harddisk", value: v(3, "73 %"), label: "DISK", color: "red" },
+        { icon: "thermometer", value: v(4, "48 °C"), label: "TEPLOTA" },
+      ], columns: 2, h: 0.68 },
       { footer: [{ label: "PROVOZ", value: v(5, "18 dní") }], h: 0.12 },
     ];
     return [
       { band: { icon: "server", label: "HOME SERVER", value: v(0, "ONLINE"), color: "black" }, bleed: true, h: lerp(0.18, 0.13) },
-      { meters: [
-        { label: "CPU", value: v(1, "24 %"), percent: ratio(1, 24) },
-        { label: "RAM / paměť", value: v(2, "61 %"), percent: ratio(2, 61) },
-        { label: "DISK / úložiště", value: v(3, "73 %"), percent: ratio(3, 73), color: "red" },
-        { label: "TEMP / teplota", value: v(4, "48 °C"), percent: ratio(4, 48) },
-      ], group: "ratio", h: lerp(0.58, 0.68) },
+      { grid: [
+        { icon: "chip", value: v(1, "24 %"), label: "CPU" },
+        { icon: "memory", value: v(2, "61 %"), label: "RAM / paměť" },
+        { icon: "harddisk", value: v(3, "73 %"), label: "DISK / úložiště", color: "red" },
+        { icon: "thermometer", value: v(4, "48 °C"), label: "TEMP / teplota" },
+      ], columns: 2, h: lerp(0.58, 0.68) },
       { strip: [
         { icon: "server-network", label: "UPTIME", value: v(5, "18 dní"), color: "red" },
         { icon: "lan-connect", label: "SÍŤ", value: "AKTIVNÍ" },

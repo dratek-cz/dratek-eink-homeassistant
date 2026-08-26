@@ -994,13 +994,24 @@ class FrontendToolLibraryTests(unittest.TestCase):
             "Zahrada",
         ):
             self.assertIn(f'title: "{title}"', self.source)
-        # Charts, meters and dials read the bound entity rather than carrying a
+        # Charts and dials read the bound entity rather than carrying a
         # hard-coded number, so a template is a working readout as soon as it is
-        # dropped on a display instead of a picture of one.
+        # dropped on a display instead of a picture of one. Server metrics are
+        # direct live values in a 2 x 2 console: the old four progress bars were
+        # too compressed on a 296 x 128 tag to work as a glanceable status.
         self.assertIn("_templatePercent(template, variableIndex", self.source)
         self.assertIn("const series = (index, fallback) => this._templateSeries(template, index, fallback);", self.source)
         self.assertIn("const ratio = (index, fallback) => this._templatePercent(template, index, fallback) / 100;", self.source)
-        self.assertIn('{ label: "CPU", value: v(1, "24 %"), percent: ratio(1, 24) },', self.source)
+        self.assertIn('{ icon: "chip", value: v(1, "24 %"), label: "CPU" },', self.source)
+        self.assertIn('{ icon: "harddisk", value: v(3, "73 %"), label: "DISK", color: "red" },', self.source)
+        # The narrow/tall display is not a rotated copy of the landscape one.
+        # Presence and server become full-width vertical tiles, while every
+        # departure (including the live first line) keeps a filled line plate.
+        self.assertGreaterEqual(self.source.count("if (height > width) return ["), 3)
+        self.assertIn('], columns: 1, h: 0.77 },', self.source)
+        self.assertIn('const transit = () => {', self.source)
+        self.assertIn('group: "transport-board"', self.source)
+        self.assertIn('type: "dratek_eink/transit/search_stops"', self.source)
         # The forecast and the calendar come from services; Home Assistant removed
         # the forecast attribute in 2024.4, so the weather strip had been showing
         # sample data on every installation since.
@@ -2001,18 +2012,50 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('const yellow = red >= 161 && green >= 128 && blue < 96;', self.source)
         self.assertIn('if (yellow) return this._displaySupportsYellow?.() ? [244, 196, 0] : [220, 20, 12];', self.source)
 
-    def test_all_builtin_templates_use_the_shared_four_colour_theme(self):
-        self.assertIn('_fourColorTemplateRows(rows)', self.source)
-        self.assertIn('row.color = "yellow"', self.source)
+    def test_non_protected_templates_use_the_shared_four_colour_theme(self):
+        self.assertIn('_fourColorTemplateRows(rows, templateId = "")', self.source)
         self.assertIn('if (painted >= 2) break;', self.source)
         self.assertIn('row.qr.accent = "yellow"', self.source)
+        # Yellow needs area to read. A 17px line-art glyph filled yellow on
+        # white is almost invisible once the panel thresholds it, so the accent
+        # goes to arcs, ring and dial fills, the datebox header and the QR
+        # frame - never to an icon, and never to type.
+        self.assertNotIn('if (row.icon) { row.color = "yellow"; return true; }', self.source)
+        self.assertNotIn('iconColor: "yellow"', self.source)
         self.assertIn('paint-order="stroke"', self.source)
-        self.assertIn('dratek-accent-shade-', self.source)
-        self.assertIn('const textColor = yellow ? BLACK : "#ffffff";', self.source)
+        self.assertNotIn('dratek-accent-shade-', self.source)
+        self.assertIn('["custom_image", "weather", "radar", "cz_spot_prices", "calendar"]', self.source)
+        self.assertIn('if (protectedTemplates.has(String(templateId || ""))) return themed;', self.source)
+        self.assertIn('themed.forEach((row) => { row.modern = true; });', self.source)
+        # `modern` now only picks the layout. The decorative top rule it used to
+        # draw - a yellow segment leading into a black line across the page -
+        # is gone: it was ornament, and the yellow made it the loudest thing on
+        # a panel whose whole appeal is that it looks like paper.
+        self.assertNotIn('_minimalTemplateAccent', self.source)
+        self.assertNotIn('_modernTemplateSurface(', self.source)
+        self.assertNotIn('_modernTemplateInset(', self.source)
+        self.assertLess(
+            self.source.index('if (protectedTemplates.has(String(templateId || ""))) return themed;'),
+            self.source.index('themed.forEach((row) => { row.modern = true; });'),
+        )
+        # A band is an open headline with a red hairline under it, not a solid
+        # slab with white type knocked out. Black slabs are gone entirely: the
+        # panel thresholds every pixel, so white-on-black is the worst-rendering
+        # combination it has, and a dark block is the heaviest thing on a page
+        # that is otherwise white.
+        self.assertIn('const filled = band.color === "red";', self.source)
+        self.assertIn('const textColor = filled ? "#ffffff" : BLACK;', self.source)
+        self.assertNotIn('band.color === "black" ? BLACK', self.source)
+        self.assertNotIn('footerRow.color === "black" ? BLACK : RED', self.source)
         for icon in ("tag-outline", "tram", "server", "shield-home-outline", "package-variant-closed"):
             self.assertIn(f'icon: "{icon}"', self.source)
-        self.assertIn('footer.color = "red"', self.source)
-        self.assertIn('return this._fourColorTemplateRows(rows);', self.source)
+        # The footer is a solid red bar on every template, so the four-colour
+        # pass no longer recolours it and the renderer no longer asks the row
+        # what colour it wants. It is the one filled block in the catalogue:
+        # being the only coloured shape is what makes it read as a footer.
+        self.assertNotIn('footer.color = "red"', self.source)
+        self.assertIn('height="${footerHeight.toFixed(2)}" fill="${RED}"', self.source)
+        self.assertIn('return this._fourColorTemplateRows(rows, baseTemplate?.id);', self.source)
 
 
 if __name__ == "__main__":

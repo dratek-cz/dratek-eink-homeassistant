@@ -4,6 +4,13 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.344
+
+- **Jízdní řády jsou přímo součástí Drátku** – v nastavení šablony Odjezdy stačí vyhledat a vybrat zastávku; není potřeba další HACS integrace ani API klíč.
+- **Čtyři skutečné odjezdy se obnovují automaticky** včetně linky, směru a času do odjezdu z otevřených dat Transitous pro Česko a Slovensko.
+- **Kdo je doma a Stav serveru využívají celou plochu** na šířku i na výšku a odjezdy mají plně vybarvená čísla linek.
+- **Opravené ukazatele a termostat** se nepřekrývají a ruční náhled odpovídá automatickému překreslení.
+
 ## Novinky ve verzi 0.1.343
 
 - **Žlutá je součástí grafiky, ne nečitelný text na bílé** – používá ohraničené panely, podkresy grafů a bezpečný rám QR kódu.

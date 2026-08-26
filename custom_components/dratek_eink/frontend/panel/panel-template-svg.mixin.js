@@ -16,7 +16,7 @@
 // are identical by construction.
 
 import qrcode from "../qrcode-generator.js";
-import { DISPLAY_TEMPLATES } from "./templates/index.js?v=yellow-shaded-accents-1";
+import { DISPLAY_TEMPLATES } from "./templates/index.js?v=native-transit-1";
 
 const RED = "#e31b1b";
 const YELLOW = "#f4c400";
@@ -761,36 +761,16 @@ export const templateSvgMixin = {
     }
     const resolved = ICON_GEOMETRY.get(name);
     if (!resolved?.inner) return "";
-    if (color === YELLOW || color === RED) {
-      const serial = this._accentIconSerial = (this._accentIconSerial || 0) + 1;
-      const safeName = String(name || "icon").replace(/[^a-z0-9_-]/gi, "-");
-      const clipId = `dratek-accent-clip-${safeName}-${serial}`;
-      const patternId = `dratek-accent-shade-${safeName}-${serial}`;
-      const radius = size * 0.46;
-      const shadow = Math.max(1, size * 0.07);
-      const glyphSize = size * 0.62;
-      const glyphX = cx - glyphSize / 2;
-      const glyphY = cy - glyphSize / 2;
-      const glyphColor = color === RED ? "#ffffff" : BLACK;
-      return `<defs>`
-        + `<clipPath id="${clipId}"><circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${radius.toFixed(2)}"></circle></clipPath>`
-        + `<pattern id="${patternId}" patternUnits="userSpaceOnUse" width="4" height="4" shape-rendering="crispEdges">`
-        + `<rect x="0" y="0" width="1" height="1" fill="${BLACK}"></rect><rect x="2" y="2" width="1" height="1" fill="${BLACK}"></rect>`
-        + `</pattern></defs>`
-        + `<circle cx="${(cx + shadow).toFixed(2)}" cy="${(cy + shadow).toFixed(2)}" r="${radius.toFixed(2)}" fill="${BLACK}"></circle>`
-        + `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${radius.toFixed(2)}" fill="${color}" stroke="${BLACK}" stroke-width="1.2"></circle>`
-        + `<rect x="${(cx - radius).toFixed(2)}" y="${cy.toFixed(2)}" width="${(radius * 2).toFixed(2)}" height="${radius.toFixed(2)}"`
-        + ` fill="url(#${patternId})" clip-path="url(#${clipId})"></rect>`
-        + `<svg x="${glyphX.toFixed(2)}" y="${glyphY.toFixed(2)}" width="${glyphSize.toFixed(2)}" height="${glyphSize.toFixed(2)}"`
-        + ` viewBox="${resolved.viewBox}" fill="${glyphColor}" color="${glyphColor}">${resolved.inner}</svg>`;
-    }
     const x = cx - size / 2;
     const y = cy - size / 2;
+    const outline = color === YELLOW
+      ? ` stroke="${BLACK}" stroke-width="1.1" paint-order="stroke" stroke-linejoin="round"`
+      : "";
     // Nested <svg> re-establishes the icon's own viewBox, so it scales into the
     // requested box no matter what coordinate system the source icon used. The
     // color attribute makes any fill="currentColor" inside resolve correctly.
     return `<svg x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${size.toFixed(2)}" height="${size.toFixed(2)}"`
-      + ` viewBox="${resolved.viewBox}" fill="${color}" color="${color}">${resolved.inner}</svg>`;
+      + ` viewBox="${resolved.viewBox}" fill="${color}" color="${color}"${outline}>${resolved.inner}</svg>`;
   },
 
   // Home Assistant's own weather glyph, drawn as a dithered raster <image>
@@ -967,11 +947,18 @@ export const templateSvgMixin = {
   },
 
   _layoutTemplateSvgStacked(rows, width, height, collector) {
+    // Kept for the layout choice below; the decorative top rule it used to
+    // draw - a yellow segment leading into a black line - is gone. It was
+    // ornament on a panel whose whole appeal is that it looks like paper.
+    const modern = rows.some((row) => row?.modern);
     const pad = Math.max(3, Math.round(Math.min(width, height) * 0.035));
     const footerRow = rows.find((row) => row.footer);
     const footerHeight = footerRow ? Math.max(18, Math.round(height * (footerRow.h || 0.16))) : 0;
-    const box = { x: pad, y: pad, w: width - pad * 2, h: height - footerHeight - pad, fullX: 0, fullW: width };
-    const parts = this._stackTemplateBlocks(rows.filter((row) => !row.footer), box, height, collector);
+    const parts = [];
+    let box = { x: pad, y: pad, w: width - pad * 2, h: height - footerHeight - pad, fullX: 0, fullW: width };
+    if (modern) {
+    }
+    parts.push(...this._stackTemplateBlocks(rows.filter((row) => !row.footer), box, modern ? 0 : height, collector));
     parts.push(...this._layoutTemplateFooter(footerRow, width, height, footerHeight, collector));
     return parts.join("");
   },
@@ -983,6 +970,7 @@ export const templateSvgMixin = {
   // on a 296x128 tag as it does on a 240x416 one.
   _layoutTemplateSvgColumns(rows, width, height, collector) {
     const compactLandscape = rows.some((row) => row?.compact);
+    const modern = rows.some((row) => row?.modern);
     const pad = compactLandscape ? 3 : Math.max(3, Math.round(Math.min(width, height) * 0.045));
     const footerRow = rows.find((row) => row.footer);
     // Horizontal rules separate stacked rows; side by side there is nothing left
@@ -1013,7 +1001,9 @@ export const templateSvgMixin = {
 
     const parts = [];
     if (!lead.length || !detail.length) {
-      const box = { x: pad, y: pad, w: width - pad * 2, h: columnHeight, fullX: pad, fullW: width - pad * 2 };
+      let box = { x: pad, y: pad, w: width - pad * 2, h: columnHeight, fullX: pad, fullW: width - pad * 2 };
+      if (modern) {
+      }
       parts.push(...this._stackTemplateBlocks(lead.length ? lead : flowRows, box, 0, collector));
       if (lead.length && detail.length) parts.push(...this._stackTemplateBlocks(detail, box, 0, collector));
     } else {
@@ -1021,9 +1011,13 @@ export const templateSvgMixin = {
       const leadWidth = Math.max(1, Math.round((width - pad * 2 - gap) * 0.42));
       const detailX = pad + leadWidth + gap;
       const detailWidth = Math.max(1, width - pad - detailX);
-      parts.push(...this._stackTemplateBlocks(lead, { x: pad, y: pad, w: leadWidth, h: columnHeight, fullX: pad, fullW: leadWidth }, 0, collector));
-      parts.push(`<rect x="${(detailX - gap / 2).toFixed(2)}" y="${pad.toFixed(2)}" width="1" height="${columnHeight.toFixed(2)}" fill="${BLACK}"></rect>`);
-      parts.push(...this._stackTemplateBlocks(detail, { x: detailX, y: pad, w: detailWidth, h: columnHeight, fullX: detailX, fullW: detailWidth }, 0, collector));
+      let leadBox = { x: pad, y: pad, w: leadWidth, h: columnHeight, fullX: pad, fullW: leadWidth };
+      let detailBox = { x: detailX, y: pad, w: detailWidth, h: columnHeight, fullX: detailX, fullW: detailWidth };
+      if (modern) {
+      }
+      parts.push(`<rect x="${(detailX - gap / 2).toFixed(2)}" y="${leadBox.y.toFixed(2)}" width="1" height="${leadBox.h.toFixed(2)}" fill="${BLACK}"></rect>`);
+      parts.push(...this._stackTemplateBlocks(lead, leadBox, 0, collector));
+      parts.push(...this._stackTemplateBlocks(detail, detailBox, 0, collector));
     }
 
     parts.push(...this._layoutTemplateFooter(footerRow, width, height, footerHeight, collector));
@@ -1065,8 +1059,13 @@ export const templateSvgMixin = {
     }
     const parts = [];
     const top = height - footerHeight;
-    const footerColor = footerRow.color === "black" ? BLACK : RED;
-    parts.push(`<rect x="0" y="${top.toFixed(2)}" width="${width}" height="${footerHeight.toFixed(2)}" fill="${footerColor}"></rect>`);
+    // The footer is always a solid red bar. It is the one place a filled block
+    // belongs: it closes the page, it is the same on every template, and being
+    // the only coloured shape on the panel is what makes it read as a footer
+    // rather than as content. Red rather than black because red carries the
+    // brand and, on a panel that thresholds every pixel, prints just as
+    // cleanly while leaving black to the type above it.
+    parts.push(`<rect x="0" y="${top.toFixed(2)}" width="${width}" height="${footerHeight.toFixed(2)}" fill="${RED}"></rect>`);
     const cells = footerRow.footer;
     const cellWidth = width / (cells.length || 1);
     cells.forEach((cell, index) => {
@@ -1136,6 +1135,38 @@ export const templateSvgMixin = {
     return "";
   },
 
+  // Whether this row may take the four-colour accent treatment. Two conditions,
+  // both of which have bitten already:
+  //   * row.modern is set only by _fourColorTemplateRows, which returns early
+  //     for the protected templates - so those keep their own tuned palette;
+  //   * yellow on white is almost no contrast on a panel that thresholds every
+  //     pixel, so callers must bound it with a black edge or not use it.
+  _accentYellow(row) {
+    return !!row?.modern && !!this._displaySupportsYellow?.();
+  },
+
+  // Every block that fills a shape by proportion takes a 0-1 fraction, which is
+  // what the templates' ratio() helper returns. A template that wrote a plain
+  // percentage instead clamped to 1 and filled the shape completely -
+  // thermostat.js asked for `percent: 54` and drew a solid black arch at every
+  // temperature - so a value above 1 is read as the percentage it obviously is
+  // rather than silently pinning the gauge.
+  _fillFraction(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number <= 0) return 0;
+    return Math.min(1, number > 1 ? number / 100 : number);
+  },
+
+  // The ink a "done" marker is filled with. Yellow only where the template did
+  // not ask for red and the panel can actually print it; a three-colour panel
+  // keeps exactly what it had. A marker is a filled square or dot - an area,
+  // never type - which is the only kind of place yellow reads on this panel.
+  _markerInk(color, row, outlined) {
+    return color === "red" || !outlined || !this._accentYellow(row)
+      ? this._templateInk(color)
+      : YELLOW;
+  },
+
   _templateInk(color) {
     if (color === "yellow") return this._displaySupportsYellow?.() ? YELLOW : RED;
     return color === "red" ? RED : BLACK;
@@ -1194,10 +1225,9 @@ export const templateSvgMixin = {
   _blockRule(row, box) {
     const ruleWidth = box.w * 0.82;
     const x = box.x + (box.w - ruleWidth) / 2;
-    if (row.accent === "yellow" && this._displaySupportsYellow?.()) {
-      return this._svgHairline(x, box.y + box.h / 2 - 2, ruleWidth, 5, BLACK)
-        + this._svgHairline(x + 1, box.y + box.h / 2 - 1, Math.max(1, ruleWidth - 2), 3, YELLOW);
-    }
+    // One hairline, nothing else. This used to draw a five-pixel black bar with
+    // a yellow one inside it whenever the four-colour pass touched the row -
+    // a heavy striped ribbon across the top of the page rather than a divider.
     return this._svgHairline(x, box.y + box.h / 2, ruleWidth, 1, this._templateInk(row.color));
   },
 
@@ -1207,22 +1237,20 @@ export const templateSvgMixin = {
   _blockText(row, box) {
     const ratio = row.h ? (row.size || row.h * 0.62) / row.h : 0.62;
     const fontSize = Math.max(9, Math.min(box.h * ratio, box.h * 0.92));
-    const accented = row.accent === "yellow" && this._displaySupportsYellow?.();
-    const parts = accented
-      ? [`<rect x="${box.x.toFixed(2)}" y="${(box.y + box.h * 0.08).toFixed(2)}" width="${box.w.toFixed(2)}" height="${(box.h * 0.84).toFixed(2)}" rx="3" fill="${YELLOW}" stroke="${BLACK}" stroke-width="1.2"></rect>`]
-      : [];
-    parts.push(this._svgText(row.text, box.x + box.w / 2, box.y + box.h / 2, fontSize, {
+    // No yellow slab behind the words. Yellow is reserved for graphic detail;
+    // as a fill under type it reads as a highlighter mark, and the black text
+    // on it loses contrast once the panel thresholds every pixel.
+    return this._svgText(row.text, box.x + box.w / 2, box.y + box.h / 2, fontSize, {
       bold: !!row.bold,
-      color: accented ? BLACK : this._templateInk(row.color),
+      color: this._templateInk(row.color),
       maxWidth: box.w,
-    }));
-    return parts.join("");
+    });
   },
 
   _blockList(row, box) {
     const cells = row.list;
     const lineHeight = box.h / (cells.length || 1);
-    const fontSize = Math.max(row.compact ? 10 : 8.5, Math.min(lineHeight * 0.7, box.w * 0.13));
+    const fontSize = Math.max(row.compact ? 11 : 10, Math.min(lineHeight * 0.82, box.w * 0.16));
     const right = box.x + box.w;
     const parts = [];
     cells.forEach((cell, index) => {
@@ -1230,7 +1258,7 @@ export const templateSvgMixin = {
       let textX = box.x;
       if (cell.icon) {
         const iconSize = Math.min(lineHeight * 0.66, box.w * 0.2);
-        parts.push(this._svgIcon(cell.icon, box.x + iconSize / 2, lineY, iconSize, this._templateInk(cell.color)));
+        parts.push(this._svgIcon(cell.icon, box.x + iconSize / 2, lineY, iconSize, this._templateInk(cell.iconColor ?? cell.color)));
         textX = box.x + iconSize + Math.max(2, iconSize * 0.25);
       }
       if (cell.value != null && cell.label != null) {
@@ -1266,19 +1294,18 @@ export const templateSvgMixin = {
     const unitSize = fontSize * unitRatio;
     const left = box.x + box.w / 2 - span(fontSize) / 2;
     const baseline = box.y + valueHeight * 0.54;
-    const accented = stat.accent === "yellow" && this._displaySupportsYellow?.();
-    const parts = accented
-      ? [`<rect x="${(box.x + box.w * 0.04).toFixed(2)}" y="${(box.y + box.h * 0.07).toFixed(2)}" width="${(box.w * 0.92).toFixed(2)}" height="${(box.h * 0.86).toFixed(2)}" rx="4" fill="${YELLOW}" stroke="${BLACK}" stroke-width="1.2"></rect>`]
-      : [];
-    parts.push(this._svgText(val, left, baseline, fontSize, { anchor: "start", bold: true, color: accented ? BLACK : this._templateInk(stat.color) }));
+    // See _blockText: the reading itself is the thing to look at, so it gets
+    // the panel's strongest ink rather than a coloured plate under it.
+    const parts = [];
+    parts.push(this._svgText(val, left, baseline, fontSize, { anchor: "start", bold: true, color: this._templateInk(stat.color) }));
     if (stat.unit) {
       parts.push(this._svgText(stat.unit, left + this._svgTextWidth(val, fontSize, true) + unitSize * 0.3, baseline + fontSize * 0.22, unitSize, {
-        anchor: "start", color: accented ? BLACK : this._templateInk(stat.unitColor),
+        anchor: "start", color: this._templateInk(stat.unitColor),
       }));
     }
     if (stat.caption != null) {
       parts.push(this._svgText(stat.caption, box.x + box.w / 2, box.y + valueHeight + captionHeight * 0.5, Math.max(row.compact ? 10 : 8.5, captionHeight * 0.7), {
-        bold: false, minSize: row.compact ? 8.5 : undefined, color: accented ? BLACK : this._templateInk(stat.captionColor), maxWidth: box.w,
+        bold: false, minSize: row.compact ? 8.5 : undefined, color: this._templateInk(stat.captionColor), maxWidth: box.w,
       }));
     }
     return parts.join("");
@@ -1290,15 +1317,22 @@ export const templateSvgMixin = {
     const band = row.band;
     const x = row.bleed ? box.fullX : box.x;
     const w = row.bleed ? box.fullW : box.w;
-    const yellow = band.color === "yellow" && this._displaySupportsYellow?.();
-    const fill = band.color === "black" ? BLACK : yellow ? YELLOW : RED;
-    const textColor = yellow ? BLACK : "#ffffff";
-    const parts = [`<rect x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}" fill="${fill}"${yellow ? ` stroke="${BLACK}" stroke-width="1.2"` : ""}></rect>`];
+    // A band used to be a solid slab with white type knocked out of it, and
+    // for most templates that slab was black - a heavy dark block across the
+    // top of a page that is otherwise white. Only a band the template asks for
+    // in red keeps a fill now; every other one becomes an open headline with a
+    // thin red rule under it. Same emphasis, a fraction of the ink, and no
+    // white-on-black text to fight the panel's hard 50% threshold.
+    const filled = band.color === "red";
+    const parts = filled
+      ? [`<rect x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${w.toFixed(2)}" height="${box.h.toFixed(2)}" fill="${RED}"></rect>`]
+      : [`<rect x="${x.toFixed(2)}" y="${(box.y + box.h - 1).toFixed(2)}" width="${w.toFixed(2)}" height="1" fill="${RED}"></rect>`];
+    const textColor = filled ? "#ffffff" : BLACK;
     const iconSize = band.icon ? Math.min(box.h * 0.72, w * 0.12) : 0;
     const iconCx = x + iconSize * 0.82;
     const textX = band.icon ? x + iconSize * 1.65 + (w - iconSize * 1.65) / 2 : x + w / 2;
     const textWidth = band.icon ? Math.max(10, w - iconSize * 2.15) : w * 0.92;
-    const iconColor = yellow ? RED : this._displaySupportsYellow?.() ? YELLOW : "#ffffff";
+    const iconColor = filled ? "#ffffff" : RED;
     if (band.icon) parts.push(this._svgIcon(band.icon, iconCx, box.y + box.h / 2, iconSize, iconColor));
     // On a 128 px landscape tag these bands are often only 16-26 native
     // pixels high. Two separate baselines at 30/70 % overlap after e-ink
@@ -1311,10 +1345,10 @@ export const templateSvgMixin = {
       return parts.join("");
     }
     if (band.label != null && band.value != null) {
-      parts.push(this._svgText(band.label, textX, box.y + box.h * 0.3, Math.max(8.5, box.h * 0.32), { color: textColor, bold: true, maxWidth: textWidth }));
-      parts.push(this._svgText(band.value, textX, box.y + box.h * 0.7, Math.max(10.5, box.h * 0.45), { color: textColor, bold: true, maxWidth: textWidth }));
+      parts.push(this._svgText(band.label, textX, box.y + box.h * 0.3, Math.max(10, box.h * 0.4), { color: textColor, bold: true, maxWidth: textWidth }));
+      parts.push(this._svgText(band.value, textX, box.y + box.h * 0.7, Math.max(12, box.h * 0.56), { color: textColor, bold: true, maxWidth: textWidth }));
     } else {
-      parts.push(this._svgText(band.value ?? band.label, textX, box.y + box.h * 0.5, Math.max(10.5, box.h * 0.56), { color: textColor, bold: true, maxWidth: textWidth }));
+      parts.push(this._svgText(band.value ?? band.label, textX, box.y + box.h * 0.5, Math.max(12, box.h * 0.68), { color: textColor, bold: true, maxWidth: textWidth }));
     }
     return parts.join("");
   },
@@ -1337,8 +1371,16 @@ export const templateSvgMixin = {
     ];
     values.forEach((value, index) => {
       const barHeight = Math.max(1, ((value - bottom) / span) * (chartHeight - 1));
+      // On a four-colour panel the columns are yellow with a black edge: the
+      // shape still reads as a solid bar, but a chart stops being a block of
+      // black. The highlighted column keeps red so it still stands out, and a
+      // three-colour panel keeps the plain black bars it always had.
+      const columns = this._accentYellow(row);
+      const fill = row.bars.highlight === index ? RED : columns ? YELLOW : BLACK;
+      const edge = columns && row.bars.highlight !== index
+        ? ` stroke="${BLACK}" stroke-width="1"` : "";
       parts.push(`<rect x="${(box.x + step * index + (step - barWidth) / 2).toFixed(2)}" y="${(box.y + chartHeight - barHeight).toFixed(2)}"`
-        + ` width="${barWidth.toFixed(2)}" height="${barHeight.toFixed(2)}" fill="${row.bars.highlight === index ? RED : BLACK}"></rect>`);
+        + ` width="${barWidth.toFixed(2)}" height="${barHeight.toFixed(2)}" fill="${fill}"${edge}></rect>`);
     });
     labels.forEach((label, index) => {
       if (label == null || label === "") return;
@@ -1361,15 +1403,38 @@ export const templateSvgMixin = {
     const parts = [];
     meters.forEach((meter, index) => {
       const top = box.y + lineHeight * index;
-      const labelSize = Math.max(row.compact ? 9.5 : 7, Math.min(lineHeight * 0.42, box.w * 0.1));
-      const barHeight = Math.max(row.compact ? 3 : 2, lineHeight * 0.28);
-      const barY = top + lineHeight * 0.55;
-      const percent = Math.max(0, Math.min(1, Number(meter.percent) || 0));
-      parts.push(this._svgText(meter.label, box.x, top + lineHeight * 0.26, labelSize, { anchor: "start", bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: box.w * 0.58 }));
-      parts.push(this._svgText(meter.value, box.x + box.w, top + lineHeight * 0.26, labelSize, { anchor: "end", bold: !row.compact, color: this._templateInk(meter.color), maxWidth: box.w * 0.4 }));
+      // A track needs its outline, a gap and a fill; under six pixels those
+      // three collapse into one smear once the panel thresholds them. Six is
+      // therefore the floor, and at six the outline still fits - which matters
+      // twice over, because the outline is also what makes a yellow fill
+      // visible at all against white. Ten is the ceiling: past that a bar stops
+      // reading as a gauge and starts reading as a slab.
+      const barHeight = Math.max(6, Math.min(lineHeight * 0.32, 10));
+      const gap = Math.max(2, lineHeight * 0.08);
+      // What is left for the label and the reading once the bar has taken its
+      // share. Sizing the type off the whole line height instead was what let
+      // the server template's readings grow until they overlapped the bar of
+      // the meter above them.
+      const textBand = Math.max(9, lineHeight - barHeight - gap);
+      const labelSize = Math.max(row.compact ? 10 : 9.5, Math.min(textBand * 0.8, box.w * 0.13));
+      // The reading carries the row; the label only says what it is. They used
+      // to share one size, which left a meter row looking like two captions
+      // with a hairline under them.
+      const valueSize = Math.max(labelSize, Math.min(textBand * 0.95, box.w * 0.18));
+      const textY = top + textBand / 2;
+      const barY = top + textBand + gap / 2;
+      const percent = this._fillFraction(meter.percent);
+      parts.push(this._svgText(meter.label, box.x, textY, labelSize, { anchor: "start", bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: box.w * 0.58 }));
+      parts.push(this._svgText(meter.value, box.x + box.w, textY, valueSize, { anchor: "end", bold: true, color: this._templateInk(meter.color), maxWidth: box.w * 0.4 }));
       parts.push(`<rect x="${box.x.toFixed(2)}" y="${barY.toFixed(2)}" width="${box.w.toFixed(2)}" height="${barHeight.toFixed(2)}" fill="none" stroke="${BLACK}" stroke-width="1"></rect>`);
       if (percent > 0) {
-        parts.push(`<rect x="${box.x.toFixed(2)}" y="${barY.toFixed(2)}" width="${(box.w * percent).toFixed(2)}" height="${barHeight.toFixed(2)}" fill="${this._templateInk(meter.color)}"></rect>`);
+        // The filled part of a meter is the other honest place for yellow: it
+        // is an area, it is never type, and a row of black bars was most of
+        // what made these templates read as three-colour.
+        const meterInk = meter.color === "red" || !this._accentYellow(row)
+          ? this._templateInk(meter.color)
+          : YELLOW;
+        parts.push(`<rect x="${box.x.toFixed(2)}" y="${barY.toFixed(2)}" width="${(box.w * percent).toFixed(2)}" height="${barHeight.toFixed(2)}" fill="${meterInk}"></rect>`);
       }
     });
     return parts.join("");
@@ -1381,16 +1446,19 @@ export const templateSvgMixin = {
     const cy = box.y + box.h / 2;
     const outer = Math.min(box.w, box.h) * 0.46;
     const inner = outer * 0.68;
-    const percent = Math.max(0, Math.min(1, Number(ring.percent) || 0));
-    const parts = [];
-    if (ring.accent === "yellow" && this._displaySupportsYellow?.()) {
-      parts.push(`<path d="${this._svgArcPath(cx, cy, outer, inner, -90, 269.9)}" fill="${YELLOW}"></path>`);
-    }
-    parts.push(
+    const percent = this._fillFraction(ring.percent);
+    // The reading carries the colour and the track stays empty. It used to be
+    // the other way round - the whole ring filled yellow with the value arc
+    // laid over it in black - so a gauge came out as a solid dark shape
+    // whatever it was reading, and the one thing the eye should measure was
+    // the one thing with no edge of its own.
+    const accent = ring.accent === "yellow" && ring.color !== "red" && this._accentYellow(row);
+    const parts = [
       `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${outer.toFixed(2)}" fill="none" stroke="${BLACK}" stroke-width="1"></circle>`,
       `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${inner.toFixed(2)}" fill="none" stroke="${BLACK}" stroke-width="1"></circle>`,
-    );
-    if (percent > 0) parts.push(`<path d="${this._svgArcPath(cx, cy, outer, inner, -90, -90 + percent * 360)}" fill="${this._templateInk(ring.color)}"></path>`);
+    ];
+    if (percent > 0) parts.push(`<path d="${this._svgArcPath(cx, cy, outer, inner, -90, -90 + percent * 360)}" fill="${accent ? YELLOW : this._templateInk(ring.color)}"`
+      + `${accent ? ` stroke="${BLACK}" stroke-width="1"` : ""}></path>`);
     if (ring.value != null) parts.push(this._svgText(ring.value, cx, cy - (ring.caption != null ? inner * 0.2 : 0), Math.max(row.compact ? 13 : 0, inner * 0.62), { bold: true, minSize: row.compact ? 10 : undefined, maxWidth: inner * 1.7 }));
     if (ring.caption != null) parts.push(this._svgText(ring.caption, cx, cy + inner * 0.46, Math.max(row.compact ? 9.5 : 0, inner * 0.34), { bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: inner * 1.7 }));
     return parts.join("");
@@ -1404,13 +1472,12 @@ export const templateSvgMixin = {
     const outer = Math.min(box.w * 0.46, box.h * 0.82);
     const inner = outer * 0.7;
     const cy = box.y + box.h * 0.5 + outer * 0.4;
-    const percent = Math.max(0, Math.min(1, Number(dial.percent) || 0));
-    const parts = [];
-    if (dial.accent === "yellow" && this._displaySupportsYellow?.()) {
-      parts.push(`<path d="${this._svgArcPath(cx, cy, outer, inner, 180, 360)}" fill="${YELLOW}"></path>`);
-    }
-    parts.push(`<path d="${this._svgArcPath(cx, cy, outer, inner, 180, 360)}" fill="none" stroke="${BLACK}" stroke-width="1"></path>`);
-    if (percent > 0) parts.push(`<path d="${this._svgArcPath(cx, cy, outer, inner, 180, 180 + percent * 180)}" fill="${this._templateInk(dial.color)}"></path>`);
+    const percent = this._fillFraction(dial.percent);
+    // See _blockRing: the track is an outline and only the reading is filled.
+    const accent = dial.accent === "yellow" && dial.color !== "red" && this._accentYellow(row);
+    const parts = [`<path d="${this._svgArcPath(cx, cy, outer, inner, 180, 360)}" fill="none" stroke="${BLACK}" stroke-width="1"></path>`];
+    if (percent > 0) parts.push(`<path d="${this._svgArcPath(cx, cy, outer, inner, 180, 180 + percent * 180)}" fill="${accent ? YELLOW : this._templateInk(dial.color)}"`
+      + `${accent ? ` stroke="${BLACK}" stroke-width="1"` : ""}></path>`);
     if (dial.value != null) parts.push(this._svgText(dial.value, cx, cy - outer * 0.28, Math.max(row.compact ? 13 : 0, outer * 0.42), { bold: true, minSize: row.compact ? 10 : undefined, maxWidth: inner * 1.8 }));
     if (dial.caption != null) parts.push(this._svgText(dial.caption, cx, cy + outer * 0.16, Math.max(row.compact ? 9.5 : 0, outer * 0.24), { bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: inner * 1.9 }));
     if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, cy + outer * 0.22, outer * 0.2, { maxWidth: outer * 0.7 }));
@@ -1517,11 +1584,11 @@ export const templateSvgMixin = {
     cells.forEach((cell, index) => {
       const cx = box.x + cellWidth * (index % columns) + cellWidth / 2;
       const top = box.y + cellHeight * Math.floor(index / columns) + (cellHeight - contentHeight) / 2;
-      if (cell.icon) parts.push(this._svgIcon(cell.icon, cx, top + contentHeight * 0.26, Math.min(contentHeight * 0.32, cellWidth * 0.32), this._templateInk(cell.color)));
-      parts.push(this._svgText(cell.value, cx, top + contentHeight * (cell.icon ? 0.6 : 0.42), Math.max(row.compact ? 11 : 9.5, Math.min(contentHeight * (cell.icon ? 0.29 : 0.38), cellWidth * 0.36)), {
+      if (cell.icon) parts.push(this._svgIcon(cell.icon, cx, top + contentHeight * 0.22, Math.min(contentHeight * 0.3, cellWidth * 0.3), this._templateInk(cell.iconColor ?? cell.color)));
+      parts.push(this._svgText(cell.value, cx, top + contentHeight * (cell.icon ? 0.57 : 0.42), Math.max(row.compact ? 11 : 9.5, Math.min(contentHeight * (cell.icon ? 0.32 : 0.46), cellWidth * 0.42)), {
         bold: true, minSize: row.compact ? 9 : undefined, color: this._templateInk(cell.color), maxWidth: cellWidth * 0.9,
       }));
-      parts.push(this._svgText(cell.label, cx, top + contentHeight * (cell.icon ? 0.85 : 0.74), Math.max(row.compact ? 9.5 : 8.5, Math.min(contentHeight * 0.22, cellWidth * 0.23)), { bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: cellWidth * 0.9 }));
+      parts.push(this._svgText(cell.label, cx, top + contentHeight * (cell.icon ? 0.88 : 0.78), Math.max(row.compact ? 9.5 : 8.5, Math.min(contentHeight * 0.21, cellWidth * 0.24)), { bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: cellWidth * 0.9 }));
     });
     return parts.join("");
   },
@@ -1535,12 +1602,14 @@ export const templateSvgMixin = {
     if (horizontal) {
       const step = box.w / (steps.length || 1);
       const lineY = box.y + box.h * 0.34;
-      const dot = Math.min(step * 0.2, box.h * 0.22);
+      // A 1px ring needs an inside to be a ring: under five pixels across it
+      // thresholds into a plain dot, so five is the floor.
+      const dot = Math.max(2.5, Math.min(step * 0.2, box.h * 0.22));
       parts.push(this._svgHairline(box.x + step * 0.5, lineY, box.w - step, 1));
       steps.forEach((item, index) => {
         const cx = box.x + step * (index + 0.5);
         parts.push(item.done
-          ? `<circle cx="${cx.toFixed(2)}" cy="${lineY.toFixed(2)}" r="${dot.toFixed(2)}" fill="${this._templateInk(item.color)}"></circle>`
+          ? `<circle cx="${cx.toFixed(2)}" cy="${lineY.toFixed(2)}" r="${dot.toFixed(2)}" fill="${this._markerInk(item.color, row, true)}" stroke="${BLACK}" stroke-width="1"></circle>`
           : `<circle cx="${cx.toFixed(2)}" cy="${lineY.toFixed(2)}" r="${dot.toFixed(2)}" fill="#ffffff" stroke="${BLACK}" stroke-width="1"></circle>`);
         // Sized from box.h alone, a tall column with many close-together steps asked
         // for a font far bigger than any one step's own width could ever hold, then
@@ -1553,13 +1622,14 @@ export const templateSvgMixin = {
       return parts.join("");
     }
     const lineHeight = box.h / (steps.length || 1);
-    const dot = Math.min(lineHeight * 0.26, box.w * 0.09);
+    // Same floor as the step markers above.
+    const dot = Math.max(2.5, Math.min(lineHeight * 0.26, box.w * 0.09));
     const railX = box.x + dot * 1.4;
     parts.push(this._svgHairline(railX, box.y + lineHeight * 0.5, 1, box.h - lineHeight));
     steps.forEach((item, index) => {
       const cy = box.y + lineHeight * (index + 0.5);
       parts.push(item.done
-        ? `<circle cx="${railX.toFixed(2)}" cy="${cy.toFixed(2)}" r="${dot.toFixed(2)}" fill="${this._templateInk(item.color)}"></circle>`
+        ? `<circle cx="${railX.toFixed(2)}" cy="${cy.toFixed(2)}" r="${dot.toFixed(2)}" fill="${this._markerInk(item.color, row, true)}" stroke="${BLACK}" stroke-width="1"></circle>`
         : `<circle cx="${railX.toFixed(2)}" cy="${cy.toFixed(2)}" r="${dot.toFixed(2)}" fill="#ffffff" stroke="${BLACK}" stroke-width="1"></circle>`);
       const textX = railX + dot * 1.8;
       parts.push(this._svgText(item.label, textX, cy, Math.max(row.compact ? 9.5 : 8.5, Math.min(lineHeight * 0.58, box.w * 0.12)), {
@@ -1576,7 +1646,12 @@ export const templateSvgMixin = {
       const lines = Math.max(1, Math.ceil(items.length / columns));
       const cellWidth = box.w / columns;
       const lineHeight = box.h / lines;
-      const mark = Math.min(lineHeight * 0.42, cellWidth * 0.12);
+      // A checkbox has to hold a 1px outline, a gap and a tick. Under about
+      // seven pixels there is no room for all three and the whole thing
+      // thresholds into a solid dot, so below that the box is dropped and the
+      // state is carried by a filled square alone.
+      const mark = Math.max(6, Math.min(lineHeight * 0.42, cellWidth * 0.12));
+      const boxed = mark >= 7;
       const parts = [];
       items.forEach((item, index) => {
         const column = index % columns;
@@ -1585,8 +1660,8 @@ export const templateSvgMixin = {
         const cy = box.y + lineHeight * (line + 0.5);
         if (column > 0) parts.push(this._svgHairline(left, box.y + box.h * 0.08, 1, box.h * 0.84));
         parts.push(`<rect x="${(left + 3).toFixed(2)}" y="${(cy - mark / 2).toFixed(2)}" width="${mark.toFixed(2)}" height="${mark.toFixed(2)}"`
-          + ` fill="${item.done ? this._templateInk(item.color) : "#ffffff"}" stroke="${BLACK}" stroke-width="1"></rect>`);
-        if (item.done) {
+          + ` fill="${item.done ? this._markerInk(item.color, row, boxed) : "#ffffff"}"${boxed ? ` stroke="${BLACK}" stroke-width="1"` : ""}></rect>`);
+        if (item.done && boxed) {
           parts.push(`<path d="M${(left + 3 + mark * 0.22).toFixed(2)} ${cy.toFixed(2)} L${(left + 3 + mark * 0.44).toFixed(2)} ${(cy + mark * 0.24).toFixed(2)}`
             + ` L${(left + 3 + mark * 0.8).toFixed(2)} ${(cy - mark * 0.26).toFixed(2)}" fill="none" stroke="#ffffff" stroke-width="${Math.max(1, mark * 0.13).toFixed(2)}"></path>`);
         }
@@ -1604,7 +1679,9 @@ export const templateSvgMixin = {
       return parts.join("");
     }
     const lineHeight = box.h / (items.length || 1);
-    const mark = Math.min(lineHeight * 0.5, box.w * 0.11);
+    // Same floor as the multi-column branch above, for the same reason.
+    const mark = Math.max(6, Math.min(lineHeight * 0.5, box.w * 0.11));
+    const boxed = mark >= 7;
     const fontSize = Math.max(row.compact ? 10 : 8.5, Math.min(lineHeight * 0.6, box.w * 0.12));
     const parts = [];
     items.forEach((item, index) => {
@@ -1612,11 +1689,11 @@ export const templateSvgMixin = {
       const left = box.x;
       if (row.marker === "dot") {
         parts.push(item.done
-          ? `<circle cx="${(left + mark / 2).toFixed(2)}" cy="${cy.toFixed(2)}" r="${(mark / 2).toFixed(2)}" fill="${this._templateInk(item.color)}"></circle>`
+          ? `<circle cx="${(left + mark / 2).toFixed(2)}" cy="${cy.toFixed(2)}" r="${(mark / 2).toFixed(2)}" fill="${this._markerInk(item.color, row, true)}" stroke="${BLACK}" stroke-width="1"></circle>`
           : `<circle cx="${(left + mark / 2).toFixed(2)}" cy="${cy.toFixed(2)}" r="${(mark / 2).toFixed(2)}" fill="#ffffff" stroke="${BLACK}" stroke-width="1"></circle>`);
       } else {
         parts.push(`<rect x="${left.toFixed(2)}" y="${(cy - mark / 2).toFixed(2)}" width="${mark.toFixed(2)}" height="${mark.toFixed(2)}"`
-          + ` fill="${item.done ? this._templateInk(item.color) : "#ffffff"}" stroke="${BLACK}" stroke-width="1"></rect>`);
+          + ` fill="${item.done ? this._markerInk(item.color, row, boxed) : "#ffffff"}"${boxed ? ` stroke="${BLACK}" stroke-width="1"` : ""}></rect>`);
         if (item.done) {
           parts.push(`<path d="M${(left + mark * 0.22).toFixed(2)} ${(cy).toFixed(2)} L${(left + mark * 0.44).toFixed(2)} ${(cy + mark * 0.24).toFixed(2)}`
             + ` L${(left + mark * 0.8).toFixed(2)} ${(cy - mark * 0.26).toFixed(2)}" fill="none" stroke="#ffffff" stroke-width="${Math.max(1, mark * 0.14).toFixed(2)}"></path>`);
@@ -1728,7 +1805,7 @@ export const templateSvgMixin = {
           }));
           return;
         }
-        parts.push(this._svgIcon(cell.icon, iconCx, valueY, iconSize, this._templateInk(cell.color)));
+        parts.push(this._svgIcon(cell.icon, iconCx, valueY, iconSize, this._templateInk(cell.iconColor ?? cell.color)));
         parts.push(this._svgText(cell.value, groupLeft + iconSize + gap, valueY, valueFontSize, {
           anchor: "start", bold: true, color: this._templateInk(cell.color), maxWidth: valueMaxWidth,
         }));
@@ -1740,7 +1817,7 @@ export const templateSvgMixin = {
       // old ratio did. The only caller of this branch is weather.js's
       // forecast strip (svg_blocks.py's block_strip mirrors this ratio for
       // the live-bound automatic refresh - keep both in sync).
-      if (cell.icon) parts.push(this._svgIcon(cell.icon, cx, box.y + box.h * 0.5, Math.min(box.h * 0.50, cellWidth * 0.62), this._templateInk(cell.color)));
+      if (cell.icon) parts.push(this._svgIcon(cell.icon, cx, box.y + box.h * 0.5, Math.min(box.h * 0.50, cellWidth * 0.62), this._templateInk(cell.iconColor ?? cell.color)));
       parts.push(this._svgText(cell.value, cx, valueY, valueFontSize, { bold: true, color: this._templateInk(cell.color), maxWidth: cellWidth * 0.92 }));
     });
     return parts.join("");
@@ -1797,7 +1874,7 @@ export const templateSvgMixin = {
         parts.push(this._svgText(half.label, cx, labelY, labelSize, { bold: true, color: labelColor, maxWidth: cellWidth * 0.92 }));
       }
       if (half.icon) {
-        parts.push(this._svgIcon(half.icon, cx, box.y + box.h * 0.48, Math.min(box.h * 0.28, cellWidth * 0.35), valColor));
+        parts.push(this._svgIcon(half.icon, cx, box.y + box.h * 0.48, Math.min(box.h * 0.28, cellWidth * 0.35), this._templateInk(half.iconColor) || valColor));
       }
       if (half.value) {
         parts.push(this._svgText(half.value, cx, valY, valSize, { bold: true, color: valColor, maxWidth: cellWidth * 0.92 }));
@@ -1847,16 +1924,22 @@ export const templateSvgMixin = {
     const span = top - bottom || 1;
     const step = box.w / (values.length - 1);
     const points = values.map((value, index) => [box.x + step * index, box.y + box.h - ((value - bottom) / span) * box.h]);
-    const lineWidth = Math.max(row.compact ? 2.5 : 1, box.h * 0.05);
+    const lineWidth = Math.max(row.compact ? 2 : 1.5, box.h * 0.045);
+    const path = points.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
+    // The yellow accent used to be three polylines stacked on top of each
+    // other - a fat black one, a yellow one inside it and a black one inside
+    // that - which came out as a black caterpillar with a yellow rim rather
+    // than as a chart. Yellow belongs under the curve instead: an area is what
+    // the colour needs to read at all, and it says "how much" the way a line
+    // alone cannot.
+    const area = row.spark.accent === "yellow" && this._accentYellow(row);
     const parts = [
-      this._svgHairline(box.x, box.y + box.h, box.w, 1),
-      ...(row.spark.accent === "yellow" && this._displaySupportsYellow?.() ? [
-        `<polyline points="${points.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ")}" fill="none" stroke="${BLACK}"`
-          + ` stroke-width="${(lineWidth + 4).toFixed(2)}" stroke-linejoin="round" stroke-linecap="round"></polyline>`,
-        `<polyline points="${points.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ")}" fill="none" stroke="${YELLOW}"`
-          + ` stroke-width="${(lineWidth + 2).toFixed(2)}" stroke-linejoin="round" stroke-linecap="round"></polyline>`,
+      ...(area ? [
+        `<polygon points="${box.x.toFixed(2)},${(box.y + box.h).toFixed(2)} ${path} `
+          + `${(box.x + box.w).toFixed(2)},${(box.y + box.h).toFixed(2)}" fill="${YELLOW}"></polygon>`,
       ] : []),
-      `<polyline points="${points.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ")}" fill="none" stroke="${this._templateInk(row.spark.color)}"`
+      this._svgHairline(box.x, box.y + box.h, box.w, 1),
+      `<polyline points="${path}" fill="none" stroke="${this._templateInk(row.spark.color)}"`
         + ` stroke-width="${lineWidth.toFixed(2)}" stroke-linejoin="round" stroke-linecap="round"></polyline>`,
     ];
     const [lastX, lastY] = points[points.length - 1];
@@ -2044,9 +2127,22 @@ export const templateSvgMixin = {
     const parts = [];
     items.forEach((item, index) => {
       const cy = box.y + lineHeight * (index + 0.5);
+      const chipInk = this._templateInk(item.color);
+      // A line number is a plate, not an outline - that is what makes a
+      // departures board read as one. On a four-colour panel the plate is
+      // yellow with the digits in black, which keeps the page light; a red
+      // badge stays red and a three-colour panel falls back to a dark plate
+      // with the digits knocked out. Boards whose badge is a status glyph
+      // rather than a number (presence) leave `filled` off and keep the
+      // outline, because a filled plate would claim a meaning the glyph
+      // inside it is already carrying.
+      const filled = !!row.filled;
+      const accent = filled && item.color !== "red" && this._accentYellow(row);
+      const plate = !filled ? "none" : accent ? YELLOW : chipInk;
+      const digitInk = !filled ? chipInk : accent ? BLACK : "#ffffff";
       parts.push(`<rect x="${box.x.toFixed(2)}" y="${(cy - badgeHeight / 2).toFixed(2)}" width="${badgeWidth.toFixed(2)}" height="${badgeHeight.toFixed(2)}"`
-        + ` fill="${this._templateInk(item.color)}"></rect>`);
-      parts.push(this._svgText(item.badge, box.x + badgeWidth / 2, cy, Math.max(row.compact ? 10 : 8.5, badgeHeight * 0.65), { color: "#ffffff", bold: true, minSize: row.compact ? 8.5 : undefined, maxWidth: badgeWidth * 0.88 }));
+        + ` rx="2" fill="${plate}" stroke="${accent ? BLACK : chipInk}" stroke-width="1"></rect>`);
+      parts.push(this._svgText(item.badge, box.x + badgeWidth / 2, cy, Math.max(row.compact ? 10 : 8.5, badgeHeight * 0.65), { color: digitInk, bold: true, minSize: row.compact ? 8.5 : undefined, maxWidth: badgeWidth * 0.88 }));
       const textX = box.x + badgeWidth + Math.max(3, badgeWidth * 0.2);
       const valueWidth = box.w * 0.26;
       parts.push(this._svgText(item.label, textX, cy, Math.max(row.compact ? 10 : 8.5, Math.min(lineHeight * 0.52, box.w * 0.12)), {
@@ -2097,6 +2193,16 @@ export const templateSvgMixin = {
     const conditionIcon = (fallback) => this._templateCurrentConditionIcon(template, fallback);
     const event = (index) => this._templateCalendarEntry(template, index);
     const option = (name) => this._templateOptionActive(template, name);
+    const transit = () => {
+      const config = this._displayTemplateConfig || {};
+      const preview = this._transitPreview && this._transitPreview.stop_id === config.transit_stop_id
+        ? this._transitPreview
+        : null;
+      return {
+        stop_name: preview?.stop_name || config.transit_stop_name || "Hlavní nádraží",
+        departures: Array.isArray(preview?.departures) ? preview.departures : [],
+      };
+    };
     const customImage = () => {
       const active = this._activeCustomImageAsset?.();
       // No fallback to the raw parrot-source.png here on purpose: it is a
@@ -2108,22 +2214,41 @@ export const templateSvgMixin = {
       // (starting from that same source) as soon as it is ready.
       return active ? this._paletteImageSrc?.(active) : this._customImageDataUrl;
     };
-    const helpers = { v, series, ratio, day, conditionIcon, event, option, customImage, width, height };
+    const helpers = { v, series, ratio, day, conditionIcon, event, option, transit, customImage, width, height };
     return Object.fromEntries(
       DISPLAY_TEMPLATES.map((entry) => [entry.catalog.id, () => entry.design(helpers)]),
     );
   },
 
-  // Built-in templates are authored against the full BWRY palette. Two content
+  // Most built-in templates are authored against the full BWRY palette. Two content
   // blocks get a yellow accent, the footer remains the red status band, and the
   // uncoloured content stays black on white. Yellow is carried by real surfaces
-  // (outlined bands, shaded icon badges, chart underlays), not by a fragile thin
+  // (outlined bands, flat outlined MDI glyphs, chart underlays), not by a fragile thin
   // glyph alone. Keeping this as one shared theme means every current and future
   // catalog template uses all four pigments without duplicating palette rules.
   // _templateInk is the single hardware adaptation point: on a BWR display it
   // maps every yellow accent to red before the SVG is rasterized.
-  _fourColorTemplateRows(rows) {
+  _fourColorTemplateRows(rows, templateId = "") {
     const themed = structuredClone(Array.isArray(rows) ? rows : []);
+    // These five templates have their own deliberately tuned renderer and
+    // palette. A global theme must never recolour or restructure them.
+    const protectedTemplates = new Set(["custom_image", "weather", "radar", "cz_spot_prices", "calendar"]);
+    if (protectedTemplates.has(String(templateId || ""))) return themed;
+    // Yellow is for graphic detail only, and only where the detail has enough
+    // area to read: gauge arcs, ring and dial fills, a datebox header, a QR
+    // frame. It is deliberately NOT used for line-art glyphs - a 17px icon in
+    // yellow on white has almost no contrast and comes out as a smudge once
+    // the panel thresholds it - and never for type, nor as a fill
+    // behind type. Both of those used to happen here: a text or stat row got
+    // accent:"yellow", which paints a full slab under the words, and one cell
+    // of every list/grid/strip had its text recoloured yellow. On a panel that
+    // thresholds each pixel with no dithering, yellow type is the weakest
+    // thing on the screen, and a yellow slab behind a heading reads as a
+    // highlighter mark rather than as design.
+    //
+    // It also fixes a real manual/automatic split: svg_blocks.py has no yellow
+    // at all (its ink() returns only red or black), so every yellow this pass
+    // painted onto a live-data row vanished the moment the backend redrew it.
     const paintYellow = (row) => {
       if (!row) return false;
       if (row.duo) {
@@ -2132,28 +2257,12 @@ export const templateSvgMixin = {
         return left || right;
       }
       if (row.qr) { row.qr.accent = "yellow"; return true; }
-      if (row.icon) { row.color = "yellow"; return true; }
-      if (row.text != null || row.rule) { row.accent = "yellow"; row.color = "black"; return true; }
-      if (row.stat) { row.stat.accent = "yellow"; return true; }
-      if (row.band) {
-        if (row.band.color === "red") return false;
-        row.band.color = "yellow";
-        return true;
-      }
       for (const key of ["ring", "dial", "spark", "pricetag"]) {
         if (row[key] && typeof row[key] === "object") { row[key].accent = "yellow"; return true; }
       }
       if (row.datebox) {
         row.datebox.color = "yellow";
         return true;
-      }
-      for (const key of ["list", "meters", "grid", "steps", "checklist", "strip", "split", "board"]) {
-        if (Array.isArray(row[key]) && row[key].length) {
-          const index = row[key].findIndex((cell) => cell?.color !== "red");
-          const accentIndex = index >= 0 ? index : 0;
-          row[key][accentIndex] = { ...row[key][accentIndex], color: "yellow" };
-          return true;
-        }
       }
       return false;
     };
@@ -2163,8 +2272,7 @@ export const templateSvgMixin = {
       if (row?.footer || row?.flex || row?.gap || row?.radarMap || row?.customImage) continue;
       if (paintYellow(row)) painted += 1;
     }
-    const footer = themed.find((row) => row?.footer);
-    if (footer) footer.color = "red";
+    themed.forEach((row) => { row.modern = true; });
     return themed;
   },
 
@@ -2184,7 +2292,7 @@ export const templateSvgMixin = {
     const compactLandscape = compactLandscapeIds.has(baseTemplate?.id)
       && Number(width) >= Number(height) && Number(height) <= 160;
     if (compactLandscape) rows = rows.map((row) => ({ ...row, compact: true }));
-    return this._fourColorTemplateRows(rows);
+    return this._fourColorTemplateRows(rows, baseTemplate?.id);
   },
 
   // Where each variable's value actually lands in the rendered template, as a

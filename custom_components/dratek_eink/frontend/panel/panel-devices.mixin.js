@@ -1,5 +1,5 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.343";
-import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=compact-landscape-content-6";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.344";
+import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=native-transit-1";
 
 // The standard Czech civil name-day calendar, indexed [month][day - 1]
 // (getMonth() is already 0-based). Days with no name day (state/religious
@@ -748,9 +748,9 @@ export const devicesMixin = {
       const foundByPrefix = Array.isArray(item.entityPrefixes) && item.entityPrefixes.length
         && Object.keys(states).some((entityId) => item.entityPrefixes.some((prefix) => entityId.startsWith(prefix)));
       const foundByName = friendlyNames.size > 0 && Object.values(states).some((state) => friendlyNames.has(normalize(state?.attributes?.friendly_name)));
-      const found = (item.entityPrefixes || []).length || friendlyNames.size
+      const found = item.internal || ((item.entityPrefixes || []).length || friendlyNames.size
         ? foundByPrefix || foundByName
-        : this._hasEntityDomain(item.domain);
+        : this._hasEntityDomain(item.domain));
       const documentationUrl = item.url || (item.core && !item.helper ? `https://www.home-assistant.io/integrations/${item.domain}/` : "");
       const link = documentationUrl
         ? `<a href="${this._escape(documentationUrl)}" target="_blank" rel="noopener noreferrer">${this._escape(item.linkLabel || "Dokumentace")}</a>`
@@ -942,6 +942,10 @@ export const devicesMixin = {
   // configure, so it is reported as "complete" rather than "empty": there is no
   // unset state for a card that never asks for one.
   _templateBindingStatus(template) {
+    if (template?.id === "transport") {
+      const configured = Boolean(String(this._displayTemplateConfig?.transit_stop_id || "").trim());
+      return { total: 1, done: configured ? 1 : 0, state: configured ? "complete" : "empty" };
+    }
     const variables = Array.isArray(template?.variables) ? template.variables : [];
     const bindings = this._displayTemplateBindings || {};
     let total = 0;
@@ -1658,6 +1662,8 @@ export const devicesMixin = {
       meteoradar_country: this._meteoradarCountry || "cz",
       meteoradar_show_precipitation: this._displayTemplateConfig?.meteoradar_show_precipitation !== false,
       meteoradar_show_wind: this._displayTemplateConfig?.meteoradar_show_wind === true,
+      transit_stop_id: this._displayTemplateConfig?.transit_stop_id || "",
+      transit_stop_name: this._displayTemplateConfig?.transit_stop_name || "",
       custom_image_data: this._customImageDataUrl || "",
       custom_image_source: this._customImageSourceUrl || "",
       custom_image_variants: structuredClone(this._customImageVariants || {}),
@@ -1682,6 +1688,8 @@ export const devicesMixin = {
       meteoradar_country: this._meteoradarCountry,
       meteoradar_show_precipitation: config?.meteoradar_show_precipitation !== false,
       meteoradar_show_wind: config?.meteoradar_show_wind === true,
+      transit_stop_id: String(config?.transit_stop_id || ""),
+      transit_stop_name: String(config?.transit_stop_name || ""),
     };
     this._customImageDataUrl = String(config?.custom_image_data || "").startsWith("data:image/")
       ? String(config.custom_image_data)
@@ -2248,9 +2256,9 @@ export const devicesMixin = {
       const foundByPrefix = Array.isArray(item.entityPrefixes) && item.entityPrefixes.length
         && Object.keys(states).some((entityId) => item.entityPrefixes.some((prefix) => entityId.startsWith(prefix)));
       const foundByName = friendlyNames.size > 0 && Object.values(states).some((state) => friendlyNames.has(normalize(state?.attributes?.friendly_name)));
-      const found = (item.entityPrefixes || []).length || friendlyNames.size
+      const found = item.internal || ((item.entityPrefixes || []).length || friendlyNames.size
         ? foundByPrefix || foundByName
-        : this._hasEntityDomain(item.domain);
+        : this._hasEntityDomain(item.domain));
       const documentationUrl = item.url || (item.core && !item.helper ? `https://www.home-assistant.io/integrations/${item.domain}/` : "");
       const link = documentationUrl
         ? `<a href="${this._escape(documentationUrl)}" target="_blank" rel="noopener noreferrer" class="template-setup-doc-link"><ha-icon icon="mdi:open-in-new"></ha-icon>${this._escape(item.linkLabel || "Dokumentace")}</a>`
@@ -2336,6 +2344,7 @@ export const devicesMixin = {
     const selectedCountry = this._meteoradarCountry || this._displayTemplateConfig?.meteoradar_country || "cz";
     const mapWidget = isRadarTemplate ? this._renderInteractiveCountryMap(selectedCountry, this._selectedDeviceAddress) : "";
     const isCustomImageTemplate = activeTemplate?.id === "custom_image";
+    const isTransitTemplate = activeTemplate?.id === "transport";
     const customPreviewSize = this._devicePreviewSize?.(this._device?.() ?? null) || { width: 296, height: 128 };
     const customPreviewLong = Math.max(customPreviewSize.width, customPreviewSize.height);
     const customPreviewShort = Math.min(customPreviewSize.width, customPreviewSize.height);
@@ -2361,17 +2370,21 @@ export const devicesMixin = {
     // template settings dialog. They are not a property of the template - they
     // belong to the automation - so they live on each automation's own card in
     // the Automations tab now (see panel-automations.mixin.js).
+    const transitWidget = isTransitTemplate ? this._renderTransitStopPicker() : "";
     const variableList = `<div class="template-variables-header">
       <h4><ha-icon icon="mdi:${isCustomImageTemplate ? "image-edit-outline" : "tune-vertical"}"></ha-icon> ${isCustomImageTemplate ? "Import obrázku" : "Napojení proměnných"}</h4>
       <p class="template-settings-intro">${isCustomImageTemplate
         ? "Vyberte barevnou fotografii; převod do stínované palety proběhne přímo v prohlížeči a uloží se k tomuto displeji."
+        : isTransitTemplate
+          ? "Vyhledejte zastávku podle názvu. Drátek pak sám načítá čtyři nejbližší odjezdy při každé automatické aktualizaci displeje."
         : activeTemplate?.manualValues
           ? "U každé položky napište přímo hodnotu, nebo nechte ruční pole prázdné a vyberte entitu Home Assistantu."
           : "U každé položky vyberte entitu v Home Assistantu. Systémové údaje (čas, datum) se doplňují automaticky."}</p>
     </div>
     ${mapWidget}
     ${customImageWidget}
-    <div class="template-variable-settings">${activeTemplate.variables.map((variable, index) => this._renderTemplateVariableSetting(activeTemplate, variable, index, crop)).join("")}</div>`;
+    ${transitWidget}
+    ${isTransitTemplate ? "" : `<div class="template-variable-settings">${activeTemplate.variables.map((variable, index) => this._renderTemplateVariableSetting(activeTemplate, variable, index, crop)).join("")}</div>`}`;
     return `<div class="template-settings-backdrop" data-template-settings-close><section class="card template-settings-dialog is-guide-layout" role="dialog" aria-modal="true" aria-label="Nastavení šablony" data-template-settings-dialog>
       <header><span><small>Jak zprovoznit a nastavit šablonu</small><strong>${this._escape(activeTemplate.title)}</strong></span><button type="button" data-template-settings-close title="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button></header>
       <div class="template-settings-dialog-content template-settings-two-col">
@@ -2379,6 +2392,66 @@ export const devicesMixin = {
         <div class="template-settings-variables">${variableList}</div>
       </div>
     </section></div>`;
+  },
+
+  _renderTransitStopPicker() {
+    const config = this._displayTemplateConfig || {};
+    const selected = String(config.transit_stop_name || "");
+    const results = Array.isArray(this._transitStopResults) ? this._transitStopResults : [];
+    const status = this._transitSearchError
+      ? `<div class="template-setup-note-card"><ha-icon icon="mdi:alert-circle-outline"></ha-icon><span>${this._escape(this._transitSearchError)}</span></div>`
+      : selected
+        ? `<div class="template-setup-status-banner is-complete"><ha-icon icon="mdi:bus-stop-covered"></ha-icon><span><strong>${this._escape(selected)}</strong><small>Zastávka je uložená pro tento displej.</small></span></div>`
+        : "";
+    return `<section class="transit-stop-picker">
+      ${status}
+      <label><strong>Najít zastávku</strong><span><input type="search" data-transit-stop-query value="${this._escape(this._transitStopQuery || "")}" placeholder="např. Brno, Česká"><button type="button" class="primary-action" data-transit-stop-search ${this._transitSearchLoading ? "disabled" : ""}><ha-icon icon="mdi:${this._transitSearchLoading ? "loading" : "magnify"}"></ha-icon>Hledat</button></span></label>
+      ${results.length ? `<div class="transit-stop-results">${results.map((stop) => `<button type="button" data-transit-stop-id="${this._escape(stop.id)}" data-transit-stop-name="${this._escape(stop.name)}"><ha-icon icon="mdi:bus-stop"></ha-icon><span><strong>${this._escape(stop.name)}</strong><small>${this._escape([stop.locality, stop.country].filter(Boolean).join(" · "))}</small></span><ha-icon icon="mdi:chevron-right"></ha-icon></button>`).join("")}</div>` : ""}
+      <small class="template-picker-help">Data poskytuje Transitous z otevřených jízdních řádů dopravců. <a href="https://transitous.org/sources/" target="_blank" rel="noopener noreferrer">Použité zdroje</a></small>
+    </section>`;
+  },
+
+  async _searchTransitStops() {
+    const input = this.shadowRoot?.querySelector("[data-transit-stop-query]");
+    const query = String(input?.value || this._transitStopQuery || "").trim();
+    this._transitStopQuery = query;
+    if (query.length < 2) {
+      this._transitSearchError = "Napište alespoň dva znaky názvu zastávky.";
+      this._render();
+      return;
+    }
+    this._transitSearchLoading = true;
+    this._transitSearchError = "";
+    this._render();
+    try {
+      const response = await this._hass.callWS({ type: "dratek_eink/transit/search_stops", query, limit: 10 });
+      this._transitStopResults = Array.isArray(response?.stops) ? response.stops : [];
+      if (!this._transitStopResults.length) this._transitSearchError = "Žádná zastávka s tímto názvem nebyla nalezena.";
+    } catch (error) {
+      this._transitSearchError = this._message?.(error) || String(error?.message || error);
+    } finally {
+      this._transitSearchLoading = false;
+      this._render();
+      this._paint();
+    }
+  },
+
+  async _selectTransitStop(stopId, stopName) {
+    this._displayTemplateConfig ||= {};
+    this._displayTemplateConfig.transit_stop_id = String(stopId || "");
+    this._displayTemplateConfig.transit_stop_name = String(stopName || "");
+    this._transitStopResults = [];
+    this._transitSearchError = "";
+    try {
+      const response = await this._hass.callWS({ type: "dratek_eink/transit/departures", stop_id: stopId, limit: 4 });
+      this._transitPreview = { ...response, stop_id: String(stopId), stop_name: response?.stop_name || stopName };
+      this._displayTemplateConfig.transit_stop_name = this._transitPreview.stop_name;
+      this._scheduleDraftSave?.();
+    } catch (error) {
+      this._transitSearchError = this._message?.(error) || String(error?.message || error);
+    }
+    this._render();
+    this._paint();
   },
 
 
@@ -2827,6 +2900,21 @@ export const devicesMixin = {
   // since by the time a row exists ratio()/series() have already collapsed
   // to a plain number and there is no trace of where it came from.
   _templateAutomationGraphicBinding(template, group, row, geometry) {
+    if (group === "transport-board") {
+      const stopId = String(this._displayTemplateConfig?.transit_stop_id || "").trim();
+      if (!stopId) return null;
+      return {
+        type: "transit",
+        stop_id: stopId,
+        stop_name: String(this._displayTemplateConfig?.transit_stop_name || ""),
+        limit: Array.isArray(row.board) ? row.board.length : 4,
+        compact: !!row.compact,
+        fallback: JSON.stringify(Array.isArray(row.board) ? row.board.map((item) => ({
+          line: String(item.badge || "–"), destination: String(item.label || "Spoj"), time: String(item.value || ""),
+        })) : []),
+        ...geometry,
+      };
+    }
     if (group === "forecast") {
       const entityId = this._templateEntityForKind(template, ["forecast", "weather"]);
       if (!entityId) return null;
@@ -2860,7 +2948,12 @@ export const devicesMixin = {
       if (row.dial) { visual = "dial"; sources = [row.dial]; }
       else if (row.ring) { visual = "ring"; sources = [row.ring]; }
       else if (row.meters) { visual = "bars"; sources = row.meters; }
+      // automation.ratio is one list for the whole template, but a template's
+      // compact layout may draw fewer gauges than its full-size one. Without
+      // this the backend redrew every declared entry and an automatic refresh
+      // put bars on the page that the manual send never had.
       const meters = declared
+        .slice(0, sources.length || declared.length)
         .map((entry, index) => {
           const variableIndex = Number(entry.variableIndex);
           const variable = template?.variables?.[variableIndex];

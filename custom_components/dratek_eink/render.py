@@ -1356,6 +1356,11 @@ def _svg_graphic_slot(binding: dict[str, Any], value: str, preserve_yellow: bool
         values = _decoded_binding_value(value, [])
         if not values:
             return ""
+        # Whether the panel decided this row may take the four-colour accent.
+        # It is captured at send time rather than recomputed here because the
+        # decision depends on which template the row came from - the protected
+        # ones (cz_spot_prices among them) never take it.
+        accent = binding.get("accent") or ""
         if str(binding.get("chartType") or "line") == "bar":
             highlight = binding.get("highlight")
             return svg_blocks.block_bars(
@@ -1366,11 +1371,15 @@ def _svg_graphic_slot(binding: dict[str, Any], value: str, preserve_yellow: bool
                     # it through would still compare equal to nothing, but None
                     # says so outright.
                     "highlight": highlight if isinstance(highlight, int) and highlight >= 0 else None,
+                    "accent": accent,
                 },
                 box,
+                preserve_yellow,
             )
         return svg_blocks.block_spark(
-            {"values": values, "caption": binding.get("caption") or None}, box
+            {"values": values, "caption": binding.get("caption") or None, "accent": accent},
+            box,
+            preserve_yellow,
         )
 
     if binding_type == "ratio":
@@ -1379,6 +1388,7 @@ def _svg_graphic_slot(binding: dict[str, Any], value: str, preserve_yellow: bool
         if not meters:
             return ""
         visual = str(binding.get("visual") or "bars")
+        accent = binding.get("accent") or ""
         if visual in ("dial", "ring"):
             first = meters[0]
             # automation.py resolves a fill as a 0-100 percentage; the panel's
@@ -1388,11 +1398,14 @@ def _svg_graphic_slot(binding: dict[str, Any], value: str, preserve_yellow: bool
                 "color": first.get("color"),
                 "value": first.get("text") or None,
                 "caption": binding.get("caption") or None,
+                "accent": accent,
             }
             if visual == "ring":
-                return svg_blocks.block_ring(source, box)
+                return svg_blocks.block_ring(source, box, preserve_yellow)
             return svg_blocks.block_dial(
-                {**source, "min": binding.get("min"), "max": binding.get("max")}, box
+                {**source, "min": binding.get("min"), "max": binding.get("max")},
+                box,
+                preserve_yellow,
             )
         return svg_blocks.block_meters(
             [
@@ -1405,6 +1418,8 @@ def _svg_graphic_slot(binding: dict[str, Any], value: str, preserve_yellow: bool
                 for meter in meters
             ],
             box,
+            preserve_yellow,
+            accent,
         )
 
     if binding_type == "forecast":
@@ -1434,6 +1449,26 @@ def _svg_graphic_slot(binding: dict[str, Any], value: str, preserve_yellow: bool
             box,
         )
 
+    if binding_type == "transit":
+        departures = _decoded_binding_value(value, [])
+        rows = [
+            {
+                "badge": item.get("line") or "–",
+                "label": item.get("destination") or "Spoj",
+                "value": item.get("time") or "",
+                "color": "red" if index == 0 else "black",
+            }
+            for index, item in enumerate(departures)
+            if isinstance(item, dict)
+        ][: max(1, int(binding.get("limit") or 4))]
+        return svg_blocks.block_board(
+            rows,
+            box,
+            filled=True,
+            compact=bool(binding.get("compact")),
+            preserve_yellow=preserve_yellow,
+        ) if rows else ""
+
     return ""
 
 
@@ -1447,7 +1482,7 @@ def _number_or_zero(value: Any) -> float:
 
 def _svg_graphic_binding(binding: dict[str, Any]) -> bool:
     """A live template row svg_blocks.py can redraw exactly."""
-    return binding.get("type") in ("series", "ratio", "forecast", "calendar")
+    return binding.get("type") in ("series", "ratio", "forecast", "calendar", "transit")
 
 
 def _svg_text_binding(binding: dict[str, Any]) -> bool:

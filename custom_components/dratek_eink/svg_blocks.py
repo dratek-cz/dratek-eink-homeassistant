@@ -39,11 +39,41 @@ from .svg_text import svg_text
 # post-quantisation values.
 BLACK = "#000000"
 RED = "#e31b1b"
+YELLOW = "#f4c400"
 
 
 def ink(color: Any) -> str:
     """Port of `_templateInk`."""
     return RED if color == "red" else BLACK
+
+
+def fill_fraction(value: Any) -> float:
+    """Port of `_fillFraction`.
+
+    A proportion is a 0-1 fraction here, but a template that wrote a plain
+    percentage used to clamp to 1 and fill the shape completely, so anything
+    above 1 is read as the percentage it obviously is.
+    """
+    number = _number(value)
+    if number <= 0:
+        return 0.0
+    return min(1.0, number / 100 if number > 1 else number)
+
+
+def accent_ink(accent: Any, color: Any, preserve_yellow: bool) -> tuple[str, bool]:
+    """The fill for a proportional shape, and whether it needs a black edge.
+
+    Port of the `accent` decision `_blockDial`/`_blockRing`/`_blockMeters`/
+    `_blockBars` make. The panel decides at capture time whether the row may
+    take the four-colour accent (protected templates never do) and records it
+    on the binding; `preserve_yellow` is the render-time truth about whether
+    the panel this is being drawn for can print yellow at all. Yellow on white
+    is almost no contrast once the panel thresholds every pixel, so a yellow
+    fill is always bounded by a black outline.
+    """
+    if accent == "yellow" and color != "red" and preserve_yellow:
+        return YELLOW, True
+    return ink(color), False
 
 
 def hairline(x: float, y: float, w: float, h: float, color: str = BLACK) -> str:
@@ -391,7 +421,9 @@ def _finite_numbers(values: Any) -> list[float]:
     return numbers
 
 
-def block_bars(bars: dict[str, Any], box: dict[str, float]) -> str:
+def block_bars(
+    bars: dict[str, Any], box: dict[str, float], preserve_yellow: bool = False
+) -> str:
     """Port of `_blockBars`."""
     values = _finite_numbers(bars.get("values"))
     if not values:
@@ -410,13 +442,21 @@ def block_bars(bars: dict[str, Any], box: dict[str, float]) -> str:
         f' height="{box["h"]:.2f}" fill="#ffffff" fill-opacity="0" pointer-events="all"></rect>',
         hairline(box["x"], box["y"] + chart_height, box["w"], 1),
     ]
+    # On a four-colour panel the columns are yellow with a black edge: the shape
+    # still reads as a solid bar, but a chart stops being a block of black. The
+    # highlighted column keeps red so it still stands out, and a three-colour
+    # panel keeps the plain black bars it always had.
+    columns = preserve_yellow and bars.get("accent") == "yellow"
     for index, value in enumerate(values):
         bar_height = max(1, ((value - bottom) / span) * (chart_height - 1))
+        picked = highlight == index
+        fill = RED if picked else YELLOW if columns else BLACK
+        edge = f' stroke="{BLACK}" stroke-width="1"' if columns and not picked else ""
         parts.append(
             f'<rect x="{box["x"] + step * index + (step - bar_width) / 2:.2f}"'
             f' y="{box["y"] + chart_height - bar_height:.2f}"'
             f' width="{bar_width:.2f}" height="{bar_height:.2f}"'
-            f' fill="{RED if highlight == index else BLACK}"></rect>'
+            f' fill="{fill}"{edge}></rect>'
         )
     for index, label in enumerate(labels):
         if label is None or label == "":
@@ -442,7 +482,9 @@ def block_bars(bars: dict[str, Any], box: dict[str, float]) -> str:
     return "".join(parts)
 
 
-def block_spark(spark: dict[str, Any], box: dict[str, float]) -> str:
+def block_spark(
+    spark: dict[str, Any], box: dict[str, float], preserve_yellow: bool = False
+) -> str:
     """Port of `_blockSpark`."""
     values = _finite_numbers(spark.get("values"))
     if len(values) < 2:
@@ -456,10 +498,19 @@ def block_spark(spark: dict[str, Any], box: dict[str, float]) -> str:
         for index, value in enumerate(values)
     ]
     drawn = " ".join(f"{x:.2f},{y:.2f}" for x, y in points)
-    parts = [
+    parts: list[str] = []
+    # Yellow belongs under the curve, not in it: an area is what the colour
+    # needs to read at all, and it says "how much" the way a line alone cannot.
+    if preserve_yellow and spark.get("accent") == "yellow":
+        parts.append(
+            f'<polygon points="{box["x"]:.2f},{box["y"] + box["h"]:.2f} {drawn}'
+            f' {box["x"] + box["w"]:.2f},{box["y"] + box["h"]:.2f}"'
+            f' fill="{YELLOW}"></polygon>'
+        )
+    parts += [
         hairline(box["x"], box["y"] + box["h"], box["w"], 1),
         f'<polyline points="{drawn}" fill="none" stroke="{ink(spark.get("color"))}"'
-        f' stroke-width="{max(1, box["h"] * 0.05):.2f}" stroke-linejoin="round"'
+        f' stroke-width="{max(1.5, box["h"] * 0.045):.2f}" stroke-linejoin="round"'
         f' stroke-linecap="round"></polyline>',
     ]
     last_x, last_y = points[-1]
@@ -482,21 +533,30 @@ def block_spark(spark: dict[str, Any], box: dict[str, float]) -> str:
     return "".join(parts)
 
 
-def block_meters(meters: list[dict[str, Any]], box: dict[str, float]) -> str:
+def block_meters(
+    meters: list[dict[str, Any]],
+    box: dict[str, float],
+    preserve_yellow: bool = False,
+    accent: Any = "",
+) -> str:
     """Port of `_blockMeters`."""
     line_height = box["h"] / (len(meters) or 1)
     parts: list[str] = []
     for index, meter in enumerate(meters):
         top = box["y"] + line_height * index
-        label_size = max(7, min(line_height * 0.42, box["w"] * 0.1))
-        bar_height = max(2, line_height * 0.28)
-        bar_y = top + line_height * 0.55
-        percent = max(0.0, min(1.0, _number(meter.get("percent"))))
+        bar_height = max(6, min(line_height * 0.32, 10))
+        gap = max(2, line_height * 0.08)
+        text_band = max(9, line_height - bar_height - gap)
+        label_size = max(9.5, min(text_band * 0.8, box["w"] * 0.13))
+        value_size = max(label_size, min(text_band * 0.95, box["w"] * 0.18))
+        text_y = top + text_band / 2
+        bar_y = top + text_band + gap / 2
+        percent = fill_fraction(meter.get("percent"))
         parts.append(
             svg_text(
                 meter.get("label"),
                 box["x"],
-                top + line_height * 0.26,
+                text_y,
                 label_size,
                 anchor="start",
                 max_width=box["w"] * 0.58,
@@ -506,8 +566,8 @@ def block_meters(meters: list[dict[str, Any]], box: dict[str, float]) -> str:
             svg_text(
                 meter.get("value"),
                 box["x"] + box["w"],
-                top + line_height * 0.26,
-                label_size,
+                text_y,
+                value_size,
                 anchor="end",
                 bold=True,
                 color=ink(meter.get("color")),
@@ -519,21 +579,27 @@ def block_meters(meters: list[dict[str, Any]], box: dict[str, float]) -> str:
             f' height="{bar_height:.2f}" fill="none" stroke="{BLACK}" stroke-width="1"></rect>'
         )
         if percent > 0:
+            # The filled part of a meter is the other honest place for yellow:
+            # it is an area, it is never type, and the track outline above is
+            # what bounds it against white.
+            fill, _edged = accent_ink(accent, meter.get("color"), preserve_yellow)
             parts.append(
                 f'<rect x="{box["x"]:.2f}" y="{bar_y:.2f}"'
                 f' width="{box["w"] * percent:.2f}" height="{bar_height:.2f}"'
-                f' fill="{ink(meter.get("color"))}"></rect>'
+                f' fill="{fill}"></rect>'
             )
     return "".join(parts)
 
 
-def block_ring(ring: dict[str, Any], box: dict[str, float]) -> str:
+def block_ring(
+    ring: dict[str, Any], box: dict[str, float], preserve_yellow: bool = False
+) -> str:
     """Port of `_blockRing`."""
     cx = box["x"] + box["w"] / 2
     cy = box["y"] + box["h"] / 2
     outer = min(box["w"], box["h"]) * 0.46
     inner = outer * 0.68
-    percent = max(0.0, min(1.0, _number(ring.get("percent"))))
+    percent = fill_fraction(ring.get("percent"))
     parts = [
         f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{outer:.2f}" fill="none"'
         f' stroke="{BLACK}" stroke-width="1"></circle>',
@@ -541,9 +607,11 @@ def block_ring(ring: dict[str, Any], box: dict[str, float]) -> str:
         f' stroke="{BLACK}" stroke-width="1"></circle>',
     ]
     if percent > 0:
+        fill, edged = accent_ink(ring.get("accent"), ring.get("color"), preserve_yellow)
+        edge = f' stroke="{BLACK}" stroke-width="1"' if edged else ""
         parts.append(
             f'<path d="{arc_path(cx, cy, outer, inner, -90, -90 + percent * 360)}"'
-            f' fill="{ink(ring.get("color"))}"></path>'
+            f' fill="{fill}"{edge}></path>'
         )
     caption = ring.get("caption")
     if ring.get("value") is not None:
@@ -564,21 +632,25 @@ def block_ring(ring: dict[str, Any], box: dict[str, float]) -> str:
     return "".join(parts)
 
 
-def block_dial(dial: dict[str, Any], box: dict[str, float]) -> str:
+def block_dial(
+    dial: dict[str, Any], box: dict[str, float], preserve_yellow: bool = False
+) -> str:
     """Port of `_blockDial` - a half dial, open at the bottom."""
     cx = box["x"] + box["w"] / 2
     outer = min(box["w"] * 0.46, box["h"] * 0.82)
     inner = outer * 0.7
     cy = box["y"] + box["h"] * 0.5 + outer * 0.4
-    percent = max(0.0, min(1.0, _number(dial.get("percent"))))
+    percent = fill_fraction(dial.get("percent"))
     parts = [
         f'<path d="{arc_path(cx, cy, outer, inner, 180, 360)}" fill="none"'
         f' stroke="{BLACK}" stroke-width="1"></path>'
     ]
     if percent > 0:
+        fill, edged = accent_ink(dial.get("accent"), dial.get("color"), preserve_yellow)
+        edge = f' stroke="{BLACK}" stroke-width="1"' if edged else ""
         parts.append(
             f'<path d="{arc_path(cx, cy, outer, inner, 180, 180 + percent * 180)}"'
-            f' fill="{ink(dial.get("color"))}"></path>'
+            f' fill="{fill}"{edge}></path>'
         )
     if dial.get("value") is not None:
         parts.append(
@@ -654,6 +726,52 @@ def block_strip(cells: list[dict[str, Any]], box: dict[str, float], preserve_yel
                 bold=True, color=ink(cell.get("color")), max_width=cell_width * 0.9,
             )
         )
+    return "".join(parts)
+
+
+def block_board(
+    items: list[dict[str, Any]],
+    box: dict[str, float],
+    *,
+    filled: bool = True,
+    compact: bool = False,
+    preserve_yellow: bool = False,
+) -> str:
+    """Port of the panel's `_blockBoard` for live transit departures."""
+    if not items:
+        return ""
+    line_height = box["h"] / len(items)
+    badge_width = min(box["w"] * 0.22, line_height * 1.5)
+    badge_height = line_height * 0.68
+    right = box["x"] + box["w"]
+    parts: list[str] = []
+    for index, item in enumerate(items):
+        cy = box["y"] + line_height * (index + 0.5)
+        chip = ink(item.get("color"))
+        accent = filled and item.get("color") != "red" and preserve_yellow
+        plate = "none" if not filled else YELLOW if accent else chip
+        digit = chip if not filled else BLACK if accent else "#ffffff"
+        parts.append(
+            f'<rect x="{box["x"]:.2f}" y="{cy - badge_height / 2:.2f}" width="{badge_width:.2f}"'
+            f' height="{badge_height:.2f}" rx="2" fill="{plate}" stroke="{BLACK if accent else chip}" stroke-width="1"></rect>'
+        )
+        parts.append(svg_text(
+            item.get("badge"), box["x"] + badge_width / 2, cy,
+            max(10 if compact else 8.5, badge_height * 0.65),
+            color=digit, bold=True, max_width=badge_width * 0.88,
+        ))
+        text_x = box["x"] + badge_width + max(3, badge_width * 0.2)
+        value_width = box["w"] * 0.26
+        parts.append(svg_text(
+            item.get("label"), text_x, cy,
+            max(10 if compact else 8.5, min(line_height * 0.52, box["w"] * 0.12)),
+            anchor="start", max_width=right - text_x - value_width,
+        ))
+        parts.append(svg_text(
+            item.get("value"), right, cy,
+            max(11 if compact else 9.5, min(line_height * 0.56, box["w"] * 0.13)),
+            anchor="end", bold=not compact, color=chip, max_width=value_width,
+        ))
     return "".join(parts)
 
 

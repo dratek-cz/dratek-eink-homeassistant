@@ -31,15 +31,18 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     if (height <= 160 && width >= height) return [
-      { dial: { percent: 54, value: v(0, "21,5 °C"), caption: "NYNÍ", min: "15°", max: "28°" }, h: 0.70 },
+      // The dial writes its scale ends just below its own baseline, so it needs
+      // the row to end clear of them - at 0.70 the "15°/28°" pair landed on top
+      // of the split row underneath.
+      { dial: { percent: 0.5, value: v(0, "21,5 °C"), caption: "NYNÍ", min: "15°", max: "28°" }, h: 0.60 },
       { split: [
         { icon: "thermostat", label: "CÍL", value: v(1, "22 °C"), color: "red" },
         { icon: "fire", label: "VÝKON", value: v(2, "60 %") },
-      ], h: 0.18 },
+      ], h: 0.28 },
       { footer: [{ label: "DALŠÍ ZMĚNA", value: v(3, "22:00") }], h: 0.12 },
     ];
     return [
-      { dial: { percent: 54, value: v(0, "21,5 °C"), caption: "AKTUÁLNĚ", min: "15°", max: "28°" }, h: lerp(0.48, 0.55) },
+      { dial: { percent: 0.5, value: v(0, "21,5 °C"), caption: "AKTUÁLNĚ", min: "15°", max: "28°" }, h: lerp(0.48, 0.55) },
       { strip: [
         { icon: "thermostat", label: "CÍL", value: v(1, "22 °C") },
         { icon: "fire", label: "VÝKON", value: v(2, "60 %"), color: "red" },

@@ -31,12 +31,29 @@ export const template = {
     const area = width && height ? width * height : 296 * 128;
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
+    if (height > width) return [
+      { band: { icon: "account-group-outline", label: "DOMÁCNOST", value: "3 OSOBY", color: "black" }, bleed: true, h: 0.13 },
+      // Portrait needs vertical cards, not the old board rows with a small dot
+      // at the left and most of the wide row left unused. One full-width tile
+      // per person makes the name, place and state occupy the whole panel.
+      { grid: [
+        { icon: "home-account", value: v(1, "Doma"), label: v(0, "Petr"), color: "red" },
+        { icon: "home-account", value: "Doma", label: "Jana" },
+        { icon: "school-outline", value: v(2, "Ve škole"), label: "Eliška" },
+      ], columns: 1, h: 0.77 },
+      { footer: [{ label: "AKTUALIZACE", value: v(3, "12:45") }], h: 0.10 },
+    ];
+    // A landscape tag is wider than it is tall, so three people belong side by
+    // side, not stacked. As rows they left most of the page empty: a narrow
+    // chip holding one bullet on the left, a name, and then two thirds of the
+    // width of nothing before the status on the right.
     if (height <= 160 && width >= height) return [
-      { board: [
-        { badge: "●", label: v(0, "Petr"), value: v(1, "Doma"), color: "red" },
-        { badge: "●", label: "Jana", value: "Doma" },
-        { badge: "○", label: "Eliška", value: v(2, "Ve škole") },
-      ], h: 0.88 },
+      { band: { icon: "account-group-outline", label: "DOMÁCNOST", value: "3 OSOBY", color: "black" }, bleed: true, h: 0.20 },
+      { strip: [
+        { icon: "home-account", label: v(0, "Petr"), value: v(1, "Doma"), color: "red" },
+        { icon: "home-account", label: "Jana", value: "Doma" },
+        { icon: "school-outline", label: "Eliška", value: v(2, "Ve škole") },
+      ], h: 0.68 },
       { footer: [{ label: "AKTUALIZACE", value: v(3, "12:45") }], h: 0.12 },
     ];
     return [

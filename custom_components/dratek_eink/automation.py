@@ -48,6 +48,7 @@ from .render import (
 )
 from .display_preview import async_save_display_preview
 from .transfer import DratekTransfer
+from .transit import TransitError, async_get_departures
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1504,6 +1505,22 @@ class EntityAutoUpdateManager:
                     self.hass, str(binding.get("entity_id") or ""), int(binding.get("index") or 0)
                 )
                 values[str(binding.get("id"))] = json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
+            elif binding_type == "transit":
+                try:
+                    board = await async_get_departures(
+                        self.hass,
+                        str(binding.get("stop_id") or ""),
+                        int(binding.get("limit") or 4),
+                    )
+                    departures = board.get("departures") if isinstance(board, dict) else []
+                    values[str(binding.get("id"))] = json.dumps(
+                        departures or [], ensure_ascii=False, separators=(",", ":")
+                    )
+                except TransitError:
+                    # Keep the last manually rendered board when the public
+                    # timetable is temporarily unavailable. Other live slots
+                    # on the display must still refresh normally.
+                    values[str(binding.get("id"))] = str(binding.get("fallback") or "[]")
             elif binding_type in (None, "", "text") and str(binding.get("kind") or "") == "calendar":
                 # A plain text slot classified as kind "calendar" (birthdays.js's
                 # "Jméno z kalendáře") reads a calendar entity directly, not

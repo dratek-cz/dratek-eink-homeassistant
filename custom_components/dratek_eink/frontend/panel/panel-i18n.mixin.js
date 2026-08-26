@@ -16,6 +16,15 @@ const EN_EXACT = new Map(Object.entries({
 
   // Shared controls and states.
   "Hledat": "Search",
+  "Najít zastávku": "Find a stop",
+  "Napište alespoň dva znaky názvu zastávky.": "Enter at least two characters of the stop name.",
+  "Žádná zastávka s tímto názvem nebyla nalezena.": "No stop with this name was found.",
+  "Zastávka je uložená pro tento displej.": "The stop is saved for this display.",
+  "Data poskytuje Transitous z otevřených jízdních řádů dopravců.": "Data is provided by Transitous from operators' open timetables.",
+  "Použité zdroje": "Data sources",
+  "Vyhledejte zastávku podle názvu. Drátek pak sám načítá čtyři nejbližší odjezdy při každé automatické aktualizaci displeje.": "Search for a stop by name. Dratek will then load the next four departures on every automatic display refresh.",
+  "např. Brno, Česká": "e.g. Brno, Česká",
+  "Hlavní nádraží": "Main station",
   "Zavřít": "Close",
   "Zpět": "Undo",
   "Znovu": "Redo",

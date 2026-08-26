@@ -32,6 +32,7 @@ from .ws_devices import (
     websocket_set_rgb_led,
 )
 from .ws_meteoradar import websocket_render_meteoradar
+from .ws_transit import websocket_transit_departures, websocket_transit_search_stops
 from .ws_gateways import (
     websocket_add_gateway,
     websocket_delete_gateway,
@@ -132,6 +133,8 @@ COMMANDS = (
     websocket_clear_queue,
     websocket_cancel_queue_job,
     websocket_render_meteoradar,
+    websocket_transit_search_stops,
+    websocket_transit_departures,
 )
 
 
