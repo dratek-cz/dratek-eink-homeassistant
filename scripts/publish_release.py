@@ -74,18 +74,13 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.345",
-        name="DRATEK eInk v0.1.345",
-        body="""## Release 0.1.345
-
-### Vylepšeno
-- Odjezdy načítají všechna nástupiště a směry vybrané zastávky, řadí nejbližší spoje a vždy uvádějí cílovou stanici.
-- Relativní čas je zobrazen jako „za X min“ nebo „teď“.
+        tag="v0.1.346",
+        name="DRATEK eInk v0.1.346",
+        body="""## Release 0.1.346
 
 ### Opraveno
-- Automatická aktualizace nejprve vyčistí celou odjezdovou tabuli, takže se nové spoje nekreslí přes staré ani u dříve uložených automatizací.
-- Malý portrétní meteoradar zobrazí obě hodnoty předpovědi.
-- Automaticky překreslené grafy a ukazatele zachovají žlutý akcent ručního náhledu.
-- Výchozí hodnota AQI se vykreslí ve správném poměru.
+- Odjezdy se při automatické aktualizaci už nekreslí přes staré spoje. Šablona hlásila automatizaci jiné souřadnice řádku, než na kterých ho sama vykreslila, takže se stará tabule nesmazala celá a nová se objevila o kousek výš. Oprava se projeví i u automatizací uložených v předchozích verzích.
+- Stejná odchylka posouvala i další živé prvky: kruhový ukazatel kvality ovzduší a graf spotřeby vody teď při automatickém překreslení sedí přesně tam, kde je ruční náhled.
+- Žlutý akcent grafů a ukazatelů se při automatické aktualizaci konečně opravdu použije - barevné rozhodnutí panelu se do automatizace dosud nikdy nezapsalo.
 """,
     )

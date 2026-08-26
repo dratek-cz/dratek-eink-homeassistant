@@ -548,6 +548,47 @@ class CleanBackgroundMatchesManualSendTests(unittest.TestCase):
             "the old departures board leaked through the automatic refresh",
         )
 
+    @unittest.skipUnless(svg_render.render_available(), "SVG rasteriser not installed")
+    def test_transit_refresh_clears_the_stroke_that_sits_outside_the_row(self) -> None:
+        # A badge plate is stroked, and a 1px stroke straddles the edge it is
+        # drawn on, so half of it lands outside the row's own box. Clearing the
+        # box exactly left that half behind as a hairline of the old board down
+        # the margin - visible precisely because a board is flush to it.
+        # Clear of the panel edge, or the clamp to 0 would hide the spill.
+        box = {"x": 20, "y": 10, "w": 120, "h": 60}
+        binding = {
+            "id": "departures", "type": "transit", "limit": 2,
+            **{key: int(value) for key, value in box.items()},
+        }
+        stale_background = svg_render.rasterize_svg(
+            self._document(svg_blocks.block_board(
+                [{"badge": "9", "label": "Starý cíl", "value": "za 1 min", "color": "red"}],
+                box,
+            )),
+            self.WIDTH, self.HEIGHT, background="#ffffff",
+        ).convert("RGB")
+        new_departures = [{"line": "12", "destination": "Komárov", "time": "za 3 min"}]
+        expected = render.quantize_bwr_preview(
+            svg_render.rasterize_svg(
+                self._document(svg_blocks.block_board(
+                    [{"badge": "12", "label": "Komárov", "value": "za 3 min", "color": "red"}],
+                    box,
+                )),
+                self.WIDTH, self.HEIGHT, background="#ffffff",
+            )
+        ).convert("RGB")
+
+        automatic = render.render_entity_bound_clean_background_image(
+            _data_url(stale_background),
+            [binding],
+            {"departures": json.dumps(new_departures, ensure_ascii=False)},
+        ).convert("RGB")
+
+        self.assertIsNone(
+            ImageChops.difference(expected, automatic).getbbox(),
+            "a hairline of the old board survived on the row's own edge",
+        )
+
     def test_without_the_rasteriser_every_value_is_still_drawn(self) -> None:
         # No resvg wheel on this platform: the PIL renderers take over, so the
         # refresh is approximate again but never blank or half-built.

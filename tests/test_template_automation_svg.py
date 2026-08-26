@@ -151,6 +151,22 @@ class GraphicRowCaptureTests(unittest.TestCase):
         self.assertIn("_templateGraphicRowBoxes(template, width, height) {", self.template_svg)
         self.assertIn("if (!row.group) return;", self.template_svg)
 
+    def test_graphic_row_boxes_measure_the_rows_that_are_actually_drawn(self) -> None:
+        # _templateGraphicRowBoxes must lay out the very rows
+        # _buildDisplayTemplateSvg draws, which means going through
+        # _templateSvgRows. Rows straight out of _templateSvgSpecs carry
+        # neither `compact` nor `modern`, and the layout reads both: a compact
+        # landscape template is padded by 3 px, a plain one by
+        # round(min(w, h) * 0.045) - 6 px on a 296x128 tag. Measuring the wrong
+        # one recorded every graphic binding's box three pixels in from where
+        # the row was really drawn, so an automatic refresh cleared the wrong
+        # rectangle and put the new row slightly off the old one. A departures
+        # board showed both at once.
+        body = self.template_svg.split("_templateGraphicRowBoxes(template, width, height) {", 1)[1]
+        body = body.split("\n  },", 1)[0]
+        self.assertIn("this._templateSvgRows(template, width, height)", body)
+        self.assertNotIn("_templateSvgSpecs(", body)
+
     def test_each_graphic_binding_kind_is_resolved(self) -> None:
         self.assertIn("_templateAutomationGraphicBinding(template, group, row, geometry) {", self.devices)
         for marker in (

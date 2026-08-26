@@ -2235,10 +2235,15 @@ def render_entity_bound_clean_background_image(
     if stale_transit:
         draw = ImageDraw.Draw(image)
         for binding in stale_transit:
-            x = max(0, math.floor(float(binding.get("x") or 0)))
-            y = max(0, math.floor(float(binding.get("y") or 0)))
-            right = min(width, math.ceil(float(binding.get("x") or 0) + float(binding.get("w") or 0)))
-            bottom = min(height, math.ceil(float(binding.get("y") or 0) + float(binding.get("h") or 0)))
+            # One pixel wider than the row on every side. A board's badge plate
+            # is stroked, and a 1px stroke sits centred on the edge, so half of
+            # it lands outside the box; the same is true of the antialiasing
+            # under text anchored flush to either margin. Clearing the box
+            # exactly therefore left a hairline of the old board down the edge.
+            x = max(0, math.floor(float(binding.get("x") or 0)) - 1)
+            y = max(0, math.floor(float(binding.get("y") or 0)) - 1)
+            right = min(width, math.ceil(float(binding.get("x") or 0) + float(binding.get("w") or 0)) + 1)
+            bottom = min(height, math.ceil(float(binding.get("y") or 0) + float(binding.get("h") or 0)) + 1)
             if right > x and bottom > y:
                 draw.rectangle((x, y, right - 1, bottom - 1), fill=(255, 255, 255, 255))
     # Composited before the remaining bindings, which keeps the z-order the

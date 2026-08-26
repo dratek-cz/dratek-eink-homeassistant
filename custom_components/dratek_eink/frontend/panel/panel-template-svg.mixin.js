@@ -2361,8 +2361,19 @@ export const templateSvgMixin = {
   // _templateVariableCropBoxes uses for text slots: box geometry is a side
   // effect of the real layout pass, not worth recomputing separately.
   _templateGraphicRowBoxes(template, width, height) {
-    const build = this._templateSvgSpecs(template, undefined, width, height)[template?.id];
-    const rows = build ? build() : [];
+    // The rows have to be the ones the document is actually built from, not a
+    // second batch straight out of _templateSvgSpecs. _templateSvgRows is what
+    // stamps `compact` and `modern` on them, and the layout reads both: a
+    // compact landscape template is padded by 3 px where a plain one is padded
+    // by round(min(w, h) * 0.045) - 6 px on a 296x128 tag. Building raw rows
+    // here therefore measured every graphic row in a layout three pixels
+    // narrower on each side than the one that got drawn, so an automatic
+    // refresh cleared the wrong rectangle and redrew the row a few pixels off
+    // from where the manual send had put it. On a departures board that showed
+    // up as the old rows still visible underneath the new ones. It also left
+    // `compact` off the binding, so the backend redrew the row with the
+    // full-size type minimums.
+    const rows = this._templateSvgRows(template, width, height);
     if (!rows.length) return {};
     rows.forEach((row, index) => { row.__rowIndex = index; });
     const collector = [];

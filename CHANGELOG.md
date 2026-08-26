@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.346] - 2026-08-26
+
+### Opraveno
+- **Odjezdy se při automatické aktualizaci už nekreslí přes staré spoje**: šablona hlásila automatizaci jiné souřadnice řádku, než na kterých ho sama vykreslila, takže se stará tabule nesmazala celá a nová se objevila o kousek výš. Oprava se projeví i u automatizací uložených dříve.
+- **Živé grafy a ukazatele sedí přesně na svém místě**: stejná odchylka posouvala i kruhový ukazatel kvality ovzduší a graf spotřeby vody.
+- **Žlutý akcent při automatické aktualizaci** se konečně opravdu použije; dosud se barevné rozhodnutí panelu do automatizace nikdy nezapsalo.
+
 ## [0.1.345] - 2026-08-26
 
 ### Vylepšeno

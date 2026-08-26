@@ -4,11 +4,16 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.346
+
+- **Odjezdy se při automatické aktualizaci nekreslí přes staré spoje.** Šablona hlásila automatizaci jiné souřadnice řádku, než na kterých ho sama nakreslila, takže se stará tabule nesmazala celá a nová se objevila o kousek výš. Projeví se i u dříve uložených automatizací.
+- **Živé grafy a ukazatele sedí přesně na svém místě** – stejná odchylka posouvala i ukazatel kvality ovzduší a graf spotřeby vody.
+- **Automaticky překreslené grafy zachovají žluté akcenty** ručního náhledu.
+
 ## Novinky ve verzi 0.1.345
 
 - **Odjezdy zahrnují všechna nástupiště a směry vybrané zastávky** a každý řádek ukazuje cílovou stanici i údaj „za X min“.
-- **Automatická aktualizace odjezdů nejdřív smaže starou tabuli**, takže se text nepřekrývá ani u dříve uložených automatizací.
-- **Malý portrétní meteoradar zobrazí obě hodnoty předpovědi** a automatické grafy zachovají žluté akcenty.
+- **Malý portrétní meteoradar zobrazí obě hodnoty předpovědi.**
 
 ## Novinky ve verzi 0.1.344
 
