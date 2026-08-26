@@ -43,7 +43,7 @@ export const template = {
     const t = Math.max(0, Math.min(1, (Math.sqrt(area) - 190) / (800 - 190)));
     const lerp = (from, to) => from + (to - from) * t;
     if (height <= 160 && width >= height) return [
-      { dial: { percent: ratio(0, 21) / 2, value: v(0, "42"), caption: "AQI", min: "0", max: "200" }, group: "ratio", h: 0.68 },
+      { dial: { percent: ratio(0, 42) / 2, value: v(0, "42"), caption: "AQI", min: "0", max: "200" }, group: "ratio", h: 0.68 },
       { strip: [
         { icon: "molecule-co2", label: "CO₂", value: v(1, "612 ppm") },
         { icon: "blur", label: "PM2.5", value: v(2, "8 µg") },
@@ -57,7 +57,7 @@ export const template = {
         { icon: "blur", label: "PM2.5", value: v(2, "8 µg") },
         { icon: "water-percent", label: "VLHKOST", value: v(3, "46 %") },
       ], h: lerp(0.31, 0.36) },
-      { dial: { percent: ratio(0, 21) / 2, value: v(0, "42"), caption: "AQI / 200", min: "ČISTÝ", max: "ZÁTĚŽ" }, group: "ratio", h: lerp(0.38, 0.43) },
+      { dial: { percent: ratio(0, 42) / 2, value: v(0, "42"), caption: "AQI / 200", min: "ČISTÝ", max: "ZÁTĚŽ" }, group: "ratio", h: lerp(0.38, 0.43) },
       { band: { label: "LABORATOŘ VZDUCHU", value: "ŽIVÉ MĚŘENÍ", color: "black" }, bleed: true, h: lerp(0.10, 0.08) },
       { flex: true },
       { footer: [{ label: "VĚTRÁNÍ", value: "Není třeba" }], h: lerp(0.13, 0.07) },

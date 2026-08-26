@@ -507,6 +507,47 @@ class CleanBackgroundMatchesManualSendTests(unittest.TestCase):
         ).convert("RGB")
         self.assertIsNone(ImageChops.difference(expected, automatic).getbbox())
 
+    @unittest.skipUnless(svg_render.render_available(), "SVG rasteriser not installed")
+    def test_transit_refresh_erases_the_previous_board_before_drawing(self) -> None:
+        box = {"x": 0, "y": 12, "w": 200, "h": 76}
+        old_rows = [
+            {"badge": "9", "label": "Starý cíl", "value": "za 1 min", "color": "red"},
+            {"badge": "4", "label": "Minulý spoj", "value": "za 6 min", "color": "black"},
+        ]
+        new_departures = [
+            {"line": "12", "destination": "Komárov", "time": "za 3 min"},
+            {"line": "5", "destination": "Štefánikova čtvrť", "time": "za 8 min"},
+        ]
+        new_rows = [
+            {"badge": "12", "label": "Komárov", "value": "za 3 min", "color": "red"},
+            {"badge": "5", "label": "Štefánikova čtvrť", "value": "za 8 min", "color": "black"},
+        ]
+        binding = {
+            "id": "departures", "type": "transit", "limit": 2,
+            **{key: int(value) for key, value in box.items()},
+        }
+        stale_background = svg_render.rasterize_svg(
+            self._document(svg_blocks.block_board(old_rows, box)),
+            self.WIDTH, self.HEIGHT, background="#ffffff",
+        ).convert("RGB")
+        expected = render.quantize_bwr_preview(
+            svg_render.rasterize_svg(
+                self._document(svg_blocks.block_board(new_rows, box)),
+                self.WIDTH, self.HEIGHT, background="#ffffff",
+            )
+        ).convert("RGB")
+
+        automatic = render.render_entity_bound_clean_background_image(
+            _data_url(stale_background),
+            [binding],
+            {"departures": json.dumps(new_departures, ensure_ascii=False)},
+        ).convert("RGB")
+
+        self.assertIsNone(
+            ImageChops.difference(expected, automatic).getbbox(),
+            "the old departures board leaked through the automatic refresh",
+        )
+
     def test_without_the_rasteriser_every_value_is_still_drawn(self) -> None:
         # No resvg wheel on this platform: the PIL renderers take over, so the
         # refresh is approximate again but never blank or half-built.

@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.345
+
+- **Odjezdy zahrnují všechna nástupiště a směry vybrané zastávky** a každý řádek ukazuje cílovou stanici i údaj „za X min“.
+- **Automatická aktualizace odjezdů nejdřív smaže starou tabuli**, takže se text nepřekrývá ani u dříve uložených automatizací.
+- **Malý portrétní meteoradar zobrazí obě hodnoty předpovědi** a automatické grafy zachovají žluté akcenty.
+
 ## Novinky ve verzi 0.1.344
 
 - **Jízdní řády jsou přímo součástí Drátku** – v nastavení šablony Odjezdy stačí vyhledat a vybrat zastávku; není potřeba další HACS integrace ani API klíč.

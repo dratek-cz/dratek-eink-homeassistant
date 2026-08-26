@@ -1,5 +1,5 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.344";
-import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=native-transit-1";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.345";
+import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=release-0.1.345";
 
 // The standard Czech civil name-day calendar, indexed [month][day - 1]
 // (getMonth() is already 0-based). Days with no name day (state/religious
@@ -2977,6 +2977,13 @@ export const devicesMixin = {
         caption: single.caption != null ? String(single.caption) : "",
         min: single.min != null ? String(single.min) : "0",
         max: single.max != null ? String(single.max) : "100",
+        // Whether this row may print its fill in yellow. The decision belongs
+        // to the panel (a protected template never takes the four-colour
+        // accent, and only the rows _fourColorTemplateRows picked carry it),
+        // and svg_blocks.py has no way to recover it from the row, so it
+        // travels with the binding - otherwise every automatic refresh
+        // repainted a yellow gauge black.
+        accent: this._ratioAccent(row, visual, single),
         fallback: "", ...geometry,
       };
     }
@@ -2999,6 +3006,9 @@ export const devicesMixin = {
       const highlightIndex = Number.isInteger(row.bars?.highlight) ? row.bars.highlight : -1;
       return {
         type: "series", entity_id: entityId, chartType, caption, labels, highlight: highlightIndex,
+        // See the ratio binding: yellow is the panel's decision, not something
+        // the backend can work out from the row.
+        accent: this._ratioAccent(row, chartType === "bar" ? "bars" : "spark", row.spark || {}),
         maxPoints: 96, fallback: "[]", ...geometry,
       };
     }
@@ -3401,7 +3411,7 @@ export const devicesMixin = {
         node.removeAttribute("href");
         continue;
       }
-      if (["text", "ratio", "series", "forecast", "calendar"].includes(binding.type)) {
+      if (["text", "ratio", "series", "forecast", "calendar", "transit"].includes(binding.type)) {
         node.remove();
       }
     }

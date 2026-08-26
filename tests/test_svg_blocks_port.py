@@ -82,6 +82,11 @@ import { templateSvgMixin as m } from %(module)s;
 m._escape = (value) =>
   String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+// The four-colour accent branches are gated on the panel knowing it is talking
+// to a BWRY display. The backend's equivalent is preserve_yellow, which the
+// Python calls below pass explicitly.
+m._displaySupportsYellow = () => true;
+
 m._svgWeatherIcon = function (name, cx, cy, size) {
   if (!name.startsWith("weather-")) return "";
   const x = cx - size / 2, y = cy - size / 2;
@@ -175,6 +180,58 @@ CASES = [
         {"datebox": DATEBOX},
         TALL,
         lambda: svg_blocks.block_datebox(DATEBOX, TALL),
+    ),
+    # The four-colour accent. `modern` is what _fourColorTemplateRows stamps on
+    # every row of an unprotected template, and `accent` is the one shape in
+    # that template it picked to carry the colour; the backend has neither, so
+    # the binding hands svg_blocks.py the decision and preserve_yellow says
+    # whether the panel can print it. These four cases are the ones that used to
+    # come out black on an automatic refresh after a manual send drew them
+    # yellow.
+    (
+        "dial_accent",
+        "_blockDial",
+        {"dial": {**DIAL, "accent": "yellow"}, "modern": True},
+        WIDE,
+        lambda: svg_blocks.block_dial({**DIAL, "accent": "yellow"}, WIDE, True),
+    ),
+    (
+        "ring_accent",
+        "_blockRing",
+        {"ring": {**RING, "accent": "yellow"}, "modern": True},
+        WIDE,
+        lambda: svg_blocks.block_ring({**RING, "accent": "yellow"}, WIDE, True),
+    ),
+    (
+        "meters_accent",
+        "_blockMeters",
+        {"meters": METERS, "modern": True},
+        TALL,
+        lambda: svg_blocks.block_meters(METERS, TALL, True, "yellow"),
+    ),
+    (
+        "bars_accent",
+        "_blockBars",
+        {"bars": BARS, "modern": True},
+        TALL,
+        lambda: svg_blocks.block_bars({**BARS, "accent": "yellow"}, TALL, True),
+    ),
+    (
+        "spark_accent",
+        "_blockSpark",
+        {"spark": {**SPARK, "accent": "yellow"}, "modern": True},
+        TALL,
+        lambda: svg_blocks.block_spark({**SPARK, "accent": "yellow"}, TALL, True),
+    ),
+    # A protected template keeps its own palette: no `modern`, so the accent on
+    # the shape must be ignored on both sides rather than quietly painting
+    # cz_spot_prices yellow.
+    (
+        "bars_accent_protected",
+        "_blockBars",
+        {"bars": BARS},
+        TALL,
+        lambda: svg_blocks.block_bars({**BARS, "accent": ""}, TALL, True),
     ),
 ]
 

@@ -2,6 +2,18 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.345] - 2026-08-26
+
+### Vylepšeno
+- **Odjezdy ze všech směrů zastávky**: výběr jednoho označníku načte také rodičovskou zastávku, její nástupiště a stejnojmenné ekvivalenty. Spoje se seřadí podle nejbližšího odjezdu.
+- **Cílová stanice a srozumitelný čas**: každý řádek uvádí konečnou stanici a čas ve tvaru „za 3 min“ nebo „teď“; chybějící cíl se doplní z poslední následující zastávky.
+
+### Opraveno
+- **Čistá automatická aktualizace odjezdů**: nová tabule už se nekreslí přes staré spoje. Oprava vyčistí oblast i u automatizací uložených v předchozí verzi.
+- **Dvě hodnoty počasí v malém portrétním meteoradaru**: řádky se přizpůsobí dostupné výšce a druhá předpověď už nezmizí.
+- **Barevné automatické ukazatele**: žlutý akcent grafů a měřáků se při automatickém překreslení zachová stejně jako v ručním náhledu.
+- **Výchozí AQI** používá správnou hodnotu při prvním zobrazení šablony Kvalita vzduchu.
+
 ## [0.1.344] - 2026-08-26
 
 ### Přidáno

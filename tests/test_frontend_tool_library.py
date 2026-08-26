@@ -1622,6 +1622,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("async _blankedDisplayTemplateBackground(", self.source)
         self.assertIn("clean_background: prepared.cleanBackground || \"\",", self.source)
         self.assertIn("_rasterizeSvgStringToPng(", self.source)
+        self.assertIn('["text", "ratio", "series", "forecast", "calendar", "transit"]', self.source)
 
 
     def test_template_studio_has_contextual_component_editor(self):

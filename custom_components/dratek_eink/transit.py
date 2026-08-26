@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 import logging
+import re
 import time
 from typing import Any
 
@@ -22,6 +23,7 @@ USER_AGENT = "DRATEK-eInk-HomeAssistant/0.1 (https://github.com/DRATEK/DRATEK-eI
 SEARCH_TTL = 15 * 60
 DEPARTURES_TTL = 45
 REQUEST_TIMEOUT = 12
+DEPARTURE_CANDIDATE_MINIMUM = 12
 
 
 class TransitError(RuntimeError):
@@ -101,12 +103,39 @@ def _parse_time(value: Any) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
+def _departure_destination(item: dict[str, Any], current_stop: str = "") -> str:
+    """Return the public-facing terminal, with fetched following stops as fallback."""
+    headsign = str(item.get("headsign") or "").strip()
+    if headsign:
+        return headsign
+
+    trip_to = item.get("tripTo") if isinstance(item.get("tripTo"), dict) else {}
+    destination = str(trip_to.get("name") or "").strip()
+    if destination:
+        return destination
+
+    next_stops = item.get("nextStops") if isinstance(item.get("nextStops"), list) else []
+    for stop in reversed(next_stops):
+        if isinstance(stop, dict) and str(stop.get("name") or "").strip():
+            return str(stop["name"]).strip()
+
+    # Some feeds expose only a route name such as "Česká - Vychodilova".
+    route_name = str(item.get("routeLongName") or "").strip()
+    if route_name:
+        endpoints = [part.strip() for part in re.split(r"\s+[-–—]\s+", route_name) if part.strip()]
+        for endpoint in reversed(endpoints):
+            if endpoint.casefold() != current_stop.casefold():
+                return endpoint
+    return "Cíl neuveden"
+
+
 def normalize_departures(payload: Any, now: datetime | None = None, limit: int = 4) -> dict[str, Any]:
-    """Normalize MOTIS stop times into the four rows the eInk board needs."""
+    """Normalize and sort departures from every equivalent stop/platform."""
     if not isinstance(payload, dict):
         return {"stop_name": "", "departures": []}
     now = now or datetime.now(timezone.utc)
     place = payload.get("place") if isinstance(payload.get("place"), dict) else {}
+    stop_name = str(place.get("name") or "").strip()
     departures: list[dict[str, Any]] = []
     for item in payload.get("stopTimes", []):
         if not isinstance(item, dict) or item.get("cancelled") or item.get("tripCancelled"):
@@ -117,22 +146,22 @@ def normalize_departures(payload: Any, now: datetime | None = None, limit: int =
             continue
         minutes = max(0, int((departure.astimezone(timezone.utc) - now.astimezone(timezone.utc)).total_seconds() // 60))
         line = str(item.get("displayName") or item.get("routeShortName") or "–").strip()
-        destination = str(item.get("headsign") or (item.get("tripTo") or {}).get("name") or "").strip()
+        destination = _departure_destination(item, stop_name)
         departures.append({
             "line": line or "–",
-            "destination": destination or "Spoj",
-            "time": "teď" if minutes == 0 else f"{minutes} min",
+            "destination": destination,
+            "time": "teď" if minutes == 0 else f"za {minutes} min",
             "minutes": minutes,
             "realtime": bool(item.get("realTime")),
             "mode": str(item.get("mode") or ""),
             "platform": str(item_place.get("track") or ""),
         })
-        if len(departures) >= max(1, min(12, limit)):
-            break
+    row_limit = max(1, min(12, limit))
+    departures.sort(key=lambda entry: entry["minutes"])
     return {
-        "stop_name": str(place.get("name") or "").strip(),
+        "stop_name": stop_name,
         "stop_id": str(place.get("stopId") or "").strip(),
-        "departures": departures,
+        "departures": departures[:row_limit],
         "attribution_url": SOURCES_URL,
     }
 
@@ -163,8 +192,23 @@ async def async_get_departures(hass: Any, stop_id: str, limit: int = 4) -> dict[
     cached = _cache(hass).get(key)
     if cached and cached[0] > time.monotonic():
         return cached[1]
+    candidate_count = max(DEPARTURE_CANDIDATE_MINIMUM, limit * 3)
     payload = await _get_json(hass, "/api/v6/stoptimes", {
-        "stopId": stop_id, "n": limit, "language": "cs,sk", "withAlerts": "false",
+        "stopId": stop_id,
+        "n": candidate_count,
+        # A one-metre radius with exactRadius=false asks MOTIS for the selected stop's
+        # parent, children/platforms and same-name equivalents, but does not
+        # pull unrelated nearby stops into the board. This covers all travel
+        # directions even when the picker happened to return one bay's ID.
+        # Production currently returns no rows for the documented radius=0
+        # boundary, hence the smallest non-zero radius here.
+        "radius": 1,
+        "exactRadius": "false",
+        # Lets the normalizer recover a terminal from the final following stop
+        # when a feed omits both headsign and tripTo.
+        "fetchStops": "true",
+        "language": "cs,sk",
+        "withAlerts": "false",
     })
     result = normalize_departures(payload, limit=limit)
     _cache(hass)[key] = (time.monotonic() + DEPARTURES_TTL, result)

@@ -68,6 +68,9 @@ class HourlySidebarTests(unittest.TestCase):
                 _rows_drawn(render.radar_sidebar_width(width), height, _forecast()), 1
             )
 
+    def test_small_portrait_forecast_keeps_two_hours(self) -> None:
+        self.assertEqual(_rows_drawn(128, 162, _forecast(2)), 2)
+
     def test_taller_panel_never_shows_fewer_hours(self) -> None:
         previous = 0
         for height in (128, 300, 400, 480, 640, 800):

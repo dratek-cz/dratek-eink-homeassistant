@@ -74,20 +74,18 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.344",
-        name="DRATEK eInk v0.1.344",
-        body="""## Release 0.1.344
-
-### Přidáno
-- Jízdní řády jsou přímo součástí integrace Drátek. V nastavení šablony Odjezdy stačí vyhledat a vybrat zastávku bez další HACS integrace a bez API klíče.
-- Čtyři nejbližší odjezdy se načítají z otevřených dat Transitous pro Česko a Slovensko a automaticky obnovují linku, směr a čas.
+        tag="v0.1.345",
+        name="DRATEK eInk v0.1.345",
+        body="""## Release 0.1.345
 
 ### Vylepšeno
-- Kdo je doma a Stav serveru využívají celou plochu na šířku i na výšku.
-- Čísla linek jsou v plně vybarvených značkách a všechny čtyři řádky odjezdů jsou živé.
+- Odjezdy načítají všechna nástupiště a směry vybrané zastávky, řadí nejbližší spoje a vždy uvádějí cílovou stanici.
+- Relativní čas je zobrazen jako „za X min“ nebo „teď“.
 
 ### Opraveno
-- Ukazatele a prstence správně pracují se zlomkem 0–1 a automatický render odpovídá ručnímu náhledu.
-- Termostat ani serverové hodnoty se na kompaktních a portrétních displejích nepřekrývají.
+- Automatická aktualizace nejprve vyčistí celou odjezdovou tabuli, takže se nové spoje nekreslí přes staré ani u dříve uložených automatizací.
+- Malý portrétní meteoradar zobrazí obě hodnoty předpovědi.
+- Automaticky překreslené grafy a ukazatele zachovají žlutý akcent ručního náhledu.
+- Výchozí hodnota AQI se vykreslí ve správném poměru.
 """,
     )

@@ -163,7 +163,15 @@ class GraphicRowCaptureTests(unittest.TestCase):
                 self.assertIn(marker, self.devices)
 
     def test_clean_background_tears_out_graphic_bindings_too(self) -> None:
-        self.assertIn('["text", "ratio", "series", "forecast", "calendar"].includes(binding.type)', self.devices)
+        # Every binding type an automatic refresh redraws has to be torn out of
+        # the clean background first, or the old markup stays painted underneath
+        # and the new rows are laid on top of it. `transit` was missing, which
+        # is exactly how a departures board ended up printed twice, the second
+        # copy a few pixels higher than the first.
+        self.assertIn(
+            '["text", "ratio", "series", "forecast", "calendar", "transit"].includes(binding.type)',
+            self.devices,
+        )
 
     def test_calendar_binding_captures_the_datebox_color(self) -> None:
         # _blockDatebox reads row.datebox.color for its header band and first

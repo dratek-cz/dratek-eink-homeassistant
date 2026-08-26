@@ -20,7 +20,7 @@ import { template as calendar } from "./calendar.js";
 import { template as security } from "./security.js?v=yellow-shaded-accents-1";
 import { template as transport } from "./transport.js?v=native-transit-1";
 import { template as shopping } from "./shopping.js?v=compact-landscape-content-6";
-import { template as air } from "./air.js?v=compact-landscape-content-6";
+import { template as air } from "./air.js?v=air-aqi-fix-1";
 import { template as thermostat } from "./thermostat.js?v=compact-landscape-content-6";
 import { template as water } from "./water.js?v=compact-landscape-content-6";
 import { template as parcel } from "./parcel.js?v=yellow-shaded-accents-1";

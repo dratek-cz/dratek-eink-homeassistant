@@ -1887,8 +1887,16 @@ def _draw_radar_sidebar(
     if not entries:
         return canvas
 
+    available_h = max(0, (height - pad) - y)
     row_h = max(22, min(64, round(inner_w * 0.55)))
-    visible = _radar_forecast_rows(max(0, (height - pad) - y), row_h, len(entries))
+    # On small portrait displays the forecast block is narrow and the width-
+    # based row height can leave room for only one otherwise valid entry.
+    # Prefer two compact, complete rows when the block can still keep the
+    # minimum readable row height.
+    preferred_rows = min(2, len(entries))
+    if preferred_rows > 1 and available_h >= preferred_rows * 22:
+        row_h = min(row_h, available_h // preferred_rows)
+    visible = _radar_forecast_rows(available_h, row_h, len(entries))
     for entry in entries[:visible]:
         icon_size = max(12, round(row_h * 0.82))
         icon = _weather_condition_icon_image(
@@ -2218,6 +2226,21 @@ def render_entity_bound_clean_background_image(
 
     svg_bindings = [binding for binding in bindings if redrawn_by_svg(binding)]
     width, height = image.size
+    # Transit boards saved before 0.1.345 were accidentally left painted into
+    # clean_background: the panel's blanking list omitted the `transit` type.
+    # Clear their complete white board area before drawing the current rows so
+    # existing automations are repaired immediately, without making the user
+    # open and save every template again.
+    stale_transit = [binding for binding in svg_bindings if binding.get("type") == "transit"]
+    if stale_transit:
+        draw = ImageDraw.Draw(image)
+        for binding in stale_transit:
+            x = max(0, math.floor(float(binding.get("x") or 0)))
+            y = max(0, math.floor(float(binding.get("y") or 0)))
+            right = min(width, math.ceil(float(binding.get("x") or 0) + float(binding.get("w") or 0)))
+            bottom = min(height, math.ceil(float(binding.get("y") or 0) + float(binding.get("h") or 0)))
+            if right > x and bottom > y:
+                draw.rectangle((x, y, right - 1, bottom - 1), fill=(255, 255, 255, 255))
     # Composited before the remaining bindings, which keeps the z-order the
     # panel captured: the template's own rows are pushed ahead of the radar
     # image and the designer's overlay widgets in the binding list, and a manual

@@ -2,7 +2,7 @@ import { storageMixin } from "./panel/panel-storage.mixin.js";
 import { queueMixin } from "./panel/panel-queue.mixin.js?v=live-log-update-1";
 import { automationsMixin } from "./panel/panel-automations.mixin.js?v=always-send-default-on-1";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=live-topology-routes-2";
-import { devicesMixin } from "./panel/panel-devices.mixin.js?v=native-transit-1";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=transit-refresh-2";
 import { projectsMixin } from "./panel/panel-projects.mixin.js?v=interval-only-default-1";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
 import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-3";
@@ -14,9 +14,9 @@ import { i18nMixin } from "./panel/panel-i18n.mixin.js?v=native-transit-1";
 import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=native-transit-1";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js?v=templates-4c-1";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
-import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=native-transit-1";
+import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=gauge-fix-3";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.344";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.345";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {

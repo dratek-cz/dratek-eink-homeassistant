@@ -1145,6 +1145,22 @@ export const templateSvgMixin = {
     return !!row?.modern && !!this._displaySupportsYellow?.();
   },
 
+  // Which accent an automation binding must record for a graphic row, so the
+  // backend redraws the shape in the colour the browser gave it. svg_blocks.py
+  // cannot work this out for itself: it never sees row.modern, and by the time
+  // it runs there is no trace of which shape _fourColorTemplateRows picked.
+  // Must agree with _blockDial/_blockRing/_blockBars/_blockSpark/_blockMeters,
+  // which is why it is one function rather than a condition restated at every
+  // binding.
+  _ratioAccent(row, visual, source) {
+    if (!this._accentYellow(row)) return "";
+    // A bar chart and a meter row colour their fills whenever the row is
+    // eligible; a dial, a ring and a sparkline take the accent only when
+    // _fourColorTemplateRows picked that particular shape to carry it.
+    if (visual === "bars") return "yellow";
+    return source?.accent === "yellow" ? "yellow" : "";
+  },
+
   // Every block that fills a shape by proportion takes a 0-1 fraction, which is
   // what the templates' ratio() helper returns. A template that wrote a plain
   // percentage instead clamped to 1 and filled the shape completely -
