@@ -23,6 +23,13 @@ const EN_EXACT = new Map(Object.entries({
   "Přepnout do češtiny": "Switch to Czech",
   "Přepnout do angličtiny": "Switch to English",
   "Otevřít e-shop DRATEK.CZ v nové záložce": "Open the DRATEK.CZ store in a new tab",
+  "Bluetooth není v Home Assistantu dostupný": "Bluetooth is not available in Home Assistant",
+  "Home Assistant nemá nainstalovaný nebo nastavený Bluetooth adaptér. Bez něj nelze displeje vyhledávat ani obsluhovat přímo z Home Assistantu.":
+    "Home Assistant does not have a Bluetooth adapter installed or configured. Without it, displays cannot be discovered or controlled directly from Home Assistant.",
+  "Je dostupná aktualizace firmwaru gatewaye": "A gateway firmware update is available",
+  "Nainstalovaná verze integrace obsahuje novější firmware. Aktualizujte uvedené gatewaye, aby používaly stejnou verzi protokolu.":
+    "The installed integration includes newer firmware. Update the listed gateways so they use the same protocol version.",
+  "Otevřít gatewaye": "Open gateways",
 
   // Shared controls and states.
   "Hledat": "Search",

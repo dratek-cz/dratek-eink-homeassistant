@@ -65,6 +65,13 @@ export const inspectorMixin = {
   },
 
   _bind() {
+    this.shadowRoot.querySelector("[data-system-alert-gateways]")?.addEventListener("click", () => {
+      this._activeTab = "gateways";
+      this._gatewaySubtab = "manage";
+      this._render();
+      this._paint();
+      this.shadowRoot.querySelector(".page")?.scrollIntoView({ block: "start" });
+    });
     this._bindAutomationEvents?.();
     this._bindLazyTemplateCatalogPreviews();
     this.shadowRoot.querySelector("#scan")?.addEventListener("click", () => this._scan());

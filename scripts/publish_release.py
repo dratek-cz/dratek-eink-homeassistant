@@ -74,13 +74,12 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.348",
-        name="DRATEK eInk v0.1.348",
-        body="""## Release 0.1.348
+        tag="v0.1.349",
+        name="DRATEK eInk v0.1.349",
+        body="""## Release 0.1.349
 
-### Vylepšeno
-- Odjezdy na výšku mají nový vzhled. Na úzkém displeji se cíl, linka i časy nevešly na jeden řádek a název cílové stanice se osekal; každý spoj teď zabírá dva řádky - cíl dostane celou šířku, pod ním je čas odjezdu vedle odpočtu - a zobrazují se tři spoje místo čtyř.
-- U každého spoje je i skutečný čas odjezdu (07:12) v časovém pásmu dané zastávky, ne jen "za 3 min". Odpočet zastará s každou minutou, čas odjezdu ne.
-- Druh vozidla na první pohled: ikona autobusu, trolejbusu, tramvaje, vlaku, metra nebo lodi u každého spoje. Trolejbus se pozná podle route_type dopravce, protože zdroj jízdních řádů ho jinak hlásí jako autobus.
+### Přidáno
+- Chybějící Bluetooth už nezůstane bez vysvětlení. Po dokončení kontroly zobrazí panel výrazné červené upozornění, pokud Home Assistant nemá dostupný Bluetooth adaptér; během úvodního načítání se falešně neukáže.
+- Panel upozorní na starý firmware gatewayí. Firmware každé gatewaye se průběžně porovnává s verzí přibalenou v nainstalované integraci. Pokud je po aktualizaci integrace některá gateway zastaralá, upozornění ji pojmenuje a nabídne přímý přechod k aktualizaci.
 """,
     )

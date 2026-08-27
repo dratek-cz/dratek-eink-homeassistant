@@ -1,5 +1,5 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.348";
-import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=release-0.1.348";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.349";
+import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=release-0.1.349";
 
 // Generation of the graphic-row capture written into every series()/ratio()/
 // day()/event()/transit binding. Bumped whenever the recorded box could move,
@@ -104,7 +104,10 @@ export const devicesMixin = {
   },
 
   _deviceStatusSignature(result = this._result) {
-    return (result?.devices || [])
+    const scanner = Object.prototype.hasOwnProperty.call(result || {}, "scanner_count")
+      ? `scanner:${Number(result.scanner_count || 0)}`
+      : "scanner:unchecked";
+    const devices = (result?.devices || [])
       .map((device) => {
         const preferredPath = device.preferred_path || null;
         return JSON.stringify({
@@ -128,6 +131,7 @@ export const devicesMixin = {
       })
       .sort()
       .join("|");
+    return `${scanner}|${devices}`;
   },
 
   _device() {

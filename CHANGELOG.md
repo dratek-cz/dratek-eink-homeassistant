@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.349] - 2026-08-27
+
+### Přidáno
+- **Upozornění na chybějící Bluetooth**: panel po skutečné kontrole skenerů zobrazí výrazné červené upozornění, pokud Home Assistant nemá dostupný Bluetooth adaptér. Během úvodního načítání se upozornění nezobrazuje falešně.
+- **Upozornění na aktualizaci gatewayí**: firmware každé gatewaye se průběžně porovnává s verzí přibalenou v integraci. Zastaralé gatewaye se zobrazí v globálním červeném upozornění s přímým přechodem na jejich správu.
+
 ## [0.1.348] - 2026-08-27
 
 ### Vylepšeno

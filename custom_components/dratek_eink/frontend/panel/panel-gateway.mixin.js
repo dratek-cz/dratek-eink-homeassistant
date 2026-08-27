@@ -80,10 +80,19 @@ export const gatewayMixin = {
         /^(?:last_seen|last_check|checked_at|updated_at|timestamp)$/.test(key) ? undefined : item
       );
       const before = stable(this._gateways || []);
+      const beforeFirmwareAlert = (this._gateways || [])
+        .map((gateway) => String(gateway?.status?.firmware || "").trim())
+        .filter((firmware) => firmware && !CURRENT_GATEWAY_FIRMWARES.has(firmware))
+        .sort().join("|");
       const after = stable(gateways);
       this._gateways = gateways;
+      const afterFirmwareAlert = gateways
+        .map((gateway) => String(gateway?.status?.firmware || "").trim())
+        .filter((firmware) => firmware && !CURRENT_GATEWAY_FIRMWARES.has(firmware))
+        .sort().join("|");
       const visible = ["gateways", "topology"].includes(this._activeTab);
-      if (visible && (before !== after || this._pendingGatewayBackgroundRender)) {
+      const alertChanged = beforeFirmwareAlert !== afterFirmwareAlert;
+      if ((visible && before !== after) || alertChanged || this._pendingGatewayBackgroundRender) {
         if (this._backgroundUiCanRender?.() !== false) {
           this._pendingGatewayBackgroundRender = false;
           this._render();

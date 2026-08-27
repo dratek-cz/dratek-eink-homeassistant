@@ -51,18 +51,50 @@ class BrandLogoTemplateTests(unittest.TestCase):
     def test_small_panels_get_the_wide_lockup_and_large_ones_the_tall_one(self) -> None:
         self.assertIn("const stacked = h > w || Math.min(w, h) >= 200;", self.template)
 
-    def test_the_lockup_is_the_real_artwork_dithered(self) -> None:
+    def test_the_lockup_is_the_real_artwork_with_its_own_ordered_dither(self) -> None:
         # Redrawing the mark from type and rectangles printed sharply but was an
         # approximation of a logo, which is the one thing a logo may not be:
         # Arial letterforms and a stroked rectangle standing in for the Eink
-        # screen. The integration's own file goes through the same
-        # Floyd-Steinberg pass an imported photo takes instead.
+        # screen. The integration's own files go through a logo-specific pass:
+        # photographic error diffusion bleeds colour across hard boundaries.
         self.assertIn("_blockBrandLogo(row, box) {", self.svg)
         self.assertIn("if (row.brandLogo) return this._blockBrandLogo(row, box);", self.svg)
         mixin = MIXIN.read_text(encoding="utf-8")
         self.assertIn("dratek-eink-logo.png", mixin)
         self.assertIn("dratek-eink-header.png", mixin)
-        self.assertIn("_renderCustomImageBitmapAtSize(", mixin)
+        self.assertIn("_renderBrandLogoBitmapAtSize(", mixin)
+        self.assertNotIn("_ditherImportedTemplateImageData(", mixin)
+
+    def test_neutral_logo_areas_can_never_receive_red_error(self) -> None:
+        mixin = MIXIN.read_text(encoding="utf-8")
+        self.assertIn("Neutral parts of the module are strictly black/white", mixin)
+        self.assertNotIn("7 / 16", mixin)
+        self.assertNotIn("3 / 16", mixin)
+        self.assertNotIn("5 / 16", mixin)
+
+    def test_small_panels_use_the_finer_ordered_cell(self) -> None:
+        mixin = MIXIN.read_text(encoding="utf-8")
+        self.assertIn("Math.min(width, height) <= 160", mixin)
+        self.assertIn("[0, 8, 2, 10]", mixin)
+
+    def test_wordmark_and_eink_dot_have_semantic_colours(self) -> None:
+        mixin = MIXIN.read_text(encoding="utf-8")
+        self.assertIn("Turquoise DRATEK and +/- become black", mixin)
+        self.assertIn("dot over the i in Eink", mixin)
+        self.assertIn("pixels.data[offset] = 220", mixin)
+
+    def test_letter_edges_are_hard_not_dithered_halos(self) -> None:
+        mixin = MIXIN.read_text(encoding="utf-8")
+        self.assertIn("if (alpha < 0.5)", mixin)
+        self.assertIn("Math.max(...source) < 48", mixin)
+        self.assertIn("context.clearRect(0, 0, width, height)", mixin)
+
+    def test_eink_module_gets_a_target_pixel_outline(self) -> None:
+        mixin = MIXIN.read_text(encoding="utf-8")
+        self.assertIn("_outlineBrandLogoModule(pixels, width, height", mixin)
+        self.assertIn("insideRoundedRect(x, y, 0)", mixin)
+        self.assertIn("!insideRoundedRect(x, y, 1)", mixin)
+        self.assertIn("One physical pixel", mixin)
 
     def test_the_dither_is_produced_for_the_panel_s_own_palette(self) -> None:
         # Handing a three-colour panel the four-colour bitmap prints the yellow
@@ -70,14 +102,12 @@ class BrandLogoTemplateTests(unittest.TestCase):
         # afterthought.
         mixin = MIXIN.read_text(encoding="utf-8")
         self.assertIn("this._displayPaletteKey?.(device)", mixin)
-        self.assertIn("`${source}:${w}x${h}:${paletteKey}`", mixin)
+        self.assertIn("`${source}:${w}x${h}:${paletteKey}:logo-ordered-5`", mixin)
 
     def test_the_logo_is_letterboxed_and_never_cropped(self) -> None:
         mixin = MIXIN.read_text(encoding="utf-8")
         self.assertNotIn('"cover"', mixin)
-        # Both dither paths - the lazy one for the preview and the blocking one
-        # for the send - and the comment that says why.
-        self.assertEqual(3, mixin.count('"contain"'))
+        self.assertIn('_drawCustomImageFitted(context, this._brandLogoPrepareSource(image), width, height, "contain")', mixin)
 
     def test_the_catalog_tile_is_not_cached_before_the_bitmap_lands(self) -> None:
         # The thumbnail cache keeps whatever the first pass drew, and the first

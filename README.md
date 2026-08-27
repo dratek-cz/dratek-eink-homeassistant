@@ -4,6 +4,11 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.349
+
+- **Chybějící Bluetooth už nezůstane bez vysvětlení.** Po dokončení kontroly zobrazí panel výrazné červené upozornění, pokud Home Assistant nemá dostupný Bluetooth adaptér; během úvodního načítání se falešně neukáže.
+- **Panel upozorní na starý firmware gatewayí.** Firmware každé gatewaye se průběžně porovnává s verzí přibalenou v nainstalované integraci. Pokud je po aktualizaci integrace některá gateway zastaralá, červené upozornění ji pojmenuje a nabídne přímý přechod k aktualizaci.
+
 ## Novinky ve verzi 0.1.348
 
 - **Odjezdy na výšku mají nový vzhled.** Na úzkém displeji se cíl, linka i časy nevešly na jeden řádek a název cílové stanice se osekal. Každý spoj teď zabírá dva řádky – cíl dostane celou šířku, pod ním je čas odjezdu vedle odpočtu – a zobrazují se tři spoje místo čtyř.
