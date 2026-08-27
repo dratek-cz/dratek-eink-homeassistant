@@ -51,12 +51,45 @@ class BrandLogoTemplateTests(unittest.TestCase):
     def test_small_panels_get_the_wide_lockup_and_large_ones_the_tall_one(self) -> None:
         self.assertIn("const stacked = h > w || Math.min(w, h) >= 200;", self.template)
 
-    def test_the_lockup_is_drawn_as_vector_art_not_a_scaled_bitmap(self) -> None:
-        # A raster logo blown up to a 800x480 panel is a speckled version of
-        # itself once the three-colour threshold has been through it.
+    def test_the_lockup_is_the_real_artwork_dithered(self) -> None:
+        # Redrawing the mark from type and rectangles printed sharply but was an
+        # approximation of a logo, which is the one thing a logo may not be:
+        # Arial letterforms and a stroked rectangle standing in for the Eink
+        # screen. The integration's own file goes through the same
+        # Floyd-Steinberg pass an imported photo takes instead.
         self.assertIn("_blockBrandLogo(row, box) {", self.svg)
         self.assertIn("if (row.brandLogo) return this._blockBrandLogo(row, box);", self.svg)
-        self.assertNotIn("dratek-eink-logo.png", self.template)
+        mixin = MIXIN.read_text(encoding="utf-8")
+        self.assertIn("dratek-eink-logo.png", mixin)
+        self.assertIn("dratek-eink-header.png", mixin)
+        self.assertIn("_renderCustomImageBitmapAtSize(", mixin)
+
+    def test_the_dither_is_produced_for_the_panel_s_own_palette(self) -> None:
+        # Handing a three-colour panel the four-colour bitmap prints the yellow
+        # as a dirty grey, so the palette is part of the cache key, not an
+        # afterthought.
+        mixin = MIXIN.read_text(encoding="utf-8")
+        self.assertIn("this._displayPaletteKey?.(device)", mixin)
+        self.assertIn("`${source}:${w}x${h}:${paletteKey}`", mixin)
+
+    def test_the_logo_is_letterboxed_and_never_cropped(self) -> None:
+        mixin = MIXIN.read_text(encoding="utf-8")
+        self.assertNotIn('"cover"', mixin)
+        # Both dither paths - the lazy one for the preview and the blocking one
+        # for the send - and the comment that says why.
+        self.assertEqual(3, mixin.count('"contain"'))
+
+    def test_the_catalog_tile_is_not_cached_before_the_bitmap_lands(self) -> None:
+        # The thumbnail cache keeps whatever the first pass drew, and the first
+        # pass of an asynchronously dithered block is a blank panel - the same
+        # trap the meteoradar map fell into, which froze its tile on the
+        # placeholder for a whole session.
+        self.assertIn('rows.some((row) => row?.brandLogo) && !this._brandLogoDitherEntry?.(', self.svg)
+
+    def test_the_send_path_waits_for_the_bitmap(self) -> None:
+        # A broadcast must not go out as a blank panel because the dither had
+        # not finished yet.
+        self.assertIn("await this._preloadBrandLogoDither?.(rows, slot.w, slot.h);", self.svg)
 
 
 class BrandLogoBroadcastTests(unittest.TestCase):

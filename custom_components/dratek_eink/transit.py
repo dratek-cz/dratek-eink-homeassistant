@@ -103,6 +103,60 @@ def _parse_time(value: Any) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
+# Which vehicle is actually pulling in. Two sources, because neither is enough
+# on its own:
+#
+# `mode` is MOTIS's own coarse classification and folds every road vehicle into
+# BUS - a Plzeň trolleybus and a Plzeň bus are both "BUS" there. `routeType` is
+# the raw GTFS route_type from the operator's own feed, where 11 means
+# trolleybus, so that is what tells the two apart. It is also the more precise
+# of the two everywhere else, hence the order below.
+#
+# routeType is absent from some feeds, and `mode` carries values (LONG_DISTANCE,
+# NIGHT_RAIL) that have no GTFS number at all, so the fallback is not optional.
+_ROUTE_TYPE_KINDS = {
+    0: "tram", 1: "metro", 2: "train", 3: "bus", 4: "ferry",
+    5: "tram", 6: "cable", 7: "funicular", 11: "trolleybus", 12: "metro",
+}
+_MODE_KINDS = {
+    "TRAM": "tram",
+    "SUBWAY": "metro", "METRO": "metro",
+    "RAIL": "train", "REGIONAL_RAIL": "train", "REGIONAL_FAST_RAIL": "train",
+    "LONG_DISTANCE": "train", "HIGHSPEED_RAIL": "train", "NIGHT_RAIL": "train",
+    "BUS": "bus", "COACH": "bus",
+    "FERRY": "ferry",
+    "CABLE_CAR": "cable", "FUNICULAR": "funicular", "AREAL_LIFT": "cable",
+}
+
+
+def vehicle_kind(item: dict[str, Any]) -> str:
+    """Classify one departure into the vehicle the board should picture."""
+    route_type = item.get("routeType")
+    if isinstance(route_type, bool):  # bool is an int subclass; never a route type
+        route_type = None
+    if isinstance(route_type, (int, float)) and int(route_type) in _ROUTE_TYPE_KINDS:
+        return _ROUTE_TYPE_KINDS[int(route_type)]
+    return _MODE_KINDS.get(str(item.get("mode") or "").upper(), "other")
+
+
+def _local_clock(departure: datetime, tz_name: str) -> str:
+    """The wall-clock departure time as it is printed at the stop itself.
+
+    Deliberately the stop's own timezone rather than the Home Assistant host's:
+    a board for a stop one country over should read the way its own departure
+    board does. MOTIS hands the zone back with every place, and falling back to
+    the host's zone only matters for a feed that omits it.
+    """
+    try:
+        if tz_name:
+            from zoneinfo import ZoneInfo
+
+            return departure.astimezone(ZoneInfo(tz_name)).strftime("%H:%M")
+    except Exception:  # unknown zone name, or no tzdata on this platform
+        pass
+    return departure.astimezone().strftime("%H:%M")
+
+
 def _departure_destination(item: dict[str, Any], current_stop: str = "") -> str:
     """Return the public-facing terminal, with fetched following stops as fallback."""
     headsign = str(item.get("headsign") or "").strip()
@@ -151,9 +205,15 @@ def normalize_departures(payload: Any, now: datetime | None = None, limit: int =
             "line": line or "–",
             "destination": destination,
             "time": "teď" if minutes == 0 else f"za {minutes} min",
+            # The scheduled wall-clock time as well as the countdown. "za 3 min"
+            # answers "do I run?", "07:12" answers "which connection is this?" -
+            # and only the second one is still true a minute after the panel
+            # last refreshed, which on e-ink is most of the time.
+            "departure": _local_clock(departure, str(item_place.get("tz") or "")),
             "minutes": minutes,
             "realtime": bool(item.get("realTime")),
             "mode": str(item.get("mode") or ""),
+            "kind": vehicle_kind(item),
             "platform": str(item_place.get("track") or ""),
         })
     row_limit = max(1, min(12, limit))

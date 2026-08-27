@@ -18,6 +18,80 @@ export const BRAND_LOGO_TEMPLATE_ID = "dratek_logo";
 
 export const brandLogoMixin = {
 
+  // --------------------------------------------------------- the artwork ---
+
+  // The lockup is the integration's own icon, dithered, not a redrawing of it.
+  //
+  // It started as native SVG - type and rectangles that approximated the mark -
+  // and an approximation of a logo is the one thing a logo may not be. Running
+  // the real artwork through the same Floyd-Steinberg pass an imported photo
+  // takes (_ditherImportedTemplateImageData) keeps the actual shapes, and the
+  // teal and orange survive as texture rather than being reduced to flat black
+  // by a threshold.
+  //
+  // Two source files because the artwork has two lockups: the square one reads
+  // on a tall or roomy panel, the wide one on a small landscape tag where the
+  // square lockup's wordmark would shrink to a smudge.
+  _brandLogoAsset(stacked) {
+    return this._frontendAssetUrl(stacked ? "dratek-eink-logo.png" : "dratek-eink-header.png");
+  },
+
+  // The dither is per palette as well as per size: a three-colour panel and a
+  // four-colour one need different error diffusion over the same pixels, and
+  // handing a BWR panel the BWRY bitmap prints the yellow as a dirty grey.
+  _brandLogoDitherSpec(stacked, width, height, device = this._device?.()) {
+    const w = Math.max(1, Math.round(width));
+    const h = Math.max(1, Math.round(height));
+    const source = this._brandLogoAsset(stacked);
+    const paletteKey = this._displayPaletteKey?.(device) || "bwr";
+    return { source, w, h, paletteKey, cacheKey: `${source}:${w}x${h}:${paletteKey}` };
+  },
+
+  _brandLogoDitherEntry(stacked, width, height, device = this._device?.()) {
+    const spec = this._brandLogoDitherSpec(stacked, width, height, device);
+    return this._brandLogoDitherCache?.get(spec.cacheKey) || "";
+  },
+
+  // Non-blocking, for the interactive preview: the block that needs it is
+  // synchronous, so the first pass draws blank and repaints when this lands.
+  _requestBrandLogoDither(stacked, width, height, device = this._device?.()) {
+    const spec = this._brandLogoDitherSpec(stacked, width, height, device);
+    this._brandLogoDitherCache ||= new Map();
+    if (this._brandLogoDitherCache.has(spec.cacheKey)) return;
+    this._brandLogoDitherPending ||= new Set();
+    if (this._brandLogoDitherPending.has(spec.cacheKey)) return;
+    this._brandLogoDitherPending.add(spec.cacheKey);
+    // "contain": a logo may be letterboxed but never cropped.
+    this._renderCustomImageBitmapAtSize(spec.source, "contain", spec.w, spec.h, spec.paletteKey)
+      .then((dataUrl) => {
+        this._rememberBrandLogoDither(spec.cacheKey, dataUrl);
+        this._scheduleTemplateIconRepaint?.();
+      })
+      .catch(() => {})
+      .finally(() => this._brandLogoDitherPending.delete(spec.cacheKey));
+  },
+
+  _rememberBrandLogoDither(cacheKey, dataUrl) {
+    this._brandLogoDitherCache ||= new Map();
+    this._brandLogoDitherCache.set(cacheKey, dataUrl);
+    if (this._brandLogoDitherCache.size > 8) {
+      this._brandLogoDitherCache.delete(this._brandLogoDitherCache.keys().next().value);
+    }
+  },
+
+  // Blocking counterpart for the send path: a broadcast must never go out as a
+  // blank panel because the dither had not finished yet.
+  async _preloadBrandLogoDither(rows, width, height, device = this._device?.()) {
+    const row = (rows || []).find((entry) => entry?.brandLogo);
+    if (!row) return;
+    const spec = this._brandLogoDitherSpec(!!row.brandLogo.stacked, width, height, device);
+    if (this._brandLogoDitherCache?.has(spec.cacheKey)) return;
+    const dataUrl = await this._renderCustomImageBitmapAtSize(
+      spec.source, "contain", spec.w, spec.h, spec.paletteKey,
+    );
+    this._rememberBrandLogoDither(spec.cacheKey, dataUrl);
+  },
+
   _brandLogoTemplateCard() {
     return (this._displayTemplateCards?.() || []).find((card) => card.id === BRAND_LOGO_TEMPLATE_ID) || null;
   },

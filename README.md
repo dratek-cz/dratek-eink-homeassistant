@@ -4,6 +4,12 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.348
+
+- **Odjezdy na výšku mají nový vzhled.** Na úzkém displeji se cíl, linka i časy nevešly na jeden řádek a název cílové stanice se osekal. Každý spoj teď zabírá dva řádky – cíl dostane celou šířku, pod ním je čas odjezdu vedle odpočtu – a zobrazují se tři spoje místo čtyř.
+- **U každého spoje je i skutečný čas odjezdu** (07:12) v časovém pásmu dané zastávky, ne jen „za 3 min“. Odpočet zastará s každou minutou, čas odjezdu ne.
+- **Druh vozidla na první pohled** – ikona autobusu, trolejbusu, tramvaje, vlaku, metra nebo lodi u každého spoje. Trolejbus se pozná podle údaje dopravce, protože zdroj jízdních řádů ho jinak hlásí jako autobus.
+
 ## Novinky ve verzi 0.1.347
 
 - **Gatewaye jde nově vyrobit i bez přístupu k serveru.** V kroku „Nová gateway“ se vybírá, kam je ESP32 zapojená: do zařízení s Home Assistantem jako dosud, nebo do počítače, na kterém je panel zrovna otevřený. Druhá cesta nahraje firmware přímo z prohlížeče přes Web Serial, takže deska nemusí nikam cestovat.

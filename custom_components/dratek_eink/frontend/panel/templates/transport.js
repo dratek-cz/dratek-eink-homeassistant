@@ -1,4 +1,6 @@
 // Everything about the "Odjezdy" (Transit departures) display template.
+import { TRANSIT_KIND_ICONS } from "./shared.js?v=transit-two-line-1";
+
 export const template = {
   catalog: {
     id: "transport",
@@ -14,13 +16,13 @@ export const template = {
   },
   prepared: true,
   setup: {
-    summary: "Vyberte zastávku přímo v Drátku. Název, linka, směr i čas všech čtyř spojů se pak načítají automaticky z internetu.",
+    summary: "Vyberte zastávku přímo v Drátku. Název, linka, směr, čas odjezdu i druh vozidla se pak načítají automaticky z internetu.",
     integrations: [
       { name: "Jízdní řády Drátek", domain: "dratek_eink", internal: true, why: "Je součástí této integrace a používá otevřené zdroje Transitous pro Česko, Slovensko i další evropské země." },
     ],
     steps: [
       "Otevřete Nastavit a napište město a název zastávky.",
-      "Vyberte správnou zastávku ze seznamu; hned se načte živý náhled čtyř odjezdů.",
+      "Vyberte správnou zastávku ze seznamu; hned se načte živý náhled odjezdů.",
       "Odešlete šablonu do displeje a zapněte automatickou aktualizaci v kartě Automatizace.",
     ],
     note: "Přímé stahování z webu IDOS není použito, protože IDOS neposkytuje veřejné datové API. Transitous skládá oficiální otevřené jízdní řády dopravců; dostupnost údajů v reálném čase závisí na konkrétním dopravci.",
@@ -32,22 +34,34 @@ export const template = {
     const lerp = (from, to) => from + (to - from) * t;
     const live = transit?.() || {};
     const fallback = [
-      { line: v(1, "9"), destination: "Centrum", time: v(2, "3 min") },
-      { line: "4", destination: "Univerzita", time: "8 min" },
-      { line: "12", destination: "Nemocnice", time: "14 min" },
-      { line: "N2", destination: "Depo", time: "21 min" },
+      { line: v(1, "9"), destination: "Centrum", time: v(2, "3 min"), departure: "7:12", kind: "tram" },
+      { line: "4", destination: "Univerzita", time: "8 min", departure: "7:17", kind: "trolleybus" },
+      { line: "12", destination: "Nemocnice", time: "14 min", departure: "7:23", kind: "bus" },
+      { line: "N2", destination: "Depo", time: "21 min", departure: "7:30", kind: "train" },
     ];
-    const departures = (Array.isArray(live.departures) && live.departures.length ? live.departures : fallback).slice(0, 4);
+    // Two lines per service take roughly twice the room, so a portrait board
+    // shows three rather than four. Three legible services beat four that have
+    // had their destinations ellipsised away, which is what the single-line
+    // portrait board did on the narrow tags.
+    const rowCount = height > width ? 3 : 4;
+    const departures = (Array.isArray(live.departures) && live.departures.length ? live.departures : fallback).slice(0, rowCount);
     const board = departures.map((item, index) => ({
-      badge: item.line || "–", label: item.destination || "Spoj", value: item.time || "", color: index === 0 ? "red" : "black",
+      badge: item.line || "–",
+      label: item.destination || "Spoj",
+      value: item.time || "",
+      // Only the two-line board draws these two; _blockBoard's single-line
+      // layout has no room for either and simply ignores them.
+      clock: item.departure || "",
+      icon: TRANSIT_KIND_ICONS[item.kind] || TRANSIT_KIND_ICONS.other,
+      color: index === 0 ? "red" : "black",
     }));
     const stopName = live.stop_name || v(0, "Hlavní nádraží");
     if (height > width) return [
       { band: { icon: "tram", label: "ODJEZDY", value: stopName, color: "black" }, bleed: true, h: 0.15 },
-      // All four lines share the same board in portrait. The former split put
-      // the first line in an icon/value card, so only the following lines got
-      // the requested solid number plate.
-      { board: board, filled: true, group: "transport-board", h: 0.75 },
+      // `twoLine` is what makes this board give each service the full width for
+      // its destination and a second line for the scheduled time next to the
+      // countdown - see _blockBoardTwoLine for why a narrow panel needs it.
+      { board: board, filled: true, twoLine: true, group: "transport-board", h: 0.75 },
       { footer: [{ label: "PĚŠKY", value: v(3, "240 m") }], h: 0.10 },
     ];
     if (height <= 160 && width >= height) return [

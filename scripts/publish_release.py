@@ -74,22 +74,13 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.347",
-        name="DRATEK eInk v0.1.347",
-        body="""## Release 0.1.347
-
-### Přidáno
-- Novou gateway jde vyrobit i z počítače, u kterého sedíte. Krok „Nová gateway" nabízí obě cesty - ESP32 zapojenou do zařízení s Home Assistantem jako dosud, nebo do tohoto počítače. Prohlížečová cesta zapisuje firmware přes Web Serial a Home Assistant u toho nemusí být.
-- Prohlížečové nahrání dojde až k hotové gatewayi: po zápisu firmwaru pošle desce Wi-Fi konfiguraci, vyčte z ní přidělenou IP adresu a gateway sám přidá do seznamu.
-- Každý zapsaný obraz se ověří otiskem MD5 a konzole nahrávání ukazuje průběh. Ověření desky i volba „Jen Wi-Fi" fungují v prohlížečové cestě stejně jako u nahrávání přes server.
+        tag="v0.1.348",
+        name="DRATEK eInk v0.1.348",
+        body="""## Release 0.1.348
 
 ### Vylepšeno
-- Obě cesty nahrávání čtou stejné profily obrazů, offsetů i mazaných NVS oblastí, takže nemohou zapsat rozdílný výsledek.
-- Bez HTTPS nebo bez podpory Web Serial panel vysvětlí proč to nejde a pošle uživatele na nahrání přes zařízení s Home Assistantem.
-
-### Opraveno
-- Vybraná zastávka u šablony Odjezdy zůstane uložená. Ukládala se teprve po úspěšném načtení živé tabule, takže každý výpadek jízdních řádů volbu zahodil a výběr se vrátil prázdný.
-- Odjezdy se načítají znovu samy. Tabule žila jen do zavření stránky - po znovuotevření displeje se hlavička jmenovala správnou zastávkou, ale čtyři spoje pod ní byly ukázková data, a ruční odeslání je poslalo i na displej. Náhled se teď při otevřené šabloně sám drží aktuální a odeslání počká na živá data.
-- Tabule odjezdů se už nekreslí dvakrát. Automatizace uložené před verzí 0.1.346 mají zapsané jiné souřadnice řádku, než na kterých byl vykreslený; takové automatizace teď automatická aktualizace překreslí celou šablonou místo mazání a dokreslování do špatného obdélníku, takže stará tabule nezůstane vidět pod novou. Po dalším uložení automatizace se vrátí rychlejší způsob.
+- Odjezdy na výšku mají nový vzhled. Na úzkém displeji se cíl, linka i časy nevešly na jeden řádek a název cílové stanice se osekal; každý spoj teď zabírá dva řádky - cíl dostane celou šířku, pod ním je čas odjezdu vedle odpočtu - a zobrazují se tři spoje místo čtyř.
+- U každého spoje je i skutečný čas odjezdu (07:12) v časovém pásmu dané zastávky, ne jen "za 3 min". Odpočet zastará s každou minutou, čas odjezdu ne.
+- Druh vozidla na první pohled: ikona autobusu, trolejbusu, tramvaje, vlaku, metra nebo lodi u každého spoje. Trolejbus se pozná podle route_type dopravce, protože zdroj jízdních řádů ho jinak hlásí jako autobus.
 """,
     )

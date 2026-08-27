@@ -1451,23 +1451,37 @@ def _svg_graphic_slot(binding: dict[str, Any], value: str, preserve_yellow: bool
 
     if binding_type == "transit":
         departures = _decoded_binding_value(value, [])
+        # The panel resolves an MDI glyph name through ha-icon and records the
+        # path data for every vehicle kind on the binding, because there is no
+        # ha-icon here to ask and a refresh can bring back kinds the capture
+        # never showed. A kind with no recorded path simply draws no glyph,
+        # exactly as the panel does for a name it never resolved.
+        icons = binding.get("icons") if isinstance(binding.get("icons"), dict) else {}
         rows = [
             {
                 "badge": item.get("line") or "–",
                 "label": item.get("destination") or "Spoj",
                 "value": item.get("time") or "",
+                "clock": item.get("departure") or "",
+                "icon": str(icons.get(str(item.get("kind") or "other")) or icons.get("other") or ""),
                 "color": "red" if index == 0 else "black",
             }
             for index, item in enumerate(departures)
             if isinstance(item, dict)
         ][: max(1, int(binding.get("limit") or 4))]
+        if not rows:
+            return ""
+        if binding.get("two_line"):
+            return svg_blocks.block_board_two_line(
+                rows, box, filled=True, preserve_yellow=preserve_yellow
+            )
         return svg_blocks.block_board(
             rows,
             box,
             filled=True,
             compact=bool(binding.get("compact")),
             preserve_yellow=preserve_yellow,
-        ) if rows else ""
+        )
 
     return ""
 

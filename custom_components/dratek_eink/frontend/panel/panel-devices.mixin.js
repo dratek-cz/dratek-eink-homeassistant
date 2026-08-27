@@ -1,5 +1,5 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.347";
-import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=release-0.1.347";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.348";
+import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=release-0.1.348";
 
 // Generation of the graphic-row capture written into every series()/ratio()/
 // day()/event()/transit binding. Bumped whenever the recorded box could move,
@@ -2978,8 +2978,19 @@ export const devicesMixin = {
         stop_name: String(this._displayTemplateConfig?.transit_stop_name || ""),
         limit: Array.isArray(row.board) ? row.board.length : 4,
         compact: !!row.compact,
+        // Which of the two board layouts this panel's design() chose. The
+        // backend cannot work it out from the box alone - a portrait tag and a
+        // small landscape tag can hand it the same rectangle.
+        two_line: !!row.twoLine,
+        // Every vehicle glyph, not only the kinds currently on the board: the
+        // next refresh can bring back a trolleybus where a tram stood, and
+        // svg_blocks.py has no ha-icon to resolve a name with. Empty when the
+        // icons have not resolved yet, which draws no glyph rather than a wrong
+        // one - the same thing the panel itself does in that state.
+        icons: this._transitKindIconPaths(),
         fallback: JSON.stringify(Array.isArray(row.board) ? row.board.map((item) => ({
-          line: String(item.badge || "–"), destination: String(item.label || "Spoj"), time: String(item.value || ""),
+          line: String(item.badge || "–"), destination: String(item.label || "Spoj"),
+          time: String(item.value || ""), departure: String(item.clock || ""),
         })) : []),
         ...geometry,
       };

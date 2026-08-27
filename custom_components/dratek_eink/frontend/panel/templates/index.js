@@ -18,7 +18,7 @@ import { template as presence } from "./presence.js?v=compact-landscape-content-
 import { template as wifi } from "./wifi.js?v=compact-landscape-content-6";
 import { template as calendar } from "./calendar.js";
 import { template as security } from "./security.js?v=yellow-shaded-accents-1";
-import { template as transport } from "./transport.js?v=native-transit-1";
+import { template as transport } from "./transport.js?v=transit-two-line-1";
 import { template as shopping } from "./shopping.js?v=compact-landscape-content-6";
 import { template as air } from "./air.js?v=air-aqi-fix-1";
 import { template as thermostat } from "./thermostat.js?v=compact-landscape-content-6";
@@ -30,7 +30,7 @@ import { template as garden } from "./garden.js?v=compact-landscape-content-6";
 import { template as price } from "./price.js?v=yellow-shaded-accents-1";
 // INTERNAL - remove with the rest of the brand-logo feature before the retail
 // release (PRIVATE-NOTES.md). Imported last so it also sits last in the grid.
-import { template as dratekLogo } from "./dratek_logo.js?v=brand-logo-1";
+import { template as dratekLogo } from "./dratek_logo.js?v=logo-dither-1";
 
 export const DISPLAY_TEMPLATES = [
   customImage,

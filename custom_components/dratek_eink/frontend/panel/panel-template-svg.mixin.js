@@ -16,7 +16,8 @@
 // are identical by construction.
 
 import qrcode from "../qrcode-generator.js";
-import { DISPLAY_TEMPLATES } from "./templates/index.js?v=release-0.1.347";
+import { DISPLAY_TEMPLATES } from "./templates/index.js?v=release-0.1.348";
+import { TRANSIT_KIND_ICONS } from "./templates/shared.js?v=transit-two-line-1";
 
 const RED = "#e31b1b";
 const YELLOW = "#f4c400";
@@ -578,10 +579,42 @@ export const templateSvgMixin = {
     }
   },
 
+  // Every vehicle glyph's raw path data, keyed by transit.py's `kind`.
+  //
+  // svg_blocks.py draws an MDI glyph from path data because it has no ha-icon to
+  // resolve a name with, so the automation binding has to carry the geometry the
+  // browser resolved. Sent for every kind rather than the ones on the board
+  // right now: the whole point of an automatic refresh is that the mix changes.
+  //
+  // ICON_GEOMETRY entries wrap one <path> in a 24x24 viewBox (see
+  // _resolveMdiIcon), which is exactly what svg_blocks.icon rebuilds, so only
+  // the `d` attribute has to travel. A glyph that has not resolved yet is left
+  // out, and the backend then draws no glyph for that kind - the same thing the
+  // panel does with a name it never resolved.
+  _transitKindIconPaths() {
+    const paths = {};
+    for (const [kind, name] of Object.entries(TRANSIT_KIND_ICONS)) {
+      const geometry = ICON_GEOMETRY.get(name);
+      const d = /\sd="([^"]+)"/.exec(geometry?.inner || "");
+      if (d) paths[kind] = d[1];
+    }
+    return paths;
+  },
+
+  // Resolves every vehicle glyph, not only the ones the board is showing. The
+  // automation capture records all of them (see _transitKindIconPaths), and a
+  // capture is taken from whatever happens to be on screen at the time.
+  async _preloadTransitKindIcons() {
+    await Promise.all(
+      Object.values(TRANSIT_KIND_ICONS).map((name) => this._mdiIconPath(name)),
+    );
+  },
+
   // The blocking counterpart: a manual send must never go out with the sample
   // departures baked into it.
   async _preloadTemplateTransitBoard(rows) {
     if (!this._templateNeedsTransitBoard(rows)) return;
+    await this._preloadTransitKindIcons();
     await this._ensureTemplateTransitBoard();
   },
 
@@ -590,6 +623,7 @@ export const templateSvgMixin = {
   _requestTemplateTransitBoard(rows) {
     if (!this._templateNeedsTransitBoard(rows) || this._transitBoardRequestPending) return;
     if (!String(this._displayTemplateConfig?.transit_stop_id || "").trim()) return;
+    this._preloadTransitKindIcons();
     this._transitBoardRequestPending = true;
     let settled = false;
     const clearPending = () => {
@@ -790,6 +824,10 @@ export const templateSvgMixin = {
       // appeared if something else happened to evict the entry. Keep
       // re-rendering until the map is actually in hand.
       && !(this._templateNeedsRadarImage(rows) && !this._meteoradarImageCache?.dataUrl)
+      // The brand logo falls into exactly the same trap: its bitmap is dithered
+      // asynchronously, so the first pass draws a blank panel, and caching that
+      // would freeze the catalog tile empty for the rest of the session.
+      && !(rows.some((row) => row?.brandLogo) && !this._brandLogoDitherEntry?.(!!rows.find((row) => row?.brandLogo)?.brandLogo?.stacked, width, height))
     ) {
       this._templateThumbnailMarkupCache.set(cacheKey, thumbnail);
       if (this._templateThumbnailMarkupCache.size > 96) this._templateThumbnailMarkupCache.delete(this._templateThumbnailMarkupCache.keys().next().value);
@@ -2192,133 +2230,39 @@ export const templateSvgMixin = {
 
   // INTERNAL / NOT FOR THE PUBLIC RELEASE - see PRIVATE-NOTES.md.
   //
-  // The DRÁTEK.CZ lockup, drawn as native SVG rather than as a dithered copy of
-  // frontend/dratek-eink-logo.png. A raster logo scaled up to fill an 800x480
-  // panel is a soft, speckled version of itself once the three-colour threshold
-  // has been through it; the same shapes drawn as type and rectangles print
-  // with hard edges at every size the range covers, from a 196x96 tag to a
-  // 960x680 panel.
+  // The DRÁTEK.CZ lockup, drawn as a dithered copy of the integration's own
+  // artwork (frontend/dratek-eink-logo.png and its wide sibling) rather than as
+  // native SVG.
   //
-  // The artwork exists as two lockups and so does this block: `wide` sets the
-  // wordmark and the Eink screen side by side (frontend/dratek-eink-header.png),
-  // `stacked` puts the screen under the wordmark (frontend/dratek-eink-logo.png).
-  // Which one a display gets is templates/dratek_logo.js's decision, not this
-  // block's.
+  // This block used to redraw the mark from type and rectangles. That printed
+  // sharply, but an approximation of a logo is the one thing a logo may not be:
+  // the letterforms were Arial rather than the real face, and the Eink screen
+  // was a pair of stroked rectangles standing in for the actual artwork.
+  // Dithering the real file through the same Floyd-Steinberg pass an imported
+  // photo takes keeps the true shapes, and turns the teal and the orange into
+  // texture instead of letting a flat threshold reduce both to solid black.
   //
-  // Everything is laid out in the lockup's own natural units and scaled once at
-  // the end. The two variants therefore cannot drift apart, and no proportion
-  // in either of them depends on the panel it happens to land on.
+  // Everything here is the bitmap's placement only; the pixels are prepared by
+  // panel-brand-logo.mixin.js, which owns the palette and the cache. The
+  // request below is what starts that work - the same lazily-drawn arrangement
+  // _blockCustomImage uses, because this method is synchronous and the dither
+  // is not.
   _blockBrandLogo(row, box) {
     const stacked = !!row.brandLogo?.stacked;
-    const margin = Math.max(3, Math.round(Math.min(box.w, box.h) * 0.06));
-    const innerW = Math.max(1, box.w - margin * 2);
-    const innerH = Math.max(1, box.h - margin * 2);
-    // Natural units. WORD_W is the wordmark's width, and every other number is
-    // a proportion of the artwork measured against it.
-    const WORD_W = 100;
-    const WORD_H = 26;
-    const MARK_H = 8;
-    const BADGE_W = 92;
-    const BADGE_H = 44;
-    const GAP_MIN = 10;
-    const naturalW = stacked ? WORD_W : 176;
-    // The stacked lockup is measured at its tightest, with only the minimum gap
-    // between the wordmark and the screen. Anything left over after that goes
-    // into the gap below, so a tall portrait panel is filled by the artwork
-    // rather than by two thick bands of white paper above and below it.
-    const naturalH = stacked ? MARK_H + WORD_H + GAP_MIN + BADGE_H : 34;
-    const scale = Math.min(innerW / naturalW, innerH / naturalH);
-    if (!(scale > 0)) return "";
-    const u = (value) => value * scale;
-    // Capped at a little over the screen's own height: past that the two halves
-    // stop reading as one lockup and start reading as two separate marks that
-    // happen to share a page.
-    const gap = stacked
-      ? Math.min(
-        Math.max(u(GAP_MIN), innerH - u(MARK_H + WORD_H) - u(BADGE_H)),
-        u(BADGE_H) * 1.1,
-      )
-      : 0;
-    const totalH = stacked ? u(MARK_H + WORD_H) + gap + u(BADGE_H) : u(naturalH);
-    const originX = box.x + margin + (innerW - u(naturalW)) / 2;
-    const originY = box.y + margin + (innerH - totalH) / 2;
-    const parts = [];
-
-    // -- wordmark ----------------------------------------------------------
-    // Sized by measurement rather than by a guessed font size: the lockup's
-    // whole point is that DRÁTEK.CZ spans exactly the wordmark's width, and
-    // _svgTextWidth is the same estimator every other block lays two runs of
-    // type against, so the two halves below meet exactly where they should.
-    const wordX = originX + (stacked ? 0 : 0);
-    const wordY = originY + u(MARK_H);
-    const emWidth = this._svgTextWidth("DRÁTEK.CZ", 1, true);
-    const wordSize = emWidth > 0 ? u(WORD_W) / emWidth : u(WORD_H);
-    const wordCy = wordY + u(WORD_H) / 2;
-    const darkWidth = this._svgTextWidth("DRÁTEK", wordSize, true);
-    // Teal and orange in print; on a panel that thresholds every pixel they
-    // reduce to the two inks that are actually there, and ".CZ" keeps the
-    // colour break the logo is built around.
-    parts.push(this._svgText("DRÁTEK", wordX, wordCy, wordSize, {
-      anchor: "start", bold: true, color: BLACK, minSize: 4,
-    }));
-    parts.push(this._svgText(".CZ", wordX + darkWidth, wordCy, wordSize, {
-      anchor: "start", bold: true, color: RED, minSize: 4,
-    }));
-
-    // -- the "+ -" marks above the wordmark ---------------------------------
-    const barThickness = Math.max(1, u(1.8));
-    const barLength = Math.max(2, u(5.4));
-    const markCy = originY + u(MARK_H) * 0.45;
-    const bar = (cx, cy, w, h) => `<rect x="${(cx - w / 2).toFixed(2)}" y="${(cy - h / 2).toFixed(2)}"`
-      + ` width="${w.toFixed(2)}" height="${h.toFixed(2)}" fill="${BLACK}"></rect>`;
-    const plusCx = wordX + u(WORD_W) * 0.44;
-    const minusCx = wordX + u(WORD_W) * 0.57;
-    parts.push(bar(plusCx, markCy, barLength, barThickness));
-    parts.push(bar(plusCx, markCy, barThickness, barLength));
-    parts.push(bar(minusCx, markCy, barLength, barThickness));
-
-    // -- the Eink screen ----------------------------------------------------
-    const badge = stacked
-      ? {
-        x: originX + u((WORD_W - BADGE_W) / 2),
-        y: originY + u(MARK_H + WORD_H) + gap,
-        w: u(BADGE_W),
-        h: u(BADGE_H),
-      }
-      : { x: originX + u(108), y: originY + u(1), w: u(68), h: u(32) };
-    const radius = Math.max(1, badge.h * 0.14);
-    const frameStroke = Math.max(1, u(1.4));
-    const inset = Math.max(1, badge.h * 0.10);
-    parts.push(`<rect x="${badge.x.toFixed(2)}" y="${badge.y.toFixed(2)}" width="${badge.w.toFixed(2)}"`
-      + ` height="${badge.h.toFixed(2)}" rx="${radius.toFixed(2)}" fill="#ffffff" stroke="${BLACK}"`
-      + ` stroke-width="${frameStroke.toFixed(2)}"></rect>`);
-    const screen = {
-      x: badge.x + inset, y: badge.y + inset,
-      w: Math.max(1, badge.w - inset * 2), h: Math.max(1, badge.h - inset * 2),
-    };
-    // The printed logo screens this panel grey. Grey is not one of the inks, so
-    // it becomes a hairline frame instead - which is what actually reads as an
-    // e-ink module on paper, where a flat 50% fill would only read as noise.
-    parts.push(`<rect x="${screen.x.toFixed(2)}" y="${screen.y.toFixed(2)}" width="${screen.w.toFixed(2)}"`
-      + ` height="${screen.h.toFixed(2)}" fill="#ffffff" stroke="${BLACK}"`
-      + ` stroke-width="${Math.max(1, u(0.8)).toFixed(2)}"></rect>`);
-    const einkSize = this._svgFitFontSize("Eink", screen.h * 0.68, screen.w * 0.84, true, 4);
-    const einkCx = screen.x + screen.w / 2;
-    const einkCy = screen.y + screen.h / 2;
-    parts.push(this._svgText("Eink", einkCx, einkCy, einkSize, {
-      anchor: "middle", bold: true, color: BLACK, minSize: 4,
-    }));
-    // The red tittle over the "i" - the one detail that makes the badge the
-    // logo rather than the word. Placed by measuring the glyphs before it, the
-    // same way _blockStat places a unit after its value.
-    const einkWidth = this._svgTextWidth("Eink", einkSize, true);
-    const dotCx = einkCx - einkWidth / 2
-      + this._svgTextWidth("E", einkSize, true)
-      + this._svgTextWidth("i", einkSize, true) / 2;
-    const dotSide = Math.max(1, einkSize * 0.18);
-    parts.push(`<rect x="${(dotCx - dotSide / 2).toFixed(2)}" y="${(einkCy - einkSize * 0.46).toFixed(2)}"`
-      + ` width="${dotSide.toFixed(2)}" height="${dotSide.toFixed(2)}" fill="${RED}"></rect>`);
-    return parts.join("");
+    const width = Math.max(1, Math.round(box.fullW ?? box.w));
+    const height = Math.max(1, Math.round(box.h));
+    const bitmap = this._brandLogoDitherEntry?.(stacked, width, height);
+    if (!bitmap) {
+      this._requestBrandLogoDither?.(stacked, width, height);
+      // Blank rather than a placeholder: this panel is about to show a logo,
+      // and a flash of "loading" art reads as the wrong content, not as a
+      // loading state.
+      return `<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>`;
+    }
+    // Already dithered at exactly this pixel size, so nothing here may resample
+    // it - "none" makes the placement a straight 1:1 blit.
+    return `<image x="0" y="0" width="${width}" height="${height}" href="${this._escape(bitmap)}"`
+      + ` preserveAspectRatio="none" image-rendering="auto"></image>`;
   },
 
   // Two raster blocks in an otherwise all-vector renderer: landscape slots
@@ -2371,7 +2315,101 @@ export const templateSvgMixin = {
 
   // A departure board: the line number lives in a filled badge, so it is found by
   // shape before anything is read.
+  // The same departures board given two lines per service instead of one.
+  //
+  // A portrait panel is narrow, and one line had to carry the line number, the
+  // destination and the countdown side by side; on a 168 px-wide tag the
+  // destination was squeezed to the readability floor and then ellipsised away,
+  // which is the one field nobody can guess. Splitting the service across two
+  // lines gives the destination the whole width and leaves the times a line of
+  // their own, where the scheduled clock time fits next to the countdown.
+  //
+  // The left column stays a column: the line plate on the first line, the
+  // vehicle glyph directly under it on the second, so "which line, what kind of
+  // vehicle" is one glance down the margin rather than a hunt across the row.
+  _blockBoardTwoLine(row, box) {
+    const items = row.board || [];
+    const lineHeight = box.h / (items.length || 1);
+    const badgeWidth = Math.min(box.w * 0.26, lineHeight * 0.95);
+    const badgeHeight = lineHeight * 0.36;
+    const right = box.x + box.w;
+    const textX = box.x + badgeWidth + Math.max(3, badgeWidth * 0.18);
+    // One size per column, chosen so the longest entry in it fits, rather than
+    // letting every row shrink to fit on its own. Independent fitting is what a
+    // single _svgText call does, and it printed a short destination at 29 px
+    // directly above a long one at 17 px - a departures board where the type
+    // size tells you nothing except how many letters the word has reads as
+    // broken, not as emphasis.
+    const fit = (size, values, maxWidth, bold) => values.reduce(
+      (smallest, value) => Math.min(smallest, this._svgFitFontSize(value, size, maxWidth, bold, 8.5)),
+      size,
+    );
+    const titleSize = fit(
+      Math.max(10, Math.min(lineHeight * 0.30, box.w * 0.13)),
+      items.map((item) => item.label), right - textX, true,
+    );
+    // The clock and the countdown share the second line and therefore share one
+    // size, derived from the pair that needs the most room. Sizing them
+    // separately - the countdown first, the clock into whatever was left -
+    // clipped the clock to "07:…" on a 128 px-wide tag, and a departure time
+    // with its minutes cut off is worse than no departure time at all. Text
+    // width scales linearly with the font size, so the largest size that fits
+    // is arithmetic rather than a search.
+    const baseTime = Math.max(10, Math.min(lineHeight * 0.26, box.w * 0.11));
+    const timesWidth = Math.max(1, right - textX);
+    const timeSize = items.reduce((size, item) => {
+      const unit = this._svgTextWidth(item.clock, 1, true)
+        + this._svgTextWidth(item.value, 1, false) + 0.6;
+      return unit > 0 ? Math.min(size, timesWidth / unit) : size;
+    }, baseTime);
+    const clockSize = Math.max(8.5, timeSize);
+    const valueSize = clockSize;
+    const valueWidth = items.reduce(
+      (widest, item) => Math.max(widest, this._svgTextWidth(item.value, valueSize, false)), 0,
+    );
+    const parts = [];
+    items.forEach((item, index) => {
+      const top = box.y + lineHeight * index;
+      const titleCy = top + lineHeight * 0.31;
+      const timesCy = top + lineHeight * 0.73;
+      const chipInk = this._templateInk(item.color);
+      // Same plate rules as the one-line board - see _blockBoard.
+      const filled = !!row.filled;
+      const accent = filled && item.color !== "red" && this._accentYellow(row);
+      const plate = !filled ? "none" : accent ? YELLOW : chipInk;
+      const digitInk = !filled ? chipInk : accent ? BLACK : "#ffffff";
+      // Two lines per service need a rule between services, or the second line
+      // of one reads as the first line of the next.
+      if (index > 0) parts.push(this._svgHairline(box.x, top, box.w, 1));
+      parts.push(`<rect x="${box.x.toFixed(2)}" y="${(titleCy - badgeHeight / 2).toFixed(2)}" width="${badgeWidth.toFixed(2)}" height="${badgeHeight.toFixed(2)}"`
+        + ` rx="2" fill="${plate}" stroke="${accent ? BLACK : chipInk}" stroke-width="1"></rect>`);
+      parts.push(this._svgText(item.badge, box.x + badgeWidth / 2, titleCy, Math.max(10, badgeHeight * 0.72), {
+        color: digitInk, bold: true, minSize: 8.5, maxWidth: badgeWidth * 0.88,
+      }));
+      if (item.icon) {
+        parts.push(this._svgIcon(item.icon, box.x + badgeWidth / 2, timesCy, Math.min(lineHeight * 0.30, badgeWidth * 0.62), chipInk));
+      }
+      parts.push(this._svgText(item.label, textX, titleCy, titleSize, {
+        anchor: "start", bold: true, minSize: 8.5, maxWidth: right - textX,
+      }));
+      // The clip guard has to be measured with the size the run is actually
+      // drawn at, not with the requested one: a guard computed from baseTime
+      // sat a few pixels tighter than the arithmetic above had allowed for and
+      // ellipsised a clock that fits. Half a gap rather than a whole one keeps
+      // a little slack for the rounding.
+      parts.push(this._svgText(item.clock, textX, timesCy, clockSize, {
+        anchor: "start", bold: true, minSize: 8.5,
+        maxWidth: Math.max(1, timesWidth - valueWidth - clockSize * 0.5),
+      }));
+      parts.push(this._svgText(item.value, right, timesCy, valueSize, {
+        anchor: "end", bold: false, minSize: 8.5, color: chipInk, maxWidth: box.w * 0.46,
+      }));
+    });
+    return parts.join("");
+  },
+
   _blockBoard(row, box) {
+    if (row.twoLine) return this._blockBoardTwoLine(row, box);
     const items = row.board;
     const lineHeight = box.h / (items.length || 1);
     const badgeWidth = Math.min(box.w * 0.22, lineHeight * 1.5);
@@ -2655,6 +2693,7 @@ export const templateSvgMixin = {
       await this._preloadTemplateRadarImage(rows, slot.w, slot.h);
       await this._preloadTemplateTransitBoard(rows);
       await this._preloadCustomImageForSlot?.(rows, slot.w, slot.h);
+      await this._preloadBrandLogoDither?.(rows, slot.w, slot.h);
       const slotName = index === 0 ? "primary" : index === 1 ? "secondary" : `slot-${index + 1}`;
       const markup = this._applyTemplateAdjustmentsToSvgMarkup(this._layoutTemplateSvg(rows, slot.w, slot.h), template, slotName);
       // data-template-slot lets the automation capture find a block inside the

@@ -3,7 +3,7 @@ import { queueMixin } from "./panel/panel-queue.mixin.js?v=live-log-update-1";
 import { automationsMixin } from "./panel/panel-automations.mixin.js?v=always-send-default-on-1";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=browser-flash-1";
 import { webSerialMixin } from "./panel/panel-webserial.mixin.js?v=browser-flash-1";
-import { devicesMixin } from "./panel/panel-devices.mixin.js?v=transit-persist-1";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=transit-two-line-1";
 import { projectsMixin } from "./panel/panel-projects.mixin.js?v=interval-only-default-1";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
 import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-3";
@@ -15,12 +15,12 @@ import { i18nMixin } from "./panel/panel-i18n.mixin.js?v=brand-logo-1";
 import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=brand-logo-1";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js?v=templates-4c-1";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
-import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=brand-logo-1";
+import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=transit-two-line-1";
 // INTERNAL - remove with the rest of the brand-logo feature before the retail
 // release (PRIVATE-NOTES.md).
-import { brandLogoMixin } from "./panel/panel-brand-logo.mixin.js?v=brand-logo-1";
+import { brandLogoMixin } from "./panel/panel-brand-logo.mixin.js?v=logo-dither-1";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.347";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.348";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {

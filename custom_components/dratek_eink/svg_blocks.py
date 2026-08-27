@@ -31,7 +31,7 @@ from typing import Any
 from PIL import Image
 
 from . import svg_render
-from .svg_text import svg_text
+from .svg_text import svg_fit_font_size, svg_text, svg_text_width
 
 # The panel's own two ink constants (panel-template-svg.mixin.js). Both survive
 # quantize_bwr_preview as the panel's red and black, so the markup this module
@@ -726,6 +726,99 @@ def block_strip(cells: list[dict[str, Any]], box: dict[str, float], preserve_yel
                 bold=True, color=ink(cell.get("color")), max_width=cell_width * 0.9,
             )
         )
+    return "".join(parts)
+
+
+def block_board_two_line(
+    items: list[dict[str, Any]],
+    box: dict[str, float],
+    *,
+    filled: bool = True,
+    preserve_yellow: bool = False,
+) -> str:
+    """Port of the panel's `_blockBoardTwoLine` - the portrait departures board.
+
+    One difference from the JavaScript, and only one: the panel names its glyph
+    ("bus") and looks the geometry up in ICON_GEOMETRY at draw time, while this
+    side is handed the resolved `<path d>` in `item["icon"]`, because the backend
+    has no ha-icon to ask. Same asymmetry `icon()` already carries.
+    """
+    if not items:
+        return ""
+    line_height = box["h"] / len(items)
+    badge_width = min(box["w"] * 0.26, line_height * 0.95)
+    badge_height = line_height * 0.36
+    right = box["x"] + box["w"]
+    text_x = box["x"] + badge_width + max(3, badge_width * 0.18)
+
+    def fit(size: float, values: list[Any], max_width: float, bold: bool) -> float:
+        # One size per column: see the JavaScript for why per-row shrink-to-fit
+        # is wrong here.
+        smallest = size
+        for value in values:
+            smallest = min(smallest, svg_fit_font_size(value, size, max_width, bold, 8.5))
+        return smallest
+
+    title_size = fit(
+        max(10.0, min(line_height * 0.30, box["w"] * 0.13)),
+        [item.get("label") for item in items], right - text_x, True,
+    )
+    # The clock and the countdown share one size: see the JavaScript for why
+    # sizing them one after the other clipped the clock on a narrow tag.
+    base_time = max(10.0, min(line_height * 0.26, box["w"] * 0.11))
+    times_width = max(1.0, right - text_x)
+    time_size = base_time
+    for item in items:
+        unit = (
+            svg_text_width(item.get("clock"), 1, True)
+            + svg_text_width(item.get("value"), 1, False) + 0.6
+        )
+        if unit > 0:
+            time_size = min(time_size, times_width / unit)
+    clock_size = max(8.5, time_size)
+    value_size = clock_size
+    value_width = max(
+        [svg_text_width(item.get("value"), value_size, False) for item in items] or [0.0]
+    )
+
+    parts: list[str] = []
+    for index, item in enumerate(items):
+        top = box["y"] + line_height * index
+        title_cy = top + line_height * 0.31
+        times_cy = top + line_height * 0.73
+        chip = ink(item.get("color"))
+        accent = filled and item.get("color") != "red" and preserve_yellow
+        plate = "none" if not filled else YELLOW if accent else chip
+        digit = chip if not filled else BLACK if accent else "#ffffff"
+        if index > 0:
+            parts.append(hairline(box["x"], top, box["w"], 1))
+        parts.append(
+            f'<rect x="{box["x"]:.2f}" y="{title_cy - badge_height / 2:.2f}" width="{badge_width:.2f}"'
+            f' height="{badge_height:.2f}" rx="2" fill="{plate}" stroke="{BLACK if accent else chip}" stroke-width="1"></rect>'
+        )
+        parts.append(svg_text(
+            item.get("badge"), box["x"] + badge_width / 2, title_cy,
+            max(10.0, badge_height * 0.72),
+            color=digit, bold=True, max_width=badge_width * 0.88,
+        ))
+        if item.get("icon"):
+            parts.append(icon(
+                str(item["icon"]), box["x"] + badge_width / 2, times_cy,
+                min(line_height * 0.30, badge_width * 0.62), chip,
+            ))
+        parts.append(svg_text(
+            item.get("label"), text_x, title_cy, title_size,
+            anchor="start", bold=True, max_width=right - text_x,
+        ))
+        parts.append(svg_text(
+            item.get("clock"), text_x, times_cy, clock_size,
+            anchor="start", bold=True,
+            max_width=max(1.0, times_width - value_width - clock_size * 0.5),
+        ))
+        parts.append(svg_text(
+            item.get("value"), right, times_cy, value_size,
+            anchor="end", color=chip, max_width=box["w"] * 0.46,
+        ))
     return "".join(parts)
 
 

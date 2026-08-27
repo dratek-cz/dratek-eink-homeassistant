@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.348] - 2026-08-27
+
+### Vylepšeno
+- **Odjezdy na výšku mají nový vzhled**: na úzkém displeji se cíl, linka i časy nevešly na jeden řádek a název cílové stanice se osekal. Každý spoj teď zabírá dva řádky – cíl dostane celou šířku, pod ním je čas odjezdu vedle odpočtu – a zobrazují se tři spoje místo čtyř.
+- **Čas odjezdu vedle odpočtu**: kromě „za 3 min“ se u každého spoje ukazuje i skutečný čas odjezdu (07:12) v časovém pásmu dané zastávky. Odpočet zastará s každou minutou, čas odjezdu ne.
+- **Druh vozidla na první pohled**: u každého spoje je ikona autobusu, trolejbusu, tramvaje, vlaku, metra nebo lodi. Trolejbus se pozná podle údaje dopravce (GTFS route_type 11), protože zdroj jízdních řádů ho jinak hlásí jako autobus.
+
 ## [0.1.347] - 2026-08-26
 
 ### Přidáno
