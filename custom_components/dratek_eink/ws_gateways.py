@@ -19,6 +19,7 @@ from .gateway import (
     async_delete_gateway,
     async_discover_gateways,
     async_flash_gateway,
+    async_gateway_flash_manifest,
     async_get_gateway_ota_job,
     async_get_flash_job,
     async_list_serial_ports,
@@ -323,6 +324,31 @@ async def websocket_gateway_serial_ports(
         connection.send_result(msg["id"], {"ok": False, "error": str(exc), "ports": []})
         return
     connection.send_result(msg["id"], {"ok": True, "ports": ports})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({"type": "dratek_eink/gateways/firmware_manifest"})
+@websocket_api.async_response
+async def websocket_gateway_firmware_manifest(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Offsets and digests for the browser route, which flashes the board itself."""
+    try:
+        chips = await async_gateway_flash_manifest(hass)
+    except Exception as exc:
+        connection.send_result(msg["id"], {"ok": False, "error": str(exc), "chips": {}})
+        return
+    connection.send_result(
+        msg["id"],
+        {
+            "ok": True,
+            "chips": chips,
+            "firmware_version": GATEWAY_FIRMWARE_VERSION,
+            "download_url": "/api/dratek_eink/firmware/{chip}/{part}",
+        },
+    )
 
 
 @websocket_api.require_admin

@@ -74,13 +74,22 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.346",
-        name="DRATEK eInk v0.1.346",
-        body="""## Release 0.1.346
+        tag="v0.1.347",
+        name="DRATEK eInk v0.1.347",
+        body="""## Release 0.1.347
+
+### Přidáno
+- Novou gateway jde vyrobit i z počítače, u kterého sedíte. Krok „Nová gateway" nabízí obě cesty - ESP32 zapojenou do zařízení s Home Assistantem jako dosud, nebo do tohoto počítače. Prohlížečová cesta zapisuje firmware přes Web Serial a Home Assistant u toho nemusí být.
+- Prohlížečové nahrání dojde až k hotové gatewayi: po zápisu firmwaru pošle desce Wi-Fi konfiguraci, vyčte z ní přidělenou IP adresu a gateway sám přidá do seznamu.
+- Každý zapsaný obraz se ověří otiskem MD5 a konzole nahrávání ukazuje průběh. Ověření desky i volba „Jen Wi-Fi" fungují v prohlížečové cestě stejně jako u nahrávání přes server.
+
+### Vylepšeno
+- Obě cesty nahrávání čtou stejné profily obrazů, offsetů i mazaných NVS oblastí, takže nemohou zapsat rozdílný výsledek.
+- Bez HTTPS nebo bez podpory Web Serial panel vysvětlí proč to nejde a pošle uživatele na nahrání přes zařízení s Home Assistantem.
 
 ### Opraveno
-- Odjezdy se při automatické aktualizaci už nekreslí přes staré spoje. Šablona hlásila automatizaci jiné souřadnice řádku, než na kterých ho sama vykreslila, takže se stará tabule nesmazala celá a nová se objevila o kousek výš. Oprava se projeví i u automatizací uložených v předchozích verzích.
-- Stejná odchylka posouvala i další živé prvky: kruhový ukazatel kvality ovzduší a graf spotřeby vody teď při automatickém překreslení sedí přesně tam, kde je ruční náhled.
-- Žlutý akcent grafů a ukazatelů se při automatické aktualizaci konečně opravdu použije - barevné rozhodnutí panelu se do automatizace dosud nikdy nezapsalo.
+- Vybraná zastávka u šablony Odjezdy zůstane uložená. Ukládala se teprve po úspěšném načtení živé tabule, takže každý výpadek jízdních řádů volbu zahodil a výběr se vrátil prázdný.
+- Odjezdy se načítají znovu samy. Tabule žila jen do zavření stránky - po znovuotevření displeje se hlavička jmenovala správnou zastávkou, ale čtyři spoje pod ní byly ukázková data, a ruční odeslání je poslalo i na displej. Náhled se teď při otevřené šabloně sám drží aktuální a odeslání počká na živá data.
+- Tabule odjezdů se už nekreslí dvakrát. Automatizace uložené před verzí 0.1.346 mají zapsané jiné souřadnice řádku, než na kterých byl vykreslený; takové automatizace teď automatická aktualizace překreslí celou šablonou místo mazání a dokreslování do špatného obdélníku, takže stará tabule nezůstane vidět pod novou. Po dalším uložení automatizace se vrátí rychlejší způsob.
 """,
     )

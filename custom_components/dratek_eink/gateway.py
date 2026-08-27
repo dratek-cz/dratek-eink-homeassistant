@@ -32,6 +32,14 @@ FIRMWARE_DIR = Path(__file__).parent / "firmware"
 FLASH_JOBS_KEY = "dratek_eink_flash_jobs"
 OTA_JOBS_KEY = "dratek_eink_ota_jobs"
 ESPTOOL_FLASH_BAUD = "115200"
+# NVS plus the OTA boot selector. Wiping it is what makes a reflash behave like
+# a first boot instead of inheriting the previous gateway's stored Wi-Fi and
+# OTA slot. The host route erases it with esptool; the browser route has no
+# erase-region command and writes 0xFF across the same span instead, so both
+# have to agree on where it is.
+NVS_ERASE_OFFSET = 0x9000
+NVS_ERASE_SIZE = 0x7000
+FLASH_PART_ORDER = ("bootloader", "partitions", "app")
 FLASH_PROFILES = {
     "esp32": {
         "label": "ESP32 / ESP32-WROOM",
@@ -1080,6 +1088,62 @@ async def async_list_serial_ports(hass: HomeAssistant) -> list[dict[str, Any]]:
     return await hass.async_add_executor_job(_list_serial_ports_sync)
 
 
+def gateway_firmware_part_path(chip: str, part: str) -> Path | None:
+    """The bundled image for one flash part, or None when it is not a real one.
+
+    Both arguments arrive from an HTTP request, so nothing is ever joined onto
+    a path: they only ever select an entry that FLASH_PROFILES already spells
+    out, which is what keeps a crafted chip/part pair inside the firmware
+    directory.
+    """
+    profile = FLASH_PROFILES.get(str(chip or "").strip().lower())
+    if not profile:
+        return None
+    entry = profile["files"].get(str(part or "").strip().lower())
+    return entry[1] if entry else None
+
+
+def _flash_manifest_sync() -> dict[str, Any]:
+    """What the browser needs to flash a board itself, per supported chip.
+
+    The host route hands esptool a list of paths; a browser cannot be given
+    paths, so it gets offsets, sizes and digests here and fetches the bytes
+    from GatewayFirmwareView afterwards. Both routes read the same
+    FLASH_PROFILES, so neither can drift onto a different image or offset.
+    """
+    chips: dict[str, Any] = {}
+    for chip, profile in FLASH_PROFILES.items():
+        parts: list[dict[str, Any]] = []
+        missing: list[str] = []
+        for part in FLASH_PART_ORDER:
+            offset, path = profile["files"][part]
+            if not path.exists():
+                missing.append(path.name)
+                continue
+            data = path.read_bytes()
+            parts.append(
+                {
+                    "part": part,
+                    "offset": offset,
+                    "size": len(data),
+                    "md5": hashlib.md5(data, usedforsecurity=False).hexdigest(),
+                    "filename": path.name,
+                }
+            )
+        chips[chip] = {
+            "chip": chip,
+            "label": profile["label"],
+            "parts": parts,
+            "missing": missing,
+            "erase": {"offset": NVS_ERASE_OFFSET, "size": NVS_ERASE_SIZE},
+        }
+    return chips
+
+
+async def async_gateway_flash_manifest(hass: HomeAssistant) -> dict[str, Any]:
+    return await hass.async_add_executor_job(_flash_manifest_sync)
+
+
 def _safe_log_line(line: str, password: str) -> str:
     return line.replace(password, "********") if password else line
 
@@ -1294,7 +1358,7 @@ def _flash_gateway_sync(
         "write-flash",
         "-z",
     ]
-    for key in ("bootloader", "partitions", "app"):
+    for key in FLASH_PART_ORDER:
         offset, path = files[key]
         esptool_cmd.extend([hex(offset), str(path)])
     add_log(f"Flashing {profile['label']} firmware...")
@@ -1310,8 +1374,8 @@ def _flash_gateway_sync(
             "--baud",
             ESPTOOL_FLASH_BAUD,
             "erase-region",
-            "0x9000",
-            "0x7000",
+            hex(NVS_ERASE_OFFSET),
+            hex(NVS_ERASE_SIZE),
         ]
         add_log("Resetting NVS partition and OTA boot metadata for clean initialization.")
         erase_proc = subprocess.run(

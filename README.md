@@ -4,6 +4,17 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.347
+
+- **Gatewaye jde nově vyrobit i bez přístupu k serveru.** V kroku „Nová gateway“ se vybírá, kam je ESP32 zapojená: do zařízení s Home Assistantem jako dosud, nebo do počítače, na kterém je panel zrovna otevřený. Druhá cesta nahraje firmware přímo z prohlížeče přes Web Serial, takže deska nemusí nikam cestovat.
+- **Prohlížečové nahrání dojde až do konce** – po zápisu firmwaru pošle desce Wi-Fi údaje, počká na přidělenou IP adresu a gateway rovnou přidá do seznamu.
+- **Zapsaná data se ověřují otiskem MD5** a průběh zápisu ukazuje ukazatel v konzoli nahrávání.
+- **Když prohlížeč k USB nesmí** (Home Assistant otevřený bez HTTPS nebo prohlížeč bez Web Serial), panel to rovnou vysvětlí a nabídne nahrání přes zařízení s Home Assistantem.
+
+- **Šablona Odjezdy si konečně pamatuje zastávku** i když se jízdní řády zrovna nepodaří načíst.
+- **Odjezdy se obnovují samy** – po znovuotevření displeje už tabule neukazuje ukázkové spoje a ruční odeslání počká na živá data.
+- **Tabule odjezdů se nekreslí dvakrát** ani u automatizací uložených před verzí 0.1.346.
+
 ## Novinky ve verzi 0.1.346
 
 - **Odjezdy se při automatické aktualizaci nekreslí přes staré spoje.** Šablona hlásila automatizaci jiné souřadnice řádku, než na kterých ho sama nakreslila, takže se stará tabule nesmazala celá a nová se objevila o kousek výš. Projeví se i u dříve uložených automatizací.

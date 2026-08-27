@@ -509,21 +509,34 @@ export const gatewayMixin = {
     }
     if (this._gatewaySubtab === "create") {
       const selectedBoard = this._selectedGatewayBoard();
+      const browserRoute = this._flashRoute === "browser";
       // Kroky maji svuj vlastni vyznam, ne jen poradi: krok je "hotovy", kdyz je
       // jeho udaj skutecne vyplneny, ne podle toho, ze uzivatel jen dorazil dal.
-      const usbDone = Boolean(this._flashForm.port);
+      const usbDone = browserRoute ? Boolean(this._browserSerial?.port) : Boolean(this._flashForm.port);
       const wifiDone = Boolean(this._flashForm.ssid);
       const stepMark = (n, done) => `<span class="${done ? "is-done" : ""}">${done ? `<ha-icon icon="mdi:check"></ha-icon>` : n}</span>`;
       const stepRail = `<div class="gateway-step-rail" aria-label="Krok ${wifiDone ? (usbDone ? 4 : 3) : usbDone ? 2 : 1} ze 4">${stepMark(1, usbDone)}<i class="${usbDone ? "is-done" : ""}"></i>${stepMark(2, wifiDone)}<i class="${wifiDone ? "is-done" : ""}"></i>${stepMark(3, true)}<i class="is-done"></i><span class="is-final">4</span></div>`;
+      // Hostitelská cesta potřebuje seznam portů ze serveru, prohlížečová si
+      // desku vybírá sama systémovým dialogem - tlačítko i varování k portům
+      // tedy patří jen k té první.
+      const headActions = browserRoute
+        ? ""
+        : `<div class="gateway-view-actions"><button id="refreshSerialPorts" class="secondary refresh-ports-btn" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:usb-port" class="${this._gatewayBusy ? "spin" : ""}"></ha-icon>Načíst porty</button></div>`;
+      const intro = browserRoute
+        ? "Desku vyberete v prohlížeči. Firmware i Wi-Fi do ní zapíše tenhle počítač."
+        : "Vyberte připojení, desku a Wi-Fi. Potom nahrajte připravený firmware.";
       return `${shellStart}<div class="gateway-create-block">
-        <div class="gateway-hero-head"><div class="gateway-hero-title"><span class="hero-icon-badge"><ha-icon icon="mdi:usb-flash-drive"></ha-icon></span><div><h2>Nová gateway přes USB</h2><p>Vyberte připojení, desku a Wi-Fi. Potom nahrajte připravený firmware.</p></div></div>${stepRail}<div class="gateway-view-actions"><button id="refreshSerialPorts" class="secondary refresh-ports-btn" ${this._gatewayBusy ? "disabled" : ""}><ha-icon icon="mdi:usb-port" class="${this._gatewayBusy ? "spin" : ""}"></ha-icon>Načíst porty</button></div></div>
-        ${this._renderNoSerialPortsWarning()}
+        <div class="gateway-hero-head"><div class="gateway-hero-title"><span class="hero-icon-badge"><ha-icon icon="mdi:usb-flash-drive"></ha-icon></span><div><h2>Nová gateway přes USB</h2><p>${this._escape(intro)}</p></div></div>${stepRail}${headActions}</div>
+        <section class="gateway-setup-section gateway-route-section"><div class="gateway-step-header"><span class="step-num"><ha-icon icon="mdi:usb-flash-drive-outline"></ha-icon></span><div><strong>Kam je deska zapojená?</strong><small>Obě cesty nahrají tentýž firmware</small></div></div>${this._renderGatewayRoutePicker()}</section>
+        ${browserRoute ? this._renderBrowserFlashNotice() : this._renderNoSerialPortsWarning()}
         <div class="gateway-setup-grid"><div class="gateway-setup-column gateway-setup-left">
-          <section class="gateway-setup-section gateway-usb-section"><div class="gateway-step-header"><span class="step-num">1</span><div><strong>Připojení přes USB</strong><small>Port desky připojené k Home Assistantu</small></div></div>${this._renderGatewayPortPicker()}</section>
+          ${browserRoute
+            ? this._renderBrowserPortSection()
+            : `<section class="gateway-setup-section gateway-usb-section"><div class="gateway-step-header"><span class="step-num">1</span><div><strong>Připojení přes USB</strong><small>Port desky připojené k Home Assistantu</small></div></div>${this._renderGatewayPortPicker()}</section>`}
           <section class="gateway-setup-section gateway-network-section"><div class="gateway-step-header"><span class="step-num">2</span><div><strong>Síťové nastavení</strong><small>Údaje se nahrají bezpečně přes USB</small></div></div><div class="gateway-form-fields"><div class="field"><label for="flashHostname"><ha-icon icon="mdi:dns-outline"></ha-icon>Název gatewaye</label><input id="flashHostname" value="${this._escape(this._flashForm.hostname)}" placeholder="dratek-eink-gateway-dilna"></div><div class="field"><label for="flashSsid"><ha-icon icon="mdi:wifi"></ha-icon>Wi-Fi SSID</label><input id="flashSsid" value="${this._escape(this._flashForm.ssid)}" placeholder="Název Wi-Fi sítě"></div><div class="field"><label for="flashPassword"><ha-icon icon="mdi:lock-outline"></ha-icon>Wi-Fi heslo</label><input id="flashPassword" type="password" value="${this._escape(this._flashForm.password)}" placeholder="Heslo k Wi-Fi síti"></div></div></section>
         </div><div class="gateway-setup-column gateway-setup-right">
-          <section class="gateway-setup-section gateway-board-section"><div class="gateway-step-header"><span class="step-num">3</span><div><strong>Vyberte typ desky</strong><small>Dvě podporované varianty gateway firmwaru</small></div></div>${this._renderGatewayBoardPicker()}</section>
-          ${this._renderGatewayInstallPanel(selectedBoard)}
+          <section class="gateway-setup-section gateway-board-section"><div class="gateway-step-header"><span class="step-num">3</span><div><strong>Vyberte typ desky</strong><small>${browserRoute ? "Podle připojené desky se profil sám srovná" : "Dvě podporované varianty gateway firmwaru"}</small></div></div>${this._renderGatewayBoardPicker()}</section>
+          ${browserRoute ? this._renderBrowserInstallPanel(selectedBoard) : this._renderGatewayInstallPanel(selectedBoard)}
         </div></div>
         ${this._renderFlashResult()}${this._renderSerialResult()}
       </div>${shellEnd}`;
@@ -1086,13 +1099,19 @@ export const gatewayMixin = {
 
   _renderFlashResult() {
     if (!this._flashResult) return "";
-    const running = this._flashResult.ok === null || ["queued", "running"].includes(this._flashResult.status);
+    const running = this._flashResult.ok === null || ["queued", "running", "provisioning"].includes(this._flashResult.status);
     const cls = running ? "warn" : this._flashResult.ok ? "good" : "bad";
     const statusText = running ? "Probíhá nahrávání..." : this._flashResult.ok ? "Dokončeno" : "Chyba";
     const message = running
       ? `Flash probíhá: ${this._flashResult.status || "running"}`
       : this._flashResult.ok ? "ESP32 gateway byla úspěšně flashnuta a Wi-Fi konfigurace odeslána." : `Flash selhal: ${this._flashResult.error || "neznámý problém"}`;
     const log = (this._flashResult.log || []).join("\n");
+    // Prohlizecova cesta zna postup zapisu po blocích a hlásí ho; hostitelska
+    // vidí jen výstup esptoolu, takze u ní zadny prouzek nevznikne.
+    const progress = Number(this._flashResult.progress);
+    const bar = running && Number.isFinite(progress) && progress > 0
+      ? `<div class="ota-progress"><span style="width:${Math.max(0, Math.min(100, progress))}%"></span></div>`
+      : "";
     return `<div class="gateway-terminal-window">
       <div class="terminal-header">
         <span class="terminal-dots"><i></i><i></i><i></i></span>
@@ -1103,6 +1122,7 @@ export const gatewayMixin = {
         <ha-icon icon="${running ? "mdi:sync" : this._flashResult.ok ? "mdi:check-circle" : "mdi:alert-circle"}" class="${running ? "spin" : ""}"></ha-icon>
         <span>${this._escape(message)}</span>
       </div>
+      ${bar}
       ${log ? `<pre class="gateway-log">${this._escape(log)}</pre>` : ""}
     </div>`;
   },

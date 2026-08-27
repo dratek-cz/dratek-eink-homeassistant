@@ -306,6 +306,53 @@ class AutomaticRefreshRendererTests(unittest.TestCase):
         self.assertEqual(["template"], calls)
         self.assertEqual((220, 20, 12), image.getpixel((0, 0)))
 
+    def _tier_chosen_for(self, bindings: list[dict]) -> list[str]:
+        calls: list[str] = []
+        original_template = render.render_entity_bound_template_image
+        original_clean = render.render_entity_bound_clean_background_image
+        render.render_entity_bound_template_image = lambda *_a, **_k: (
+            calls.append("template") or Image.new("RGB", (20, 10), (220, 20, 12))
+        )
+        render.render_entity_bound_clean_background_image = lambda *_a, **_k: (
+            calls.append("clean") or Image.new("RGB", (20, 10), (0, 0, 0))
+        )
+        try:
+            render.render_automatic_refresh_image(
+                _solid_png_data_url((20, 10), (255, 255, 255)),
+                '<svg width="20" height="10"></svg>',
+                _solid_png_data_url((20, 10), (255, 255, 255)),
+                bindings,
+                {},
+            )
+        finally:
+            render.render_entity_bound_template_image = original_template
+            render.render_entity_bound_clean_background_image = original_clean
+        return calls
+
+    def test_a_graphic_row_captured_before_the_layout_fix_takes_the_svg_tier(self) -> None:
+        # Up to 0.1.345 the recorded box was a few pixels away from where the
+        # row was actually drawn, and the clean-background tier trusts that box
+        # completely: it whitens it and redraws into it, so a departures board
+        # printed twice, the fresh one slightly above the leftovers. The
+        # SVG-substitution tier replaces the whole tagged group instead and so
+        # cannot leave anything stale behind, whatever the box says.
+        self.assertEqual(
+            ["template"],
+            self._tier_chosen_for([{"id": "board", "type": "transit", "x": 4, "y": 20, "w": 280, "h": 80}]),
+        )
+
+    def test_a_current_capture_keeps_the_preferred_clean_background_tier(self) -> None:
+        stamped = {
+            "id": "board", "type": "transit", "x": 4, "y": 20, "w": 280, "h": 80,
+            "capture": render.GRAPHIC_BINDING_CAPTURE_VERSION,
+        }
+        self.assertEqual(["clean"], self._tier_chosen_for([stamped]))
+
+    def test_a_text_binding_is_unaffected_by_the_graphic_stamp(self) -> None:
+        # Only graphic rows ever carried the misplaced box; a plain text slot
+        # must not be pushed off the preferred tier for lacking a stamp.
+        self.assertEqual(["clean"], self._tier_chosen_for([_slot()]))
+
     @unittest.skipUnless(svg_render.render_available(), "SVG rasteriser not installed")
     def test_empty_clean_background_is_purely_additive(self) -> None:
         # An automation saved before this tier existed has no clean_background

@@ -43,6 +43,9 @@ ALLOWED_UNTRANSLATED = {
     "PÁ", "ÚT", "ČT", "KVĚ",
     # Brand name.
     "DRÁTEK.CZ eInk",
+    # The wordmark _blockBrandLogo draws onto the panel. It is artwork, not
+    # copy - a logo says the same thing in every language.
+    "DRÁTEK", "DRÁTEK.CZ",
     # Symbol-catalogue labels: translated through SYMBOL_LABEL_EN instead.
     "bazén", "oheň", "pokračovat",
     # Lowercase stems compared against entity names by has()/includes().

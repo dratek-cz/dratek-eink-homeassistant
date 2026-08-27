@@ -16,7 +16,7 @@
 // are identical by construction.
 
 import qrcode from "../qrcode-generator.js";
-import { DISPLAY_TEMPLATES } from "./templates/index.js?v=native-transit-1";
+import { DISPLAY_TEMPLATES } from "./templates/index.js?v=release-0.1.347";
 
 const RED = "#e31b1b";
 const YELLOW = "#f4c400";
@@ -59,6 +59,16 @@ const RADAR_FOOTER_FRACTION = 0.28;
 // flag to get stuck on, which is why a manual send always renders correctly
 // even when the preview is stuck.
 const METEORADAR_REQUEST_TIMEOUT_MS = 20 * 1000;
+// transit.py caches a stop's board for 45 s, so asking more often than this
+// only spends round trips on the same four rows. The departures print as
+// "za 3 min" - relative to the moment they were fetched - so the panel must
+// keep re-asking while the designer is open or the preview quietly drifts out
+// of date, and a manual send would go out with minutes that already passed.
+const TRANSIT_CACHE_MS = 60 * 1000;
+// A failed fetch (the public timetable server is down or rate-limiting) retries
+// well inside the success TTL, the same trade METEORADAR_RETRY_MS makes.
+const TRANSIT_RETRY_MS = 20 * 1000;
+const TRANSIT_REQUEST_TIMEOUT_MS = 20 * 1000;
 
 // Advance width of one glyph as a fraction of the font size, per character class,
 // measured off the Arial/Helvetica stack above.
@@ -515,6 +525,94 @@ export const templateSvgMixin = {
       });
   },
 
+  // ------------------------------------------------------- transit board ---
+
+  // A departures row draws live data that arrives over the websocket, exactly
+  // like the radar map above - so it gets the same three entry points: an
+  // `_ensure` that owns the cache, a non-blocking `_request` for the
+  // interactive preview and a blocking `_preload` for the send path.
+  _templateNeedsTransitBoard(rows) {
+    return (rows || []).some((row) => row?.group === "transport-board" && Array.isArray(row?.board));
+  },
+
+  // Fetches (or reuses) the configured stop's board. Returns true when the
+  // cache changed and the caller should repaint.
+  //
+  // The board used to live only in _transitPreview, written the one time the
+  // user picked a stop in the settings dialog. Nothing rebuilt it afterwards,
+  // so every later visit to that display - a page reload, switching to another
+  // display and back - found it empty and transport.js fell through to its
+  // sample rows: the header named the real stop while the four departures
+  // underneath read Centrum/Univerzita/Nemocnice/Depo, and a manual send put
+  // exactly that on the panel.
+  async _ensureTemplateTransitBoard() {
+    const stopId = String(this._displayTemplateConfig?.transit_stop_id || "").trim();
+    if (!stopId) return false;
+    const cached = this._transitPreview;
+    const age = cached?.fetched_at ? Date.now() - cached.fetched_at : Infinity;
+    const ttl = Array.isArray(cached?.departures) && cached.departures.length ? TRANSIT_CACHE_MS : TRANSIT_RETRY_MS;
+    if (cached?.stop_id === stopId && age < ttl) return false;
+    if (!this._hass?.callWS) return false;
+    try {
+      const response = await this._hass.callWS({
+        type: "dratek_eink/transit/departures", stop_id: stopId, limit: 4,
+      });
+      this._transitPreview = {
+        ...response,
+        stop_id: stopId,
+        stop_name: response?.stop_name || this._displayTemplateConfig?.transit_stop_name || "",
+        fetched_at: Date.now(),
+      };
+      return true;
+    } catch (_error) {
+      // Cached as a failure rather than left unset, so the retry is paced by
+      // TRANSIT_RETRY_MS instead of firing again on every single repaint. The
+      // last good board (if there is one for this stop) is deliberately kept:
+      // four slightly stale departures still say more than four invented ones.
+      if (cached?.stop_id !== stopId) {
+        this._transitPreview = { stop_id: stopId, stop_name: "", departures: [], fetched_at: Date.now() };
+      } else {
+        this._transitPreview = { ...cached, fetched_at: Date.now() };
+      }
+      return false;
+    }
+  },
+
+  // The blocking counterpart: a manual send must never go out with the sample
+  // departures baked into it.
+  async _preloadTemplateTransitBoard(rows) {
+    if (!this._templateNeedsTransitBoard(rows)) return;
+    await this._ensureTemplateTransitBoard();
+  },
+
+  // Non-blocking counterpart for the live preview, guarded and watchdogged the
+  // same way _requestTemplateRadarImage is.
+  _requestTemplateTransitBoard(rows) {
+    if (!this._templateNeedsTransitBoard(rows) || this._transitBoardRequestPending) return;
+    if (!String(this._displayTemplateConfig?.transit_stop_id || "").trim()) return;
+    this._transitBoardRequestPending = true;
+    let settled = false;
+    const clearPending = () => {
+      if (settled) return;
+      settled = true;
+      this._transitBoardRequestPending = false;
+    };
+    const watchdog = setTimeout(() => {
+      clearPending();
+      this._scheduleTemplateIconRepaint();
+    }, TRANSIT_REQUEST_TIMEOUT_MS);
+    this._ensureTemplateTransitBoard()
+      .then((changed) => {
+        clearTimeout(watchdog);
+        clearPending();
+        if (changed) this._scheduleTemplateIconRepaint();
+      })
+      .catch(() => {
+        clearTimeout(watchdog);
+        clearPending();
+      });
+  },
+
   // Kick off whatever this template still needs, without blocking the render.
   // A single "preload in progress" flag used to guard this, and because the
   // preview slots render one after another the second slot skipped its own
@@ -640,6 +738,7 @@ export const templateSvgMixin = {
     const rows = this._templateSvgRows(baseTemplate, width, height);
     this._requestTemplateIcons(rows);
     this._requestTemplateRadarImage(rows, width, height);
+    this._requestTemplateTransitBoard(rows);
     this._warmTemplateIcons();
     // Weather icons are not in ICON_GEOMETRY (they never go through ha-icon
     // at all - see _templateIconNames), so _templateSvgThumbnail's own
@@ -936,7 +1035,11 @@ export const templateSvgMixin = {
   // same layout math, not something worth recomputing separately (and risking
   // it drifting from what actually gets drawn).
   _layoutTemplateSvg(rows, width, height, collector) {
-    if (rows.length === 1 && (rows[0]?.dither || rows[0]?.customImage) && rows[0]?.pixelPerfect) {
+    // brandLogo joins dither/customImage here so the logo template really does
+    // get the whole panel: no page padding, no footer band, no column split -
+    // the block is handed the display's exact rectangle and centres the lockup
+    // inside it itself.
+    if (rows.length === 1 && (rows[0]?.dither || rows[0]?.customImage || rows[0]?.brandLogo) && rows[0]?.pixelPerfect) {
       const box = { x: 0, y: 0, w: width, h: height, fullX: 0, fullW: width };
       if (collector && rows[0].__rowIndex !== undefined) collector.push({ rowIndex: rows[0].__rowIndex, box });
       return this._renderTemplateBlock(rows[0], box);
@@ -1131,6 +1234,7 @@ export const templateSvgMixin = {
     if (row.qr) return this._blockQr(row, box);
     if (row.radarMap) return this._blockRadarMap(row, box);
     if (row.pricetag) return this._blockPriceTag(row, box);
+    if (row.brandLogo) return this._blockBrandLogo(row, box);
     if (row.text != null) return this._blockText(row, box);
     return "";
   },
@@ -2084,6 +2188,139 @@ export const templateSvgMixin = {
       + `<path d="${path}" fill="${BLACK}" shape-rendering="crispEdges"></path>`;
   },
 
+  // ------------------------------------------------------------- branding ---
+
+  // INTERNAL / NOT FOR THE PUBLIC RELEASE - see PRIVATE-NOTES.md.
+  //
+  // The DRÁTEK.CZ lockup, drawn as native SVG rather than as a dithered copy of
+  // frontend/dratek-eink-logo.png. A raster logo scaled up to fill an 800x480
+  // panel is a soft, speckled version of itself once the three-colour threshold
+  // has been through it; the same shapes drawn as type and rectangles print
+  // with hard edges at every size the range covers, from a 196x96 tag to a
+  // 960x680 panel.
+  //
+  // The artwork exists as two lockups and so does this block: `wide` sets the
+  // wordmark and the Eink screen side by side (frontend/dratek-eink-header.png),
+  // `stacked` puts the screen under the wordmark (frontend/dratek-eink-logo.png).
+  // Which one a display gets is templates/dratek_logo.js's decision, not this
+  // block's.
+  //
+  // Everything is laid out in the lockup's own natural units and scaled once at
+  // the end. The two variants therefore cannot drift apart, and no proportion
+  // in either of them depends on the panel it happens to land on.
+  _blockBrandLogo(row, box) {
+    const stacked = !!row.brandLogo?.stacked;
+    const margin = Math.max(3, Math.round(Math.min(box.w, box.h) * 0.06));
+    const innerW = Math.max(1, box.w - margin * 2);
+    const innerH = Math.max(1, box.h - margin * 2);
+    // Natural units. WORD_W is the wordmark's width, and every other number is
+    // a proportion of the artwork measured against it.
+    const WORD_W = 100;
+    const WORD_H = 26;
+    const MARK_H = 8;
+    const BADGE_W = 92;
+    const BADGE_H = 44;
+    const GAP_MIN = 10;
+    const naturalW = stacked ? WORD_W : 176;
+    // The stacked lockup is measured at its tightest, with only the minimum gap
+    // between the wordmark and the screen. Anything left over after that goes
+    // into the gap below, so a tall portrait panel is filled by the artwork
+    // rather than by two thick bands of white paper above and below it.
+    const naturalH = stacked ? MARK_H + WORD_H + GAP_MIN + BADGE_H : 34;
+    const scale = Math.min(innerW / naturalW, innerH / naturalH);
+    if (!(scale > 0)) return "";
+    const u = (value) => value * scale;
+    // Capped at a little over the screen's own height: past that the two halves
+    // stop reading as one lockup and start reading as two separate marks that
+    // happen to share a page.
+    const gap = stacked
+      ? Math.min(
+        Math.max(u(GAP_MIN), innerH - u(MARK_H + WORD_H) - u(BADGE_H)),
+        u(BADGE_H) * 1.1,
+      )
+      : 0;
+    const totalH = stacked ? u(MARK_H + WORD_H) + gap + u(BADGE_H) : u(naturalH);
+    const originX = box.x + margin + (innerW - u(naturalW)) / 2;
+    const originY = box.y + margin + (innerH - totalH) / 2;
+    const parts = [];
+
+    // -- wordmark ----------------------------------------------------------
+    // Sized by measurement rather than by a guessed font size: the lockup's
+    // whole point is that DRÁTEK.CZ spans exactly the wordmark's width, and
+    // _svgTextWidth is the same estimator every other block lays two runs of
+    // type against, so the two halves below meet exactly where they should.
+    const wordX = originX + (stacked ? 0 : 0);
+    const wordY = originY + u(MARK_H);
+    const emWidth = this._svgTextWidth("DRÁTEK.CZ", 1, true);
+    const wordSize = emWidth > 0 ? u(WORD_W) / emWidth : u(WORD_H);
+    const wordCy = wordY + u(WORD_H) / 2;
+    const darkWidth = this._svgTextWidth("DRÁTEK", wordSize, true);
+    // Teal and orange in print; on a panel that thresholds every pixel they
+    // reduce to the two inks that are actually there, and ".CZ" keeps the
+    // colour break the logo is built around.
+    parts.push(this._svgText("DRÁTEK", wordX, wordCy, wordSize, {
+      anchor: "start", bold: true, color: BLACK, minSize: 4,
+    }));
+    parts.push(this._svgText(".CZ", wordX + darkWidth, wordCy, wordSize, {
+      anchor: "start", bold: true, color: RED, minSize: 4,
+    }));
+
+    // -- the "+ -" marks above the wordmark ---------------------------------
+    const barThickness = Math.max(1, u(1.8));
+    const barLength = Math.max(2, u(5.4));
+    const markCy = originY + u(MARK_H) * 0.45;
+    const bar = (cx, cy, w, h) => `<rect x="${(cx - w / 2).toFixed(2)}" y="${(cy - h / 2).toFixed(2)}"`
+      + ` width="${w.toFixed(2)}" height="${h.toFixed(2)}" fill="${BLACK}"></rect>`;
+    const plusCx = wordX + u(WORD_W) * 0.44;
+    const minusCx = wordX + u(WORD_W) * 0.57;
+    parts.push(bar(plusCx, markCy, barLength, barThickness));
+    parts.push(bar(plusCx, markCy, barThickness, barLength));
+    parts.push(bar(minusCx, markCy, barLength, barThickness));
+
+    // -- the Eink screen ----------------------------------------------------
+    const badge = stacked
+      ? {
+        x: originX + u((WORD_W - BADGE_W) / 2),
+        y: originY + u(MARK_H + WORD_H) + gap,
+        w: u(BADGE_W),
+        h: u(BADGE_H),
+      }
+      : { x: originX + u(108), y: originY + u(1), w: u(68), h: u(32) };
+    const radius = Math.max(1, badge.h * 0.14);
+    const frameStroke = Math.max(1, u(1.4));
+    const inset = Math.max(1, badge.h * 0.10);
+    parts.push(`<rect x="${badge.x.toFixed(2)}" y="${badge.y.toFixed(2)}" width="${badge.w.toFixed(2)}"`
+      + ` height="${badge.h.toFixed(2)}" rx="${radius.toFixed(2)}" fill="#ffffff" stroke="${BLACK}"`
+      + ` stroke-width="${frameStroke.toFixed(2)}"></rect>`);
+    const screen = {
+      x: badge.x + inset, y: badge.y + inset,
+      w: Math.max(1, badge.w - inset * 2), h: Math.max(1, badge.h - inset * 2),
+    };
+    // The printed logo screens this panel grey. Grey is not one of the inks, so
+    // it becomes a hairline frame instead - which is what actually reads as an
+    // e-ink module on paper, where a flat 50% fill would only read as noise.
+    parts.push(`<rect x="${screen.x.toFixed(2)}" y="${screen.y.toFixed(2)}" width="${screen.w.toFixed(2)}"`
+      + ` height="${screen.h.toFixed(2)}" fill="#ffffff" stroke="${BLACK}"`
+      + ` stroke-width="${Math.max(1, u(0.8)).toFixed(2)}"></rect>`);
+    const einkSize = this._svgFitFontSize("Eink", screen.h * 0.68, screen.w * 0.84, true, 4);
+    const einkCx = screen.x + screen.w / 2;
+    const einkCy = screen.y + screen.h / 2;
+    parts.push(this._svgText("Eink", einkCx, einkCy, einkSize, {
+      anchor: "middle", bold: true, color: BLACK, minSize: 4,
+    }));
+    // The red tittle over the "i" - the one detail that makes the badge the
+    // logo rather than the word. Placed by measuring the glyphs before it, the
+    // same way _blockStat places a unit after its value.
+    const einkWidth = this._svgTextWidth("Eink", einkSize, true);
+    const dotCx = einkCx - einkWidth / 2
+      + this._svgTextWidth("E", einkSize, true)
+      + this._svgTextWidth("i", einkSize, true) / 2;
+    const dotSide = Math.max(1, einkSize * 0.18);
+    parts.push(`<rect x="${(dotCx - dotSide / 2).toFixed(2)}" y="${(einkCy - einkSize * 0.46).toFixed(2)}"`
+      + ` width="${dotSide.toFixed(2)}" height="${dotSide.toFixed(2)}" fill="${RED}"></rect>`);
+    return parts.join("");
+  },
+
   // Two raster blocks in an otherwise all-vector renderer: landscape slots
   // place the forecast on the left; portrait slots place it below the map.
   // Both are
@@ -2416,6 +2653,7 @@ export const templateSvgMixin = {
       const rows = this._templateSvgRows(template, slot.w, slot.h);
       await this._preloadTemplateIcons(rows);
       await this._preloadTemplateRadarImage(rows, slot.w, slot.h);
+      await this._preloadTemplateTransitBoard(rows);
       await this._preloadCustomImageForSlot?.(rows, slot.w, slot.h);
       const slotName = index === 0 ? "primary" : index === 1 ? "secondary" : `slot-${index + 1}`;
       const markup = this._applyTemplateAdjustmentsToSvgMarkup(this._layoutTemplateSvg(rows, slot.w, slot.h), template, slotName);

@@ -1,5 +1,15 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.346";
-import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=release-0.1.346";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.347";
+import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=release-0.1.347";
+
+// Generation of the graphic-row capture written into every series()/ratio()/
+// day()/event()/transit binding. Bumped whenever the recorded box could move,
+// so render.py can tell a trustworthy capture from one it must not clear and
+// redraw blind. Must stay in step with GRAPHIC_BINDING_CAPTURE_VERSION in
+// render.py.
+//   1 - implied by its absence: boxes measured without `compact`, so inset a
+//       few pixels from where the row was actually drawn (fixed in 0.1.346).
+//   2 - boxes measured in the layout the document is really built from.
+const GRAPHIC_BINDING_CAPTURE_VERSION = 2;
 
 // The standard Czech civil name-day calendar, indexed [month][day - 1]
 // (getMonth() is already 0-based). Days with no name day (state/religious
@@ -1256,6 +1266,31 @@ export const devicesMixin = {
                 </div>
               </article>`;
             }
+            // INTERNAL - remove with the rest of the brand-logo feature before
+            // the retail release (PRIVATE-NOTES.md).
+            //
+            // A broadcast template gets its own card: none of the ordinary
+            // furniture applies to it. It is not dragged onto a slot, it has no
+            // variables to bind and no designer to open - the tile is a button
+            // that resets every display, so it says so instead of showing a
+            // "Nenastaveno" badge it can never leave.
+            if (template.broadcast) {
+              return `<article class="display-template-card display-template-broadcast-card" aria-label="${this._escape(template.title)}. Odešle se na všechny displeje.">
+                <header class="display-template-tile-header">
+                  <span class="display-template-kind-icon is-broadcast-icon"><ha-icon icon="mdi:broadcast"></ha-icon></span>
+                  <span class="display-template-tile-identity"><strong>${this._escape(template.title)}</strong><small>Firemní šablona</small></span>
+                </header>
+                <div class="display-template-tile-preview is-${orientation}" data-display-template-select="${template.id}" role="button" tabindex="0" aria-label="Odeslat ${this._escape(template.title)} na všechny displeje">
+                  <span class="display-template-preview" style="aspect-ratio:${previewAspect};min-height:0">${this._renderDisplayTemplateCatalogPreviewSlot(template, orientation, size)}</span>
+                </div>
+                <div class="display-template-tile-meta">
+                  <span class="display-template-broadcast-warning"><ha-icon icon="mdi:alert-outline"></ha-icon>Zruší automatizace i frontu na všech displejích.</span>
+                </div>
+                <div class="display-template-tile-actions">
+                  <button type="button" class="display-template-card-action is-broadcast-action" data-display-template-select="${template.id}" ${this._brandLogoBroadcasting ? "disabled" : ""}><ha-icon icon="mdi:${this._brandLogoBroadcasting ? "loading" : "broadcast"}"></ha-icon>${this._brandLogoBroadcasting ? "Odesílám…" : "Odeslat na všechny displeje"}</button>
+                </div>
+              </article>`;
+            }
             return `<article class="display-template-card display-template-drag-card is-config-${configStatus.state} ${userCreated ? "is-user-created" : ""} ${used ? "is-used" : ""} ${onDisplay ? "is-on-display" : ""} ${this._templateEditMenuId === template.id ? "has-edit-overlay" : ""}" draggable="true" data-display-template-drag="${template.id}" aria-label="${this._escape(template.title)}. Přetáhněte na displej.">
               <header class="display-template-tile-header">
                 <span class="display-template-kind-icon"><ha-icon icon="mdi:${userCreated ? "palette-outline" : template.kind === "prepared" ? "auto-fix" : "tune-variant"}"></ha-icon></span>
@@ -2095,6 +2130,7 @@ export const devicesMixin = {
     const rows = this._templateSvgRows(template, width, height);
     this._requestTemplateIcons(rows);
     this._requestTemplateRadarImage(rows, width, height);
+    this._requestTemplateTransitBoard(rows);
     return { width, height, markup: this._layoutTemplateSvg(rows, width, height), boxes: this._templateVariableCropBoxes(template, width, height) };
   },
 
@@ -2436,16 +2472,49 @@ export const devicesMixin = {
     }
   },
 
+  // Mirrors the chosen stop into this display's cached draft, exactly the way
+  // the meteoradar country and the custom-image data do. _scheduleDraftSave
+  // rebuilds the payload from _displayTemplateConfig on its own, but it also
+  // refuses to run at all until this device's stored draft has been read back
+  // (_draftIsLoadedForSelectedDevice) - and the picker is reachable in that
+  // window. Without the mirror the stop was then held only in a field nothing
+  // persists, so it survived until the next reload and no further.
+  _rememberTransitStopInDraft() {
+    const address = String(this._selectedDeviceAddress || "").toUpperCase();
+    if (!address) return;
+    this._deviceDrafts ||= {};
+    const draft = this._deviceDrafts[address] || {};
+    draft.template_config ||= {};
+    draft.template_config.transit_stop_id = String(this._displayTemplateConfig?.transit_stop_id || "");
+    draft.template_config.transit_stop_name = String(this._displayTemplateConfig?.transit_stop_name || "");
+    this._deviceDrafts[address] = draft;
+  },
+
   async _selectTransitStop(stopId, stopName) {
     this._displayTemplateConfig ||= {};
     this._displayTemplateConfig.transit_stop_id = String(stopId || "");
     this._displayTemplateConfig.transit_stop_name = String(stopName || "");
     this._transitStopResults = [];
     this._transitSearchError = "";
+    // Persisted before the live board is fetched, not after it. The fetch is a
+    // call to a public timetable server that legitimately fails (it is down,
+    // it rate-limits, the HA host is offline) - and while the save sat behind
+    // it, every one of those failures threw the user's choice away as well as
+    // the preview, so the picker came back empty on the next open.
+    this._rememberTransitStopInDraft();
+    this._scheduleDraftSave?.();
     try {
       const response = await this._hass.callWS({ type: "dratek_eink/transit/departures", stop_id: stopId, limit: 4 });
-      this._transitPreview = { ...response, stop_id: String(stopId), stop_name: response?.stop_name || stopName };
+      this._transitPreview = {
+        ...response,
+        stop_id: String(stopId),
+        stop_name: response?.stop_name || stopName,
+        fetched_at: Date.now(),
+      };
+      // The provider's own spelling of the stop wins over the search result's,
+      // so the board's header reads the same as the departures under it.
       this._displayTemplateConfig.transit_stop_name = this._transitPreview.stop_name;
+      this._rememberTransitStopInDraft();
       this._scheduleDraftSave?.();
     } catch (error) {
       this._transitSearchError = this._message?.(error) || String(error?.message || error);
@@ -3331,6 +3400,17 @@ export const devicesMixin = {
         // produce the same id twice, and a duplicate id means the backend's
         // substitution only ever finds the first of them.
         binding.id = `template-${template.id}-${group}-s${slotIndex}-${occurrence}`;
+        // Stamps which generation of the row-measuring code recorded this box.
+        // Up to 0.1.345 _templateGraphicRowBoxes laid the rows out without
+        // `compact`, so the box it wrote here was inset a few pixels from
+        // where the row had actually been drawn. The clean-background tier
+        // trusts that box completely - it clears it and redraws into it - so
+        // an automation saved back then leaves a frame of the old departures
+        // board behind and prints the new rows slightly above it. render.py
+        // reads this stamp and sends those captures down the SVG-substitution
+        // tier instead, which replaces the whole tagged group and therefore
+        // cannot leave anything stale behind, whatever the box says.
+        binding.capture = GRAPHIC_BINDING_CAPTURE_VERSION;
         node.setAttribute("id", binding.id);
         bindings.push(binding);
       }

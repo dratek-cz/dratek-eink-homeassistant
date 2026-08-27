@@ -70,6 +70,10 @@ SINGLE_ROW_TEMPLATES = {
     "radar",
     # A photo template is intentionally one edge-to-edge raster image.
     "custom_image",
+    # INTERNAL (PRIVATE-NOTES.md): the logo template is the lockup and nothing
+    # else - a heading or a footer over the brand mark would be exactly the
+    # thing it exists not to have.
+    "dratek_logo",
 }
 
 

@@ -2,6 +2,23 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.347] - 2026-08-26
+
+### Přidáno
+- **Nová gateway z počítače, u kterého sedíte**: krok „Nová gateway“ nabízí obě cesty – ESP32 zapojenou do zařízení s Home Assistantem, nebo do tohoto počítače. Prohlížečová cesta zapisuje firmware přes Web Serial a Home Assistant u toho nemusí být.
+- **Dokončení až k hotové gatewayi**: po zápisu firmwaru panel pošle desce Wi-Fi konfiguraci, vyčte z ní přidělenou IP adresu a gateway sám přidá do seznamu.
+- **Kontrola zápisu a průběh**: každý zapsaný obraz se ověří otiskem MD5 a konzole nahrávání ukazuje postup.
+- **Ověření desky a „Jen Wi-Fi“** fungují i v prohlížečové cestě, stejně jako u nahrávání přes server.
+
+### Vylepšeno
+- **Sdílený zdroj pravdy o firmwaru**: obě cesty čtou stejné profily obrazů, offsetů i mazané NVS oblasti, takže nemohou nahrát rozdílný výsledek.
+- **Srozumitelné odmítnutí**: bez HTTPS nebo bez podpory Web Serial panel vysvětlí proč a pošle uživatele na nahrání přes zařízení s Home Assistantem.
+
+### Opraveno
+- **Vybraná zastávka u šablony Odjezdy zůstane uložená**: ukládala se teprve po úspěšném načtení živé tabule, takže každý výpadek jízdních řádů volbu zahodil a výběr se vrátil prázdný.
+- **Odjezdy se načítají znovu samy**: tabule žila jen do zavření stránky. Po znovuotevření displeje se hlavička jmenovala správnou zastávkou, ale čtyři spoje pod ní byly ukázková data – a ruční odeslání je poslalo i na displej. Náhled se teď při otevřené šabloně sám drží aktuální a odeslání počká na živá data.
+- **Tabule odjezdů se už nekreslí dvakrát**: automatizace uložené před verzí 0.1.346 mají zapsané jiné souřadnice řádku, než na kterých byl vykreslený. Takové automatizace teď automatická aktualizace překreslí celou šablonou místo mazání a dokreslování do špatného obdélníku, takže stará tabule nezůstane vidět pod novou. Po dalším uložení automatizace se vrátí rychlejší způsob.
+
 ## [0.1.346] - 2026-08-26
 
 ### Opraveno

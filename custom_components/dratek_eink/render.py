@@ -1485,6 +1485,29 @@ def _svg_graphic_binding(binding: dict[str, Any]) -> bool:
     return binding.get("type") in ("series", "ratio", "forecast", "calendar", "transit")
 
 
+# Generation of the panel's graphic-row capture. Mirrors
+# GRAPHIC_BINDING_CAPTURE_VERSION in panel-devices.mixin.js; see that constant
+# for what each generation means. A binding with no stamp at all is generation 1.
+GRAPHIC_BINDING_CAPTURE_VERSION = 2
+
+
+def _stale_graphic_capture(binding: Any) -> bool:
+    """True for a graphic row whose recorded box predates the layout fix.
+
+    Up to 0.1.345 the panel measured these rows in a layout three pixels
+    narrower on each side than the one it drew them in, so the box travelling
+    with the binding is not where the row is. The clean-background tier trusts
+    that box completely - it whitens it and redraws into it - which on a
+    departures board left a frame of the old rows standing and printed the new
+    ones a few pixels above them.
+    """
+    return (
+        isinstance(binding, dict)
+        and _svg_graphic_binding(binding)
+        and int(binding.get("capture") or 0) < GRAPHIC_BINDING_CAPTURE_VERSION
+    )
+
+
 def _svg_text_binding(binding: dict[str, Any]) -> bool:
     """A text slot the panel captured enough SVG geometry to redraw exactly.
 
@@ -2325,7 +2348,14 @@ def render_automatic_refresh_image(
         and not (binding.get("w") and binding.get("h"))
         for binding in bindings
     )
-    if clean_background and not (camera_without_geometry and svg_template):
+    # The same reasoning for a graphic row captured before its box was measured
+    # in the layout it is drawn in. The SVG-substitution tier replaces the whole
+    # tagged group rather than clearing a rectangle and drawing into it, so it
+    # cannot leave the old row standing however wrong the recorded box is. As
+    # soon as the user saves that automation again the stamp is current and the
+    # preferred tier takes over on its own.
+    stale_graphic_capture = any(_stale_graphic_capture(binding) for binding in bindings)
+    if clean_background and not ((camera_without_geometry or stale_graphic_capture) and svg_template):
         image = render_entity_bound_clean_background_image(clean_background, bindings, values, True)
         if image is not None:
             return image

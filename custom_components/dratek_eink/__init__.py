@@ -344,6 +344,13 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
             ])
         await hass.http.async_register_static_paths(static_configs)
         registered_panel_paths.add(PANEL_STATIC_PATH)
+        # Firmware is not a static path: it stays behind Home Assistant's auth
+        # so only a signed-in admin's browser can pull an image down to flash.
+        if not hass.data[DOMAIN].get("firmware_view_registered"):
+            from .http_firmware import GatewayFirmwareView
+
+            hass.http.register_view(GatewayFirmwareView())
+            hass.data[DOMAIN]["firmware_view_registered"] = True
         if brand_path.exists():
             hass.data[DOMAIN]["brand_static_path_registered"] = True
         hass.data[DOMAIN]["static_paths_registered"] = True
