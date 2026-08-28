@@ -329,7 +329,7 @@ _CZECH_NAME_DAYS: tuple[tuple[str, ...], ...] = (
     ("Hynek", "Nela", "Blažej", "Jarmila", "Dobromila", "Vanda", "Veronika", "Milada", "Apolena", "Mojmír", "Božena", "Slavěna", "Věnceslav", "Valentýn", "Jiřina", "Ljuba", "Miloslava", "Gizela", "Patrik", "Oldřich", "Lenka", "Petr", "Svatopluk", "Matěj", "Liliana", "Dorota", "Alexandr", "Lumír", "Horymír"),
     ("Bedřich", "Anežka", "Kamil", "Stela", "Kazimír", "Miroslav", "Tomáš", "Gabriela", "Františka", "Viktorie", "Anděla", "Řehoř", "Růžena", "Rút, Matylda", "Ida", "Elena, Herbert", "Vlastimil", "Eduard", "Josef", "Světlana", "Radek", "Leona", "Ivona", "Gabriel", "Marián", "Emanuel", "Dita", "Soňa", "Taťána", "Arnošt", "Kvido"),
     ("Hugo", "Erika", "Richard", "Ivana", "Miroslava", "Vendula", "Heřman, Hermína", "Ema", "Dušan", "Darja", "Izabela", "Julius", "Aleš", "Vincenc", "Anastázie", "Irena", "Rudolf", "Valérie", "Rostislav", "Marcela", "Alexandra", "Evženie", "Vojtěch", "Jiří", "Marek", "Oto", "Jaroslav", "Vlastislav", "Robert", "Blahoslav"),
-    ("", "Zikmund", "Alexej", "Květoslav", "Klaudie", "Radoslav", "Stanisla", "", "Ctibor", "Blažena", "Svatava", "Pankrác", "Servác", "Bonifác", "Žofie", "Přemysl", "Aneta", "Nataša", "Ivo", "Zbyšek", "Monika", "Emil", "Vladimír", "Jana", "Viola", "Filip", "Valdemar", "Vilém", "Maxmilián", "Ferdinand", "Kamila"),
+    ("", "Zikmund", "Alexej", "Květoslav", "Klaudie", "Radoslav", "Stanislav", "", "Ctibor", "Blažena", "Svatava", "Pankrác", "Servác", "Bonifác", "Žofie", "Přemysl", "Aneta", "Nataša", "Ivo", "Zbyšek", "Monika", "Emil", "Vladimír", "Jana", "Viola", "Filip", "Valdemar", "Vilém", "Maxmilián", "Ferdinand", "Kamila"),
     ("Laura", "Jarmil", "Tamara", "Dalibor", "Dobroslav", "Norbert", "Iveta, Slavoj", "Medard", "Stanislav", "Gita", "Bruno", "Antonie", "Antonín", "Roland", "Vít", "Zbyněk", "Adolf", "Milan", "Leoš", "Květa", "Alois", "Pavla", "Zdeňka", "Jan", "Ivan", "Adriana", "Ladislav", "Lubomír", "Petr, Pavel", "Šárka"),
     ("Jaroslava", "Patricie", "Radomír", "Prokop", "", "", "Bohuslava", "Nora", "Drahoslava", "Libuše, Amálie", "Olga", "Bořek", "Markéta", "Karolína", "Jindřich", "Luboš", "Martina", "Drahomíra", "Čeněk", "Ilja", "Vítězslav", "Magdeléna", "Libor", "Kristýna", "Jakub", "Anna", "Věroslav", "Viktor", "Marta", "Bořivoj", "Ignác"),
     ("Oskar", "Gustav", "Miluše", "Dominik", "Kristián", "Oldřiška", "Lada", "Soběslav", "Roman", "Vavřinec", "Zuzana", "Klára", "Alena", "Alan", "Hana", "Jáchym", "Petra", "Helena", "Ludvík", "Bernard", "Johana", "Bohuslav", "Sandra", "Bartoloměj", "Radim", "Luděk", "Otakar", "Augustýn", "Evelína", "Vladěna", "Pavlína"),
@@ -413,10 +413,29 @@ def _parse_iso_datetime(value: Any) -> datetime | None:
         return None
 
 
-def _ratio_percent(state: Any, divisor: float) -> float:
-    """Percent-fill for a ratio() gauge/bar - mirrors _templatePercent."""
+def _ratio_percent(state: Any, divisor: float, source: str = "") -> float:
+    """Percent-fill for a ratio() gauge/bar - mirrors _templatePercent.
+
+    `source` names how the entity becomes a fill. The default reads the state
+    as a number. "thermostat" reads current_temperature and scales it between
+    the thermostat's own min_temp and max_temp - the only way a climate.*
+    entity can drive a gauge at all, because its state is "heat"/"off" and the
+    numeric path below resolves that to an empty dial. Mirrors
+    _templateThermostat in panel-devices.mixin.js.
+    """
     if state is None:
         return 0.0
+    if source == "thermostat":
+        current = _float_or_none((state.attributes or {}).get("current_temperature"))
+        if current is None:
+            return 0.0
+        low = _float_or_none((state.attributes or {}).get("min_temp"))
+        high = _float_or_none((state.attributes or {}).get("max_temp"))
+        low = 10.0 if low is None else low
+        high = 30.0 if high is None else high
+        if high - low <= 0:
+            return 0.0
+        return max(0.0, min(100.0, (current - low) / (high - low) * 100.0))
     match = re.search(r"-?\d+(?:\.\d+)?", str(state.state))
     if not match:
         return 0.0
@@ -529,6 +548,122 @@ async def _async_forecast_days(hass: HomeAssistant, entity_id: str, count: int) 
             value = ""
         days.append({"label": label, "condition": str(entry.get("condition") or ""), "value": value})
     return days
+
+
+def _float_or_none(value: Any) -> float | None:
+    """A finite float, or None for anything that is not one."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _resample_series(numbers: list[float], points: int) -> list[float]:
+    """Port of _resampleSeries - evenly spaced buckets, each its own mean.
+
+    A thermostat can report twice a minute or twice an hour; a curve drawn
+    straight from the recorder's rows would show the sampling rate rather than
+    the temperature.
+    """
+    if len(numbers) <= points:
+        return numbers
+    out: list[float] = []
+    for index in range(points):
+        start = (index * len(numbers)) // points
+        end = max(start + 1, ((index + 1) * len(numbers)) // points)
+        chunk = numbers[start:end]
+        out.append(sum(chunk) / len(chunk))
+    return out
+
+
+async def _async_history_series(
+    hass: HomeAssistant, entity_id: str, hours: int, points: int
+) -> list[float] | None:
+    """A recorded series for one entity - mirrors _templateHistorySeries.
+
+    None, not [], when the recorder cannot answer: an entity excluded from
+    history, or an installation without the recorder at all. The caller then
+    keeps the curve the manual send drew rather than flattening the row.
+    """
+    if not entity_id:
+        return None
+    try:
+        from homeassistant.components.recorder import get_instance, history
+        from homeassistant.util import dt as dt_util
+    except Exception:
+        return None
+    end = dt_util.utcnow()
+    start = end - timedelta(hours=max(1, hours))
+    # A climate entity keeps the room temperature in an attribute, so asking
+    # for states without attributes would come back as a list of "heat".
+    climate = entity_id.startswith("climate.")
+    try:
+        rows = await get_instance(hass).async_add_executor_job(
+            lambda: history.state_changes_during_period(
+                hass, start, end, entity_id,
+                include_start_time_state=True,
+                no_attributes=not climate,
+            )
+        )
+    except Exception:
+        return None
+    numbers: list[float] = []
+    for item in (rows or {}).get(entity_id) or []:
+        raw = (
+            (getattr(item, "attributes", None) or {}).get("current_temperature")
+            if climate
+            else getattr(item, "state", None)
+        )
+        parsed = _float_or_none(raw)
+        if parsed is not None:
+            numbers.append(parsed)
+    if len(numbers) < 2:
+        return None
+    return _resample_series(numbers, max(2, points))
+
+
+def _departure_minutes(row: dict[str, Any]) -> int:
+    """A departure's countdown, for merging two stops onto one board.
+
+    transit.py always writes `minutes`; anything without it sorts last rather
+    than to the top, where a missing value would push an unknown service ahead
+    of every real one.
+    """
+    try:
+        return int(row.get("minutes"))
+    except (TypeError, ValueError):
+        return 10 ** 6
+
+
+async def _async_todo_items(hass: HomeAssistant, entity_id: str) -> list[dict[str, str]] | None:
+    """Every item of a todo.* list - mirrors _templateTodoItems.
+
+    A todo entity's own state is the number of items left; the items are not in
+    its attributes at all, so this service call is the only way to read them,
+    the same as calendar.get_events below.
+
+    None, not [], when the list could not be read: an empty list is a real
+    answer a shopping display should print ("vše odškrtnuto"), and a failed
+    read is not - the caller keeps the last rendered rows for that one.
+    """
+    if not entity_id:
+        return None
+    try:
+        response = await hass.services.async_call(
+            "todo", "get_items", {},
+            target={"entity_id": entity_id}, blocking=True, return_response=True,
+        )
+    except Exception:
+        return None
+    items = (response or {}).get(entity_id, {}).get("items")
+    if not isinstance(items, list):
+        return None
+    return [
+        {"summary": str(item.get("summary") or ""), "status": str(item.get("status") or "")}
+        for item in items
+        if isinstance(item, dict)
+    ]
 
 
 async def _async_calendar_entry(hass: HomeAssistant, entity_id: str, index: int) -> dict[str, str]:
@@ -1357,7 +1492,9 @@ class EntityAutoUpdateManager:
                 continue
             state = self.hass.states.get(str(meter.get("entity_id")))
             resolved.append({
-                "percent": _ratio_percent(state, float(meter.get("divisor") or 1)),
+                "percent": _ratio_percent(
+                    state, float(meter.get("divisor") or 1), str(meter.get("source") or "")
+                ),
                 "text": _ratio_text(state),
                 "label": str(meter.get("label") or ""),
                 "color": str(meter.get("color") or "black"),
@@ -1507,20 +1644,54 @@ class EntityAutoUpdateManager:
                 values[str(binding.get("id"))] = json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
             elif binding_type == "transit":
                 try:
-                    board = await async_get_departures(
-                        self.hass,
-                        str(binding.get("stop_id") or ""),
-                        int(binding.get("limit") or 4),
-                    )
-                    departures = board.get("departures") if isinstance(board, dict) else []
+                    limit = int(binding.get("limit") or 4)
+                    # One or two stops, merged by countdown - the port of
+                    # _mergeTransitDepartures in panel-template-svg.mixin.js.
+                    # A display watching a village's train halt and bus stop
+                    # together must keep watching both when it refreshes itself.
+                    stop_ids = [str(binding.get("stop_id") or "")]
+                    second = str(binding.get("stop_id_2") or "").strip()
+                    if second:
+                        stop_ids.append(second)
+                    departures: list[Any] = []
+                    for stop_id in stop_ids:
+                        board = await async_get_departures(self.hass, stop_id, limit)
+                        rows = board.get("departures") if isinstance(board, dict) else []
+                        departures.extend(
+                            row for row in (rows or []) if isinstance(row, dict)
+                        )
+                    if len(stop_ids) > 1:
+                        # Stable, single-key, exactly as the panel sorts it:
+                        # two services leaving in the same minute keep the
+                        # order their own timetable gave them.
+                        departures.sort(key=lambda row: _departure_minutes(row))
                     values[str(binding.get("id"))] = json.dumps(
-                        departures or [], ensure_ascii=False, separators=(",", ":")
+                        departures[:limit], ensure_ascii=False, separators=(",", ":")
                     )
                 except TransitError:
                     # Keep the last manually rendered board when the public
                     # timetable is temporarily unavailable. Other live slots
                     # on the display must still refresh normally.
                     values[str(binding.get("id"))] = str(binding.get("fallback") or "[]")
+            elif binding_type == "history":
+                series = await _async_history_series(
+                    self.hass,
+                    str(binding.get("entity_id") or ""),
+                    int(binding.get("hours") or 12),
+                    int(binding.get("points") or 24),
+                )
+                values[str(binding.get("id"))] = (
+                    str(binding.get("fallback") or "[]")
+                    if series is None
+                    else json.dumps(series, ensure_ascii=False, separators=(",", ":"))
+                )
+            elif binding_type == "todo":
+                items = await _async_todo_items(self.hass, str(binding.get("entity_id") or ""))
+                values[str(binding.get("id"))] = (
+                    str(binding.get("fallback") or "[]")
+                    if items is None
+                    else json.dumps(items, ensure_ascii=False, separators=(",", ":"))
+                )
             elif binding_type in (None, "", "text") and str(binding.get("kind") or "") == "calendar":
                 # A plain text slot classified as kind "calendar" (birthdays.js's
                 # "Jméno z kalendáře") reads a calendar entity directly, not

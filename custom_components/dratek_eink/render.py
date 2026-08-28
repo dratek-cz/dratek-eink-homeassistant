@@ -1382,6 +1382,26 @@ def _svg_graphic_slot(binding: dict[str, Any], value: str, preserve_yellow: bool
             preserve_yellow,
         )
 
+    if binding_type == "history":
+        # Already a plain list of numbers by the time it gets here: the recorder
+        # rows were resampled where they were fetched, so the panel and the
+        # refresh draw the same hours at the same resolution.
+        numbers = [
+            float(number) for number in _decoded_binding_value(value, [])
+            if isinstance(number, (int, float)) and math.isfinite(float(number))
+        ]
+        if len(numbers) < 2:
+            return ""
+        return svg_blocks.block_spark(
+            {
+                "values": numbers,
+                "caption": binding.get("caption") or "",
+                "accent": binding.get("accent") or "",
+            },
+            box,
+            preserve_yellow,
+        )
+
     if binding_type == "ratio":
         meters = _decoded_binding_value(value, [])
         meters = [meter for meter in meters if isinstance(meter, dict)]
@@ -1483,7 +1503,64 @@ def _svg_graphic_slot(binding: dict[str, Any], value: str, preserve_yellow: bool
             preserve_yellow=preserve_yellow,
         )
 
+    if binding_type == "todo":
+        items = _decoded_binding_value(value, [])
+        limit = max(1, int(binding.get("limit") or 1))
+        # Unchecked first, exactly as _templateShoppingList orders them for a
+        # manual send - the backend gets the raw todo.get_items response, not
+        # the panel's already-sorted list, so it has to make the same decision
+        # rather than print the list in whatever order the integration stores.
+        entries = [
+            {
+                "label": str(item.get("summary") or "").strip(),
+                "done": str(item.get("status") or "").lower() == "completed",
+            }
+            for item in items
+            if isinstance(item, dict) and str(item.get("summary") or "").strip()
+        ]
+        ordered = [item for item in entries if not item["done"]] + [item for item in entries if item["done"]]
+        rows = ordered[:limit]
+        if not rows:
+            return ""
+        if binding.get("highlight_first") and not rows[0]["done"]:
+            rows[0] = {**rows[0], "color": "red"}
+        columns = max(1, int(binding.get("columns") or 1))
+        rows = _column_major(rows, max(1, int(binding.get("lines") or 1)), columns)
+        return svg_blocks.block_checklist(
+            rows,
+            box,
+            columns=columns,
+            marker="dot" if binding.get("marker") == "dot" else "box",
+            strike=bool(binding.get("strike")),
+            compact=bool(binding.get("compact")),
+        )
+
     return ""
+
+
+def _column_major(items: list[dict[str, Any]], lines: int, columns: int) -> list[dict[str, Any]]:
+    """Port of shopping.js's `columnMajor`.
+
+    svg_blocks.block_checklist fills its grid row by row, so a three-column list
+    would come out reading across the top rather than down each column. The
+    panel transposes the items before handing them to the block, and an
+    automatic refresh has to make the same move or it prints the same list in a
+    different order than the manual send did.
+    """
+    if columns <= 1:
+        return items
+    slices: list[list[dict[str, Any]]] = []
+    cursor = 0
+    for column in range(columns):
+        size = min(lines, math.ceil((len(items) - cursor) / (columns - column)))
+        slices.append(items[cursor:cursor + size])
+        cursor += size
+    ordered: list[dict[str, Any]] = []
+    for line in range(lines):
+        for column in range(columns):
+            if line < len(slices[column]):
+                ordered.append(slices[column][line])
+    return ordered
 
 
 def _number_or_zero(value: Any) -> float:
@@ -1496,7 +1573,7 @@ def _number_or_zero(value: Any) -> float:
 
 def _svg_graphic_binding(binding: dict[str, Any]) -> bool:
     """A live template row svg_blocks.py can redraw exactly."""
-    return binding.get("type") in ("series", "ratio", "forecast", "calendar", "transit")
+    return binding.get("type") in ("series", "ratio", "history", "forecast", "calendar", "transit", "todo")
 
 
 # Generation of the panel's graphic-row capture. Mirrors
@@ -1966,47 +2043,91 @@ def _draw_radar_sidebar(
 def _draw_radar_footer(
     width: int, height: int, forecast: dict[str, Any] | None, preserve_yellow: bool
 ) -> Image.Image:
-    """Draw a compact horizontal forecast strip for portrait radar slots."""
+    """Draw a compact horizontal forecast strip for portrait radar slots.
+
+    One column per hour - condition icon, the hour, its temperature - with the
+    current temperature in a cell of its own on the left.
+
+    The three bands are measured and then centred as a single block. They used
+    to be pinned to fixed fractions of the strip instead: the icon flush to the
+    top padding, the hour at 0.62 and the temperature at 0.84, while the current
+    temperature was centred at 0.5. Nothing lined up with anything - the icons
+    floated above an empty band, the two text rows were squashed against the
+    bottom edge, and the big current temperature sat in the gap between them
+    rather than beside the columns it belongs to.
+    """
     canvas = Image.new("RGB", (width, height), "white")
     if not forecast:
         return canvas
     draw = ImageDraw.Draw(canvas)
     pad = max(3, round(min(width, height) * 0.06))
+    inner_h = max(1, height - 2 * pad)
+
     temperature = str(forecast.get("temperature") or "")
+    entries = forecast.get("entries") or []
+
+    # The left cell only earns its width when there is a reading to put in it,
+    # and its own padding only when there are columns to be separated from.
     temp_w = min(round(width * 0.24), max(58, round(height * 0.9))) if temperature else 0
+    entries_x = pad + temp_w + (pad if temp_w else 0)
+    available_w = max(1, width - entries_x - pad)
+    # What a column has to hold is "10:00" over "-12°C" at the band's own text
+    # size - a width, not a height. This used to scale with the strip's height,
+    # so a taller strip fitted fewer hours across than a short one: the
+    # opposite of what the extra room should buy.
+    min_slot_w = 44
+    visible = min(len(entries), max(1, available_w // min_slot_w)) if entries else 0
+
+    if visible <= 0:
+        # No usable forecast, but a current temperature is still worth the
+        # strip: give it the whole width rather than leaving the panel blank.
+        if temperature:
+            _draw_centered_text(
+                draw, temperature, width / 2, height / 2,
+                max(1, width - 2 * pad), inner_h,
+                max(12, round(min(inner_h * 0.7, (width - 2 * pad) * 0.34))),
+            )
+        return canvas
+
+    slot_w = available_w / visible
+    line_h = max(8, min(round(inner_h * 0.30), 20))
+    gap = max(1, round(inner_h * 0.05))
+    icon_size = max(
+        10,
+        min(round(slot_w * 0.55), inner_h - 2 * line_h - 2 * gap),
+    )
+    stack_h = icon_size + gap + line_h + gap + line_h
+    top = pad + max(0, (inner_h - stack_h) / 2)
+    icon_y = round(top)
+    label_cy = top + icon_size + gap + line_h / 2
+    value_cy = label_cy + line_h / 2 + gap + line_h / 2
+
     if temperature:
         _draw_centered_text(
-            draw, temperature, pad + temp_w / 2, height / 2,
-            max(1, temp_w - pad), max(14, height - 2 * pad),
-            max(12, round(min(height * 0.34, temp_w * 0.34))),
+            draw, temperature, pad + temp_w / 2, top + stack_h / 2,
+            temp_w, stack_h, max(12, round(min(stack_h * 0.5, temp_w * 0.34))),
         )
+        # A hairline the height of the stack, so the left cell reads as its own
+        # column rather than as a first hour that lost its icon.
+        rule_x = round(pad + temp_w + pad / 2)
+        draw.rectangle((rule_x, round(top), rule_x, round(top + stack_h)), fill=(0, 0, 0))
 
-    entries = forecast.get("entries") or []
-    entries_x = pad + temp_w
-    available_w = max(1, width - entries_x - pad)
-    min_slot_w = max(44, min(72, round(height * 0.58)))
-    visible = min(len(entries), max(1, available_w // min_slot_w)) if entries else 0
-    if visible <= 0:
-        return canvas
-    slot_w = available_w / visible
-    icon_size = max(12, min(round(height * 0.38), round(slot_w * 0.52)))
+    text_w = max(1, round(slot_w - 4))
     for index, entry in enumerate(entries[:visible]):
         cx = entries_x + slot_w * (index + 0.5)
         icon = _weather_condition_icon_image(
             entry.get("condition", ""), icon_size, preserve_yellow, bool(entry.get("night"))
         )
         if icon is not None:
-            canvas.paste(icon, (round(cx - icon.width / 2), pad), icon)
+            canvas.paste(icon, (round(cx - icon.width / 2), icon_y), icon)
         label = entry.get("time") or entry.get("label") or ""
-        text_w = max(1, round(slot_w - 4))
-        line_h = max(8, round(height * 0.20))
         _draw_centered_text(
-            draw, label, cx, height * 0.62, text_w, line_h,
+            draw, label, cx, label_cy, text_w, line_h,
             max(8, round(line_h * 0.78)), bold=False,
         )
         if entry.get("temperature"):
             _draw_centered_text(
-                draw, entry["temperature"], cx, height * 0.84, text_w, line_h,
+                draw, entry["temperature"], cx, value_cy, text_w, line_h,
                 max(9, round(line_h * 0.88)),
             )
     return canvas

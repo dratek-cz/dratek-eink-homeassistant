@@ -60,7 +60,9 @@ class GatewayDiscoveryRetentionTests(unittest.TestCase):
         self.assertIn("async_track_time_interval(", init_source)
         self.assertIn("_scheduleGatewayStatusPoll(delay = 15000)", panel_source)
         self.assertIn('type: "dratek_eink/gateways/list"', panel_source)
-        self.assertIn("this._scheduleRefresh();", overview_source)
+        # One timer for every card on the dashboard, not one per card.
+        self.assertIn("scheduleOverviewRefresh();", overview_source)
+        self.assertIn("overviewStore.cards.add(this);", overview_source)
 
     def test_zeroconf_resolution_never_blocks_the_home_assistant_loop(self) -> None:
         source = (COMPONENT / "gateway.py").read_text(encoding="utf-8")

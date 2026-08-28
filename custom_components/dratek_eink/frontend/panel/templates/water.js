@@ -47,16 +47,25 @@ export const template = {
       ], h: 0.10 },
       { footer: [{ label: "VODA", value: "aktuální odečet" }], h: 0.12 },
     ];
+    // The two headline readings were given more than a third of the page and
+    // spent it on white space between three widely separated lines. The curve
+    // is what a week of water actually looks like, so the room went there.
     return [
+      // No icons: a 16 px droplet under the word DNES is a speck, and dropping
+      // it lets the split use its two-line geometry, where the reading is the
+      // biggest thing in the cell rather than the third of three bands.
       { split: [
-        { icon: "water", value: v(0, "126 l"), label: "DNES", color: "red" },
-        { icon: "chart-line", value: v(3, "−12 %"), label: "PROTI MINULE" },
-      ], h: lerp(0.34, 0.39) },
-      { spark: { values: series(0, [96, 131, 108, 142, 119, 174, 126]), caption: "SPOTŘEBA / 7 DNÍ" }, group: "chart", h: lerp(0.34, 0.39) },
+        { value: v(0, "126 l"), label: "DNES", color: "red" },
+        { value: v(3, "−12 %"), label: "PROTI MINULE" },
+      ], h: lerp(0.28, 0.30) },
+      { spark: { values: series(0, [96, 131, 108, 142, 119, 174, 126]), caption: "SPOTŘEBA / 7 DNÍ" }, group: "chart", h: lerp(0.38, 0.40) },
+      // Stacked rows sit flush, and the chart's baseline would otherwise be
+      // the line the two totals below it stand on.
+      { gap: true, h: 0.02 },
       { strip: [
         { label: "TÝDEN", value: v(1, "0,84 m³") },
         { label: "MĚSÍC", value: v(2, "3,12 m³") },
-      ], h: lerp(0.18, 0.21) },
+      ], h: lerp(0.18, 0.20) },
       { flex: true },
       { footer: [{ label: "ODEČET", value: "dnes 06:00" }], h: lerp(0.13, 0.07) },
     ];

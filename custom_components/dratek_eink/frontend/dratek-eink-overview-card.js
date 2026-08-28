@@ -1,4 +1,4 @@
-const DRATEK_EINK_OVERVIEW_VERSION = "0.1.349";
+const DRATEK_EINK_OVERVIEW_VERSION = "0.1.351";
 const DRATEK_EINK_PANEL_PATH = "/dratek-eink";
 const overviewStore = {
   devices: [],
@@ -9,10 +9,129 @@ const overviewStore = {
   loadedAt: 0,
   request: null,
   listeners: new Set(),
+  cards: new Set(),
+  timer: null,
 };
 
 const notifyOverviewCards = () => {
   overviewStore.listeners.forEach((listener) => listener());
+};
+
+// Every card used to run its own refresh timer, so a dashboard with several of
+// them (or several open tabs) forced one full BLE scan per card. One timer for
+// all of them fires at the shortest interval any card asks for; the result is
+// shared through the store, which every card already listens to.
+const scheduleOverviewRefresh = () => {
+  if (overviewStore.timer) window.clearTimeout(overviewStore.timer);
+  overviewStore.timer = null;
+  const cards = [...overviewStore.cards].filter((card) => card._hass);
+  if (!cards.length) return;
+  const seconds = Math.min(...cards.map((card) => card._refreshSeconds()));
+  overviewStore.timer = window.setTimeout(async () => {
+    overviewStore.timer = null;
+    const active = [...overviewStore.cards].find((card) => card._hass);
+    if (active) await active._loadData(true);
+    scheduleOverviewRefresh();
+  }, seconds * 1000);
+};
+
+// The panel stores the language the user picked for it under this key. The card
+// follows that choice so a dashboard and the panel behind it never disagree,
+// and falls back to Home Assistant's own language when nothing was picked.
+const storedLanguage = () => {
+  try {
+    const value = window.localStorage.getItem("dratek-eink-language");
+    return value === "cs" || value === "en" ? value : "";
+  } catch (_err) {
+    return "";
+  }
+};
+
+const languageFor = (hass) => storedLanguage()
+  || (String(hass?.language || document.documentElement.lang || "cs").toLowerCase().startsWith("cs") ? "cs" : "en");
+
+// Czech counts one, a few and many differently; English does not.
+const czechPlural = (count, one, few, many) => (count === 1 ? one : count >= 2 && count <= 4 ? few : many);
+
+const STRINGS = {
+  cs: {
+    displays: "Displeje",
+    gateways: "Gatewaye",
+    refresh: "Obnovit",
+    openPanel: "Otevřít DRATEK eInk",
+    displayCount: (n) => `${n} ${czechPlural(n, "displej", "displeje", "displejů")}`,
+    gatewaysOnline: (online, total) => ` · ${online}/${total} ${czechPlural(total, "gateway", "gatewaye", "gatewayí")} online`,
+    loadingDisplays: "Načítám displeje…",
+    noDisplays: "Žádné displeje",
+    scanning: "Probíhá BLE vyhledávání v Home Assistantu a gatewayích.",
+    openAndCheck: "Otevřete DRATEK eInk a ověřte dostupnost zařízení.",
+    loadingGateways: "Načítám gatewaye…",
+    noGateways: "Žádné gatewaye",
+    showAll: (n) => `+ ${n} ${czechPlural(n, "další displej", "další displeje", "dalších displejů")} · zobrazit vše`,
+    partialError: "Část údajů se nepodařilo načíst",
+    outOfRange: "Dočasně mimo dosah",
+    localRoute: "Home Assistant Bluetooth",
+    gatewayRoute: "Gateway",
+    fallbackDisplay: "eInk displej",
+    fallbackGateway: "DRATEK gateway",
+    noIp: "Bez IP adresy",
+    online: "Online",
+    offline: "Offline",
+    unverified: "Neověřeno",
+    battery: "Baterie",
+    signal: "Signál",
+    signalUnknown: "Signál neznámý",
+    nextRefresh: "Příští obnova za",
+    refreshIn: "Obnova za",
+    editorTitle: "Název karty",
+    editorMaxDisplays: "Maximální počet displejů",
+    editorRefresh: "Obnovení údajů",
+    editorShowGateways: "Zobrazit gatewaye",
+    seconds30: "30 sekund",
+    minute1: "1 minuta",
+    minutes2: "2 minuty",
+    minutes5: "5 minut",
+    minutes15: "15 minut",
+  },
+  en: {
+    displays: "Displays",
+    gateways: "Gateways",
+    refresh: "Refresh",
+    openPanel: "Open DRATEK eInk",
+    displayCount: (n) => `${n} ${n === 1 ? "display" : "displays"}`,
+    gatewaysOnline: (online, total) => ` · ${online}/${total} ${total === 1 ? "gateway" : "gateways"} online`,
+    loadingDisplays: "Loading displays…",
+    noDisplays: "No displays",
+    scanning: "A BLE scan is running in Home Assistant and on the gateways.",
+    openAndCheck: "Open DRATEK eInk and check that the devices are reachable.",
+    loadingGateways: "Loading gateways…",
+    noGateways: "No gateways",
+    showAll: (n) => `+ ${n} more ${n === 1 ? "display" : "displays"} · show all`,
+    partialError: "Some data could not be loaded",
+    outOfRange: "Temporarily out of range",
+    localRoute: "Home Assistant Bluetooth",
+    gatewayRoute: "Gateway",
+    fallbackDisplay: "eInk display",
+    fallbackGateway: "DRATEK gateway",
+    noIp: "No IP address",
+    online: "Online",
+    offline: "Offline",
+    unverified: "Unverified",
+    battery: "Battery",
+    signal: "Signal",
+    signalUnknown: "Signal unknown",
+    nextRefresh: "Next refresh in",
+    refreshIn: "Refresh in",
+    editorTitle: "Card title",
+    editorMaxDisplays: "Maximum number of displays",
+    editorRefresh: "Data refresh",
+    editorShowGateways: "Show gateways",
+    seconds30: "30 seconds",
+    minute1: "1 minute",
+    minutes2: "2 minutes",
+    minutes5: "5 minutes",
+    minutes15: "15 minutes",
+  },
 };
 
 const escapeHtml = (value) => String(value ?? "")
@@ -69,7 +188,6 @@ class DratekEinkOverviewCard extends HTMLElement {
     this._error = "";
     this._connected = false;
     this._loadedAt = 0;
-    this._timer = null;
     this._syncOverview = () => {
       this._devices = overviewStore.devices;
       this._gateways = overviewStore.gateways;
@@ -103,33 +221,41 @@ class DratekEinkOverviewCard extends HTMLElement {
       ...(config || {}),
     };
     this._render();
-    this._scheduleRefresh();
+    scheduleOverviewRefresh();
   }
 
   set hass(value) {
     const firstConnection = !this._hass && value;
     this._hass = value;
-    if (firstConnection) this._loadData();
+    if (firstConnection) {
+      this._loadData();
+      scheduleOverviewRefresh();
+    }
   }
 
   get hass() {
     return this._hass;
   }
 
+  get _t() {
+    return STRINGS[languageFor(this._hass)];
+  }
+
   connectedCallback() {
     this._connected = true;
     overviewStore.listeners.add(this._syncOverview);
+    overviewStore.cards.add(this);
     this._syncOverview();
     this._render();
     this._loadData();
-    this._scheduleRefresh();
+    scheduleOverviewRefresh();
   }
 
   disconnectedCallback() {
     this._connected = false;
     overviewStore.listeners.delete(this._syncOverview);
-    if (this._timer) window.clearTimeout(this._timer);
-    this._timer = null;
+    overviewStore.cards.delete(this);
+    scheduleOverviewRefresh();
   }
 
   getCardSize() {
@@ -148,17 +274,6 @@ class DratekEinkOverviewCard extends HTMLElement {
 
   _refreshSeconds() {
     return Math.min(900, Math.max(30, Number(this._config.refresh_interval) || 60));
-  }
-
-  _scheduleRefresh() {
-    if (this._timer) window.clearTimeout(this._timer);
-    this._timer = null;
-    if (!this._connected || !this._hass) return;
-    this._timer = window.setTimeout(async () => {
-      this._timer = null;
-      await this._loadData(true);
-      this._scheduleRefresh();
-    }, this._refreshSeconds() * 1000);
   }
 
   async _loadData(force = false) {
@@ -208,7 +323,7 @@ class DratekEinkOverviewCard extends HTMLElement {
   }
 
   _deviceTitle(device) {
-    return device?.display_name || device?.physical_code || device?.name || device?.address || "eInk displej";
+    return device?.display_name || device?.physical_code || device?.name || device?.address || this._t.fallbackDisplay;
   }
 
   _deviceSubtitle(device) {
@@ -222,22 +337,22 @@ class DratekEinkOverviewCard extends HTMLElement {
     const bars = [1, 2, 3, 4]
       .map((index) => `<i class="${index <= level ? "on" : ""}" style="height:${4 + index * 3}px"></i>`)
       .join("");
-    return `<span class="signal ${tone}" title="${Number.isFinite(Number(rssi)) ? `${Number(rssi)} dBm` : "Signál neznámý"}">${bars}${compact ? "" : `<b>${Number.isFinite(Number(rssi)) ? `${Number(rssi)} dBm` : "—"}</b>`}</span>`;
+    return `<span class="signal ${tone}" title="${Number.isFinite(Number(rssi)) ? `${Number(rssi)} dBm` : this._t.signalUnknown}">${bars}${compact ? "" : `<b>${Number.isFinite(Number(rssi)) ? `${Number(rssi)} dBm` : "—"}</b>`}</span>`;
   }
 
   _renderBattery(percent) {
     const value = Number(percent);
     const safeValue = Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : 0;
     const label = Number.isFinite(value) ? `${safeValue} %` : "—";
-    return `<span class="battery-wrap ${batteryTone(value)}" title="Baterie ${label}"><span class="battery"><i style="width:${safeValue}%"></i></span><b>${label}</b></span>`;
+    return `<span class="battery-wrap ${batteryTone(value)}" title="${this._t.battery} ${label}"><span class="battery"><i style="width:${safeValue}%"></i></span><b>${label}</b></span>`;
   }
 
   _renderDevice(device) {
     const unseen = device?.temporarily_unseen === true;
     const address = device?.address || "";
     const route = device?.preferred_path?.type === "gateway"
-      ? device.preferred_path.name || "Gateway"
-      : "Home Assistant Bluetooth";
+      ? device.preferred_path.name || this._t.gatewayRoute
+      : this._t.localRoute;
     const auto = device?.automation;
     const hasAuto = auto && auto.enabled !== false;
     let autoBar = "";
@@ -249,8 +364,8 @@ class DratekEinkOverviewCard extends HTMLElement {
       const pct = Math.max(0, Math.min(100, Math.round((rem / interval) * 100)));
       const tone = pct > 50 ? "good" : pct > 20 ? "warn" : "critical";
       const formatted = rem >= 3600 ? `${Math.floor(rem / 3600)}h ${Math.floor((rem % 3600) / 60)}m` : rem >= 60 ? `${Math.floor(rem / 60)}m ${rem % 60}s` : `${rem}s`;
-      autoBar = `<span class="overview-countdown tone-${tone}" title="Příští obnova za ${formatted}">
-        <span class="overview-countdown-label"><small>Obnova za</small><strong>${formatted}</strong></span>
+      autoBar = `<span class="overview-countdown tone-${tone}" title="${this._t.nextRefresh} ${formatted}">
+        <span class="overview-countdown-label"><small>${this._t.refreshIn}</small><strong>${formatted}</strong></span>
         <span class="overview-countdown-track"><i style="width:${pct}%"></i></span>
       </span>`;
     }
@@ -259,12 +374,12 @@ class DratekEinkOverviewCard extends HTMLElement {
       <span class="display-copy">
         <strong>${escapeHtml(this._deviceTitle(device))}</strong>
         <small>${escapeHtml(this._deviceSubtitle(device))}</small>
-        <span class="route">${unseen ? "Dočasně mimo dosah" : escapeHtml(route)}</span>
+        <span class="route">${unseen ? this._t.outOfRange : escapeHtml(route)}</span>
         ${autoBar}
       </span>
       <span class="display-health">
-        <span class="metric"><small>Baterie</small>${this._renderBattery(device?.battery_percent)}</span>
-        <span class="metric"><small>Signál</small>${this._renderSignal(device?.rssi)}</span>
+        <span class="metric"><small>${this._t.battery}</small>${this._renderBattery(device?.battery_percent)}</span>
+        <span class="metric"><small>${this._t.signal}</small>${this._renderSignal(device?.rssi)}</span>
       </span>
     </button>`;
   }
@@ -274,11 +389,11 @@ class DratekEinkOverviewCard extends HTMLElement {
     const online = status.ok === true;
     const unknown = status.ok === null || status.ok === undefined;
     const stateClass = online ? "online" : unknown ? "unknown" : "offline";
-    const stateLabel = online ? "Online" : unknown ? "Neověřeno" : "Offline";
+    const stateLabel = online ? this._t.online : unknown ? this._t.unverified : this._t.offline;
     const url = safeGatewayUrl(gateway);
     return `<button class="gateway-item ${stateClass}" data-gateway-url="${escapeHtml(url)}" ${url ? "" : "disabled"}>
       <span class="gateway-board"><i></i><b>${String(status.chip || "ESP32").toUpperCase().replace("ESP32S3", "S3")}</b></span>
-      <span class="gateway-copy"><strong>${escapeHtml(gateway?.name || "DRATEK gateway")}</strong><small>${escapeHtml(status.ip || gateway?.host || "Bez IP adresy")}</small></span>
+      <span class="gateway-copy"><strong>${escapeHtml(gateway?.name || this._t.fallbackGateway)}</strong><small>${escapeHtml(status.ip || gateway?.host || this._t.noIp)}</small></span>
       <span class="gateway-health">${this._renderSignal(status.wifi_rssi, true)}<b class="state">${stateLabel}</b></span>
     </button>`;
   }
@@ -291,6 +406,7 @@ class DratekEinkOverviewCard extends HTMLElement {
     const showGateways = this._config.show_gateways !== false;
     const busy = this._loadingDevices || this._loadingGateways;
     const gatewayOnline = this._gateways.filter((gateway) => gateway?.status?.ok === true).length;
+    const t = this._t;
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -325,25 +441,31 @@ class DratekEinkOverviewCard extends HTMLElement {
       <ha-card>
         <div class="header">
           <span class="logo">DE</span>
-          <span class="title"><strong>${escapeHtml(this._config.title || "DRATEK eInk")}</strong><small>${this._devices.length} displejů${showGateways ? ` · ${gatewayOnline}/${this._gateways.length} gatewayí online` : ""}</small></span>
-          <span class="header-actions"><button class="icon-button ${busy ? "loading" : ""}" data-refresh title="Obnovit" aria-label="Obnovit">↻</button><button class="icon-button" data-open-panel title="Otevřít DRATEK eInk" aria-label="Otevřít DRATEK eInk">↗</button></span>
+          <span class="title"><strong>${escapeHtml(this._config.title || "DRATEK eInk")}</strong><small>${t.displayCount(this._devices.length)}${showGateways ? t.gatewaysOnline(gatewayOnline, this._gateways.length) : ""}</small></span>
+          <span class="header-actions"><button class="icon-button ${busy ? "loading" : ""}" data-refresh title="${escapeHtml(t.refresh)}" aria-label="${escapeHtml(t.refresh)}">↻</button><button class="icon-button" data-open-panel title="${escapeHtml(t.openPanel)}" aria-label="${escapeHtml(t.openPanel)}">↗</button></span>
         </div>
         <div class="content">
           <section>
-            <div class="section-head"><strong>Displeje</strong><span class="count">${this._devices.length}</span></div>
+            <div class="section-head"><strong>${escapeHtml(t.displays)}</strong><span class="count">${this._devices.length}</span></div>
             <div style="height:8px"></div>
-            ${visibleDevices.length ? `<div class="display-grid">${visibleDevices.map((device) => this._renderDevice(device)).join("")}</div>` : `<div class="empty"><strong>${this._loadingDevices ? "Načítám displeje…" : "Žádné displeje"}</strong><small>${this._loadingDevices ? "Probíhá BLE vyhledávání v Home Assistantu a gatewayích." : "Otevřete DRATEK eInk a ověřte dostupnost zařízení."}</small></div>`}
-            ${hiddenCount ? `<button class="more" data-open-panel>+ ${hiddenCount} dalších displejů · zobrazit vše</button>` : ""}
+            ${visibleDevices.length ? `<div class="display-grid">${visibleDevices.map((device) => this._renderDevice(device)).join("")}</div>` : `<div class="empty"><strong>${escapeHtml(this._loadingDevices ? t.loadingDisplays : t.noDisplays)}</strong><small>${escapeHtml(this._loadingDevices ? t.scanning : t.openAndCheck)}</small></div>`}
+            ${hiddenCount ? `<button class="more" data-open-panel>${escapeHtml(t.showAll(hiddenCount))}</button>` : ""}
           </section>
-          ${showGateways ? `<section><div class="section-head"><strong>Gatewaye</strong><span class="count">${gatewayOnline}/${this._gateways.length}</span></div><div style="height:8px"></div>${this._gateways.length ? `<div class="gateway-list">${this._gateways.map((gateway) => this._renderGateway(gateway)).join("")}</div>` : `<div class="empty"><strong>${this._loadingGateways ? "Načítám gatewaye…" : "Žádné gatewaye"}</strong></div>`}</section>` : ""}
-          ${this._error ? `<div class="error">Část údajů se nepodařilo načíst: ${escapeHtml(this._error)}</div>` : ""}
+          ${showGateways ? `<section><div class="section-head"><strong>${escapeHtml(t.gateways)}</strong><span class="count">${gatewayOnline}/${this._gateways.length}</span></div><div style="height:8px"></div>${this._gateways.length ? `<div class="gateway-list">${this._gateways.map((gateway) => this._renderGateway(gateway)).join("")}</div>` : `<div class="empty"><strong>${escapeHtml(this._loadingGateways ? t.loadingGateways : t.noGateways)}</strong></div>`}</section>` : ""}
+          ${this._error ? `<div class="error">${escapeHtml(t.partialError)}: ${escapeHtml(this._error)}</div>` : ""}
         </div>
       </ha-card>`;
 
     this.shadowRoot.querySelector("[data-refresh]")?.addEventListener("click", () => this._loadData(true));
     this.shadowRoot.querySelectorAll("[data-open-panel]").forEach((element) => {
       element.addEventListener("click", () => {
-        window.history.pushState(null, "", DRATEK_EINK_PANEL_PATH);
+        // A display tile carries its own address, the header and "show all"
+        // buttons do not. The panel picks the address up from the query string
+        // and opens that display's settings instead of its default tab.
+        const address = element.dataset.openPanel || "";
+        window.history.pushState(null, "", address
+          ? `${DRATEK_EINK_PANEL_PATH}?device=${encodeURIComponent(address)}`
+          : DRATEK_EINK_PANEL_PATH);
         window.dispatchEvent(new Event("location-changed"));
       });
     });
@@ -383,15 +505,16 @@ class DratekEinkOverviewCardEditor extends HTMLElement {
   }
 
   _render() {
+    const t = STRINGS[languageFor(this._hass)];
     this.shadowRoot.innerHTML = `
       <style>
         :host{display:grid;gap:14px;padding:8px 0;color:var(--primary-text-color);font-family:var(--ha-font-family,Arial,sans-serif)}
         label{display:grid;gap:6px;font-size:12px;font-weight:650}input,select{width:100%;padding:10px 11px;border:1px solid var(--divider-color,#ccc);border-radius:8px;background:var(--card-background-color,#fff);color:var(--primary-text-color);font:inherit}.toggle{display:flex;align-items:center;gap:9px}.toggle input{width:18px;height:18px}
       </style>
-      <label>Název karty<input data-field="title" value="${escapeHtml(this._config.title || "DRATEK eInk")}"></label>
-      <label>Maximální počet displejů<input data-field="max_displays" type="number" min="1" max="20" value="${Number(this._config.max_displays) || 6}"></label>
-      <label>Obnovení údajů<select data-field="refresh_interval"><option value="30">30 sekund</option><option value="60">1 minuta</option><option value="120">2 minuty</option><option value="300">5 minut</option><option value="900">15 minut</option></select></label>
-      <label class="toggle"><input data-field="show_gateways" type="checkbox" ${this._config.show_gateways === false ? "" : "checked"}> Zobrazit gatewaye</label>`;
+      <label>${escapeHtml(t.editorTitle)}<input data-field="title" value="${escapeHtml(this._config.title || "DRATEK eInk")}"></label>
+      <label>${escapeHtml(t.editorMaxDisplays)}<input data-field="max_displays" type="number" min="1" max="20" value="${Number(this._config.max_displays) || 6}"></label>
+      <label>${escapeHtml(t.editorRefresh)}<select data-field="refresh_interval"><option value="30">${escapeHtml(t.seconds30)}</option><option value="60">${escapeHtml(t.minute1)}</option><option value="120">${escapeHtml(t.minutes2)}</option><option value="300">${escapeHtml(t.minutes5)}</option><option value="900">${escapeHtml(t.minutes15)}</option></select></label>
+      <label class="toggle"><input data-field="show_gateways" type="checkbox" ${this._config.show_gateways === false ? "" : "checked"}> ${escapeHtml(t.editorShowGateways)}</label>`;
     const refreshSelect = this.shadowRoot.querySelector('[data-field="refresh_interval"]');
     refreshSelect.value = String(Number(this._config.refresh_interval) || 60);
     this.shadowRoot.querySelector('[data-field="title"]').addEventListener("input", (event) => this._changed("title", event.target.value));
@@ -410,10 +533,15 @@ if (!customElements.get("dratek-eink-overview-card-editor")) {
 
 window.customCards = window.customCards || [];
 if (!window.customCards.some((card) => card.type === "dratek-eink-overview-card")) {
+  // The picker entry is registered once at load, long before a hass object
+  // exists, so it reads the language off the document Home Assistant rendered.
+  const pickerCzech = languageFor(null) === "cs";
   window.customCards.push({
     type: "dratek-eink-overview-card",
-    name: "DRATEK eInk – přehled",
-    description: "Kompaktní přehled displejů, baterií, signálu a gatewayí.",
+    name: pickerCzech ? "DRATEK eInk – přehled" : "DRATEK eInk – overview",
+    description: pickerCzech
+      ? "Kompaktní přehled displejů, baterií, signálu a gatewayí."
+      : "A compact overview of displays, batteries, signal and gateways.",
     preview: true,
     documentationURL: "https://github.com/dratek-cz/dratek-eink-homeassistant",
   });

@@ -23,7 +23,7 @@ export const template = {
   // dial fill otherwise assumes.
   automation: { ratio: [{ variableIndex: 0, divisor: 2 }] },
   setup: {
-    summary: "Kruhový přístroj AQI a tři samostatné laboratorní karty pro CO₂, PM2.5 a vlhkost.",
+    summary: "Půlkruhový budík AQI přes celou šířku a pod ním tři karty s CO₂, PM2.5 a vlhkostí.",
     integrations: [
       { name: "Airly", domain: "sensor", core: true, why: "Venkovní kvalita ovzduší podle nejbližší veřejné stanice - nevyžaduje vlastní čidlo, jen zadání polohy." },
       { name: "Netatmo", domain: "sensor", core: true, why: "Vnitřní senzor CO₂ a kvality vzduchu, pokud máte stanici Netatmo doma." },
@@ -51,14 +51,21 @@ export const template = {
       ], h: 0.20 },
       { footer: [{ label: "VĚTRÁNÍ", value: "Není třeba" }], h: 0.12 },
     ];
+    // The gauge leads. It used to sit under the three readings, which put the
+    // one number the page exists to answer - is the air all right - below three
+    // numbers that only qualify it.
     return [
+      { dial: { percent: ratio(0, 42) / 2, value: v(0, "42"), caption: "AQI / 200", min: "ČISTÝ", max: "ZÁTĚŽ" }, group: "ratio", h: lerp(0.44, 0.48) },
+      { gap: true, h: 0.02 },
+      // No icons on this row. The mdi "molecule-co2" glyph is the letters CO₂,
+      // printed directly under a label that already reads CO₂, and the other
+      // two are line art too fine to survive the panel's threshold. Two lines
+      // per cell - what it is, what it reads - is the whole card.
       { strip: [
-        { icon: "molecule-co2", label: "CO₂", value: v(1, "612 ppm"), color: "red" },
-        { icon: "blur", label: "PM2.5", value: v(2, "8 µg") },
-        { icon: "water-percent", label: "VLHKOST", value: v(3, "46 %") },
-      ], h: lerp(0.31, 0.36) },
-      { dial: { percent: ratio(0, 42) / 2, value: v(0, "42"), caption: "AQI / 200", min: "ČISTÝ", max: "ZÁTĚŽ" }, group: "ratio", h: lerp(0.38, 0.43) },
-      { band: { label: "LABORATOŘ VZDUCHU", value: "ŽIVÉ MĚŘENÍ", color: "black" }, bleed: true, h: lerp(0.10, 0.08) },
+        { label: "CO₂", value: v(1, "612 ppm") },
+        { label: "PM2.5", value: v(2, "8 µg") },
+        { label: "VLHKOST", value: v(3, "46 %") },
+      ], h: lerp(0.28, 0.30) },
       { flex: true },
       { footer: [{ label: "VĚTRÁNÍ", value: "Není třeba" }], h: lerp(0.13, 0.07) },
     ];

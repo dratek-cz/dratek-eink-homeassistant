@@ -2,11 +2,47 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.351] - 2026-08-28
+
+### Přidáno
+- **Nenastavenou šablonu už nelze přehlédnout**: přes celý náhled v katalogu i přes její plochu v náhledu displeje se zobrazí upozornění, že šablona používá ukázková data. Částečně napojená šablona má vlastní hlášku „Nastavení není dokončené“.
+- **Upozornění nezakrývá šablonu**: vrstva je jen světlý nádech, přes který je kresba šablony pořád vidět, a hláška sedí na vlastní kartičce, aby zůstala čitelná. Text „Odeslat lze i tak“ zmizel - nic tu nikdy zakázané nebylo a vedle tlačítka Nastavit působil jako druhá akce. Tlačítko Nastavit je výrazně větší, protože je to jediná klikatelná věc na celé vrstvě. Ukázkovou šablonu je stále možné záměrně poslat na displej.
+
+### Vylepšeno
+- **Topení, Kvalita vzduchu a Spotřeba vody přerovnané**: budík na Topení psal svoji stupnici a popisek pod spodní hranu vlastního řádku, takže „10°“ leželo přes popisek křivky a na Kvalitě vzduchu slova „ČISTÝ / ZÁTĚŽ“ přes černý pruh pod nimi. Budík si teď řádek nejdřív rozdělí – pás pro stupnici dole, popisek nahoru do úst oblouku vedle hodnoty – a oblouk dostane, co zbude. Na Kvalitě vzduchu je budík AQI nahoře, kde patří: bylo pod třemi vedlejšími čísly. Zmizel pruh „LABORATOŘ VZDUCHU“, který nic neříkal, a ikony v pásu s CO₂ – glyf `molecule-co2` jsou doslova písmena CO₂ přímo pod popiskem CO₂. Spotřeba vody dala třetinu stránky, kterou dvojice nahoře utrácela za bílé místo, sedmidenní křivce.
+- **Grafy a rozdělené řádky se už nekreslí přes sebe**: popisek křivky se tiskl 14 % dovnitř grafu, tedy přesně tam, kde křivka je, když vrchol přijde brzy – „SPOTŘEBA / 7 DNÍ“ i „TEPLOTA / 12 H“ měly přes sebe čáru. Popisek má teď vlastní pás nad grafem. Ikona v rozděleném řádku sahala do 62 % výšky, zatímco hodnota pod ní začínala na 54 %, takže se kreslila přes číslo. A dvouřádkový pruh (`DŮM / RYCHLÝ PŘEHLED`, `RR 458 921 730 CZ / NA CESTĚ`, `OCHRANA DOMU / ZAPNUTO`) měl řádky tak blízko u sebe, že nadpis seděl v horní části vlastní hodnoty. Opraveno pro všechny šablony najednou, v prohlížeči i v serverovém vykreslování, takže ruční odeslání a automatická aktualizace kreslí dál to samé.
+- **Velké číslo na budíku už nepřetíná oblouk**: šířka se měřila proti průměru úst budíku ve středové ose, jenže hodnota sedí výš, kde je otvor užší – „21,5 °C“ se na cenovce 296×128 kreslilo přes vnitřní kružnici. Měří se teď proti tětivě ve vlastní výšce.
+
+### Opraveno
+- **Gateway se sama zotaví ze zaseknutého přenosu** (firmware 0.1.62): zamrzlá GATT operace uměla nechat bránu viset donekonečna a jediné, co pomohlo, bylo odpojit ji od napájení. Firmware teď hlídá dvě lhůty – tři minuty bez jakéhokoliv postupu a deset minut celkem – a při jejich překročení přenos ukončí a bránu restartuje. Po aktualizaci integrace nezapomeňte v panelu spustit „Nahrát firmware“, jinak brána běží dál na staré verzi.
+
+## [0.1.350] - 2026-08-28
+
+### Vylepšeno
+- **Nabídka úprav šablony už nesplývá**: nastavení dat a úprava vzhledu jsou oddělené názvem, barvou i významem. Tyrkysová volba vede k entitám a automatickým aktualizacím, oranžová do eInk Studia. Export je v samostatné neutrální sekci „Soubor šablony“, takže nepůsobí jako třetí krok nastavení.
+
 ## [0.1.349] - 2026-08-27
 
 ### Přidáno
 - **Upozornění na chybějící Bluetooth**: panel po skutečné kontrole skenerů zobrazí výrazné červené upozornění, pokud Home Assistant nemá dostupný Bluetooth adaptér. Během úvodního načítání se upozornění nezobrazuje falešně.
 - **Upozornění na aktualizaci gatewayí**: firmware každé gatewaye se průběžně porovnává s verzí přibalenou v integraci. Zastaralé gatewaye se zobrazí v globálním červeném upozornění s přímým přechodem na jejich správu.
+
+### Vylepšeno
+- **Dvě zastávky na jedné tabuli**: k šabloně Odjezdy lze v Nastavit přidat druhou zastávku. Odjezdy z obou se slučují do jediné tabule seřazené podle toho, za jak dlouho spoj jede – typicky vesnická železniční zastávka a autobusová zastávka kousek od sebe. Druhá zastávka je nepovinná a dá se kdykoliv odebrat; záhlaví pak uvádí obě jména.
+- **Větší ikona vozidla u každého spoje**: autobus, vlak nebo tramvaj se kreslily na polovinu velikosti, kterou řádek unese – na cenovce 296×128 to byla jedenaáctipixelová skvrnka, ze které se autobus od vlaku nepoznal. Ikona je teď zvětšená na 78 % výšky řádku (u tabule na výšku na 40 %, víc se pod číslo linky nevejde).
+- **Odjezdy se škálují podle displeje**: každá cenovka teď ukazuje čtyři spoje – na šířku každý na svém řádku, na výšku se dvěma řádky a velkou ikonou vozidla. Nejmenší cenovka na šířku dřív ukazovala jen tři, úzké displeje na výšku naopak osm až devět – a těch pět spojů navíc zaplatila zmenšením právě té ikony, která jediná říká, jestli přijede autobus nebo vlak (na 168×384 je ikona dvojnásobná, 29 px místo 14). Větší panely se škálují dál až na dvanáct spojů; počet se počítá z výšky tabule, ne z pevného čísla. Z jízdních řádů se teď načítá až dvanáct spojů místo čtyř.
+- **Vzdálenost pěšky nahrazena časem a datem**: údaj „Vzdálenost“ neměl žádný zdroj – jízdní řád neví, jak daleko je zastávka od displeje – a tiskl na všech panelech svých výchozích „240 m“. Ve spodním pruhu je místo něj čas a datum z hodin Home Assistantu.
+- **Meteoradar na výšku má spravenou předpověď**: ikona, hodina a teplota byly připnuté na pevné zlomky výšky pruhu, takže ikony visely nad prázdným pásem, oba řádky textu se mačkaly u spodní hrany a velká aktuální teplota seděla mezi nimi. Teď se tři pásy změří a vycentrují jako jeden blok; vyšší pruh navíc už neukazuje méně hodin než nízký.
+- **Nákupní seznam ukazuje skutečný seznam**: šablona se v Nastavit propojí s entitou `todo.*` (Nákupní seznam nebo Místní úkolovník) jediným výběrem a načte její položky službou `todo.get_items`. Nesplněné jsou nahoře, odškrtnuté přeškrtnuté, a kolik se jich vejde si šablona spočítá z rozměru panelu – malá cenovka je rozloží do sloupců, velký panel je vypíše pod sebou. Sloupce se čtou shora dolů. Automatická aktualizace překresluje seznam stejně jako ruční odeslání. Šablona je nově hned za Odjezdy.
+- **Logo Drátek na malých displejích**: šedá plocha modulu Eink se na cenovkách rozpadala do pravidelné mřížky černých bodů – rastr, který má smysl až na velkém panelu. Pod hranicí čitelnosti se logo tiskne plnou barvou: bílý modul v černém obrysu a ostrý nápis Eink. Displeje od 640×360 výš mají rastr beze změny.
+
+### Opraveno
+- **Wi-Fi QR kód bez žlutého rámečku**: čtyřbarevný motiv podkládal symbol žlutou plochou. Čtečka QR kód prahuje, takže jediné, co potřebuje, je čistá klidová zóna kolem modulů – barevná plocha za ní byla jediné místo na panelu, kde tenhle akcent kontrast ubíral místo přidával (a na tříbarevném displeji navíc padal na červenou). Zůstává bílá zóna a černé moduly.
+- **Název sítě a heslo se uřízly**: oba údaje sdílely jeden řádek vedle sebe, takže cokoliv delšího než asi dvanáct znaků přišlo o konec. Heslo s useknutým koncem není kratší heslo, je to špatné heslo. Každý údaj má teď vlastní řádek přes celou šířku a písmo se zmenšuje tak, aby se vešel celý – do 31 znaků i na nejmenší cenovce.
+- **Na štítku na šířku chyběl název sítě i heslo**: byly nacpané do patnáctipixelového pruhu dole, kde se reálně nevykreslily, zaťco čtvercový kód vedle sebe nechával většinu štítku prázdnou. Kód si drží svou velikost a údaje se přesunuly do místa vedle něj.
+- **Čas odjezdu se osekával na „7:…“**: pruh pro čas se rezervoval podle velikosti 9 px, ale vykreslovač textu pod svoje minimum 10 px nejde – text tedy přetékal vlastní rezervaci a přišel o minuty. Projevovalo se to právě na cenovkách 296×128, kde je čas nejdůležitější.
+- **Odpočet se osekával na „za 12 m…“**: sloupec s odpočtem měl pevných 26 % šířky tabule, což je na cenovce 196×96 o čtyři pixely méně, než potřebuje „za 34 min“. Nově se rezervuje podle skutečně nejdelšího odpočtu na tabuli, stejně jako to už dělá sloupec s časem.
+- **Kliknutí na displej v přehledové kartě otevíralo předchozí displej**: panel si adresu z odkazu přečetl jen jednou a po dokončení ji vymazal. Kliknutí na druhý displej, které dorazilo během skenování pro první, si adresu uložilo, našlo odkaz „už probíhá“ a skončilo – a první běh ji pak zahodil a otevřel svůj vlastní displej. Novější kliknutí teď vždy vyhraje.
 
 ## [0.1.348] - 2026-08-27
 

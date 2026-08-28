@@ -15,14 +15,14 @@ import { template as solar } from "./solar.js?v=compact-landscape-content-6";
 import { template as washer } from "./washer.js?v=compact-landscape-content-6";
 import { template as living } from "./living.js?v=compact-landscape-content-6";
 import { template as presence } from "./presence.js?v=compact-landscape-content-6";
-import { template as wifi } from "./wifi.js?v=compact-landscape-content-6";
+import { template as wifi } from "./wifi.js?v=wifi-credentials-1";
 import { template as calendar } from "./calendar.js";
 import { template as security } from "./security.js?v=yellow-shaded-accents-1";
-import { template as transport } from "./transport.js?v=transit-two-line-1";
-import { template as shopping } from "./shopping.js?v=compact-landscape-content-6";
-import { template as air } from "./air.js?v=air-aqi-fix-1";
-import { template as thermostat } from "./thermostat.js?v=compact-landscape-content-6";
-import { template as water } from "./water.js?v=compact-landscape-content-6";
+import { template as transport } from "./transport.js?v=transit-clock-footer-1";
+import { template as shopping } from "./shopping.js?v=shopping-live-list-1";
+import { template as air } from "./air.js?v=air-gauge-first-1";
+import { template as thermostat } from "./thermostat.js?v=thermostat-dial-curve-2";
+import { template as water } from "./water.js?v=water-chart-rebalance-1";
 import { template as parcel } from "./parcel.js?v=yellow-shaded-accents-1";
 import { template as birthdays } from "./birthdays.js?v=compact-landscape-content-6";
 import { template as server } from "./server.js?v=yellow-shaded-accents-1";
@@ -38,13 +38,19 @@ export const DISPLAY_TEMPLATES = [
   radar,
   czSpotPrices,
   calendar,
+  transport,
+  // Next to the departures board on purpose: both are the "what do I need to
+  // know on the way out of the door" pair, and both now read a real list from
+  // Home Assistant rather than printing a sample of one.
+  shopping,
+  // Beside the shopping list on purpose: both are the household's own notes
+  // pinned to a display - one you read on the way out, one you hand to a guest.
+  wifi,
   home,
   living,
   thermostat,
   security,
   presence,
-  transport,
-  shopping,
   air,
   water,
   parcel,
@@ -55,7 +61,6 @@ export const DISPLAY_TEMPLATES = [
   waste,
   solar,
   washer,
-  wifi,
   // Always the last tile in the catalog - it is not a template anyone
   // arranges next to another, it is a one-click room reset.
   dratekLogo,

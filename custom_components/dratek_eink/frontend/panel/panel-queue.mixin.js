@@ -209,34 +209,17 @@ export const queueMixin = {
     // Otevřenou nabídku by pravidelné překreslení zavřelo pod rukama. Data už
     // jsou uložená, seznam se dorovná při prvním dalším překreslení.
     if (this._queueOpenMenu) return;
-    const openLogs = new Set(
-      [...this.shadowRoot.querySelectorAll("details[data-queue-log][open]")]
-        .map((details) => details.dataset.queueLog)
-    );
+    // Otevřené protokoly i fokus drží _render() sám (viz _captureUiState
+    // v panel-render-ui.mixin.js), takže tady zbyla jen ta jedna výjimka.
     this._renderKeepingSearchFocus();
-    this.shadowRoot.querySelectorAll("details[data-queue-log]").forEach((details) => {
-      details.open = openLogs.has(details.dataset.queueLog);
-    });
   },
 
+  // Fokus, výběr v poli i odrolování přežijí každé překreslení, takže tenhle
+  // název už jen dokumentuje, proč ho volající zavolal. Zůstává, aby se
+  // nemuselo přepisovat sedm volání.
   _renderKeepingSearchFocus() {
-    const active = this.shadowRoot.activeElement;
-    const searchIds = new Set(["deviceSearch", "queueSearch", "symbolSearch", "displayTemplateSearch"]);
-    const activeId = searchIds.has(active?.id) ? active.id : "";
-    const selectionStart = activeId ? active.selectionStart : null;
-    const selectionEnd = activeId ? active.selectionEnd : null;
-    const selectionDirection = activeId ? active.selectionDirection : "none";
     this._render();
     this._paint();
-    if (!activeId) return;
-    const next = this.shadowRoot.querySelector(`#${activeId}`);
-    if (!next) return;
-    next.focus({ preventScroll: true });
-    try {
-      next.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
-    } catch (_err) {
-      // Některé typy inputu neumí rozsah výběru, samotný fokus stačí.
-    }
   },
 
   _queueFilters() {

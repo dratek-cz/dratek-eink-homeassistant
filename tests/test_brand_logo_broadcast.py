@@ -72,10 +72,27 @@ class BrandLogoTemplateTests(unittest.TestCase):
         self.assertNotIn("3 / 16", mixin)
         self.assertNotIn("5 / 16", mixin)
 
-    def test_small_panels_use_the_finer_ordered_cell(self) -> None:
+    def test_small_panels_print_the_module_in_solid_ink_not_a_lattice(self) -> None:
+        # An ordered cell only reads as a grey once it repeats often enough
+        # across the shape it fills. On a 296x128 tag the module is ~51px tall,
+        # so the screen's flat grey printed as a visible mesh of single black
+        # pixels - a grid, not a tone. Under the bar the thresholds collapse to
+        # a plain half-way decision and the module prints as white inside its
+        # black outline.
         mixin = MIXIN.read_text(encoding="utf-8")
-        self.assertIn("Math.min(width, height) <= 160", mixin)
-        self.assertIn("[0, 8, 2, 10]", mixin)
+        self.assertIn("export const BRAND_LOGO_MIN_TONAL_MODULE_HEIGHT = 120;", mixin)
+        self.assertIn("_brandLogoModuleIsTonal(width, height, sourceWidth, sourceHeight)", mixin)
+        self.assertIn("rect.bottom - rect.top + 1 >= BRAND_LOGO_MIN_TONAL_MODULE_HEIGHT", mixin)
+        self.assertIn("tonal ? (matrix[y % matrixSize][x % matrixSize] + 0.5) / levels : 0.5", mixin)
+        self.assertIn("this._ditherBrandLogoImageData(pixels, width, height, paletteKey, tonal);", mixin)
+        # The coarse 4x4 cell existed only to make the small tags bearable and
+        # no panel that still dithers is anywhere near it.
+        self.assertNotIn("[0, 8, 2, 10]", mixin)
+
+    def test_the_outline_and_the_tonal_test_read_the_same_rectangle(self) -> None:
+        mixin = MIXIN.read_text(encoding="utf-8")
+        self.assertIn("_brandLogoModuleRect(width, height, sourceWidth, sourceHeight) {", mixin)
+        self.assertEqual(2, mixin.count("this._brandLogoModuleRect("))
 
     def test_wordmark_and_eink_dot_have_semantic_colours(self) -> None:
         mixin = MIXIN.read_text(encoding="utf-8")
@@ -102,7 +119,7 @@ class BrandLogoTemplateTests(unittest.TestCase):
         # afterthought.
         mixin = MIXIN.read_text(encoding="utf-8")
         self.assertIn("this._displayPaletteKey?.(device)", mixin)
-        self.assertIn("`${source}:${w}x${h}:${paletteKey}:logo-ordered-5`", mixin)
+        self.assertIn("`${source}:${w}x${h}:${paletteKey}:logo-flat-6`", mixin)
 
     def test_the_logo_is_letterboxed_and_never_cropped(self) -> None:
         mixin = MIXIN.read_text(encoding="utf-8")

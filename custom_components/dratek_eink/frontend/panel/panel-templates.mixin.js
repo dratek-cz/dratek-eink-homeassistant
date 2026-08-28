@@ -4,10 +4,10 @@ export const templatesMixin = {
   _templateDefinitions() {
     return [
       {
-        id: "weather", title: "Pocasi", icon: "mdi:weather-partly-cloudy", objects: [
+        id: "weather", title: "Počasí", icon: "mdi:weather-partly-cloudy", objects: [
           this._tt(92, 22, 66, 28, "☁", "black", true),
-          this._tt(83, 50, 86, 16, "Patek", "black", true),
-          this._tt(72, 68, 110, 14, "23. kvetna"),
+          this._tt(83, 50, 86, 16, "Pátek", "black", true),
+          this._tt(72, 68, 110, 14, "23. května"),
           this._ln(45, 84, 205, 84),
           this._tt(83, 92, 88, 18, "12:45", "red", true, "cas"),
           this._ln(45, 112, 205, 112),
@@ -18,7 +18,7 @@ export const templatesMixin = {
           this._tt(18, 205, 28, 11, "SO", "white"),
           this._tt(76, 205, 28, 11, "NE", "white"),
           this._tt(134, 205, 28, 11, "PO", "white"),
-          this._tt(195, 205, 28, 11, "UT", "white"),
+          this._tt(195, 205, 28, 11, "ÚT", "white"),
           this._tt(13, 221, 38, 16, "22°", "white", true),
           this._tt(73, 221, 38, 16, "25°", "white", true),
           this._tt(132, 221, 38, 16, "18°", "white", true),
@@ -28,10 +28,10 @@ export const templatesMixin = {
       {
         id: "energy", title: "Cena energie", icon: "mdi:lightning-bolt", objects: [
           this._tt(18, 17, 30, 32, "⚡", "red", true),
-          this._tt(57, 20, 150, 18, "Cena elektriny", "black", true),
-          this._tt(58, 41, 72, 11, "Kc / kWh"),
+          this._tt(57, 20, 150, 18, "Cena elektřiny", "black", true),
+          this._tt(58, 41, 72, 11, "Kč / kWh"),
           this._ln(15, 62, 235, 62),
-          this._tt(24, 82, 132, 34, "2,45 Kc", "red", true, "cena_elektriny"),
+          this._tt(24, 82, 132, 34, "2,45 Kč", "red", true, "cena_elektriny"),
           this._tt(27, 123, 110, 12, "12:00 - 13:00"),
           this._tt(27, 141, 50, 12, "Dnes"),
           this._ln(42, 192, 58, 192, "red", 2),
@@ -52,14 +52,14 @@ export const templatesMixin = {
           this._ln(191, 154, 191, 183, "red", 2),
           this._ln(191, 183, 212, 183, "red", 2),
           this._rr(0, 196, 250, 54, "red", "none"),
-          this._tt(58, 207, 116, 15, "Nejlevnejsi dnes", "white", true),
-          this._tt(83, 226, 74, 20, "2,45 Kc", "white", true, "nejlevnejsi_cena"),
+          this._tt(58, 207, 116, 15, "Nejlevnější dnes", "white", true),
+          this._tt(83, 226, 74, 20, "2,45 Kč", "white", true, "nejlevnejsi_cena"),
           this._tt(178, 230, 60, 11, "12:00 - 13:00", "white"),
         ]
       },
       {
-        id: "home", title: "Dum", icon: "mdi:home", objects: [
-          this._tt(19, 18, 80, 20, "Dum", "black", true),
+        id: "home", title: "Dům", icon: "mdi:home", objects: [
+          this._tt(19, 18, 80, 20, "Dům", "black", true),
           this._tt(82, 57, 92, 64, "⌂", "red", true),
           this._tt(39, 147, 20, 15, "♨", "black"),
           this._tt(75, 147, 82, 16, "21,5 °C", "black", false, "teplota_dum"),
@@ -72,44 +72,44 @@ export const templatesMixin = {
           this._ln(20, 267, 230, 267),
           this._rr(31, 276, 31, 31, "red", "none"),
           this._tt(42, 285, 26, 20, "✓", "white", true),
-          this._tt(82, 286, 126, 14, "Vsechno v poradku", "red", true, "stav_domu"),
+          this._tt(82, 286, 126, 14, "Všechno v pořádku", "red", true, "stav_domu"),
         ]
       },
       {
         id: "waste", title: "Odpady", icon: "mdi:trash-can-outline", objects: [
           this._tt(20, 18, 92, 20, "Odpady", "black", true),
           this._tt(49, 79, 72, 54, "♜", "black", true),
-          this._tt(140, 86, 68, 22, "ZITRA", "red", true, "odpad_1_kdy"),
+          this._tt(140, 86, 68, 22, "ZÍTRA", "red", true, "odpad_1_kdy"),
           this._tt(140, 117, 60, 18, "Plast", "black", false, "odpad_1_typ"),
           this._ln(15, 158, 235, 158),
           this._tt(51, 194, 68, 48, "♻", "black", true),
-          this._tt(138, 200, 70, 18, "za 7 dni", "red", true, "odpad_2_kdy"),
-          this._tt(140, 230, 62, 18, "Papir", "black", false, "odpad_2_typ"),
+          this._tt(138, 200, 70, 18, "za 7 dní", "red", true, "odpad_2_kdy"),
+          this._tt(140, 230, 62, 18, "Papír", "black", false, "odpad_2_typ"),
         ]
       },
       {
         id: "solar", title: "Fotovoltaika", icon: "mdi:solar-power", objects: [
           this._tt(22, 18, 34, 28, "☼", "black", false),
           this._tt(78, 20, 142, 19, "Fotovoltaika", "black", true),
-          this._tt(80, 42, 96, 11, "Aktualni vykon"),
+          this._tt(80, 42, 96, 11, "Aktuální výkon"),
           this._tt(78, 75, 96, 58, "▦", "black", true),
           this._tt(66, 136, 132, 31, "2,35 kW", "black", true, "vykon_fve"),
           this._ln(15, 183, 235, 183),
           this._tt(20, 197, 70, 13, "Dnes"),
           this._tt(165, 197, 58, 13, "8,2 kWh", "black", true, "fve_dnes"),
           this._ln(15, 214, 235, 214),
-          this._tt(20, 228, 82, 13, "Tento mesic"),
+          this._tt(20, 228, 82, 13, "Tento měsíc"),
           this._tt(158, 228, 65, 13, "152 kWh", "black", true, "fve_mesic"),
           this._ln(15, 245, 235, 245),
           this._tt(20, 259, 70, 13, "Celkem"),
           this._tt(155, 259, 70, 13, "3,45 MWh", "black", true, "fve_celkem"),
           this._rr(0, 290, 250, 40, "red", "none"),
-          this._tt(58, 305, 132, 15, "Uspora CO2: 125 kg", "white", true, "uspora_co2"),
+          this._tt(58, 305, 132, 15, "Úspora CO2: 125 kg", "white", true, "uspora_co2"),
         ]
       },
       {
-        id: "washer", title: "Pracka", icon: "mdi:washing-machine", objects: [
-          this._tt(18, 18, 80, 20, "Pracka", "black", true),
+        id: "washer", title: "Pračka", icon: "mdi:washing-machine", objects: [
+          this._tt(18, 18, 80, 20, "Pračka", "black", true),
           this._tt(50, 62, 94, 76, "▣", "black", true),
           this._tt(22, 154, 54, 14, "Program"),
           this._tt(22, 174, 112, 18, "Bavlna 60°", "red", true, "program_pracky"),
@@ -118,12 +118,12 @@ export const templatesMixin = {
           this._tt(59, 222, 48, 13, "Zbyva"),
           this._tt(143, 217, 70, 22, "01:15", "red", true, "pracka_zbyva"),
           this._ln(15, 250, 235, 250),
-          this._tt(59, 267, 116, 15, "Skonci v 14:30", "black", true, "pracka_konec"),
+          this._tt(59, 267, 116, 15, "Skončí v 14:30", "black", true, "pracka_konec"),
         ]
       },
       {
-        id: "living", title: "Obyvak", icon: "mdi:sofa-outline", objects: [
-          this._tt(20, 18, 88, 20, "Obyvak", "black", true),
+        id: "living", title: "Obývák", icon: "mdi:sofa-outline", objects: [
+          this._tt(20, 18, 88, 20, "Obývák", "black", true),
           this._tt(38, 78, 36, 50, "♨", "red", true),
           this._tt(96, 88, 118, 32, "23,5 °C", "black", true, "teplota_obyvak"),
           this._ln(20, 154, 230, 154),
@@ -149,7 +149,7 @@ export const templatesMixin = {
           this._tt(165, 171, 70, 15, "Ve skole", "red", true, "eliska_stav"),
           this._rr(0, 218, 250, 54, "red", "none"),
           this._tt(35, 229, 24, 22, "◷", "white", true),
-          this._tt(76, 229, 128, 13, "Posledni aktualizace", "white", true),
+          this._tt(76, 229, 128, 13, "Poslední aktualizace", "white", true),
           this._tt(76, 246, 64, 20, "12:45", "white", true, "cas_update"),
         ]
       },
@@ -164,24 +164,24 @@ export const templatesMixin = {
           this._tt(20, 251, 140, 14, "MyPassword123", "red", true, "wifi_heslo"),
           this._ln(15, 277, 235, 277),
           this._tt(37, 293, 28, 20, "≋", "black", true),
-          this._tt(82, 297, 120, 12, "Naskenuj pro pripojeni"),
+          this._tt(82, 297, 120, 12, "Naskenuj pro připojení"),
         ]
       },
       {
-        id: "calendar", title: "Kalendar", icon: "mdi:calendar-month", objects: [
-          this._tt(19, 18, 96, 20, "Kalendar", "black", true),
+        id: "calendar", title: "Kalendář", icon: "mdi:calendar-month", objects: [
+          this._tt(19, 18, 96, 20, "Kalendář", "black", true),
           this._tt(26, 69, 52, 45, "23", "black", true),
-          this._tt(99, 64, 68, 16, "PATEK", "red", true, "udalost_1_den"),
-          this._tt(99, 85, 72, 15, "Schuzka", "black", false, "udalost_1_nazev"),
+          this._tt(99, 64, 68, 16, "PÁTEK", "red", true, "udalost_1_den"),
+          this._tt(99, 85, 72, 15, "Schůzka", "black", false, "udalost_1_nazev"),
           this._tt(99, 104, 58, 14, "15:00", "black", false, "udalost_1_cas"),
           this._ln(15, 137, 235, 137),
           this._tt(26, 166, 52, 45, "24", "black", true),
           this._tt(99, 161, 82, 16, "SOBOTA", "red", true, "udalost_2_den"),
           this._tt(99, 182, 96, 15, "Narozeniny", "black", false, "udalost_2_nazev"),
-          this._tt(99, 201, 70, 14, "Tomas", "black", false, "udalost_2_detail"),
+          this._tt(99, 201, 70, 14, "Tomáš", "black", false, "udalost_2_detail"),
           this._rr(0, 240, 250, 58, "red", "none"),
           this._tt(34, 254, 34, 23, "♛", "white", true),
-          this._tt(78, 253, 112, 13, "Zitra ma svatek", "white"),
+          this._tt(78, 253, 112, 13, "Zítra má svátek", "white"),
           this._tt(78, 271, 70, 18, "Jana", "white", true, "svatek"),
         ]
       },

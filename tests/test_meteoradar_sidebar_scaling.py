@@ -144,6 +144,59 @@ class LayoutMirrorTests(unittest.TestCase):
         self.assertEqual(image.size, (480, 140))
         self.assertGreaterEqual(len(drawn), 4)
 
+    def test_a_taller_portrait_strip_never_shows_fewer_hours(self) -> None:
+        # The minimum column width used to scale with the strip's height, so
+        # making the strip taller fitted fewer hours across it than a short one
+        # - the opposite of what the extra room should buy.
+        def hours(height: int) -> int:
+            drawn: list[int] = []
+            original = render._weather_condition_icon_image
+            render._weather_condition_icon_image = lambda condition, size, yellow=False, night=False: (
+                drawn.append(size), original(condition, size, yellow)
+            )[1]
+            try:
+                render._draw_radar_footer(280, height, _forecast(), False)
+            finally:
+                render._weather_condition_icon_image = original
+            return len(drawn)
+
+        short = hours(96)
+        for height in (110, 120, 140, 160):
+            with self.subTest(height=height):
+                self.assertGreaterEqual(hours(height), short)
+
+    def test_the_portrait_strip_has_no_dead_band_through_the_middle(self) -> None:
+        """Icon, hour and temperature are measured and stacked as one block.
+
+        They used to be pinned to fixed fractions of the strip - icon flush to
+        the top padding, hour at 0.62, temperature at 0.84 - so the icons sat
+        alone above an empty band roughly a fifth of the content tall, and the
+        two text rows were crushed together underneath it. Measuring the total
+        margin instead would not catch this: the old strip was top- and
+        bottom-balanced, the hole was in the middle of it.
+        """
+        for height in (96, 120, 140):
+            with self.subTest(height=height):
+                image = render._draw_radar_footer(280, height, _forecast(), False)
+                pixels = image.convert("L").load()
+                width, _ = image.size
+                rows = [
+                    any(pixels[x, y] < 200 for x in range(width))
+                    for y in range(height)
+                ]
+                inked = [y for y, drawn in enumerate(rows) if drawn]
+                self.assertTrue(inked, "the strip drew nothing at all")
+                widest_gap = 0
+                run = 0
+                for y in range(inked[0], inked[-1] + 1):
+                    run = 0 if rows[y] else run + 1
+                    widest_gap = max(widest_gap, run)
+                span = inked[-1] - inked[0] + 1
+                self.assertLessEqual(
+                    widest_gap, span * 0.08,
+                    f"{widest_gap}px blank band inside a {span}px stack",
+                )
+
     def test_palette_and_target_size_reach_the_map_renderer(self) -> None:
         source = (COMPONENT / "render.py").read_text(encoding="utf-8")
         call = source[source.index("radar_img = await async_render_meteoradar(") :][:700]

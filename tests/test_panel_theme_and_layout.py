@@ -72,6 +72,118 @@ class StatusColourThemeTests(unittest.TestCase):
         self.assertIn('@media(prefers-color-scheme:dark){:host(:not([data-dratek-dark="false"]))', self.styles)
 
 
+class AccentInkThemeTests(unittest.TestCase):
+    """The accent inks the status palette left behind: green, amber and red
+    literals written straight into a `color:` on a themed surface."""
+
+    def setUp(self) -> None:
+        self.styles = (PANEL / "panel-render-ui.mixin.js").read_text(encoding="utf-8")
+
+    def test_every_ink_has_a_dark_counterpart(self) -> None:
+        names = ("--dratek-ink-ok", "--dratek-ink-teal", "--dratek-ink-warn",
+                 "--dratek-ink-bad", "--dratek-ink-danger")
+        light = re.search(r":host\{--dratek-status-ok-fg[^}]*\}", self.styles)
+        dark = re.search(r':host\(\[data-dratek-dark="true"\]\)\{([^}]*)\}', self.styles)
+        for name in names:
+            with self.subTest(variable=name):
+                self.assertIn(f"{name}:", light.group(0))
+                self.assertIn(f"{name}:", dark.group(1))
+
+    def test_status_text_no_longer_carries_a_bare_literal(self) -> None:
+        for selector in (r"\.signal-value\.bad-signal", r"\.system-alert-copy strong",
+                         r"\.display-grid \.health-value\.level-3"):
+            rule = re.search(selector + r"\{[^}]*\}", self.styles)
+            with self.subTest(selector=selector):
+                self.assertIsNotNone(rule, f"{selector} is gone")
+                self.assertIn("var(--dratek-ink-", rule.group(0))
+
+    def test_the_e_ink_preview_keeps_its_own_black_on_white(self) -> None:
+        # The simulated display is paper: it stays white with black ink whatever
+        # the Home Assistant theme does.
+        for selector in (r"\.device-preview-code", r"\.device-preview-screen"):
+            rule = re.search(selector + r"\{[^}]*\}", self.styles)
+            with self.subTest(selector=selector):
+                self.assertNotIn("--dratek-ink-", rule.group(0))
+
+
+class StackingOrderTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.styles = (PANEL / "panel-render-ui.mixin.js").read_text(encoding="utf-8")
+
+    def test_the_ladder_is_declared_in_order(self) -> None:
+        self.assertIn(
+            "--dratek-z-sticky:40;--dratek-z-menu:200;--dratek-z-overlay:300;--dratek-z-modal:400",
+            self.styles,
+        )
+
+    def test_dialogs_sit_on_the_modal_rung(self) -> None:
+        for selector in (r"\.modal-backdrop", r"\.price-sale-dialog-backdrop",
+                         r"\.template-settings-backdrop", r"\.symbol-modal-backdrop"):
+            rule = re.search(selector + r"\{[^}]*z-index:[^;}]*", self.styles)
+            with self.subTest(selector=selector):
+                self.assertIn("var(--dratek-z-modal", rule.group(0))
+
+    def test_the_layout_popup_still_outranks_its_own_scrim(self) -> None:
+        # One shared rung would leave DOM order to decide which of the two wins.
+        self.assertIn(".display-grid-layout-menu-scrim{position:fixed;z-index:var(--dratek-z-menu,200)", self.styles)
+        self.assertIn(".display-grid-layout-popup{position:absolute;z-index:calc(var(--dratek-z-menu,200) + 1)", self.styles)
+
+
+class StickyLayerTests(unittest.TestCase):
+    """A sticky bar has to clear the header and hide what scrolls under it."""
+
+    def setUp(self) -> None:
+        self.styles = (PANEL / "panel-render-ui.mixin.js").read_text(encoding="utf-8")
+
+    def test_the_offset_follows_the_header_instead_of_one_early_measurement(self) -> None:
+        # The header is still growing while its webfont loads and while the tab
+        # bar decides whether it wraps. Measured once, the offset came out ~18px
+        # short and every sticky section below parked under the header.
+        self.assertIn("new ResizeObserver(() => this._syncStickyOffset())", self.styles)
+        self.assertIn("this._stickyHeaderObserver.observe(header);", self.styles)
+        entry = (COMPONENT / "frontend" / "dratek-eink-panel.js").read_text(encoding="utf-8")
+        self.assertIn("this._stickyHeaderObserver.disconnect();", entry)
+
+    def test_the_gap_below_the_header_belongs_to_the_header(self) -> None:
+        # Sticky sections park 10px below the header. That band used to belong
+        # to nobody, so list rows and card borders scrolled visibly through it;
+        # only the template toolbar masked it, with a pseudo-element of its own.
+        header = re.search(r"\.app-header\{[^}]*\}", self.styles).group(0)
+        self.assertIn("padding:6px 0 14px", header)
+        self.assertIn("background:var(--primary-background-color", header)
+        self.assertIn("const value = `${height}px`;", self.styles)
+        self.assertNotIn("${height + 10}px", self.styles)
+        self.assertNotIn(".display-template-toolbar::before", self.styles)
+
+    def test_every_sticky_offset_is_measured_from_the_same_header(self) -> None:
+        # A second, hardcoded offset put the designer's selection row 165px
+        # behind the header.
+        self.assertIn(".studio-pro-workspace{--studio-locked-top:var(--dratek-sticky-top,10px)", self.styles)
+        self.assertNotIn("--studio-locked-top:10px", self.styles)
+
+    def _rules_for(self, class_name: str) -> str:
+        # A class can carry several rules (a plain one, a scoped one, a media
+        # query); the declarations that matter may sit in any of them.
+        found = re.findall(re.escape(class_name) + r"\{([^}]*)\}", self.styles)
+        self.assertTrue(found, f"{class_name} has no rules left")
+        return " ".join(found)
+
+    def test_sticky_bars_paint_an_opaque_surface(self) -> None:
+        for class_name in (".studio-pro-selection-row", ".queue-controls-locked",
+                           ".gateway-workspace-tabs", ".display-template-drop-panel"):
+            body = self._rules_for(class_name)
+            with self.subTest(selector=class_name):
+                self.assertIn("position:sticky", body, f"{class_name} is no longer sticky")
+                self.assertRegex(
+                    body, r"background:var\(--(primary|card|secondary)-background-color",
+                    "a sticky bar without its own surface lets the page scroll through it",
+                )
+
+    def test_a_sticky_bar_declares_the_layer_it_sits_on(self) -> None:
+        # z-index:auto puts a sticky bar below any positioned sibling after it.
+        self.assertIn("z-index:var(--dratek-z-sticky", self._rules_for(".gateway-workspace-tabs"))
+
+
 class RefreshControlPlacementTests(unittest.TestCase):
     def setUp(self) -> None:
         self.devices = (PANEL / "panel-devices.mixin.js").read_text(encoding="utf-8")

@@ -527,7 +527,9 @@ class FrontendToolLibraryTests(unittest.TestCase):
 
     def test_symbol_dialog_stays_above_the_sticky_header(self):
         self.assertIn('class="modal-backdrop symbol-modal-backdrop"', self.source)
-        self.assertIn(".symbol-modal-backdrop{z-index:120;isolation:isolate}", self.source)
+        self.assertIn(".symbol-modal-backdrop{z-index:var(--dratek-z-modal,400);isolation:isolate}", self.source)
+        # the ladder itself: a modal has to outrank the sticky header
+        self.assertIn("--dratek-z-sticky:40;--dratek-z-menu:200;--dratek-z-overlay:300;--dratek-z-modal:400", self.source)
         self.assertIn('role="dialog" aria-modal="true" aria-labelledby="symbolDialogTitle"', self.source)
         self.assertIn('id="symbolDialogTitle"', self.source)
 
@@ -612,6 +614,16 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('if (!resolvedBase || resolvedBase === template || resolvedBase.id === "blank") return "";', self.source)
         self.assertIn('base_template_id: existing?.base_template_id || (selectedId === "blank" ? "" : selectedId)', self.source)
         self.assertIn('_applyTemplateAdjustmentsToSvgMarkup(markup, template', self.source)
+
+    def test_saved_blank_preview_cannot_inherit_the_display_template(self):
+        inspector = (PANEL_MODULES / "panel-inspector.mixin.js").read_text(encoding="utf-8")
+        self.assertIn("const selectedWasAssigned = currentAssignments.includes(selectedId);", self.source)
+        self.assertIn("const nextAssignments = selectedWasAssigned", self.source)
+        self.assertIn(": [id];", self.source)
+        self.assertIn("this._displayTemplateAssignments[address] = nextAssignments;", self.source)
+        self.assertIn("savedUserTemplate.preview_template_id = savedUserTemplate.id;", inspector)
+        self.assertIn("_hasTrustedUserTemplatePreview(template)", self.source)
+        self.assertIn('String(template?.preview_template_id || "") === String(template?.id || "")', self.source)
 
     def test_user_template_orientation_is_a_quarter_turn_without_reflow(self):
         self.assertIn('design_orientation: existing?.design_orientation || existing?.orientation', self.source)
@@ -803,7 +815,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
         # used to exist only in the catalog thumbnail's HTML, which was never sent
         # anywhere - the tag showed the network name and password as plain text and
         # no code at all, while the tile promised one.
-        self.assertIn('WIFI:T:WPA;S:${v(0, "Home_Network")};P:${v(1, "MyPassword123")};;', self.source)
+        # The payload a phone actually parses. The two values are hoisted into
+        # their own consts now, because the page prints them as well as
+        # encoding them.
+        self.assertIn("WIFI:T:WPA;S:${ssid};P:${password};;", self.source)
+        self.assertIn('const ssid = v(0, "Home_Network");', self.source)
+        self.assertIn('const password = v(1, "MyPassword123");', self.source)
         self.assertIn("_blockQr(row, box) {", self.source)
         self.assertIn('shape-rendering="crispEdges"', self.source)
         # An icon counts as rendered only once its <svg> holds something drawable.
@@ -1009,7 +1026,11 @@ class FrontendToolLibraryTests(unittest.TestCase):
         # The narrow/tall display is not a rotated copy of the landscape one.
         # Presence and server become full-width vertical tiles, while every
         # departure (including the live first line) keeps a filled line plate.
-        self.assertGreaterEqual(self.source.count("if (height > width) return ["), 3)
+        portrait_branches = (
+            self.source.count("if (height > width) return [")
+            + self.source.count("if (portrait) return [")
+        )
+        self.assertGreaterEqual(portrait_branches, 3)
         self.assertIn('], columns: 1, h: 0.77 },', self.source)
         self.assertIn('const transit = () => {', self.source)
         self.assertIn('group: "transport-board"', self.source)
@@ -1185,7 +1206,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
     def test_brand_and_primary_navigation_stay_visible_while_scrolling(self):
         self.assertIn('<div class="app-header">', self.source)
         self.assertIn(".app-header{position:sticky", self.source)
-        self.assertIn("z-index:40;top:0", self.source)
+        self.assertIn("z-index:var(--dratek-z-sticky,40);top:0", self.source)
         self.assertNotIn('data-tab="custom"', self.source)
 
     def test_list_density_is_a_vertically_centered_single_row(self):
@@ -1257,8 +1278,13 @@ class FrontendToolLibraryTests(unittest.TestCase):
         )
         self.assertNotIn("window.requestAnimationFrame(() => {\n        const input = this.shadowRoot.querySelector(\"[data-display-template-search]\");", self.source)
         self.assertIn("_renderKeepingSearchFocus()", self.source)
+        # _render() now measures and restores this for every field, so the four
+        # ids above are no longer a whitelist anything depends on.
         self.assertIn("next.focus({ preventScroll: true });", self.source)
-        self.assertIn("next.setSelectionRange(selectionStart, selectionEnd, selectionDirection);", self.source)
+        self.assertIn("next.setSelectionRange(state.selectionStart, state.selectionEnd, state.selectionDirection);", self.source)
+        self.assertNotIn('const searchIds = new Set(', self.source)
+        self.assertIn("_captureUiState()", self.source)
+        self.assertIn("_restoreUiState(uiState);", self.source)
 
     def test_device_rename_is_inline_and_flash_button_is_removed(self):
         self.assertIn('class="display-name-inline"', self.source)
@@ -1297,8 +1323,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("this._queuePollTimer = window.setTimeout", self.source)
         self.assertIn("Number(this._queue?.queued || 0) + Number(this._queue?.writing || 0) > 0", self.source)
         self.assertIn("window.clearTimeout(this._queuePollTimer)", self.source)
-        self.assertIn('details[data-queue-log][open]', self.source)
-        self.assertIn("details.open = openLogs.has", self.source)
+        # An open job log survives the refresh. Measured for every <details> in
+        # _captureUiState() rather than by the queue itself.
+        self.assertIn('details[id],details[data-queue-log]', self.source)
+        self.assertIn("if (details) details.open = open;", self.source)
 
     def test_main_device_statuses_refresh_without_persisting_card_selection(self):
         self.assertIn("_scheduleDeviceStatusPoll(delay = 30000)", self.source)
@@ -1624,7 +1652,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("async _blankedDisplayTemplateBackground(", self.source)
         self.assertIn("clean_background: prepared.cleanBackground || \"\",", self.source)
         self.assertIn("_rasterizeSvgStringToPng(", self.source)
-        self.assertIn('["text", "ratio", "series", "forecast", "calendar", "transit"]', self.source)
+        self.assertIn('["text", "ratio", "series", "history", "forecast", "calendar", "transit", "todo"]', self.source)
 
 
     def test_template_studio_has_contextual_component_editor(self):
@@ -2018,11 +2046,15 @@ class FrontendToolLibraryTests(unittest.TestCase):
     def test_non_protected_templates_use_the_shared_four_colour_theme(self):
         self.assertIn('_fourColorTemplateRows(rows, templateId = "")', self.source)
         self.assertIn('if (painted >= 2) break;', self.source)
-        self.assertIn('row.qr.accent = "yellow"', self.source)
+        # Not the QR code: a scanner thresholds the symbol, so a coloured plate
+        # behind its quiet zone only ever eats the contrast that zone exists to
+        # provide.
+        self.assertNotIn('row.qr.accent = "yellow"', self.source)
+        self.assertNotIn("YELLOW}\" stroke=\"${BLACK}\" stroke-width=\"1\" shape-rendering", self.source)
         # Yellow needs area to read. A 17px line-art glyph filled yellow on
         # white is almost invisible once the panel thresholds it, so the accent
-        # goes to arcs, ring and dial fills, the datebox header and the QR
-        # frame - never to an icon, and never to type.
+        # goes to arcs, ring and dial fills and the datebox header - never to an
+        # icon, and never to type.
         self.assertNotIn('if (row.icon) { row.color = "yellow"; return true; }', self.source)
         self.assertNotIn('iconColor: "yellow"', self.source)
         self.assertIn('paint-order="stroke"', self.source)

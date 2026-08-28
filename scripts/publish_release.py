@@ -74,12 +74,25 @@ def create_release(tag: str, name: str, body: str) -> None:
 
 if __name__ == "__main__":
     create_release(
-        tag="v0.1.349",
-        name="DRATEK eInk v0.1.349",
-        body="""## Release 0.1.349
+        tag="v0.1.351",
+        name="DRATEK eInk v0.1.351",
+        body="""## Release 0.1.351
 
 ### Přidáno
-- Chybějící Bluetooth už nezůstane bez vysvětlení. Po dokončení kontroly zobrazí panel výrazné červené upozornění, pokud Home Assistant nemá dostupný Bluetooth adaptér; během úvodního načítání se falešně neukáže.
-- Panel upozorní na starý firmware gatewayí. Firmware každé gatewaye se průběžně porovnává s verzí přibalenou v nainstalované integraci. Pokud je po aktualizaci integrace některá gateway zastaralá, upozornění ji pojmenuje a nabídne přímý přechod k aktualizaci.
+- Nenastavená nebo jen částečně napojená šablona má výrazné upozornění přes celý náhled v katalogu i na ploše displeje. Vrstva je průhledná, takže je pod ní kresba šablony pořád vidět, hláška sedí na vlastní bílé kartičce a tlačítko Nastavit je jediná klikatelná věc na ní. Šablonu s ukázkovými daty jde stále odeslat.
+
+### Vylepšeno
+- Šablony Topení, Kvalita vzduchu a Spotřeba vody přerovnané: budík si řádek rozdělí na oblouk a pás pro stupnici, takže popisky nepadají přes další řádek; AQI je na Kvalitě vzduchu nahoře; Spotřeba vody dala víc místa sedmidenní křivce.
+- Grafy, rozdělené řádky a dvouřádkové pruhy se už nekreslí přes sebe – opraveno v prohlížeči i v serverovém vykreslování, takže ruční odeslání a automatická aktualizace zůstávají shodné.
+- Nabídka úprav šablony rozdělená podle významu: data, vzhled a soubor šablony.
+- Odjezdy: dvě zastávky na jedné tabuli, větší ikona vozidla, počet spojů podle výšky displeje, čas a datum místo neexistující vzdálenosti.
+- Nákupní seznam čte skutečnou entitu `todo.*`.
+- Meteoradar na výšku má spravenou předpověď, logo Drátek se na malých displejích tiskne plnou barvou.
+
+### Opraveno
+- Gateway se sama zotaví ze zaseknutého přenosu (firmware 0.1.62): tři minuty bez postupu nebo deset minut celkem ukončí přenos a restartují bránu, místo aby čekala na odpojení od napájení. Po aktualizaci spusťte v panelu „Nahrát firmware“.
+- Wi-Fi: QR kód bez žlutého podkladu, název sítě a heslo se už neořezávají ani na štítku na šířku.
+- Odjezdy: čas se neosekává na „7:…“ ani odpočet na „za 12 m…“.
+- Kliknutí na displej v přehledové kartě otevře ten displej, na který se kliklo naposledy.
 """,
     )

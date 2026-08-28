@@ -116,6 +116,9 @@ class GatewaySideClassificationTests(unittest.TestCase):
             "transfer_task_start_failed",
             "gateway_transfer_lost_after_restart",
             "gateway_firmware_update_required",
+            "gateway_transfer_timeout",
+            "transfer_watchdog_timeout",
+            "transfer_cancelled",
         ):
             self.assertIn(error, block)
 

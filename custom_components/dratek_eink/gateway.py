@@ -686,6 +686,9 @@ GATEWAY_SIDE_JOB_ERRORS = frozenset(
         "transfer_task_start_failed",
         "gateway_transfer_lost_after_restart",
         "gateway_firmware_update_required",
+        "gateway_transfer_timeout",
+        "transfer_watchdog_timeout",
+        "transfer_cancelled",
     }
 )
 
@@ -957,8 +960,52 @@ async def async_send_gateway_payload(
                     "gateway_side": error in GATEWAY_SIDE_JOB_ERRORS,
                 }
         else:
-            add_log("Timed out waiting for the gateway transfer job.")
-            return {"ok": False, "error": "gateway_transfer_timeout", "log": log, "raw": final_data}
+            phase = str(final_data.get("phase") or "unknown")
+            last_block = final_data.get("last_block", "?")
+            total_blocks = final_data.get("total_blocks", "?")
+            add_log(
+                "Timed out waiting for the gateway transfer job "
+                f"at phase {phase}, block {last_block}/{total_blocks}."
+            )
+            # The HTTP poll timing out does not cancel a synchronous GATT write
+            # already running on the ESP32. Current firmware disconnects BLE
+            # and schedules its own restart here; older firmware returns 404,
+            # which remains a useful upgrade diagnostic instead of silently
+            # leaving the gateway wedged forever.
+            cancel_url = (
+                f"{base_url}/api/transfer/cancel?id={quote(job_id, safe='')}"
+            )
+            try:
+                async with session.post(cancel_url, timeout=8) as response:
+                    cancel_data = await response.json(content_type=None)
+                    if response.status in {200, 202} and cancel_data.get("ok") is not False:
+                        add_log(
+                            "Gateway accepted transfer cancellation; waiting for "
+                            "BLE disconnect and automatic recovery restart."
+                        )
+                        await asyncio.sleep(2)
+                    elif response.status == 404:
+                        add_log(
+                            "Gateway firmware does not support transfer cancellation; "
+                            "update its firmware to enable automatic recovery."
+                        )
+                    else:
+                        add_log(
+                            "Gateway rejected transfer cancellation: "
+                            f"{cancel_data.get('error') or f'HTTP {response.status}'}"
+                        )
+            except Exception as cancel_exc:
+                add_log(
+                    "Gateway cancellation response was unavailable; it may already "
+                    f"be restarting: {_exception_message(cancel_exc)}"
+                )
+            return {
+                "ok": False,
+                "error": "gateway_transfer_timeout",
+                "log": log,
+                "raw": final_data,
+                "gateway_side": True,
+            }
     except Exception as exc:
         message = _exception_message(exc)
         add_log(f"Gateway send failed: {message}")

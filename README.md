@@ -4,6 +4,14 @@
 
 # DRATEK eInk pro Home Assistant
 
+## Novinky ve verzi 0.1.351
+
+- **Nenastavené šablony mají výrazné upozornění přes celý náhled** v katalogu i na ploše displeje. Upozornění rozlišuje úplně chybějící a částečné nastavení, ale odeslání ukázkových dat zůstává povolené.
+
+## Novinky ve verzi 0.1.350
+
+- **Menu úprav šablony je přehlednější.** Data z Home Assistantu, vzhled v eInk Studiu a export souboru jsou teď tři vizuálně i slovně odlišené oblasti, takže je na první pohled jasné, kam která volba vede.
+
 ## Novinky ve verzi 0.1.349
 
 - **Chybějící Bluetooth už nezůstane bez vysvětlení.** Po dokončení kontroly zobrazí panel výrazné červené upozornění, pokud Home Assistant nemá dostupný Bluetooth adaptér; během úvodního načítání se falešně neukáže.

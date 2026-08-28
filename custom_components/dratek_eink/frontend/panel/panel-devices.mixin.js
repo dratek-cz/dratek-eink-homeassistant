@@ -1,5 +1,5 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.349";
-import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG } from "./templates/index.js?v=release-0.1.349";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.351";
+import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG, DISPLAY_TEMPLATES_BY_ID } from "./templates/index.js?v=thermostat-live-dial-1";
 
 // Generation of the graphic-row capture written into every series()/ratio()/
 // day()/event()/transit binding. Bumped whenever the recorded box could move,
@@ -24,7 +24,7 @@ const CZECH_NAME_DAYS = [
   ["Hynek", "Nela", "Blažej", "Jarmila", "Dobromila", "Vanda", "Veronika", "Milada", "Apolena", "Mojmír", "Božena", "Slavěna", "Věnceslav", "Valentýn", "Jiřina", "Ljuba", "Miloslava", "Gizela", "Patrik", "Oldřich", "Lenka", "Petr", "Svatopluk", "Matěj", "Liliana", "Dorota", "Alexandr", "Lumír", "Horymír"],
   ["Bedřich", "Anežka", "Kamil", "Stela", "Kazimír", "Miroslav", "Tomáš", "Gabriela", "Františka", "Viktorie", "Anděla", "Řehoř", "Růžena", "Rút, Matylda", "Ida", "Elena, Herbert", "Vlastimil", "Eduard", "Josef", "Světlana", "Radek", "Leona", "Ivona", "Gabriel", "Marián", "Emanuel", "Dita", "Soňa", "Taťána", "Arnošt", "Kvido"],
   ["Hugo", "Erika", "Richard", "Ivana", "Miroslava", "Vendula", "Heřman, Hermína", "Ema", "Dušan", "Darja", "Izabela", "Julius", "Aleš", "Vincenc", "Anastázie", "Irena", "Rudolf", "Valérie", "Rostislav", "Marcela", "Alexandra", "Evženie", "Vojtěch", "Jiří", "Marek", "Oto", "Jaroslav", "Vlastislav", "Robert", "Blahoslav"],
-  ["", "Zikmund", "Alexej", "Květoslav", "Klaudie", "Radoslav", "Stanisla", "", "Ctibor", "Blažena", "Svatava", "Pankrác", "Servác", "Bonifác", "Žofie", "Přemysl", "Aneta", "Nataša", "Ivo", "Zbyšek", "Monika", "Emil", "Vladimír", "Jana", "Viola", "Filip", "Valdemar", "Vilém", "Maxmilián", "Ferdinand", "Kamila"],
+  ["", "Zikmund", "Alexej", "Květoslav", "Klaudie", "Radoslav", "Stanislav", "", "Ctibor", "Blažena", "Svatava", "Pankrác", "Servác", "Bonifác", "Žofie", "Přemysl", "Aneta", "Nataša", "Ivo", "Zbyšek", "Monika", "Emil", "Vladimír", "Jana", "Viola", "Filip", "Valdemar", "Vilém", "Maxmilián", "Ferdinand", "Kamila"],
   ["Laura", "Jarmil", "Tamara", "Dalibor", "Dobroslav", "Norbert", "Iveta, Slavoj", "Medard", "Stanislav", "Gita", "Bruno", "Antonie", "Antonín", "Roland", "Vít", "Zbyněk", "Adolf", "Milan", "Leoš", "Květa", "Alois", "Pavla", "Zdeňka", "Jan", "Ivan", "Adriana", "Ladislav", "Lubomír", "Petr, Pavel", "Šárka"],
   ["Jaroslava", "Patricie", "Radomír", "Prokop", "", "", "Bohuslava", "Nora", "Drahoslava", "Libuše, Amálie", "Olga", "Bořek", "Markéta", "Karolína", "Jindřich", "Luboš", "Martina", "Drahomíra", "Čeněk", "Ilja", "Vítězslav", "Magdeléna", "Libor", "Kristýna", "Jakub", "Anna", "Věroslav", "Viktor", "Marta", "Bořivoj", "Ignác"],
   ["Oskar", "Gustav", "Miluše", "Dominik", "Kristián", "Oldřiška", "Lada", "Soběslav", "Roman", "Vavřinec", "Zuzana", "Klára", "Alena", "Alan", "Hana", "Jáchym", "Petra", "Helena", "Ludvík", "Bernard", "Johana", "Bohuslav", "Sandra", "Bartoloměj", "Radim", "Luděk", "Otakar", "Augustýn", "Evelína", "Vladěna", "Pavlína"],
@@ -596,7 +596,7 @@ export const devicesMixin = {
         </div>
         <div class="display-tile-actions">
           ${assignedTemplates.includes("price") ? `
-            <button type="button" class="display-sale-action-btn ${this._displayTemplateOptions?.["price:sale"] ? "is-active" : ""}" data-device-price-sale="${this._escape(device.address)}" title="Nastavit akční slevu">
+            <button type="button" class="display-sale-action-btn ${this._devicePriceSaleActive(device.address) ? "is-active" : ""}" data-device-price-sale="${this._escape(device.address)}" title="Nastavit akční slevu">
               <ha-icon icon="mdi:sale"></ha-icon>
               <span>AKCE / SLEVA</span>
             </button>
@@ -608,6 +608,33 @@ export const devicesMixin = {
     ${this._renderPriceSaleDialog()}`;
   },
 
+  // The cenovka dialog and the AKCE badge on a device card both belong to one
+  // specific display, which is not necessarily the panel's globally selected
+  // one - opening them straight from the device list used to show (and then
+  // save) whatever display happened to be selected elsewhere. Both read that
+  // display's own draft first and fall back to the live editor state only for
+  // the display currently open in the editor, whose unsaved edits win.
+  _devicePriceSaleBindings(address) {
+    const upperAddr = String(address || "").toUpperCase();
+    const draft = this._deviceDrafts?.[upperAddr] || {};
+    const isSelected = !!upperAddr && upperAddr === String(this._selectedDeviceAddress || "").toUpperCase();
+    return {
+      ...(draft.template_config?.bindings || {}),
+      ...(draft.bindings || {}),
+      ...(isSelected ? this._displayTemplateBindings || {} : {}),
+    };
+  },
+
+  _devicePriceSaleActive(address) {
+    const upperAddr = String(address || "").toUpperCase();
+    const isSelected = !!upperAddr && upperAddr === String(this._selectedDeviceAddress || "").toUpperCase();
+    if (isSelected && this._displayTemplateOptions?.["price:sale"] !== undefined) {
+      return !!this._displayTemplateOptions["price:sale"];
+    }
+    const draft = this._deviceDrafts?.[upperAddr] || {};
+    return !!(draft.template_config?.options?.["price:sale"] ?? draft.options?.sale);
+  },
+
   _renderPriceSaleDialog() {
     const address = this._activePriceSaleDeviceAddress;
     if (!address) return "";
@@ -615,9 +642,7 @@ export const devicesMixin = {
     const device = devices.find((d) => String(d.address || "").toUpperCase() === String(address).toUpperCase())
       || { address, display_name: address };
 
-    const upperAddr = String(address).toUpperCase();
-    const draft = this._deviceDrafts?.[upperAddr] || {};
-    const bindings = draft.bindings || this._displayTemplateBindings || {};
+    const bindings = this._devicePriceSaleBindings(address);
 
     const productTitle = bindings["price:tag-outline"] || bindings["tag-outline"] || "Jablka Golden";
     const oldPriceVal = parseFloat(String(bindings["price:cash-multiple"] || bindings["cash-multiple"] || "199").replace(",", ".")) || 199;
@@ -628,7 +653,7 @@ export const devicesMixin = {
     const savedAmount = Math.max(0, oldPriceVal - newPriceVal);
 
     return `<div class="modal-backdrop price-sale-dialog-backdrop" data-price-sale-close>
-      <section class="price-sale-dialog card" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
+      <section class="price-sale-dialog card" role="dialog" aria-modal="true">
         <header class="price-sale-header">
           <div class="price-sale-header-left">
             <span class="price-sale-badge-icon"><ha-icon icon="mdi:tag-outline"></ha-icon></span>
@@ -640,7 +665,7 @@ export const devicesMixin = {
           <button type="button" class="price-sale-close-btn" data-price-sale-close aria-label="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button>
         </header>
 
-        <div class="price-sale-body" onclick="event.stopPropagation()">
+        <div class="price-sale-body">
           <div class="price-sale-full-field">
             <label for="priceSaleTitle"><ha-icon icon="mdi:format-title"></ha-icon> Název produktu</label>
             <div class="price-sale-input-wrap">
@@ -957,6 +982,8 @@ export const devicesMixin = {
   // unset state for a card that never asks for one.
   _templateBindingStatus(template) {
     if (template?.id === "transport") {
+      // The second stop is optional, so it is never counted as missing - a
+      // board watching one stop is a finished configuration, not a half one.
       const configured = Boolean(String(this._displayTemplateConfig?.transit_stop_id || "").trim());
       return { total: 1, done: configured ? 1 : 0, state: configured ? "complete" : "empty" };
     }
@@ -975,6 +1002,34 @@ export const devicesMixin = {
     if (done >= total) return { total, done, state: "complete" };
     if (done > 0) return { total, done, state: "partial" };
     return { total, done, state: "empty" };
+  },
+
+  // A visible warning, not a lock. Sample data is still a valid thing to send
+  // to an eInk display, so only its explicit Configure button catches pointer
+  // events and the send button remains governed solely by whether a template
+  // is present. The same fragment is used in the catalog and on the physical
+  // display preview.
+  //
+  // There is no longer a "you can still send it" chip beside the button. It
+  // was reassurance for a restriction that does not exist - nothing here has
+  // ever been disabled - and it read as a second, competing action next to
+  // the one button that actually does something. The layer itself carries
+  // that meaning now by being mostly transparent: you can see the template
+  // through it, so it does not look like a blocked screen.
+  _renderTemplateConfigurationWarning(template, status = null) {
+    const current = status || this._templateBindingStatus(template);
+    if (!current || current.state === "complete") return "";
+    const partial = current.state === "partial";
+    return `<span class="template-unconfigured-warning is-${partial ? "partial" : "empty"}" aria-label="${partial ? "Nastavení šablony není dokončené" : "Šablona není nastavená"}">
+      <span class="template-unconfigured-warning-content">
+        <ha-icon icon="mdi:${partial ? "progress-alert" : "alert-circle-outline"}"></ha-icon>
+        <strong>${partial ? "Nastavení není dokončené" : "Šablona není nastavená"}</strong>
+        <small>${partial ? "Část hodnot stále používá ukázková data" : "Zobrazuje zatím ukázková data"}</small>
+        <span class="template-unconfigured-warning-actions">
+          <button type="button" data-display-template-configure="${this._escape(template.id)}" title="Nastavit zdroje dat šablony ${this._escape(template.title)}"><ha-icon icon="mdi:database-cog-outline"></ha-icon>Nastavit</button>
+        </span>
+      </span>
+    </span>`;
   },
 
   _czSpotTemplateBindings() {
@@ -1113,7 +1168,7 @@ export const devicesMixin = {
     const short = Math.min(base.width, base.height);
     const width = orientation === "landscape" ? long : short;
     const height = orientation === "landscape" ? short : long;
-    if (template?.user_created && String(template.preview_image || "").startsWith("data:image/")) {
+    if (template?.user_created && this._hasTrustedUserTemplatePreview(template)) {
       return this._renderDisplayTemplateCatalogPreview(template, orientation, base);
     }
     if (template?.id === "blank") {
@@ -1127,8 +1182,20 @@ export const devicesMixin = {
     return `<span class="template-catalog-lazy-preview" data-template-catalog-preview="${this._escape(template?.id || "")}" data-template-preview-orientation="${orientation}" data-template-preview-width="${width}" data-template-preview-height="${height}"><span class="template-catalog-preview-skeleton"><i></i><i></i><i></i></span></span>`;
   },
 
+  _hasTrustedUserTemplatePreview(template) {
+    if (!String(template?.preview_image || "").startsWith("data:image/")) return false;
+    // Older derived templates already identify the prepared template beneath
+    // them. A from-scratch template did not carry any preview provenance, and
+    // the old save path could therefore capture whatever unrelated template
+    // was still assigned to the display. Trust a blank-based raster only when
+    // the save path explicitly records that it rendered this very template;
+    // otherwise the live compositor below reconstructs it from editor_elements.
+    return Boolean(template?.base_template_id)
+      || String(template?.preview_template_id || "") === String(template?.id || "");
+  },
+
   _renderUserDisplayTemplateCatalogPreview(template, orientation = template?.orientation, width = 250, height = 128) {
-    if (String(template?.preview_image || "").startsWith("data:image/")) {
+    if (this._hasTrustedUserTemplatePreview(template)) {
       return `<span class="user-template-catalog-canvas has-captured-preview"><img class="user-template-captured-preview" src="${this._escape(template.preview_image)}" alt="Náhled ${this._escape(template.title || "vlastní šablony")}"></span>`;
     }
     const elements = Array.isArray(template?.editor_elements) ? template.editor_elements : [];
@@ -1303,6 +1370,7 @@ export const devicesMixin = {
               </header>
               <div class="display-template-tile-preview is-${orientation}" data-display-template-select="${template.id}" role="button" tabindex="0" aria-label="Vybrat šablonu ${this._escape(template.title)} pro displej">
                 <span class="display-template-preview ${userCreated ? "has-user-template" : ""}" style="aspect-ratio:${previewAspect};min-height:0">${this._renderDisplayTemplateCatalogPreviewSlot(template, orientation, size)}</span>
+                ${used ? this._renderTemplateConfigurationWarning(template, configStatus) : ""}
                 ${customImageCard ? "" : `<button type="button" class="display-template-gear" data-display-template-configure="${this._escape(template.id)}" title="Nastavit zdroje dat šablony ${this._escape(template.title)}" aria-label="Nastavit zdroje dat šablony ${this._escape(template.title)}"><ha-icon icon="mdi:cog"></ha-icon></button>`}
               </div>
               <div class="display-template-tile-meta">
@@ -1324,8 +1392,8 @@ export const devicesMixin = {
                 <header class="card-edit-header">
                   <span class="card-edit-kind-icon"><ha-icon icon="mdi:${customImageCard ? "image-multiple-outline" : "tune-variant"}"></ha-icon></span>
                   <div class="card-edit-identity">
-                    <strong>${customImageCard ? "Obrázkové studio" : "Možnosti úpravy"}</strong>
-                    <small>${this._escape(template.title)}</small>
+                    <strong>${customImageCard ? "Obrázkové studio" : "Upravit šablonu"}</strong>
+                    <small><span>${this._escape(template.title)}</span>${customImageCard ? "" : `<span class="card-edit-instruction">Vyberte oblast</span>`}</small>
                   </div>
                   <button type="button" class="card-edit-close-btn" data-display-template-edit-menu="${template.id}" title="Zavřít nastavení">
                     <ha-icon icon="mdi:close"></ha-icon>
@@ -1349,34 +1417,42 @@ export const devicesMixin = {
                       <small>Náhled, výměna obrázku, galerie a automatické střídání</small>
                     </div>
                     <ha-icon icon="mdi:chevron-right" class="option-arrow"></ha-icon>
-                  </button>` : `<button type="button" class="card-edit-option-btn is-primary-action" data-display-template-edit-choice="variables" data-display-template-id="${this._escape(template.id)}">
-                    <span class="option-icon"><ha-icon icon="mdi:database-edit-outline"></ha-icon></span>
-                    <div class="option-text">
-                      <strong>Upravit zdroje dat</strong>
-                      <small>Napojení hodnot na entity Home Assistantu</small>
-                      ${template.variables.length ? `<span class="option-preview-chips">${template.variables.slice(0, 5).map(([iconName, label]) => `<ha-icon icon="mdi:${iconName}" title="${this._escape(label)}"></ha-icon>`).join("")}${template.variables.length > 5 ? `<em>+${template.variables.length - 5}</em>` : ""}</span>` : ""}
-                    </div>
-                    <ha-icon icon="mdi:chevron-right" class="option-arrow"></ha-icon>
-                  </button>
+                  </button>` : `<section class="card-edit-section is-main-section" aria-label="Co chcete změnit">
+                    <div class="card-edit-section-label"><ha-icon icon="mdi:pencil-outline"></ha-icon><span>Co chcete změnit?</span></div>
+                    <button type="button" class="card-edit-option-btn is-primary-action is-data-action" data-display-template-edit-choice="variables" data-display-template-id="${this._escape(template.id)}">
+                      <span class="option-icon"><ha-icon icon="mdi:database-edit-outline"></ha-icon></span>
+                      <div class="option-text">
+                        <span class="option-eyebrow">Home Assistant</span>
+                        <strong>Zdroje dat</strong>
+                        <small>Entity a živé hodnoty</small>
+                        ${template.variables.length ? `<span class="option-preview-chips">${template.variables.slice(0, 5).map(([iconName, label]) => `<ha-icon icon="mdi:${iconName}" title="${this._escape(label)}"></ha-icon>`).join("")}${template.variables.length > 5 ? `<em>+${template.variables.length - 5}</em>` : ""}</span>` : ""}
+                      </div>
+                      <ha-icon icon="mdi:chevron-right" class="option-arrow"></ha-icon>
+                    </button>
 
-                  <button type="button" class="card-edit-option-btn is-primary-action" data-display-template-edit-choice="designer" data-display-template-id="${this._escape(template.id)}">
-                    <span class="option-icon is-live-preview">${this._renderDisplayTemplateCatalogPreviewSlot(template, orientation, size)}</span>
-                    <div class="option-text">
-                      <strong>Designer šablon</strong>
-                      <small>Rozložení, prvky a vzhled v eInk Studiu</small>
-                    </div>
-                    <ha-icon icon="mdi:chevron-right" class="option-arrow"></ha-icon>
-                  </button>
+                    <button type="button" class="card-edit-option-btn is-primary-action is-design-action" data-display-template-edit-choice="designer" data-display-template-id="${this._escape(template.id)}">
+                      <span class="option-icon is-live-preview">${this._renderDisplayTemplateCatalogPreviewSlot(template, orientation, size)}</span>
+                      <div class="option-text">
+                        <span class="option-eyebrow">eInk Studio</span>
+                        <strong>Vzhled a rozložení</strong>
+                        <small>Prvky, texty a grafika</small>
+                      </div>
+                      <ha-icon icon="mdi:chevron-right" class="option-arrow"></ha-icon>
+                    </button>
+                  </section>
 
-                  <button type="button" class="card-edit-option-btn" data-display-template-export="${this._escape(template.id)}">
-                    <span class="option-icon"><ha-icon icon="mdi:file-download-outline"></ha-icon></span>
-                    <div class="option-text">
-                      <strong>Exportovat šablonu</strong>
-                      <small>Stáhnout šablonu jako .json soubor</small>
-                      <code class="option-filename">${this._escape(template.id)}.json</code>
-                    </div>
-                    <ha-icon icon="mdi:download" class="option-arrow"></ha-icon>
-                  </button>`}
+                  <section class="card-edit-section is-file-section" aria-label="Soubor šablony">
+                    <div class="card-edit-section-label"><ha-icon icon="mdi:file-outline"></ha-icon><span>Soubor šablony</span></div>
+                    <button type="button" class="card-edit-option-btn is-secondary-action" data-display-template-export="${this._escape(template.id)}">
+                      <span class="option-icon"><ha-icon icon="mdi:file-download-outline"></ha-icon></span>
+                      <div class="option-text">
+                        <strong>Exportovat šablonu</strong>
+                        <small>Stáhnout soubor</small>
+                        <code class="option-filename">${this._escape(template.id)}.json</code>
+                      </div>
+                      <ha-icon icon="mdi:download" class="option-arrow"></ha-icon>
+                    </button>
+                  </section>`}
 
                   ${userCreated ? `<button type="button" class="card-edit-option-btn is-delete" data-delete-user-template="${this._escape(template.id)}">
                     <span class="option-icon is-delete-icon"><ha-icon icon="mdi:trash-can-outline"></ha-icon></span>
@@ -1690,6 +1766,10 @@ export const devicesMixin = {
       orientation: this._displayTemplateOrientation === "landscape" ? "landscape" : "portrait",
       layout: this._displayTemplateLargeLayout || "single",
       bindings: structuredClone(this._displayTemplateBindings || {}),
+      // Template switches such as "price:sale" used to live only in memory, so
+      // the red AKCE cenovka fell back to plain black and white on every
+      // reload. They travel with the draft like the bindings they belong to.
+      options: structuredClone(this._displayTemplateOptions || {}),
       editor_elements: structuredClone(this._templateEditorElements || []),
       element_adjustments: structuredClone(this._templateElementAdjustments || {}),
       template_states: structuredClone(this._templateEditorStates || {}),
@@ -1703,6 +1783,11 @@ export const devicesMixin = {
       meteoradar_show_wind: this._displayTemplateConfig?.meteoradar_show_wind === true,
       transit_stop_id: this._displayTemplateConfig?.transit_stop_id || "",
       transit_stop_name: this._displayTemplateConfig?.transit_stop_name || "",
+      // The optional second stop. A village where the train halt and the bus
+      // stop are a hundred metres apart is one place to a person waiting there,
+      // and the board merges both by departure time.
+      transit_stop_id_2: this._displayTemplateConfig?.transit_stop_id_2 || "",
+      transit_stop_name_2: this._displayTemplateConfig?.transit_stop_name_2 || "",
       custom_image_data: this._customImageDataUrl || "",
       custom_image_source: this._customImageSourceUrl || "",
       custom_image_variants: structuredClone(this._customImageVariants || {}),
@@ -1729,6 +1814,8 @@ export const devicesMixin = {
       meteoradar_show_wind: config?.meteoradar_show_wind === true,
       transit_stop_id: String(config?.transit_stop_id || ""),
       transit_stop_name: String(config?.transit_stop_name || ""),
+      transit_stop_id_2: String(config?.transit_stop_id_2 || ""),
+      transit_stop_name_2: String(config?.transit_stop_name_2 || ""),
     };
     this._customImageDataUrl = String(config?.custom_image_data || "").startsWith("data:image/")
       ? String(config.custom_image_data)
@@ -1772,6 +1859,7 @@ export const devicesMixin = {
       this._selectedDisplayTemplateId = "";
       this._selectedDisplayTemplateSecondaryId = "";
       this._displayTemplateBindings = {};
+      this._displayTemplateOptions = {};
       this._templateEditorElements = [];
       this._templateEditorStates = {};
       this._selectedTemplateEditorElementId = "";
@@ -1804,6 +1892,7 @@ export const devicesMixin = {
       ? config.designer_viewport
       : "wide";
     this._displayTemplateBindings = structuredClone(config.bindings || {});
+    this._displayTemplateOptions = structuredClone(config.options || {});
     this._templateEditorStates = {};
     if (config.template_states && typeof config.template_states === "object" && !Array.isArray(config.template_states)) {
       for (const [templateId, state] of Object.entries(config.template_states)) {
@@ -1913,8 +2002,26 @@ export const devicesMixin = {
     const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
     if (address) {
       this._displayTemplateAssignments ||= {};
-      this._displayTemplateAssignments[address] = this._assignedDisplayTemplates(device)
-        .map((templateId) => templateId === selectedId ? id : templateId);
+      const currentAssignments = this._assignedDisplayTemplates(device);
+      const selectedWasAssigned = currentAssignments.includes(selectedId);
+      // Opening "Nová šablona" intentionally does not replace the display
+      // before the user saves. Consequently "blank" is usually absent from
+      // currentAssignments and the old map-only update left the previous
+      // display template in place. The preview capture that runs immediately
+      // after this method then rasterised that old template and merely painted
+      // the new Designer elements over it. A design opened outside the active
+      // assignment becomes the single active template at save time; editing a
+      // template already present in a multi-slot layout still preserves the
+      // other slots.
+      const nextAssignments = selectedWasAssigned
+        ? currentAssignments.map((templateId) => templateId === selectedId ? id : templateId)
+        : [id];
+      this._displayTemplateAssignments[address] = nextAssignments;
+      this._selectedDisplayTemplateSecondaryId = nextAssignments[1] || "";
+      if (!selectedWasAssigned) {
+        this._selectedTemplateCanvasSlot = "primary";
+        this._displayTemplateLargeLayout = "single";
+      }
     }
     this._selectedDisplayTemplateId = id;
     this._rememberActiveTemplateEditorState(id);
@@ -2434,21 +2541,77 @@ export const devicesMixin = {
     </section></div>`;
   },
 
+  // Which of the two stop slots the next search result is filed under. Slot 2
+  // is optional and only offered once slot 1 holds something - "druhá
+  // zastávka" is meaningless without a first one.
+  _transitStopSlotTarget() {
+    const config = this._displayTemplateConfig || {};
+    const slot = Number(this._transitStopSlot) === 2 ? 2 : 1;
+    return String(config.transit_stop_id || "").trim() ? slot : 1;
+  },
+
+  _renderTransitStopSlot(slot) {
+    const config = this._displayTemplateConfig || {};
+    const suffix = slot === 2 ? "_2" : "";
+    const name = String(config[`transit_stop_name${suffix}`] || "");
+    if (!name) return "";
+    return `<div class="template-setup-status-banner is-complete">
+      <ha-icon icon="mdi:${slot === 2 ? "bus-multiple" : "bus-stop-covered"}"></ha-icon>
+      <span><strong>${this._escape(name)}</strong><small>${slot === 2 ? "Druhá zastávka – odjezdy se slučují do jedné tabule." : "Zastávka je uložená pro tento displej."}</small></span>
+      <span class="transit-stop-slot-actions">
+        <button type="button" class="ghost" data-transit-stop-slot="${slot}">Změnit</button>
+        ${slot === 2 ? `<button type="button" class="ghost" data-transit-stop-clear="2">Odebrat</button>` : ""}
+      </span>
+    </div>`;
+  },
+
   _renderTransitStopPicker() {
     const config = this._displayTemplateConfig || {};
-    const selected = String(config.transit_stop_name || "");
+    const first = String(config.transit_stop_name || "");
+    const second = String(config.transit_stop_name_2 || "");
+    const target = this._transitStopSlotTarget();
     const results = Array.isArray(this._transitStopResults) ? this._transitStopResults : [];
-    const status = this._transitSearchError
+    const error = this._transitSearchError
       ? `<div class="template-setup-note-card"><ha-icon icon="mdi:alert-circle-outline"></ha-icon><span>${this._escape(this._transitSearchError)}</span></div>`
-      : selected
-        ? `<div class="template-setup-status-banner is-complete"><ha-icon icon="mdi:bus-stop-covered"></ha-icon><span><strong>${this._escape(selected)}</strong><small>Zastávka je uložená pro tento displej.</small></span></div>`
-        : "";
+      : "";
+    // Offered, not forced: most displays watch one stop, and the second slot
+    // stays out of the way until it is asked for.
+    const addSecond = first && !second && target !== 2
+      ? `<button type="button" class="ghost transit-stop-add" data-transit-stop-slot="2"><ha-icon icon="mdi:plus"></ha-icon>Přidat druhou zastávku</button>`
+      : "";
+    const searchTitle = target === 2 ? "Najít druhou zastávku" : "Najít zastávku";
     return `<section class="transit-stop-picker">
-      ${status}
-      <label><strong>Najít zastávku</strong><span><input type="search" data-transit-stop-query value="${this._escape(this._transitStopQuery || "")}" placeholder="např. Brno, Česká"><button type="button" class="primary-action" data-transit-stop-search ${this._transitSearchLoading ? "disabled" : ""}><ha-icon icon="mdi:${this._transitSearchLoading ? "loading" : "magnify"}"></ha-icon>Hledat</button></span></label>
+      ${error}
+      ${this._renderTransitStopSlot(1)}
+      ${this._renderTransitStopSlot(2)}
+      ${addSecond}
+      <label><strong>${searchTitle}</strong><span><input type="search" data-transit-stop-query value="${this._escape(this._transitStopQuery || "")}" placeholder="např. Brno, Česká"><button type="button" class="primary-action" data-transit-stop-search ${this._transitSearchLoading ? "disabled" : ""}><ha-icon icon="mdi:${this._transitSearchLoading ? "loading" : "magnify"}"></ha-icon>Hledat</button></span></label>
       ${results.length ? `<div class="transit-stop-results">${results.map((stop) => `<button type="button" data-transit-stop-id="${this._escape(stop.id)}" data-transit-stop-name="${this._escape(stop.name)}"><ha-icon icon="mdi:bus-stop"></ha-icon><span><strong>${this._escape(stop.name)}</strong><small>${this._escape([stop.locality, stop.country].filter(Boolean).join(" · "))}</small></span><ha-icon icon="mdi:chevron-right"></ha-icon></button>`).join("")}</div>` : ""}
       <small class="template-picker-help">Data poskytuje Transitous z otevřených jízdních řádů dopravců. <a href="https://transitous.org/sources/" target="_blank" rel="noopener noreferrer">Použité zdroje</a></small>
     </section>`;
+  },
+
+  _setTransitStopSlot(slot) {
+    this._transitStopSlot = Number(slot) === 2 ? 2 : 1;
+    this._transitStopResults = [];
+    this._transitSearchError = "";
+    this._render();
+    this._paint();
+  },
+
+  _clearTransitStop(slot) {
+    if (Number(slot) !== 2) return;
+    this._displayTemplateConfig ||= {};
+    this._displayTemplateConfig.transit_stop_id_2 = "";
+    this._displayTemplateConfig.transit_stop_name_2 = "";
+    this._transitStopSlot = 1;
+    // The merged board is cached under a key naming both stops, so dropping
+    // one has to invalidate it or the removed stop keeps printing.
+    this._transitPreview = null;
+    this._rememberTransitStopInDraft();
+    this._scheduleDraftSave?.();
+    this._render();
+    this._paint();
   },
 
   async _searchTransitStops() {
@@ -2491,13 +2654,20 @@ export const devicesMixin = {
     draft.template_config ||= {};
     draft.template_config.transit_stop_id = String(this._displayTemplateConfig?.transit_stop_id || "");
     draft.template_config.transit_stop_name = String(this._displayTemplateConfig?.transit_stop_name || "");
+    draft.template_config.transit_stop_id_2 = String(this._displayTemplateConfig?.transit_stop_id_2 || "");
+    draft.template_config.transit_stop_name_2 = String(this._displayTemplateConfig?.transit_stop_name_2 || "");
     this._deviceDrafts[address] = draft;
   },
 
   async _selectTransitStop(stopId, stopName) {
     this._displayTemplateConfig ||= {};
-    this._displayTemplateConfig.transit_stop_id = String(stopId || "");
-    this._displayTemplateConfig.transit_stop_name = String(stopName || "");
+    const suffix = this._transitStopSlotTarget() === 2 ? "_2" : "";
+    this._displayTemplateConfig[`transit_stop_id${suffix}`] = String(stopId || "");
+    this._displayTemplateConfig[`transit_stop_name${suffix}`] = String(stopName || "");
+    // The board is cached under a key naming both stops; changing either one
+    // has to drop it rather than let the old pair keep printing.
+    this._transitPreview = null;
+    this._transitStopSlot = 1;
     this._transitStopResults = [];
     this._transitSearchError = "";
     // Persisted before the live board is fetched, not after it. The fetch is a
@@ -2508,16 +2678,17 @@ export const devicesMixin = {
     this._rememberTransitStopInDraft();
     this._scheduleDraftSave?.();
     try {
-      const response = await this._hass.callWS({ type: "dratek_eink/transit/departures", stop_id: stopId, limit: 4 });
-      this._transitPreview = {
-        ...response,
-        stop_id: String(stopId),
-        stop_name: response?.stop_name || stopName,
-        fetched_at: Date.now(),
-      };
+      const response = await this._hass.callWS({
+        type: "dratek_eink/transit/departures", stop_id: stopId, limit: 4,
+      });
       // The provider's own spelling of the stop wins over the search result's,
       // so the board's header reads the same as the departures under it.
-      this._displayTemplateConfig.transit_stop_name = this._transitPreview.stop_name;
+      const providerName = String(response?.stop_name || stopName || "");
+      if (providerName) this._displayTemplateConfig[`transit_stop_name${suffix}`] = providerName;
+      // Deliberately not written into _transitPreview: that cache now holds the
+      // merged board for both stops, and a single stop's response is not it.
+      // _ensureTemplateTransitBoard refetches on the next repaint, which is the
+      // only thing that knows how to merge.
       this._rememberTransitStopInDraft();
       this._scheduleDraftSave?.();
     } catch (error) {
@@ -2972,6 +3143,21 @@ export const devicesMixin = {
   // design() in the template file) to know which variable index feeds it,
   // since by the time a row exists ratio()/series() have already collapsed
   // to a plain number and there is no trace of where it came from.
+  // Where a template's `automation` block is read from.
+  //
+  // It is declared on the template module, beside `catalog` - but what reaches
+  // this method is a catalog *card*: id, number, category, title, variables,
+  // kind, and nothing else (see _displayTemplateCards). `template.automation`
+  // was therefore undefined for every template that declares one, so the ratio
+  // and chart branches below returned null and no gauge or chart in the
+  // catalog was ever redrawn by an automatic refresh - each stayed frozen at
+  // whatever the manual send happened to draw. Looked up by id instead, which
+  // works whichever of the two shapes the caller has.
+  _templateAutomationDeclarations(template) {
+    const id = String(template?.id || "");
+    return DISPLAY_TEMPLATES_BY_ID[id]?.automation || template?.automation || null;
+  },
+
   _templateAutomationGraphicBinding(template, group, row, geometry) {
     if (group === "transport-board") {
       const stopId = String(this._displayTemplateConfig?.transit_stop_id || "").trim();
@@ -2980,6 +3166,11 @@ export const devicesMixin = {
         type: "transit",
         stop_id: stopId,
         stop_name: String(this._displayTemplateConfig?.transit_stop_name || ""),
+        // The optional second stop travels with the binding so an automatic
+        // refresh merges the same pair the manual send did - a board that
+        // dropped back to one stop overnight is worse than no board.
+        stop_id_2: String(this._displayTemplateConfig?.transit_stop_id_2 || "").trim(),
+        stop_name_2: String(this._displayTemplateConfig?.transit_stop_name_2 || ""),
         limit: Array.isArray(row.board) ? row.board.length : 4,
         compact: !!row.compact,
         // Which of the two board layouts this panel's design() chose. The
@@ -2996,6 +3187,36 @@ export const devicesMixin = {
           line: String(item.badge || "–"), destination: String(item.label || "Spoj"),
           time: String(item.value || ""), departure: String(item.clock || ""),
         })) : []),
+        ...geometry,
+      };
+    }
+    if (group === "shopping-list") {
+      const entityId = this._templateEntityForKind(template, ["todo_list"]);
+      if (!entityId) return null;
+      const items = Array.isArray(row.checklist) ? row.checklist : [];
+      return {
+        type: "todo",
+        entity_id: entityId,
+        // design() already decided how many rows this particular panel has
+        // room for and how they are columned; the backend must reproduce that
+        // decision rather than re-derive it from the box, which cannot tell a
+        // portrait tag from a small landscape one.
+        limit: items.length || 1,
+        columns: Math.max(1, Number(row.columns) || 1),
+        // The grid shape, not just its width: render.py has to transpose the
+        // refreshed items into columns exactly as shopping.js's columnMajor
+        // did for this send, and the number of lines is what that needs.
+        lines: Math.max(1, Math.ceil((items.length || 1) / Math.max(1, Number(row.columns) || 1))),
+        marker: row.marker === "dot" ? "dot" : "box",
+        strike: !!row.strike,
+        compact: !!row.compact,
+        // Whether the first outstanding item is the red one. Recorded rather
+        // than recomputed for the same reason as `columns`.
+        highlight_first: items[0]?.color === "red",
+        fallback: JSON.stringify(items.map((item) => ({
+          summary: String(item.label || ""),
+          status: item.done ? "completed" : "needs_action",
+        }))),
         ...geometry,
       };
     }
@@ -3025,7 +3246,7 @@ export const devicesMixin = {
       };
     }
     if (group === "ratio") {
-      const declared = template?.automation?.ratio;
+      const declared = this._templateAutomationDeclarations(template)?.ratio;
       if (!Array.isArray(declared) || !declared.length) return null;
       let visual = "bars";
       let sources = [];
@@ -3051,6 +3272,12 @@ export const devicesMixin = {
             divisor: Number(entry.divisor) || 1,
             label: source.label != null ? String(source.label) : "",
             color: source.color === "red" ? "red" : "black",
+            // How the backend is to turn the entity into a fill. Empty is the
+            // usual "read the state as a number"; "thermostat" means read
+            // current_temperature and scale it between min_temp and max_temp,
+            // because a climate entity's own state is "heat"/"off" and the
+            // numeric path resolves that to an empty dial.
+            source: entry.source === "thermostat" ? "thermostat" : "",
           };
         })
         .filter(Boolean);
@@ -3072,8 +3299,15 @@ export const devicesMixin = {
       };
     }
     if (group === "chart") {
-      const declared = template?.automation?.series?.[0];
+      // Two ways a chart is fed. `series` is an entity that publishes its own
+      // array of numbers and needs no fetch at all; `history` is an entity
+      // that publishes only the present, and whose past has to come out of the
+      // recorder (thermostat.js - see _templateHistorySeries for why a
+      // climate.* entity can never take the first route).
+      const automation = this._templateAutomationDeclarations(template);
+      const declared = automation?.series?.[0] || automation?.history;
       if (!declared) return null;
+      const fromHistory = !automation?.series?.[0] && !!automation?.history;
       const index = Number(declared.variableIndex);
       const variable = template?.variables?.[index];
       if (!variable) return null;
@@ -3089,7 +3323,16 @@ export const devicesMixin = {
       const labels = Array.isArray(row.bars?.labels) ? row.bars.labels.map((label) => String(label ?? "")) : [];
       const highlightIndex = Number.isInteger(row.bars?.highlight) ? row.bars.highlight : -1;
       return {
-        type: "series", entity_id: entityId, chartType, caption, labels, highlight: highlightIndex,
+        type: fromHistory ? "history" : "series",
+        // How far back and how many points - the panel resampled the recorder's
+        // rows into evenly spaced buckets to draw this, and a refresh that
+        // picked its own numbers would redraw the same twelve hours at a
+        // different resolution every time.
+        ...(fromHistory ? {
+          hours: Math.max(1, Number(declared.hours) || 12),
+          points: Math.max(2, Number(declared.points) || 24),
+        } : {}),
+        entity_id: entityId, chartType, caption, labels, highlight: highlightIndex,
         // See the ratio binding: yellow is the panel's decision, not something
         // the backend can work out from the row.
         accent: this._ratioAccent(row, chartType === "bar" ? "bars" : "spark", row.spark || {}),
@@ -3312,7 +3555,7 @@ export const devicesMixin = {
       // small and precisely positioned by this loop, once again as part of
       // the full row by the ratio renderer.
       const ratioClaimedIndices = new Set(
-        (template?.automation?.ratio || []).map((entry) => Number(entry.variableIndex))
+        (this._templateAutomationDeclarations(template)?.ratio || []).map((entry) => Number(entry.variableIndex))
       );
       for (let index = 0; index < (template.variables || []).length; index += 1) {
         if (ratioClaimedIndices.has(index)) continue;
@@ -3506,7 +3749,7 @@ export const devicesMixin = {
         node.removeAttribute("href");
         continue;
       }
-      if (["text", "ratio", "series", "forecast", "calendar", "transit"].includes(binding.type)) {
+      if (["text", "ratio", "series", "history", "forecast", "calendar", "transit", "todo"].includes(binding.type)) {
         node.remove();
       }
     }
@@ -3977,6 +4220,7 @@ export const devicesMixin = {
       const layoutColumns = layoutTransposed ? layoutDefinition.rows : layoutDefinition.columns;
       const layoutRows = layoutTransposed ? layoutDefinition.columns : layoutDefinition.rows;
       const visibleTemplates = (Array.isArray(templates) ? templates : [templates]).filter(Boolean).slice(0, layoutDefinition.capacity);
+      const hasConfigWarning = visibleTemplates.some((template) => this._templateBindingStatus(template).state !== "complete");
       const layoutSlots = this._displayTemplateLayoutSlots(layout, sourceWidth, sourceHeight);
       const primaryFillsDisplay = autoFit || !large400Layout;
       const ditherKey = autoFit ? this._escape(JSON.stringify({
@@ -3994,7 +4238,7 @@ export const devicesMixin = {
             <foreignObject x="0" y="0" width="${outerWidth}" height="${outerHeight}">
               <div xmlns="http://www.w3.org/1999/xhtml" class="designer-device-stage device-preview-designer-copy designer-stage-${orientation}" style="--designer-stage-width:${outerWidth}px;--designer-stage-height:${outerHeight}px;--designer-frame-ratio:${frameRatio.toFixed(4)};--designer-frame-width:${frameWidth}px;--designer-frame-rotation:${orientation === "portrait" ? "90deg" : "0deg"};--designer-screen-width:${sourceWidth}px;--designer-screen-height:${sourceHeight}px;--designer-body-width:${baseWidth}px;--device-frame-radius:${frameRadius}px">
                 <div class="designer-device-bezel ${pe29Layout ? "designer-device-pe29" : ""} ${labelledLargeLayout ? "designer-device-large400" : ""} ${wide800Layout ? "designer-device-wide800" : ""} designer-device-landscape">${labelledLargeLayout ? `<span class="device-large400-top-band"></span><span class="device-large400-bottom-band"><span class="device-large400-label">${this._renderDeviceBarcode(address, true)}<span class="device-large400-mac">${this._escape(address)}</span></span></span>` : pe29Layout ? `<span class="designer-device-identification"><span class="designer-device-code">${this._escape(physicalCode)}</span>${this._renderDeviceBarcode(physicalCode, false)}</span>` : `<span class="designer-device-code">${this._escape(physicalCode)}</span>`}</div>
-                <div class="designer-device-screen template-designer-screen">
+                <div class="designer-device-screen template-designer-screen" data-has-config-warning="${hasConfigWarning ? "true" : "false"}">
                   <div class="template-device-layout layout-${layout} ${layoutTransposed ? "is-layout-transposed" : ""} ${large400Layout ? "is-large-display" : "is-small-display"}" style="--layout-columns:${layoutColumns};--layout-rows:${layoutRows}">
                     ${visibleTemplates.map((template, index) => {
                       const slotGeometry = layoutSlots[index] || layoutSlots[0];
@@ -5430,6 +5674,99 @@ export const devicesMixin = {
     return null;
   },
 
+  // The items of a todo.* list. Same shape of fetch as the calendar above and
+  // for the same reason: a todo entity's state is the number of items left, and
+  // the items themselves are not in its attributes at all - `todo.get_items` is
+  // the only way to read them.
+  _templateTodoItems(entityId) {
+    if (!entityId || !this._hass?.callService) return null;
+    this._templateTodoCache ||= new Map();
+    if (this._templateTodoCache.has(entityId)) return this._templateTodoCache.get(entityId);
+    this._templateTodoCache.set(entityId, null);
+    if (this._templateTodoCache.size > 64) {
+      this._templateTodoCache.delete(this._templateTodoCache.keys().next().value);
+    }
+    Promise.resolve()
+      // No `status` filter: a shopping list that shows only what is left has
+      // nothing to strike through, and the struck rows are what make the page
+      // read as a list being worked through rather than a list being retyped.
+      .then(() => this._hass.callService("todo", "get_items", {}, { entity_id: entityId }, false, true))
+      .then((result) => {
+        const items = result?.response?.[entityId]?.items;
+        if (Array.isArray(items)) {
+          this._templateTodoCache.set(entityId, items);
+          this._scheduleTemplateDataRepaint();
+        }
+      })
+      .catch(() => {
+        // An installation too old for response data, or a list that has since
+        // been removed. The sample list stays, which is honest.
+      });
+    return null;
+  },
+
+  // A recorded series for one entity, for the templates that draw a graph of
+  // something Home Assistant does not keep in an attribute.
+  //
+  // _templateSeries covers the other case - an entity that publishes its own
+  // array (spot prices, a soil-moisture list) - and needs no call at all. A
+  // thermostat has neither: `climate.*` carries one number for right now, and
+  // the only place its past lives is the recorder.
+  _templateHistorySeries(entityId, hours = 12, points = 24) {
+    if (!entityId || !this._hass?.callWS) return null;
+    const key = `${entityId}:${hours}:${points}`;
+    this._templateHistoryCache ||= new Map();
+    if (this._templateHistoryCache.has(key)) return this._templateHistoryCache.get(key);
+    this._templateHistoryCache.set(key, null);
+    if (this._templateHistoryCache.size > 32) {
+      this._templateHistoryCache.delete(this._templateHistoryCache.keys().next().value);
+    }
+    const climate = entityId.startsWith("climate.");
+    Promise.resolve()
+      .then(() => this._hass.callWS({
+        type: "history/history_during_period",
+        start_time: new Date(Date.now() - hours * 3600 * 1000).toISOString(),
+        entity_ids: [entityId],
+        // A climate entity keeps the room temperature in an attribute, so the
+        // minimal response - which is state strings only - would come back as
+        // a list of "heat" with no number in it anywhere.
+        minimal_response: !climate,
+        no_attributes: !climate,
+        significant_changes_only: false,
+      }))
+      .then((response) => {
+        const rows = response?.[entityId];
+        if (!Array.isArray(rows)) return;
+        const numbers = rows
+          .map((entry) => Number(climate ? (entry?.a?.current_temperature ?? entry?.attributes?.current_temperature) : (entry?.s ?? entry?.state)))
+          .filter(Number.isFinite);
+        if (numbers.length < 2) return;
+        this._templateHistoryCache.set(key, this._resampleSeries(numbers, points));
+        this._scheduleTemplateDataRepaint();
+      })
+      .catch(() => {
+        // No recorder, an entity excluded from it, or an installation too old
+        // for this message. The sample curve stays, which is honest.
+      });
+    return null;
+  },
+
+  // Evenly spaced buckets rather than the raw recorder rows: a thermostat can
+  // report twice a minute or twice an hour, and a graph drawn straight from
+  // those rows would show the sampling rate rather than the temperature. Each
+  // bucket is its own mean, so a dense stretch cannot outvote a sparse one.
+  _resampleSeries(numbers, points) {
+    if (numbers.length <= points) return numbers;
+    const out = [];
+    for (let index = 0; index < points; index += 1) {
+      const from = Math.floor((index * numbers.length) / points);
+      const to = Math.max(from + 1, Math.floor(((index + 1) * numbers.length) / points));
+      const slice = numbers.slice(from, to);
+      out.push(slice.reduce((sum, value) => sum + value, 0) / slice.length);
+    }
+    return out;
+  },
+
   // Both fetches land independently; coalescing the repaint keeps a template with a
   // forecast and a calendar from redrawing the whole panel twice.
   _scheduleTemplateDataRepaint() {
@@ -5556,6 +5893,89 @@ export const devicesMixin = {
       month: new Intl.DateTimeFormat("cs-CZ", { month: "short" }).format(start).replace(/\./g, "").slice(0, 3).toLocaleUpperCase("cs"),
       title: event.summary || sample.title,
       detail: [allDay ? "celý den" : time, event.location].filter(Boolean).join(" · "),
+    };
+  },
+
+  // thermostat.js's whole page: where the room is inside the range the
+  // thermostat itself works over, and how it got there.
+  //
+  // The dial used to be `percent: 0.5` with the scale ends written out as
+  // "15°"/"28°" - a drawing of a gauge rather than a reading of one. Every
+  // number here comes off the bound entity, and the span is the thermostat's
+  // own min_temp/max_temp so the needle and the numbers under it agree.
+  _templateThermostat(template) {
+    const binding = this._templateEntityForKind(template, ["temperature"]);
+    const state = binding ? this._hass?.states?.[binding] : null;
+    const climate = String(binding || "").startsWith("climate.");
+    const attributes = state?.attributes || {};
+    const number = (value) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+    const current = climate ? number(attributes.current_temperature) : number(state?.state);
+    const target = climate ? number(attributes.temperature) : null;
+    // A thermostat publishes the range it can actually be set to. A plain
+    // temperature sensor does not, and a domestic comfort span reads far
+    // better on a half-dial than a 0-100 one would.
+    const min = number(attributes.min_temp) ?? 10;
+    const max = number(attributes.max_temp) ?? 30;
+    const span = max - min;
+    const percent = current == null || span <= 0
+      ? 0
+      : Math.max(0, Math.min(1, (current - min) / span));
+    const degrees = (value) => (value == null ? "" : `${Math.round(value)}°`);
+    return {
+      current,
+      target,
+      min,
+      max,
+      percent,
+      minLabel: degrees(min),
+      maxLabel: degrees(max),
+      // Sampled from the same entity the dial reads, so the curve and the
+      // needle can never be about two different rooms.
+      history: this._templateHistorySeries(binding, 12, 24),
+      entityId: binding || "",
+    };
+  },
+
+  // shopping.js's whole page: the bound list's real items with the unchecked
+  // ones first, plus the counts the band and the footer print.
+  //
+  // Unchecked first is not a preference, it is what the page is for - the items
+  // still to be picked up are the reason the display is on the fridge, and a
+  // panel with room for six rows of a twenty-item list must not spend them on
+  // the fourteen already in the basket.
+  _templateShoppingList(template) {
+    const sample = [
+      { label: "Mléko", done: true },
+      { label: "Chléb", done: true },
+      { label: "Jablka", done: false },
+      { label: "Káva", done: false },
+      { label: "Prací gel", done: false },
+      { label: "Vejce", done: false },
+    ];
+    const entityId = this._templateEntityForKind(template, ["todo_list"]);
+    const raw = this._templateTodoItems(entityId);
+    const state = entityId ? this._hass?.states?.[entityId] : null;
+    const name = String(state?.attributes?.friendly_name || "").trim() || "Nákupní seznam";
+    const items = Array.isArray(raw)
+      ? raw
+        .map((item) => ({
+          label: String(item?.summary || "").trim(),
+          done: String(item?.status || "").toLowerCase() === "completed",
+        }))
+        .filter((item) => item.label)
+      : sample;
+    const pending = items.filter((item) => !item.done);
+    const done = items.filter((item) => item.done);
+    return {
+      name,
+      // An empty real list is a real answer - everything is ticked off - so it
+      // must not fall back to the sample the way a list still loading does.
+      items: [...pending, ...done],
+      remaining: pending.length,
+      total: items.length,
     };
   },
 
@@ -5869,6 +6289,9 @@ export const devicesMixin = {
     // is also the start of washer's "Zbývající čas" and must still fall through
     // to the timestamp check below rather than be caught here.
     if (has("počet zbývajících")) return "todo_count";
+    // The list entity itself, not one item's name. Has to be tested before the
+    // todo_item line below, whose bare "seznam" stem also matches this label.
+    if (has("nákupní seznam", "úkolovník")) return "todo_list";
     if (has("položk", "splněn", "seznam")) return "todo_item";
     if (has("program")) return "program";
     if (has("věk", "číslo")) return "generic";
@@ -5929,6 +6352,9 @@ export const devicesMixin = {
       // wants one item's name as text.
       todo_item: { domains: ["input_text", "sensor"] },
       todo_count: { domains: ["todo", "sensor", "input_number"] },
+      // The list itself. Only a todo.* entity can answer todo.get_items, so
+      // unlike todo_count there is nothing else worth offering here.
+      todo_list: { domains: ["todo"] },
       program: { domains: ["sensor", "select", "vacuum", "humidifier"] },
       timestamp: { domains: ["sensor", "input_datetime"], classes: ["timestamp", "duration"] },
       shipment: { domains: ["sensor"] },
@@ -6083,8 +6509,10 @@ export const devicesMixin = {
     // is drawn edge to edge and offers neither the drag handle nor the outline.
     const fullBleed = fillDisplay && !autoFit;
     const placeable = !autoFit && !fullBleed;
+    const configStatus = this._templateBindingStatus(template);
+    const hasConfigWarning = configStatus.state !== "complete";
     return `<div class="template-display-slot" data-template-display-slot="${slot}">
-      <div class="display-template-surface template-canvas-item size-${templateSize === "large" ? "large" : "small"} format-${format === "wide" ? "wide" : "narrow"} is-${orientation} ${selected ? "is-selected" : ""} ${autoFit ? "is-auto-fit" : ""} ${fullBleed ? "is-full-bleed" : ""}" data-preview-template="${template.id}" data-template-canvas-slot="${slot}" ${placeable ? `tabindex="0" role="button" aria-label="Šablona ${this._escape(template.title)}. Kliknutím vyberte a tažením přesuňte."` : ""} style="--template-item-x:${placementX}%;--template-item-y:${placementY}%">
+      <div class="display-template-surface template-canvas-item size-${templateSize === "large" ? "large" : "small"} format-${format === "wide" ? "wide" : "narrow"} is-${orientation} ${selected ? "is-selected" : ""} ${autoFit ? "is-auto-fit" : ""} ${fullBleed ? "is-full-bleed" : ""} ${hasConfigWarning ? "has-config-warning" : ""}" data-preview-template="${template.id}" data-template-canvas-slot="${slot}" ${placeable ? `tabindex="0" role="button" aria-label="Šablona ${this._escape(template.title)}. Kliknutím vyberte a tažením přesuňte."` : ""} style="--template-item-x:${placementX}%;--template-item-y:${placementY}%">
         <svg class="template-responsive-preview" viewBox="0 0 ${templateWidth} ${templateHeight}" preserveAspectRatio="${fillDisplay ? "none" : "xMidYMid meet"}" aria-hidden="true">
           <foreignObject x="0" y="0" width="${templateWidth}" height="${templateHeight}">
             <div xmlns="http://www.w3.org/1999/xhtml" class="template-responsive-preview-body">${this._templateSvgPreviewBody(template, templateWidth, templateHeight)}</div>
@@ -6092,6 +6520,7 @@ export const devicesMixin = {
         </svg>
         ${primary && (!autoFit || template.user_created) ? this._renderTemplateEditorOverlays(template, orientation, templateWidth / Math.max(1, templateHeight)) : ""}
         ${placeable ? `<span class="template-canvas-selection-label">${this._escape(template.title)}</span>` : ""}
+        ${this._renderTemplateConfigurationWarning(template, configStatus)}
       </div>
     </div>`;
   },

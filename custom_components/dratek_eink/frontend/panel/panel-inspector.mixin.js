@@ -1123,6 +1123,12 @@ export const inspectorMixin = {
     this.shadowRoot.querySelectorAll("[data-transit-stop-id]").forEach((button) => button.addEventListener("click", () => {
       this._selectTransitStop?.(button.dataset.transitStopId, button.dataset.transitStopName);
     }));
+    this.shadowRoot.querySelectorAll("[data-transit-stop-slot]").forEach((button) => button.addEventListener("click", () => {
+      this._setTransitStopSlot?.(button.dataset.transitStopSlot);
+    }));
+    this.shadowRoot.querySelectorAll("[data-transit-stop-clear]").forEach((button) => button.addEventListener("click", () => {
+      this._clearTransitStop?.(button.dataset.transitStopClear);
+    }));
     this.shadowRoot.querySelectorAll("[data-template-literal-value]").forEach((input) => {
       const bindingKey = input.dataset.templateLiteralValue;
       input.addEventListener("input", () => {
@@ -1527,6 +1533,7 @@ export const inspectorMixin = {
             const previewSize = this._devicePreviewSize(this._device());
             const landscape = this._displayTemplateOrientation === "landscape";
             savedUserTemplate.preview_image = preview;
+            savedUserTemplate.preview_template_id = savedUserTemplate.id;
             savedUserTemplate.preview_width = landscape ? Math.max(previewSize.width, previewSize.height) : Math.min(previewSize.width, previewSize.height);
             savedUserTemplate.preview_height = landscape ? Math.min(previewSize.width, previewSize.height) : Math.max(previewSize.width, previewSize.height);
             savedUserTemplate.preview_orientation = this._displayTemplateOrientation;
@@ -1611,57 +1618,76 @@ export const inspectorMixin = {
         this._paint();
       });
     });
+    const priceSaleFieldValues = () => ({
+      title: this.shadowRoot.querySelector("#priceSaleTitle")?.value || "Jablka Golden",
+      oldPrice: this.shadowRoot.querySelector("#priceSaleOldPrice")?.value || "199",
+      newPrice: this.shadowRoot.querySelector("#priceSaleNewPrice")?.value || "149",
+      code: this.shadowRoot.querySelector("#priceSaleCode")?.value || "8594001234567",
+    });
+
+    // The dialog is opened from one device card, which is not necessarily the
+    // display open in the editor, so the values are written into that card's
+    // own draft. template_config is the shape a draft is reloaded from; the
+    // flat keys stay written for drafts saved by older versions.
+    const writePriceSaleDraft = (address, values) => {
+      const upperAddr = String(address).toUpperCase();
+      this._deviceDrafts ||= {};
+      this._deviceDrafts[upperAddr] ||= { template: "price", assigned_templates: ["price"] };
+      const draft = this._deviceDrafts[upperAddr];
+      draft.template_config ||= {};
+      draft.template_config.bindings = {
+        ...(draft.template_config.bindings || {}),
+        "price:tag-outline": values.title,
+        "price:cash-multiple": String(values.oldPrice),
+        "price:currency-usd": String(values.newPrice),
+        "price:barcode": values.code,
+      };
+      draft.bindings = {
+        ...(draft.bindings || {}),
+        "tag-outline": values.title,
+        "cash-multiple": String(values.oldPrice),
+        "currency-usd": String(values.newPrice),
+        "barcode": values.code,
+      };
+      this._displayTemplateBindings ||= {};
+      this._displayTemplateBindings["price:tag-outline"] = values.title;
+      this._displayTemplateBindings["price:cash-multiple"] = String(values.oldPrice);
+      this._displayTemplateBindings["price:currency-usd"] = String(values.newPrice);
+      this._displayTemplateBindings["price:barcode"] = values.code;
+      return draft;
+    };
+
+    const updateLiveDiscount = () => {
+      const address = this._activePriceSaleDeviceAddress;
+      if (!address) return;
+      const values = priceSaleFieldValues();
+      const oldVal = parseFloat(String(values.oldPrice).replace(",", ".")) || 0;
+      const newVal = parseFloat(String(values.newPrice).replace(",", ".")) || 0;
+      const pct = oldVal > 0 ? Math.round(((oldVal - newVal) / oldVal) * 100) : 0;
+      const saved = Math.max(0, oldVal - newVal);
+
+      const pctEl = this.shadowRoot.querySelector(".summary-discount-badge");
+      const saveEl = this.shadowRoot.querySelector(".summary-save-text strong");
+      if (pctEl) pctEl.textContent = `- ${pct} %`;
+      if (saveEl) saveEl.textContent = `${saved.toFixed(1).replace(".", ",")} Kč`;
+
+      writePriceSaleDraft(address, values);
+      this._paint();
+    };
+
+    // Bound here on every render the dialog is part of, rather than from a
+    // timer started by the opening click: a repaint landing inside that delay
+    // left the fields without their live recalculation.
+    ["#priceSaleTitle", "#priceSaleOldPrice", "#priceSaleNewPrice", "#priceSaleCode"].forEach((selector) => {
+      this.shadowRoot.querySelector(selector)?.addEventListener("input", updateLiveDiscount);
+    });
+
     this.shadowRoot.querySelectorAll("[data-device-price-sale]").forEach((button) => {
       button.addEventListener("click", (e) => {
         e.stopPropagation();
         this._activePriceSaleDeviceAddress = button.dataset.devicePriceSale;
         this._render();
         this._paint();
-
-        setTimeout(() => {
-          const updateLiveDiscount = () => {
-            const address = this._activePriceSaleDeviceAddress;
-            const titleVal = this.shadowRoot.querySelector("#priceSaleTitle")?.value || "Jablka Golden";
-            const oldValRaw = this.shadowRoot.querySelector("#priceSaleOldPrice")?.value || "199";
-            const newValRaw = this.shadowRoot.querySelector("#priceSaleNewPrice")?.value || "149";
-            const codeVal = this.shadowRoot.querySelector("#priceSaleCode")?.value || "8594001234567";
-
-            const oldVal = parseFloat(String(oldValRaw).replace(",", ".")) || 0;
-            const newVal = parseFloat(String(newValRaw).replace(",", ".")) || 0;
-            const pct = oldVal > 0 ? Math.round(((oldVal - newVal) / oldVal) * 100) : 0;
-            const saved = Math.max(0, oldVal - newVal);
-
-            const pctEl = this.shadowRoot.querySelector(".summary-discount-badge");
-            const saveEl = this.shadowRoot.querySelector(".summary-save-text strong");
-            if (pctEl) pctEl.textContent = `- ${pct} %`;
-            if (saveEl) saveEl.textContent = `${saved.toFixed(1).replace(".", ",")} Kč`;
-
-            if (address) {
-              const upperAddr = String(address).toUpperCase();
-              this._deviceDrafts ||= {};
-              this._deviceDrafts[upperAddr] ||= { template: "price", assigned_templates: ["price"] };
-              const draft = this._deviceDrafts[upperAddr];
-              draft.bindings ||= {};
-              draft.bindings["tag-outline"] = titleVal;
-              draft.bindings["cash-multiple"] = String(oldValRaw);
-              draft.bindings["currency-usd"] = String(newValRaw);
-              draft.bindings["barcode"] = codeVal;
-
-              this._displayTemplateBindings ||= {};
-              this._displayTemplateBindings["price:tag-outline"] = titleVal;
-              this._displayTemplateBindings["price:cash-multiple"] = String(oldValRaw);
-              this._displayTemplateBindings["price:currency-usd"] = String(newValRaw);
-              this._displayTemplateBindings["price:barcode"] = codeVal;
-
-              this._paint();
-            }
-          };
-
-          this.shadowRoot.querySelector("#priceSaleTitle")?.addEventListener("input", updateLiveDiscount);
-          this.shadowRoot.querySelector("#priceSaleOldPrice")?.addEventListener("input", updateLiveDiscount);
-          this.shadowRoot.querySelector("#priceSaleNewPrice")?.addEventListener("input", updateLiveDiscount);
-          this.shadowRoot.querySelector("#priceSaleCode")?.addEventListener("input", updateLiveDiscount);
-        }, 50);
       });
     });
     this.shadowRoot.querySelectorAll("[data-price-sale-close]").forEach((closeBtn) => {
@@ -1678,35 +1704,27 @@ export const inspectorMixin = {
       const address = this._activePriceSaleDeviceAddress;
       if (!address) return;
 
-      const titleVal = this.shadowRoot.querySelector("#priceSaleTitle")?.value || "Jablka Golden";
-      const oldVal = this.shadowRoot.querySelector("#priceSaleOldPrice")?.value || "199";
-      const newVal = this.shadowRoot.querySelector("#priceSaleNewPrice")?.value || "149";
-      const codeVal = this.shadowRoot.querySelector("#priceSaleCode")?.value || "8594001234567";
-
-      this._displayTemplateBindings ||= {};
-      this._displayTemplateBindings["price:tag-outline"] = titleVal;
-      this._displayTemplateBindings["price:cash-multiple"] = String(oldVal);
-      this._displayTemplateBindings["price:currency-usd"] = String(newVal);
-      this._displayTemplateBindings["price:barcode"] = codeVal;
+      const draft = writePriceSaleDraft(address, priceSaleFieldValues());
+      draft.template_config.options = {
+        ...(draft.template_config.options || {}),
+        "price:sale": isSaleActive,
+      };
+      draft.options = { ...(draft.options || {}), sale: isSaleActive };
       this._displayTemplateOptions ||= {};
       this._displayTemplateOptions["price:sale"] = isSaleActive;
 
-      const upperAddr = String(address).toUpperCase();
-      this._deviceDrafts ||= {};
-      this._deviceDrafts[upperAddr] ||= { template: "price", assigned_templates: ["price"] };
-      const draft = this._deviceDrafts[upperAddr];
-      draft.template = "price";
-      draft.assigned_templates = ["price"];
-      draft.options ||= {};
-      draft.options["sale"] = isSaleActive;
-      draft.bindings ||= {};
-      draft.bindings["tag-outline"] = titleVal;
-      draft.bindings["cash-multiple"] = String(oldVal);
-      draft.bindings["currency-usd"] = String(newVal);
-      draft.bindings["barcode"] = codeVal;
-
       this._activePriceSaleDeviceAddress = null;
-      await this._saveCurrentDeviceDraft?.();
+      const upperAddr = String(address).toUpperCase();
+      const device = (this._result?.devices || [])
+        .find((item) => String(item.address || "").toUpperCase() === upperAddr) || { address };
+      try {
+        // _saveCurrentDeviceDraft() writes _selectedDeviceAddress only, so a
+        // sale set straight from a device card was dropped without a trace
+        // whenever a different display (or none) was open in the editor.
+        await this._queueDeviceDraftSave?.(device, draft);
+      } catch (err) {
+        this._error = this._message(err);
+      }
       this._render();
       this._paint();
     };

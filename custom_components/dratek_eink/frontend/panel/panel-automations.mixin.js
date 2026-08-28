@@ -91,7 +91,7 @@ export const automationsMixin = {
 
     return `<div class="automation-countdown-widget ${isWriting ? "is-writing" : ""} tone-${tone}" data-automation-countdown="${this._escape(automation.address)}" data-next-time="${nextTime}" data-interval="${interval}">
       <div class="automation-countdown-header">
-        <span class="countdown-badge"><ha-icon icon="${isWriting ? "mdi:progress-upload" : "mdi:clock-fast"}"></ha-icon>${isWriting ? "Probíhá nahrávání..." : "Další nahrátí za"}</span>
+        <span class="countdown-badge"><ha-icon icon="${isWriting ? "mdi:progress-upload" : "mdi:clock-fast"}"></ha-icon>${isWriting ? "Probíhá nahrávání..." : "Další obnova za"}</span>
         <strong class="countdown-digital">${isWriting ? "Zápis" : this._formatCountdownTime(remainingSec)}</strong>
       </div>
       <div class="automation-progress-track">

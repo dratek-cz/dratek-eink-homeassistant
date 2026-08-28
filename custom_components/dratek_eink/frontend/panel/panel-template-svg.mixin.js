@@ -16,7 +16,7 @@
 // are identical by construction.
 
 import qrcode from "../qrcode-generator.js";
-import { DISPLAY_TEMPLATES } from "./templates/index.js?v=release-0.1.349";
+import { DISPLAY_TEMPLATES } from "./templates/index.js?v=release-0.1.351";
 import { TRANSIT_KIND_ICONS } from "./templates/shared.js?v=transit-two-line-1";
 
 const RED = "#e31b1b";
@@ -65,6 +65,13 @@ const METEORADAR_REQUEST_TIMEOUT_MS = 20 * 1000;
 // "za 3 min" - relative to the moment they were fetched - so the panel must
 // keep re-asking while the designer is open or the preview quietly drifts out
 // of date, and a manual send would go out with minutes that already passed.
+// How many services the timetable is asked for, regardless of how many this
+// particular panel has room to print. transport.js decides that from the
+// board's own box, and a 960x640 panel wants far more rows than a 296x128 tag -
+// fetching "however many this display shows" would mean a different request,
+// and a different cache entry in transit.py, for every size of display in the
+// house. Twelve is also transit.py's own ceiling, so this asks for all of it.
+const TRANSIT_BOARD_LIMIT = 12;
 const TRANSIT_CACHE_MS = 60 * 1000;
 // A failed fetch (the public timetable server is down or rate-limiting) retries
 // well inside the success TTL, the same trade METEORADAR_RETRY_MS makes.
@@ -547,21 +554,32 @@ export const templateSvgMixin = {
   // underneath read Centrum/Univerzita/Nemocnice/Depo, and a manual send put
   // exactly that on the panel.
   async _ensureTemplateTransitBoard() {
-    const stopId = String(this._displayTemplateConfig?.transit_stop_id || "").trim();
+    const config = this._displayTemplateConfig || {};
+    const stopId = String(config.transit_stop_id || "").trim();
     if (!stopId) return false;
+    // The optional second stop. A village where the train halt and the bus stop
+    // are a hundred metres apart is one place to the person standing between
+    // them, so the two timetables are merged into a single board ordered by
+    // departure time rather than shown as two lists.
+    const stopId2 = String(config.transit_stop_id_2 || "").trim();
+    const key = stopId2 ? `${stopId}+${stopId2}` : stopId;
     const cached = this._transitPreview;
     const age = cached?.fetched_at ? Date.now() - cached.fetched_at : Infinity;
     const ttl = Array.isArray(cached?.departures) && cached.departures.length ? TRANSIT_CACHE_MS : TRANSIT_RETRY_MS;
-    if (cached?.stop_id === stopId && age < ttl) return false;
+    if (cached?.stop_id === key && age < ttl) return false;
     if (!this._hass?.callWS) return false;
     try {
-      const response = await this._hass.callWS({
-        type: "dratek_eink/transit/departures", stop_id: stopId, limit: 4,
+      const ask = (id) => this._hass.callWS({
+        type: "dratek_eink/transit/departures", stop_id: id, limit: TRANSIT_BOARD_LIMIT,
       });
+      const responses = stopId2
+        ? await Promise.all([ask(stopId), ask(stopId2)])
+        : [await ask(stopId)];
       this._transitPreview = {
-        ...response,
-        stop_id: stopId,
-        stop_name: response?.stop_name || this._displayTemplateConfig?.transit_stop_name || "",
+        ...responses[0],
+        stop_id: key,
+        stop_name: this._mergedTransitStopName(responses, config),
+        departures: this._mergeTransitDepartures(responses),
         fetched_at: Date.now(),
       };
       return true;
@@ -570,13 +588,44 @@ export const templateSvgMixin = {
       // TRANSIT_RETRY_MS instead of firing again on every single repaint. The
       // last good board (if there is one for this stop) is deliberately kept:
       // four slightly stale departures still say more than four invented ones.
-      if (cached?.stop_id !== stopId) {
-        this._transitPreview = { stop_id: stopId, stop_name: "", departures: [], fetched_at: Date.now() };
+      if (cached?.stop_id !== key) {
+        this._transitPreview = { stop_id: key, stop_name: "", departures: [], fetched_at: Date.now() };
       } else {
         this._transitPreview = { ...cached, fetched_at: Date.now() };
       }
       return false;
     }
+  },
+
+  // One board out of one or two timetables, ordered the way a person waiting
+  // reads it: by how long until the vehicle goes, whichever stop it leaves
+  // from. `minutes` is transit.py's own countdown, so this needs no clock of
+  // its own and cannot disagree with the "za 3 min" it prints.
+  //
+  // render.py's `transit` slot repeats this for an automatic refresh; the two
+  // must order an identical pair of boards identically.
+  _mergeTransitDepartures(responses) {
+    const merged = responses.flatMap((response) => (
+      Array.isArray(response?.departures) ? response.departures : []
+    ));
+    // A stable sort on a single key: two services leaving in the same minute
+    // keep the order their own timetable gave them, so a repaint that changes
+    // nothing does not shuffle the board.
+    merged.sort((a, b) => (Number(a?.minutes) || 0) - (Number(b?.minutes) || 0));
+    return merged.slice(0, TRANSIT_BOARD_LIMIT);
+  },
+
+  // The band above the board. Two stops are joined rather than truncated to
+  // the first: a board that merges two timetables under one stop's name is
+  // lying about where half its departures leave from.
+  _mergedTransitStopName(responses, config = {}) {
+    const names = [
+      String(responses[0]?.stop_name || config.transit_stop_name || "").trim(),
+      responses.length > 1
+        ? String(responses[1]?.stop_name || config.transit_stop_name_2 || "").trim()
+        : "",
+    ].filter(Boolean);
+    return names.join(" + ");
   },
 
   // Every vehicle glyph's raw path data, keyed by transit.py's `kind`.
@@ -1455,7 +1504,24 @@ export const templateSvgMixin = {
     // See _blockText: the reading itself is the thing to look at, so it gets
     // the panel's strongest ink rather than a coloured plate under it.
     const parts = [];
-    parts.push(this._svgText(val, left, baseline, fontSize, { anchor: "start", bold: true, color: this._templateInk(stat.color) }));
+    // A value too long to reach the box even at the readable floor used to be
+    // drawn at that floor anyway, from a `left` computed for a width it no
+    // longer had - so it ran off both edges of the panel. `clamp` (wifi.js's
+    // network name and password) keeps it inside instead: centred, with the
+    // builder free to shrink what it can and ellipsise the remainder. Opt-in,
+    // because for a reading like a temperature the overflow cannot happen and
+    // the exact left-edge placement is what lines the unit up beside it.
+    const clamped = !!stat.clamp && span(fontSize) > box.w;
+    parts.push(this._svgText(val, clamped ? box.x + box.w / 2 : left, baseline, fontSize, {
+      anchor: clamped ? "middle" : "start", bold: true, color: this._templateInk(stat.color),
+      // Down to the block's own floor rather than the builder's default 10:
+      // for a Wi-Fi password, smaller-but-complete beats bigger-with-the-end-
+      // missing, because a truncated password is not a shorter password, it is
+      // the wrong one. Below 8.5 it does give up and ellipsise - by then the
+      // characters would be unreadable anyway, and the QR code above still
+      // carries the real thing.
+      ...(clamped ? { maxWidth: box.w, minSize: 8.5 } : {}),
+    }));
     if (stat.unit) {
       parts.push(this._svgText(stat.unit, left + this._svgTextWidth(val, fontSize, true) + unitSize * 0.3, baseline + fontSize * 0.22, unitSize, {
         anchor: "start", color: this._templateInk(stat.unitColor),
@@ -1496,15 +1562,26 @@ export const templateSvgMixin = {
     // pixels high. Two separate baselines at 30/70 % overlap after e-ink
     // rasterisation (SERVER / ONLINE was the most visible example), so the
     // compact design uses one deliberately heavy line instead.
-    if (row.compact && band.label != null && band.value != null) {
+    // A band's two lines used to be sized at 0.4 and 0.56 of the row and set on
+    // baselines a mere 0.4 apart, which is not enough room for them: every
+    // stacked band printed with its caption sitting in the top of its own
+    // reading. The pair is smaller and the baselines are further apart now,
+    // and the two absolute floors - which take no notice of the row they are
+    // asked to fit into, and are what a 0.08 row on a small panel actually
+    // gets - fall back to the same single heavy line the compact panels use
+    // rather than overlapping.
+    const labelSize = Math.max(10, box.h * 0.30);
+    const valueSize = Math.max(12, box.h * 0.44);
+    const stacked = band.label != null && band.value != null && labelSize + valueSize <= box.h * 0.8;
+    if ((row.compact || !stacked) && band.label != null && band.value != null) {
       parts.push(this._svgText(`${band.label}  ·  ${band.value}`, textX, box.y + box.h * 0.5, Math.max(11, box.h * 0.52), {
         color: textColor, bold: false, minSize: 9.5, maxWidth: textWidth,
       }));
       return parts.join("");
     }
-    if (band.label != null && band.value != null) {
-      parts.push(this._svgText(band.label, textX, box.y + box.h * 0.3, Math.max(10, box.h * 0.4), { color: textColor, bold: true, maxWidth: textWidth }));
-      parts.push(this._svgText(band.value, textX, box.y + box.h * 0.7, Math.max(12, box.h * 0.56), { color: textColor, bold: true, maxWidth: textWidth }));
+    if (stacked) {
+      parts.push(this._svgText(band.label, textX, box.y + box.h * 0.28, labelSize, { color: textColor, bold: true, maxWidth: textWidth }));
+      parts.push(this._svgText(band.value, textX, box.y + box.h * 0.72, valueSize, { color: textColor, bold: true, maxWidth: textWidth }));
     } else {
       parts.push(this._svgText(band.value ?? band.label, textX, box.y + box.h * 0.5, Math.max(12, box.h * 0.68), { color: textColor, bold: true, maxWidth: textWidth }));
     }
@@ -1627,19 +1704,48 @@ export const templateSvgMixin = {
   _blockDial(row, box) {
     const dial = row.dial;
     const cx = box.x + box.w / 2;
-    const outer = Math.min(box.w * 0.46, box.h * 0.82);
+    // The row is divided before anything is drawn into it, because the two
+    // pieces of type below the arc are not part of the arc and used to be
+    // placed from its baseline: the scale ends sat at `cy + outer * 0.22` and
+    // the caption at `cy + outer * 0.16`, which - with `cy` itself already
+    // 0.83 of the way down the row - put both of them past the bottom edge.
+    // Every dial therefore drew across whatever came next: the twelve-hour
+    // curve on the heating page, the band under the air gauge. The scale gets
+    // a band of its own at the foot now, the caption moved up into the arc's
+    // mouth where it belongs beside the reading it captions, and the arc is
+    // sized into what is left rather than into the whole row.
+    const scaled = dial.min != null || dial.max != null;
+    const scaleSize = scaled ? Math.max(row.compact ? 8.5 : 7.5, Math.min(box.h * 0.15, box.w * 0.055)) : 0;
+    const scaleBand = scaled ? scaleSize * 1.5 : 0;
+    const arcBand = Math.max(4, box.h - scaleBand);
+    const outer = Math.max(3, Math.min(box.w * 0.46, arcBand));
     const inner = outer * 0.7;
-    const cy = box.y + box.h * 0.5 + outer * 0.4;
+    // Centred in what the scale band leaves rather than in the row, so a dial
+    // whose width is the binding constraint sits in the middle of its space
+    // instead of hugging the bottom of it.
+    const cy = box.y + (arcBand + outer) / 2;
     const percent = this._fillFraction(dial.percent);
     // See _blockRing: the track is an outline and only the reading is filled.
     const accent = dial.accent === "yellow" && dial.color !== "red" && this._accentYellow(row);
+    const captioned = dial.caption != null;
     const parts = [`<path d="${this._svgArcPath(cx, cy, outer, inner, 180, 360)}" fill="none" stroke="${BLACK}" stroke-width="1"></path>`];
     if (percent > 0) parts.push(`<path d="${this._svgArcPath(cx, cy, outer, inner, 180, 180 + percent * 180)}" fill="${accent ? YELLOW : this._templateInk(dial.color)}"`
       + `${accent ? ` stroke="${BLACK}" stroke-width="1"` : ""}></path>`);
-    if (dial.value != null) parts.push(this._svgText(dial.value, cx, cy - outer * 0.28, Math.max(row.compact ? 13 : 0, outer * 0.42), { bold: true, minSize: row.compact ? 10 : undefined, maxWidth: inner * 1.8 }));
-    if (dial.caption != null) parts.push(this._svgText(dial.caption, cx, cy + outer * 0.16, Math.max(row.compact ? 9.5 : 0, outer * 0.24), { bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: inner * 1.9 }));
-    if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, cy + outer * 0.22, outer * 0.2, { maxWidth: outer * 0.7 }));
-    if (dial.max != null) parts.push(this._svgText(dial.max, cx + outer, cy + outer * 0.22, outer * 0.2, { maxWidth: outer * 0.7 }));
+    // The reading is measured against the arc's chord at its own height, not
+    // against the full inner diameter: `inner * 1.8` is the width the mouth
+    // has at the centre line, and the reading sits well above that, where the
+    // opening is narrower - which is how "21,5 °C" came to be drawn straight
+    // through the inner ring on a 296x128 tag. 1.34 and 1.6 are that chord for
+    // the captioned and uncaptioned baselines.
+    if (dial.value != null) parts.push(this._svgText(dial.value, cx, cy - outer * (captioned ? 0.40 : 0.28), Math.max(row.compact ? 13 : 0, outer * (captioned ? 0.40 : 0.44)), { bold: true, minSize: row.compact ? 10 : undefined, maxWidth: inner * (captioned ? 1.34 : 1.6) }));
+    if (captioned) parts.push(this._svgText(dial.caption, cx, cy - outer * 0.09, Math.max(row.compact ? 9.5 : 0, outer * 0.20), { bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: inner * 1.9 }));
+    // Anchored to the arc's own ends and reading inwards. Centring them on
+    // those ends is what pushed the air gauge's worded scale half out of the
+    // page, and an axis label under the leg it belongs to reads as a scale
+    // either way.
+    const scaleY = cy + scaleSize * 0.85;
+    if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, scaleY, scaleSize, { anchor: "start", maxWidth: outer * 0.62 }));
+    if (dial.max != null) parts.push(this._svgText(dial.max, cx + outer, scaleY, scaleSize, { anchor: "end", maxWidth: outer * 0.62 }));
     return parts.join("");
   },
 
@@ -2018,10 +2124,16 @@ export const templateSvgMixin = {
         parts.push(this._svgHairline(box.x + cellWidth * index, box.y + box.h * 0.12, 1, box.h * 0.76, divColor));
       }
       const hasIcon = Boolean(half.icon);
-      const labelY = box.y + box.h * (hasIcon ? 0.22 : 0.28);
-      const valY = box.y + box.h * (hasIcon ? 0.76 : 0.72);
-      const labelSize = Math.max(row.compact ? 10 : 9, Math.min(box.h * 0.22, cellWidth * 0.22));
-      const valSize = Math.max(row.compact ? 13 : 12, Math.min(box.h * 0.44, cellWidth * 0.42));
+      // Three bands that do not touch. The iconed variant used to put the
+      // glyph at 0.48 of the row at up to 0.28 of its height - reaching 0.62 -
+      // while the reading below it started at 0.54, so the icon was drawn
+      // through the number on every split that had one (the water page's
+      // "−12 %" wore its own chart glyph). The marker is smaller and higher
+      // now and the reading keeps its size.
+      const labelY = box.y + box.h * (hasIcon ? 0.20 : 0.28);
+      const valY = box.y + box.h * (hasIcon ? 0.77 : 0.72);
+      const labelSize = Math.max(row.compact ? 10 : 9, Math.min(box.h * (hasIcon ? 0.20 : 0.22), cellWidth * 0.22));
+      const valSize = Math.max(row.compact ? 13 : 12, Math.min(box.h * (hasIcon ? 0.40 : 0.44), cellWidth * 0.42));
 
       const isRedBanner = isBanner && row.color === "red";
       const defaultTextColor = isRedBanner ? "#ffffff" : BLACK;
@@ -2032,7 +2144,7 @@ export const templateSvgMixin = {
         parts.push(this._svgText(half.label, cx, labelY, labelSize, { bold: true, color: labelColor, maxWidth: cellWidth * 0.92 }));
       }
       if (half.icon) {
-        parts.push(this._svgIcon(half.icon, cx, box.y + box.h * 0.48, Math.min(box.h * 0.28, cellWidth * 0.35), this._templateInk(half.iconColor) || valColor));
+        parts.push(this._svgIcon(half.icon, cx, box.y + box.h * 0.44, Math.min(box.h * 0.19, cellWidth * 0.26), this._templateInk(half.iconColor) || valColor));
       }
       if (half.value) {
         parts.push(this._svgText(half.value, cx, valY, valSize, { bold: true, color: valColor, maxWidth: cellWidth * 0.92 }));
@@ -2081,8 +2193,18 @@ export const templateSvgMixin = {
     const bottom = Math.min(...values);
     const span = top - bottom || 1;
     const step = box.w / (values.length - 1);
-    const points = values.map((value, index) => [box.x + step * index, box.y + box.h - ((value - bottom) / span) * box.h]);
-    const lineWidth = Math.max(row.compact ? 2 : 1.5, box.h * 0.045);
+    // The caption used to be printed at 14 % down the plot itself, which is
+    // exactly where the curve is whenever the series peaks early - "SPOTŘEBA /
+    // 7 DNÍ" and "TEPLOTA / 12 H" were both being drawn through. It gets a
+    // band of the row now and the chart is plotted underneath it, so the two
+    // never share a pixel whatever the data does.
+    const captioned = row.spark.caption != null;
+    const captionSize = captioned ? Math.max(row.compact ? 9 : 8.5, Math.min(box.h * 0.16, box.w * 0.04)) : 0;
+    const captionBand = captioned ? captionSize * 1.4 : 0;
+    const chartY = box.y + captionBand;
+    const chartH = Math.max(1, box.h - captionBand);
+    const points = values.map((value, index) => [box.x + step * index, chartY + chartH - ((value - bottom) / span) * chartH]);
+    const lineWidth = Math.max(row.compact ? 2 : 1.5, chartH * 0.045);
     const path = points.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
     // The yellow accent used to be three polylines stacked on top of each
     // other - a fat black one, a yellow one inside it and a black one inside
@@ -2093,16 +2215,16 @@ export const templateSvgMixin = {
     const area = row.spark.accent === "yellow" && this._accentYellow(row);
     const parts = [
       ...(area ? [
-        `<polygon points="${box.x.toFixed(2)},${(box.y + box.h).toFixed(2)} ${path} `
-          + `${(box.x + box.w).toFixed(2)},${(box.y + box.h).toFixed(2)}" fill="${YELLOW}"></polygon>`,
+        `<polygon points="${box.x.toFixed(2)},${(chartY + chartH).toFixed(2)} ${path} `
+          + `${(box.x + box.w).toFixed(2)},${(chartY + chartH).toFixed(2)}" fill="${YELLOW}"></polygon>`,
       ] : []),
-      this._svgHairline(box.x, box.y + box.h, box.w, 1),
+      this._svgHairline(box.x, chartY + chartH, box.w, 1),
       `<polyline points="${path}" fill="none" stroke="${this._templateInk(row.spark.color)}"`
         + ` stroke-width="${lineWidth.toFixed(2)}" stroke-linejoin="round" stroke-linecap="round"></polyline>`,
     ];
     const [lastX, lastY] = points[points.length - 1];
-    parts.push(`<circle cx="${lastX.toFixed(2)}" cy="${lastY.toFixed(2)}" r="${Math.max(1.5, box.h * 0.08).toFixed(2)}" fill="${RED}"></circle>`);
-    if (row.spark.caption != null) parts.push(this._svgText(row.spark.caption, box.x, box.y + box.h * 0.14, Math.max(row.compact ? 10 : 8.5, box.h * 0.22), { anchor: "start", bold: false, minSize: row.compact ? 9 : undefined, maxWidth: box.w * 0.6 }));
+    parts.push(`<circle cx="${lastX.toFixed(2)}" cy="${lastY.toFixed(2)}" r="${Math.max(1.5, chartH * 0.08).toFixed(2)}" fill="${RED}"></circle>`);
+    if (captioned) parts.push(this._svgText(row.spark.caption, box.x, box.y + captionBand * 0.5, captionSize, { anchor: "start", bold: false, minSize: row.compact ? 9 : undefined, maxWidth: box.w * 0.6 }));
     return parts.join("");
   },
 
@@ -2214,14 +2336,14 @@ export const templateSvgMixin = {
         }
       }
     }
-    const framed = row.qr.accent === "yellow" && this._displaySupportsYellow?.();
     const frameX = x - margin;
     const frameY = y - margin;
     const frameSize = drawn + margin * 2;
-    const frame = framed
-      ? `<rect x="${(frameX - 3).toFixed(0)}" y="${(frameY - 3).toFixed(0)}" width="${(frameSize + 6).toFixed(0)}" height="${(frameSize + 6).toFixed(0)}" fill="${YELLOW}" stroke="${BLACK}" stroke-width="1" shape-rendering="crispEdges"></rect>`
-      : "";
-    return frame + `<rect x="${frameX.toFixed(0)}" y="${frameY.toFixed(0)}" width="${frameSize.toFixed(0)}"`
+    // White quiet zone and black modules, nothing else. This block used to
+    // paint a yellow plate behind the symbol when the four-colour theme asked
+    // for it; a scanner thresholds the image, so that plate only ever ate into
+    // the contrast the quiet zone exists to provide.
+    return `<rect x="${frameX.toFixed(0)}" y="${frameY.toFixed(0)}" width="${frameSize.toFixed(0)}"`
       + ` height="${(drawn + margin * 2).toFixed(0)}" fill="#ffffff"></rect>`
       + `<path d="${path}" fill="${BLACK}" shape-rendering="crispEdges"></path>`;
   },
@@ -2387,7 +2509,10 @@ export const templateSvgMixin = {
         color: digitInk, bold: true, minSize: 8.5, maxWidth: badgeWidth * 0.88,
       }));
       if (item.icon) {
-        parts.push(this._svgIcon(item.icon, box.x + badgeWidth / 2, timesCy, Math.min(lineHeight * 0.30, badgeWidth * 0.62), chipInk));
+        // Boxed in by the plate above it (0.24 of the row) and the row's own
+        // bottom edge (0.27 below): 0.40 is the largest glyph that still
+        // clears the plate, 0.48 would touch it.
+        parts.push(this._svgIcon(item.icon, box.x + badgeWidth / 2, timesCy, Math.min(lineHeight * 0.40, badgeWidth * 0.92), chipInk));
       }
       parts.push(this._svgText(item.label, textX, titleCy, titleSize, {
         anchor: "start", bold: true, minSize: 8.5, maxWidth: right - textX,
@@ -2412,9 +2537,54 @@ export const templateSvgMixin = {
     if (row.twoLine) return this._blockBoardTwoLine(row, box);
     const items = row.board;
     const lineHeight = box.h / (items.length || 1);
-    const badgeWidth = Math.min(box.w * 0.22, lineHeight * 1.5);
+    // A line plate 1.5 rows wide is right when the row holds nothing else, but
+    // on a tall landscape tag it grew to a fifth of the row and left no space
+    // for the icon and the clock. Narrower only where those exist, so a board
+    // without them (presence) keeps its plate exactly as it was.
+    const hasExtras = items.some((item) => item.icon || item.clock);
+    const badgeWidth = Math.min(box.w * (hasExtras ? 0.16 : 0.22), lineHeight * 1.5);
     const badgeHeight = lineHeight * 0.68;
     const right = box.x + box.w;
+    // A landscape row is mostly empty between the destination and the
+    // countdown, and the departures board threw away the two things that were
+    // meant to fill it: the vehicle icon and the scheduled time. Only the
+    // portrait board drew them, so a wide tag said less than a narrow one.
+    // Both are optional - a board whose items carry neither (presence) renders
+    // exactly as before - and both give way, clock first, when the destination
+    // would be left with less than a third of the row to sit in.
+    const gap = Math.max(3, badgeWidth * 0.2);
+    // 10 is _svgText's own floor, so anything smaller here would be measured
+    // at one size and drawn at another - the bug that clipped the clock.
+    const valueSize = Math.max(row.compact ? 11 : 10, Math.min(lineHeight * 0.56, box.w * 0.13));
+    // The countdown is the one column whose width nobody can guess: "za 1 min"
+    // and "za 34 min" differ by a character, and a flat 26% of the board was
+    // four pixels short of the longer one on a 196px tag - so the most
+    // important number on the row was the one that got ellipsised. Reserve
+    // what the widest one needs, never less than the old fraction, and never
+    // so much that the destination is starved (labelRoom below still drops the
+    // clock and then the icon if it is).
+    const valueDemand = items.reduce(
+      (widest, item) => Math.max(widest, this._svgTextWidth(item.value, valueSize, !row.compact)), 0,
+    );
+    const valueWidth = Math.max(box.w * 0.26, Math.min(valueDemand + 2, box.w * 0.4));
+    const labelFloor = box.w * 0.3;
+    // The vehicle is what tells a bus stop from a railway halt at a glance, so
+    // it is sized to the row rather than tucked in beside it. 0.78 leaves a
+    // tenth of the row clear above and below the glyph; the width cap only
+    // bites on a board too narrow for the destination anyway, and labelRoom()
+    // below still drops the icon outright when that happens.
+    let iconSize = items.some((item) => item.icon) ? Math.min(lineHeight * 0.78, box.w * 0.12) : 0;
+    // 10, not 9: the clock's reserved strip below is measured at this size and
+    // _svgText will not draw under its own 10px floor. Measuring at 9 and
+    // drawing at 10 is what ellipsised "7:12" to "7:..." on a 128px tag.
+    const clockSize = Math.max(10, Math.min(lineHeight * 0.42, box.w * 0.085));
+    let clockWidth = items.reduce(
+      (widest, item) => Math.max(widest, item.clock ? this._svgTextWidth(item.clock, clockSize, false) : 0), 0,
+    );
+    const labelRoom = () => right - (box.x + badgeWidth + gap + (iconSize ? iconSize + gap * 0.6 : 0))
+      - valueWidth - (clockWidth ? clockWidth + gap : 0);
+    if (clockWidth && labelRoom() < labelFloor) clockWidth = 0;
+    if (iconSize && labelRoom() < labelFloor) iconSize = 0;
     const parts = [];
     items.forEach((item, index) => {
       const cy = box.y + lineHeight * (index + 0.5);
@@ -2434,12 +2604,22 @@ export const templateSvgMixin = {
       parts.push(`<rect x="${box.x.toFixed(2)}" y="${(cy - badgeHeight / 2).toFixed(2)}" width="${badgeWidth.toFixed(2)}" height="${badgeHeight.toFixed(2)}"`
         + ` rx="2" fill="${plate}" stroke="${accent ? BLACK : chipInk}" stroke-width="1"></rect>`);
       parts.push(this._svgText(item.badge, box.x + badgeWidth / 2, cy, Math.max(row.compact ? 10 : 8.5, badgeHeight * 0.65), { color: digitInk, bold: true, minSize: row.compact ? 8.5 : undefined, maxWidth: badgeWidth * 0.88 }));
-      const textX = box.x + badgeWidth + Math.max(3, badgeWidth * 0.2);
-      const valueWidth = box.w * 0.26;
+      const iconX = box.x + badgeWidth + gap;
+      if (iconSize && item.icon) {
+        parts.push(this._svgIcon(item.icon, iconX + iconSize / 2, cy, iconSize, chipInk));
+      }
+      const textX = iconX + (iconSize ? iconSize + gap * 0.6 : 0);
+      const clockX = right - valueWidth - gap;
+      if (clockWidth && item.clock) {
+        parts.push(this._svgText(item.clock, clockX, cy, clockSize, {
+          anchor: "end", bold: false, minSize: 8.5, maxWidth: clockWidth,
+        }));
+      }
       parts.push(this._svgText(item.label, textX, cy, Math.max(row.compact ? 10 : 8.5, Math.min(lineHeight * 0.52, box.w * 0.12)), {
-        anchor: "start", bold: false, minSize: row.compact ? 8.5 : undefined, maxWidth: right - textX - valueWidth,
+        anchor: "start", bold: false, minSize: row.compact ? 8.5 : undefined,
+        maxWidth: right - textX - valueWidth - (clockWidth ? clockWidth + gap : 0),
       }));
-      parts.push(this._svgText(item.value, right, cy, Math.max(row.compact ? 11 : 9.5, Math.min(lineHeight * 0.56, box.w * 0.13)), {
+      parts.push(this._svgText(item.value, right, cy, valueSize, {
         anchor: "end", bold: !row.compact, minSize: row.compact ? 9 : undefined, color: this._templateInk(item.color), maxWidth: valueWidth,
       }));
     });
@@ -2486,14 +2666,24 @@ export const templateSvgMixin = {
     const option = (name) => this._templateOptionActive(template, name);
     const transit = () => {
       const config = this._displayTemplateConfig || {};
-      const preview = this._transitPreview && this._transitPreview.stop_id === config.transit_stop_id
+      // The cache is keyed by the pair of stops, not the first one - see
+      // _ensureTemplateTransitBoard. Comparing against transit_stop_id alone
+      // would reject every merged board the moment a second stop was added.
+      const stopId = String(config.transit_stop_id || "").trim();
+      const stopId2 = String(config.transit_stop_id_2 || "").trim();
+      const key = stopId2 ? `${stopId}+${stopId2}` : stopId;
+      const preview = this._transitPreview && this._transitPreview.stop_id === key
         ? this._transitPreview
         : null;
+      const configured = [config.transit_stop_name, config.transit_stop_name_2]
+        .map((name) => String(name || "").trim()).filter(Boolean).join(" + ");
       return {
-        stop_name: preview?.stop_name || config.transit_stop_name || "Hlavní nádraží",
+        stop_name: preview?.stop_name || configured || "Hlavní nádraží",
         departures: Array.isArray(preview?.departures) ? preview.departures : [],
       };
     };
+    const shoppingList = () => this._templateShoppingList(template);
+    const thermostat = () => this._templateThermostat(template);
     const customImage = () => {
       const active = this._activeCustomImageAsset?.();
       // No fallback to the raw parrot-source.png here on purpose: it is a
@@ -2505,7 +2695,7 @@ export const templateSvgMixin = {
       // (starting from that same source) as soon as it is ready.
       return active ? this._paletteImageSrc?.(active) : this._customImageDataUrl;
     };
-    const helpers = { v, series, ratio, day, conditionIcon, event, option, transit, customImage, width, height };
+    const helpers = { v, series, ratio, day, conditionIcon, event, option, transit, shoppingList, thermostat, customImage, width, height };
     return Object.fromEntries(
       DISPLAY_TEMPLATES.map((entry) => [entry.catalog.id, () => entry.design(helpers)]),
     );
@@ -2547,7 +2737,11 @@ export const templateSvgMixin = {
         const right = paintYellow(row.duo.right);
         return left || right;
       }
-      if (row.qr) { row.qr.accent = "yellow"; return true; }
+      // Deliberately not the QR code. A camera reads the symbol by
+      // thresholding it, so the one thing it needs is a clean quiet zone
+      // around the modules - a coloured plate behind that zone is the only
+      // place on the panel where this accent takes something away instead
+      // of adding to it.
       for (const key of ["ring", "dial", "spark", "pricetag"]) {
         if (row[key] && typeof row[key] === "object") { row[key].accent = "yellow"; return true; }
       }

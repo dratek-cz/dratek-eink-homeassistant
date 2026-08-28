@@ -12,7 +12,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.61-gateway";
+static const char* FIRMWARE_VERSION = "0.1.62-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 static const size_t INITIAL_UPLOAD_RESERVE_BYTES = 128UL * 1024UL;
@@ -37,6 +37,14 @@ static const size_t MAX_UPLOAD_PAYLOAD_BYTES = 512UL * 1024UL;
 // alignment, so uploads are staged through one full page.
 static const size_t FLASH_PAGE_BYTES = 4096;
 static const size_t MAX_TRANSFER_LOG_LINES = 80;
+// A healthy 800x480 acknowledged stream reports another accepted block every
+// few hundred milliseconds. Even connection retries and e-ink preparation are
+// bounded below one minute, so three minutes without *any* progress is a
+// wedged GATT operation, not a slow panel. The absolute deadline catches a
+// pathological peer that keeps making tiny amounts of progress forever.
+static const uint32_t TRANSFER_STALL_TIMEOUT_MS = 3UL * 60UL * 1000UL;
+static const uint32_t TRANSFER_MAX_RUNTIME_MS = 10UL * 60UL * 1000UL;
+static const uint32_t TRANSFER_RECOVERY_RESTART_DELAY_MS = 1000;
 static const uint32_t MDNS_REFRESH_INTERVAL_MS = 5UL * 60UL * 1000UL;
 static const uint32_t WIFI_RECONNECT_INTERVAL_MS = 15UL * 1000UL;
 static const uint16_t DRATEK_COMPANY_ID = 0x5053;
@@ -63,6 +71,10 @@ struct TransferJob {
   std::vector<String> log;
   uint32_t createdMs = 0;
   uint32_t updatedMs = 0;
+  String phase = "idle";
+  int32_t lastBlock = -1;
+  int32_t totalBlocks = 0;
+  bool cancelRequested = false;
 };
 
 TransferJob transferJob;
@@ -120,6 +132,10 @@ SemaphoreHandle_t transferSignal = nullptr;
 TaskHandle_t transferTaskHandle = nullptr;
 static const uint32_t TRANSFER_TASK_STACK_WORDS = 12288;
 bool transferTaskActive = false;
+// Owned and deleted by the transfer worker. The main-loop watchdog may only
+// ask it to disconnect while holding transferMutex; it never deletes it.
+NimBLEClient* activeTransferClient = nullptr;
+uint32_t transferRecoveryRestartAtMs = 0;
 uint32_t transferSequence = 0;
 bool mdnsStarted = false;
 bool wifiWasConnected = false;
@@ -191,7 +207,7 @@ String resetReasonName() {
 bool transferIsBusy() {
   if (!transferMutex) return false;
   xSemaphoreTake(transferMutex, portMAX_DELAY);
-  bool busy = transferJob.status == "queued" || transferJob.status == "running";
+  bool busy = transferJob.status == "queued" || transferJob.status == "running" || transferJob.status == "cancelling";
   xSemaphoreGive(transferMutex);
   return busy;
 }
@@ -237,6 +253,12 @@ void handleStatus() {
     xSemaphoreTake(transferMutex, portMAX_DELAY);
     doc["transfer_status"] = transferJob.status;
     doc["transfer_job_id"] = transferJob.id;
+    doc["transfer_phase"] = transferJob.phase;
+    doc["transfer_last_block"] = transferJob.lastBlock;
+    doc["transfer_total_blocks"] = transferJob.totalBlocks;
+    doc["transfer_stall_ms"] = transferJob.status == "running" || transferJob.status == "cancelling"
+      ? millis() - transferJob.updatedMs
+      : 0;
     xSemaphoreGive(transferMutex);
   }
   doc["dhcp"] = dhcp;
@@ -380,6 +402,48 @@ void addLog(TransferLogSink& log, const String& line) {
   log.add(line);
 }
 
+void updateTransferProgress(const char* phase, int32_t lastBlock = -1, int32_t totalBlocks = -1) {
+  if (!transferMutex) return;
+  xSemaphoreTake(transferMutex, portMAX_DELAY);
+  if (transferJob.status == "running" || transferJob.status == "cancelling") {
+    if (phase && transferJob.phase != phase) transferJob.phase = phase;
+    if (lastBlock >= 0) transferJob.lastBlock = lastBlock;
+    if (totalBlocks >= 0) transferJob.totalBlocks = totalBlocks;
+    transferJob.updatedMs = millis();
+  }
+  xSemaphoreGive(transferMutex);
+}
+
+bool transferCancellationRequested() {
+  if (!transferMutex) return false;
+  xSemaphoreTake(transferMutex, portMAX_DELAY);
+  bool requested = transferJob.cancelRequested;
+  xSemaphoreGive(transferMutex);
+  return requested;
+}
+
+void registerActiveTransferClient(NimBLEClient* client) {
+  if (!transferMutex) return;
+  xSemaphoreTake(transferMutex, portMAX_DELAY);
+  activeTransferClient = client;
+  xSemaphoreGive(transferMutex);
+}
+
+void releaseTransferClient(NimBLEClient*& client) {
+  if (!client) return;
+  // Clear the shared pointer before deletion. A cancellation handler holds the
+  // same mutex while calling disconnect(), so it can never race a stale client
+  // pointer against deleteClient().
+  if (transferMutex) {
+    xSemaphoreTake(transferMutex, portMAX_DELAY);
+    if (activeTransferClient == client) activeTransferClient = nullptr;
+    xSemaphoreGive(transferMutex);
+  }
+  if (client->isConnected()) client->disconnect();
+  NimBLEDevice::deleteClient(client);
+  client = nullptr;
+}
+
 bool findTransferChars(
   NimBLEClient* client,
   NimBLERemoteCharacteristic*& controlChar,
@@ -489,15 +553,19 @@ bool connectToDisplay(
 bool sendPayloadToDisplay(const String& address, const PayloadSource& payload, uint8_t softwareVersion, TransferLogSink& log, bool partial = false, uint32_t partialX = 0, uint32_t partialY = 0, uint32_t partialWidth = 0, uint32_t partialHeight = 0) {
   NimBLEClient* client = NimBLEDevice::createClient();
   client->setConnectTimeout(SCANNED_CONNECT_TIMEOUT_SECONDS);
+  updateTransferProgress("connecting");
   addLog(log, "Connecting to display " + address + ".");
   NimBLERemoteCharacteristic* controlChar = nullptr;
   NimBLERemoteCharacteristic* writeChar = nullptr;
   String serviceUuid = "";
   if (!connectToDisplay(client, address, log, controlChar, writeChar, serviceUuid)) {
     NimBLEDevice::deleteClient(client);
+    client = nullptr;
     addLog(log, "BLE connection failed after retries.");
     return false;
   }
+  registerActiveTransferClient(client);
+  updateTransferProgress("negotiating_protocol");
   addLog(log, "Using service " + serviceUuid + ".");
 
   // Every image block is an acknowledged write, so the transfer advances at the
@@ -519,27 +587,27 @@ bool sendPayloadToDisplay(const String& address, const PayloadSource& payload, u
 
   clearNotifications();
   uint8_t blockRequest[1] = {0x01};
+  updateTransferProgress("requesting_block_size");
   addLog(log, "Requesting block size.");
   controlChar->writeValue(blockRequest, sizeof(blockRequest), true);
   std::vector<uint8_t> packet;
   if (!waitForPacket(0x01, packet, 5000)) {
     controlChar->writeValue(blockRequest, sizeof(blockRequest), false);
     if (!waitForPacket(0x01, packet, 5000)) {
-      client->disconnect();
-      NimBLEDevice::deleteClient(client);
+      releaseTransferClient(client);
       addLog(log, "Timed out waiting for block size.");
       return false;
     }
   }
   int blockSize = packet.size() >= 3 ? ((int)packet[1] | ((int)packet[2] << 8)) : 0;
   if (blockSize < 8) {
-    client->disconnect();
-    NimBLEDevice::deleteClient(client);
+    releaseTransferClient(client);
     addLog(log, "Invalid block size response: " + hexPacket(packet));
     return false;
   }
   int chunkSize = blockSize - 4;
   int totalBlocks = (payload.size + chunkSize - 1) / chunkSize;
+  updateTransferProgress("preparing", 0, totalBlocks);
   addLog(log, "Block size " + String(blockSize) + ", payload " + String(payload.size) + " bytes, blocks " + String(totalBlocks) + ".");
 
   if (partial) {
@@ -552,10 +620,10 @@ bool sendPayloadToDisplay(const String& address, const PayloadSource& payload, u
       }
     }
     clearNotifications();
+    updateTransferProgress("configuring_partial", 0, totalBlocks);
     controlChar->writeValue(area, sizeof(area), true);
     if (!waitForPacket(0x60, packet, 8000) || packet.size() < 2 || packet[1] != 0) {
-      client->disconnect();
-      NimBLEDevice::deleteClient(client);
+      releaseTransferClient(client);
       addLog(log, "Partial update area rejected or timed out.");
       return false;
     }
@@ -576,20 +644,20 @@ bool sendPayloadToDisplay(const String& address, const PayloadSource& payload, u
   prepare[6] = 0x00;
   prepare[7] = 0x00;
   clearNotifications();
+  updateTransferProgress("preparing", 0, totalBlocks);
   controlChar->writeValue(prepare, sizeof(prepare), true);
   if (!waitForPacket(0x02, packet, 8000) || packet.size() < 2 || packet[1] != 0) {
-    client->disconnect();
-    NimBLEDevice::deleteClient(client);
+    releaseTransferClient(client);
     addLog(log, "Prepare update rejected or timed out.");
     return false;
   }
 
   uint8_t start[1] = {0x03};
   clearNotifications();
+  updateTransferProgress("waiting_first_block", 0, totalBlocks);
   controlChar->writeValue(start, sizeof(start), true);
   if (!waitForPacket(0x05, packet, 12000)) {
-    client->disconnect();
-    NimBLEDevice::deleteClient(client);
+    releaseTransferClient(client);
     addLog(log, "Display did not request first block.");
     return false;
   }
@@ -603,8 +671,7 @@ bool sendPayloadToDisplay(const String& address, const PayloadSource& payload, u
   std::vector<bool> sentBlocks(totalBlocks, false);
   int uniqueSent = 0;
   if (packet.size() < 6 || packet[0] != 0x05 || packet[1] != 0x00) {
-    client->disconnect();
-    NimBLEDevice::deleteClient(client);
+    releaseTransferClient(client);
     addLog(log, "Invalid first image-block request: " + hexPacket(packet));
     return false;
   }
@@ -616,8 +683,7 @@ bool sendPayloadToDisplay(const String& address, const PayloadSource& payload, u
   bool streamingMode = (softwareVersion & 0x80) == 0x80;
   bool blockWriteWithResponse = writeChar->canWrite();
   if (streamingMode && !blockWriteWithResponse) {
-    client->disconnect();
-    NimBLEDevice::deleteClient(client);
+    releaseTransferClient(client);
     addLog(log, "Display does not expose acknowledged block writes; refusing an unsafe unconfirmed stream.");
     return false;
   }
@@ -629,20 +695,23 @@ bool sendPayloadToDisplay(const String& address, const PayloadSource& payload, u
 
   while (true) {
     if (nextBlock < 0 || nextBlock >= totalBlocks) {
-      client->disconnect();
-      NimBLEDevice::deleteClient(client);
+      releaseTransferClient(client);
       addLog(log, "Display requested invalid block " + String(nextBlock) + "/" + String(totalBlocks) + ".");
       return false;
     }
     requestCounts[nextBlock]++;
     if (requestCounts[nextBlock] > 5) {
-      client->disconnect();
-      NimBLEDevice::deleteClient(client);
+      releaseTransferClient(client);
       addLog(log, "Display repeatedly rejected block " + String(nextBlock) + ".");
       return false;
     }
     int endBlock = streamingMode ? totalBlocks : nextBlock + 1;
     for (int blockNumber = nextBlock; blockNumber < endBlock; blockNumber++) {
+      if (transferCancellationRequested()) {
+        releaseTransferClient(client);
+        addLog(log, "Transfer cancellation requested before image block " + String(blockNumber + 1) + ".");
+        return false;
+      }
       int startOffset = blockNumber * chunkSize;
       int dataLen = min(chunkSize, (int)payload.size - startOffset);
       block[0] = blockNumber & 0xFF;
@@ -650,22 +719,24 @@ bool sendPayloadToDisplay(const String& address, const PayloadSource& payload, u
       block[2] = (blockNumber >> 16) & 0xFF;
       block[3] = (blockNumber >> 24) & 0xFF;
       if (!payload.read(startOffset, block.data() + 4, dataLen)) {
-        client->disconnect();
-        NimBLEDevice::deleteClient(client);
+        releaseTransferClient(client);
         addLog(log, "Could not read block " + String(blockNumber) + " of the staged payload.");
         return false;
       }
 
       bool written = false;
       for (int writeAttempt = 1; writeAttempt <= 3; writeAttempt++) {
+        // This timestamp sits immediately before the synchronous acknowledged
+        // GATT write. If NimBLE never returns, the main-loop watchdog can see
+        // precisely which block wedged and recover the whole gateway.
+        updateTransferProgress("writing_block", uniqueSent, totalBlocks);
         written = writeChar->writeValue(block.data(), dataLen + 4, blockWriteWithResponse);
         if (written) break;
         addLog(log, "BLE write failed for block " + String(blockNumber) + ", retry " + String(writeAttempt) + "/3.");
         delay(100);
       }
       if (!written) {
-        client->disconnect();
-        NimBLEDevice::deleteClient(client);
+        releaseTransferClient(client);
         addLog(log, "Display did not acknowledge image block " + String(blockNumber) + ".");
         return false;
       }
@@ -673,6 +744,7 @@ bool sendPayloadToDisplay(const String& address, const PayloadSource& payload, u
         sentBlocks[blockNumber] = true;
         uniqueSent++;
       }
+      updateTransferProgress("transferring", uniqueSent, totalBlocks);
       if (blockNumber == 0 || blockNumber % 10 == 0 || uniqueSent == totalBlocks) {
         int percent = (uniqueSent * 100) / max(1, totalBlocks);
         addLog(log, "Display accepted block " + String(blockNumber + 1) + "/" + String(totalBlocks) + " (" + String(percent) + "%).");
@@ -680,6 +752,7 @@ bool sendPayloadToDisplay(const String& address, const PayloadSource& payload, u
     }
 
     if (uniqueSent == totalBlocks) {
+      updateTransferProgress("waiting_completion", uniqueSent, totalBlocks);
       if (!waitForPacket(0x05, packet, 2000)) {
         addLog(log, "All image blocks were delivered; no optional 05 08 confirmation.");
         break;
@@ -698,14 +771,12 @@ bool sendPayloadToDisplay(const String& address, const PayloadSource& payload, u
     }
 
     if (!waitForPacket(0x05, packet, 12000)) {
-      client->disconnect();
-      NimBLEDevice::deleteClient(client);
+      releaseTransferClient(client);
       addLog(log, "Timed out waiting for the display to request the next image block.");
       return false;
     }
     if (packet.size() >= 2 && packet[1] == 0x08) {
-      client->disconnect();
-      NimBLEDevice::deleteClient(client);
+      releaseTransferClient(client);
       addLog(log, "Display ended transfer before every image block was delivered.");
       return false;
     }
@@ -713,15 +784,14 @@ bool sendPayloadToDisplay(const String& address, const PayloadSource& payload, u
   }
 
   if (uniqueSent != totalBlocks) {
-    client->disconnect();
-    NimBLEDevice::deleteClient(client);
+    releaseTransferClient(client);
     addLog(log, "Display ended transfer after only " + String(uniqueSent) + "/" + String(totalBlocks) + " blocks.");
     return false;
   }
 
+  updateTransferProgress("completed", uniqueSent, totalBlocks);
   addLog(log, partial ? "Partial image transfer completed." : "Full-screen image transfer completed.");
-  client->disconnect();
-  NimBLEDevice::deleteClient(client);
+  releaseTransferClient(client);
   addLog(log, "Bluetooth released after display confirmation.");
   return true;
 }
@@ -1043,6 +1113,10 @@ void handleTransferUploadComplete() {
   transferJob.log.clear();
   transferJob.createdMs = millis();
   transferJob.updatedMs = transferJob.createdMs;
+  transferJob.phase = "queued";
+  transferJob.lastBlock = 0;
+  transferJob.totalBlocks = 0;
+  transferJob.cancelRequested = false;
   xSemaphoreGive(transferMutex);
 
   doc["ok"] = true;
@@ -1073,6 +1147,16 @@ void handleTransferStatus() {
   doc["address"] = transferJob.address;
   doc["created_ms"] = transferJob.createdMs;
   doc["updated_ms"] = transferJob.updatedMs;
+  doc["phase"] = transferJob.phase;
+  doc["last_block"] = transferJob.lastBlock;
+  doc["total_blocks"] = transferJob.totalBlocks;
+  doc["progress_percent"] = transferJob.totalBlocks > 0
+    ? (transferJob.lastBlock * 100) / transferJob.totalBlocks
+    : 0;
+  doc["stall_ms"] = transferJob.status == "running" || transferJob.status == "cancelling"
+    ? millis() - transferJob.updatedMs
+    : 0;
+  doc["recovery_restart_pending"] = transferRecoveryRestartAtMs != 0;
   JsonArray log = doc["log"].to<JsonArray>();
   for (const String& line : transferJob.log) log.add(line);
   xSemaphoreGive(transferMutex);
@@ -1080,6 +1164,124 @@ void handleTransferStatus() {
   doc["minimum_free_heap"] = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
   doc["largest_free_block"] = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
   sendJson(doc);
+}
+
+bool requestRunningTransferRecovery(const String& error, const String& message) {
+  if (!transferMutex) return false;
+  bool requested = false;
+  xSemaphoreTake(transferMutex, portMAX_DELAY);
+  if ((transferJob.status == "running" || transferJob.status == "cancelling")
+      && transferRecoveryRestartAtMs == 0) {
+    transferJob.status = "cancelling";
+    transferJob.error = error;
+    transferJob.phase = "recovery_disconnect";
+    transferJob.cancelRequested = true;
+    transferJob.updatedMs = millis();
+    if (transferJob.log.size() >= MAX_TRANSFER_LOG_LINES) transferJob.log.erase(transferJob.log.begin());
+    transferJob.log.push_back(message);
+    Serial.println(message);
+    // disconnect() posts a GAP termination request; the worker remains the
+    // sole owner and deleter of the client. Holding transferMutex makes this
+    // safe against releaseTransferClient clearing/deleting the same pointer.
+    if (activeTransferClient && activeTransferClient->isConnected()) {
+      activeTransferClient->disconnect();
+    }
+    transferRecoveryRestartAtMs = millis() + TRANSFER_RECOVERY_RESTART_DELAY_MS;
+    requested = true;
+  }
+  xSemaphoreGive(transferMutex);
+  return requested;
+}
+
+void handleTransferCancel() {
+  JsonDocument doc;
+  String requestedId = server.arg("id");
+  if (!transferMutex || requestedId.length() == 0) {
+    doc["ok"] = false;
+    doc["error"] = "transfer_job_not_found";
+    sendJson(doc, 404);
+    return;
+  }
+
+  xSemaphoreTake(transferMutex, portMAX_DELAY);
+  if (requestedId != transferJob.id) {
+    xSemaphoreGive(transferMutex);
+    doc["ok"] = false;
+    doc["error"] = "transfer_job_not_found";
+    sendJson(doc, 404);
+    return;
+  }
+  String status = transferJob.status;
+  if (status == "queued") {
+    transferJob.status = "failed";
+    transferJob.error = "transfer_cancelled";
+    transferJob.phase = "cancelled_before_start";
+    transferJob.cancelRequested = true;
+    transferJob.updatedMs = millis();
+    if (transferJob.log.size() >= MAX_TRANSFER_LOG_LINES) transferJob.log.erase(transferJob.log.begin());
+    transferJob.log.push_back("Queued transfer cancelled before BLE started.");
+    queuedPayload.clear();
+    uploadPayload.swap(queuedPayload);
+    queuedInFlash = false;
+    queuedFlashSize = 0;
+    xSemaphoreGive(transferMutex);
+    doc["ok"] = true;
+    doc["status"] = "cancelled";
+    doc["restart_required"] = false;
+    sendJson(doc);
+    return;
+  }
+  xSemaphoreGive(transferMutex);
+
+  if (status == "running" || status == "cancelling") {
+    bool started = requestRunningTransferRecovery(
+      "transfer_cancelled",
+      "Transfer cancellation requested by Home Assistant; disconnecting BLE and restarting gateway."
+    );
+    doc["ok"] = true;
+    doc["status"] = "cancelling";
+    doc["restart_required"] = true;
+    doc["restart_scheduled"] = started || transferRecoveryRestartAtMs != 0;
+    sendJson(doc, 202);
+    return;
+  }
+
+  doc["ok"] = true;
+  doc["status"] = status;
+  doc["restart_required"] = false;
+  sendJson(doc);
+}
+
+void monitorTransferWatchdog() {
+  if (!transferMutex || transferRecoveryRestartAtMs != 0) return;
+  uint32_t now = millis();
+  uint32_t stalledFor = 0;
+  uint32_t runtime = 0;
+  String phase;
+  int32_t lastBlock = -1;
+  int32_t totalBlocks = 0;
+  bool running = false;
+  xSemaphoreTake(transferMutex, portMAX_DELAY);
+  running = transferJob.status == "running";
+  if (running) {
+    stalledFor = now - transferJob.updatedMs;
+    runtime = now - transferJob.createdMs;
+    phase = transferJob.phase;
+    lastBlock = transferJob.lastBlock;
+    totalBlocks = transferJob.totalBlocks;
+  }
+  xSemaphoreGive(transferMutex);
+  if (!running) return;
+
+  bool stalled = stalledFor >= TRANSFER_STALL_TIMEOUT_MS;
+  bool overRuntime = runtime >= TRANSFER_MAX_RUNTIME_MS;
+  if (!stalled && !overRuntime) return;
+  String detail = stalled
+    ? "Transfer watchdog: no progress for " + String(stalledFor / 1000) + "s"
+    : "Transfer watchdog: maximum runtime exceeded";
+  detail += " at phase " + phase + ", block " + String(lastBlock) + "/" + String(totalBlocks)
+    + "; disconnecting BLE and restarting gateway.";
+  requestRunningTransferRecovery("transfer_watchdog_timeout", detail);
 }
 
 void runQueuedTransfer() {
@@ -1107,6 +1309,10 @@ void runQueuedTransfer() {
   queuedFlashSize = 0;
   transferJob.status = "running";
   transferJob.updatedMs = millis();
+  transferJob.phase = "starting";
+  transferJob.lastBlock = 0;
+  transferJob.totalBlocks = 0;
+  transferJob.cancelRequested = false;
   xSemaphoreGive(transferMutex);
 
   JobTransferLog log(jobId);
@@ -1134,8 +1340,15 @@ void runQueuedTransfer() {
 
   xSemaphoreTake(transferMutex, portMAX_DELAY);
   if (transferJob.id == jobId) {
-    transferJob.status = ok ? "succeeded" : "failed";
-    transferJob.error = ok ? "" : "ble_transfer_failed";
+    // A cancellation/watchdog recovery has already recorded the meaningful
+    // gateway-side error and scheduled a restart. Do not overwrite it with the
+    // generic ble_transfer_failed merely because disconnect made writeValue
+    // return false before the restart fires.
+    if (!transferJob.cancelRequested) {
+      transferJob.status = ok ? "succeeded" : "failed";
+      transferJob.error = ok ? "" : "ble_transfer_failed";
+      transferJob.phase = ok ? "completed" : "failed";
+    }
     transferJob.updatedMs = millis();
   }
   transferTaskActive = false;
@@ -1197,6 +1410,7 @@ void startQueuedTransfer() {
   transferTaskActive = false;
   transferJob.status = "failed";
   transferJob.error = "transfer_task_start_failed";
+  transferJob.phase = "worker_start_failed";
   transferJob.updatedMs = millis();
   queuedPayload.clear();
   uploadPayload.swap(queuedPayload);
@@ -1551,6 +1765,7 @@ void setup() {
   server.on("/api/scan", HTTP_GET, handleScan);
   server.on("/api/transfer/upload", HTTP_POST, handleTransferUploadComplete, handleTransferUploadChunk);
   server.on("/api/transfer/status", HTTP_GET, handleTransferStatus);
+  server.on("/api/transfer/cancel", HTTP_POST, handleTransferCancel);
   server.on("/api/ota/upload", HTTP_POST, handleOtaUploadComplete, handleOtaUploadChunk);
   server.on("/api/config", HTTP_GET, handleConfig);
   server.on("/api/config", HTTP_POST, handleConfig);
@@ -1568,6 +1783,13 @@ void setup() {
 void loop() {
   handleSerialConfig();
   server.handleClient();
+  monitorTransferWatchdog();
+  if (transferRecoveryRestartAtMs != 0
+      && static_cast<int32_t>(millis() - transferRecoveryRestartAtMs) >= 0) {
+    Serial.println("Restarting gateway to recover a cancelled or stalled BLE transfer.");
+    delay(100);
+    ESP.restart();
+  }
   if (otaRestartAtMs != 0 && static_cast<int32_t>(millis() - otaRestartAtMs) >= 0) {
     Serial.println("Restarting into the updated firmware.");
     delay(100);

@@ -185,7 +185,7 @@ class GraphicRowCaptureTests(unittest.TestCase):
         # is exactly how a departures board ended up printed twice, the second
         # copy a few pixels higher than the first.
         self.assertIn(
-            '["text", "ratio", "series", "forecast", "calendar", "transit"].includes(binding.type)',
+            '["text", "ratio", "series", "history", "forecast", "calendar", "transit", "todo"].includes(binding.type)',
             self.devices,
         )
 

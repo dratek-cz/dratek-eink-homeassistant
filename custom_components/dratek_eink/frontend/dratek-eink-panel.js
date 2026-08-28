@@ -3,24 +3,24 @@ import { queueMixin } from "./panel/panel-queue.mixin.js?v=live-log-update-1";
 import { automationsMixin } from "./panel/panel-automations.mixin.js?v=always-send-default-on-1";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=system-alerts-1";
 import { webSerialMixin } from "./panel/panel-webserial.mixin.js?v=browser-flash-1";
-import { devicesMixin } from "./panel/panel-devices.mixin.js?v=system-alerts-1";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=blank-template-save-isolation-1";
 import { projectsMixin } from "./panel/panel-projects.mixin.js?v=interval-only-default-1";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
 import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-3";
 import { templatesMixin } from "./panel/panel-templates.mixin.js?v=radar-direct-dither-1";
 import { variablesMixin } from "./panel/panel-variables.mixin.js?v=readable-chart-type-2";
 import { previewMixin } from "./panel/panel-preview.mixin.js?v=device-preview-quality-1";
-import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=system-alerts-1";
-import { i18nMixin } from "./panel/panel-i18n.mixin.js?v=system-alerts-1";
-import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=system-alerts-1";
+import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=unconfigured-template-warning-3";
+import { i18nMixin } from "./panel/panel-i18n.mixin.js?v=unconfigured-template-warning-2";
+import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=blank-template-save-isolation-1";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js?v=templates-4c-1";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
-import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=transit-two-line-1";
+import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=thermostat-live-dial-1";
 // INTERNAL - remove with the rest of the brand-logo feature before the retail
 // release (PRIVATE-NOTES.md).
-import { brandLogoMixin } from "./panel/panel-brand-logo.mixin.js?v=logo-dither-5";
+import { brandLogoMixin } from "./panel/panel-brand-logo.mixin.js?v=logo-flat-6";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.349";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.351";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -204,6 +204,60 @@ class DratekEinkPanel extends HTMLElement {
     this._designerFontLoading = null;
     this._devicePreviewImages = new Map();
     this._devicePreviewRequests = new Map();
+    this._pendingDeepLinkAddress = "";
+  }
+
+  // The Lovelace overview card links to one display as /dratek-eink?device=AA:BB.
+  // The address is consumed once and stripped from the URL, so a later reload
+  // of the panel does not keep dragging the user back onto that display.
+  _captureDeepLinkAddress() {
+    let address = "";
+    try {
+      const params = new URLSearchParams(window.location.search);
+      address = params.get("device") || "";
+      if (address) {
+        params.delete("device");
+        const query = params.toString();
+        window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+      }
+    } catch (_err) {
+      address = "";
+    }
+    if (address) this._pendingDeepLinkAddress = address;
+    return address;
+  }
+
+  // The pending address is re-read after every await, and the whole thing
+  // loops, because the user can click a second display in the overview card
+  // while this is still waiting on the scan for the first one.
+  //
+  // Reading the address once into a local and clearing the slot when that run
+  // finished is what made the panel open the display the user had already
+  // navigated away from: the second click stored its address, found this
+  // already in progress and returned, and then the first run's own
+  // `_pendingDeepLinkAddress = ""` threw that second address away before
+  // opening the first display. Every later click behaved the same way, because
+  // the panel was by then holding a display the URL no longer named.
+  async _applyPendingDeepLink() {
+    if (!this._hass || this._deepLinkInProgress) return;
+    this._deepLinkInProgress = true;
+    try {
+      while (this._pendingDeepLinkAddress) {
+        const address = this._pendingDeepLinkAddress;
+        const matches = (item) => String(item?.address || "").toUpperCase() === String(address).toUpperCase();
+        // The cached scan result can predate the display the card was showing,
+        // so one scan is given a chance before the link is dropped.
+        if (!(this._result?.devices || []).some(matches)) await this._scan({ background: true });
+        // Superseded while the scan ran - start again on the newer address
+        // rather than clearing it below and opening the older one.
+        if (this._pendingDeepLinkAddress !== address) continue;
+        this._pendingDeepLinkAddress = "";
+        const device = (this._result?.devices || []).find(matches);
+        if (device) await this._openDisplaySettings(device.address);
+      }
+    } finally {
+      this._deepLinkInProgress = false;
+    }
   }
 
   _openCustomImageStudioView(choice = "images") {
@@ -285,6 +339,16 @@ class DratekEinkPanel extends HTMLElement {
       };
       this.shadowRoot.addEventListener("click", this._customImageCardClickHandler, true);
     }
+    // Home Assistant keeps this element alive across navigation, so a second
+    // click on a display in the overview card arrives as location-changed
+    // rather than as a fresh connectedCallback.
+    if (!this._deepLinkLocationHandler) {
+      this._deepLinkLocationHandler = () => {
+        if (this._captureDeepLinkAddress()) this._applyPendingDeepLink();
+      };
+      window.addEventListener("location-changed", this._deepLinkLocationHandler);
+    }
+    this._captureDeepLinkAddress();
     this._render();
     this._paint();
     this._lastRenderedDeviceSignature = this._deviceStatusSignature?.(this._result) || "";
@@ -292,6 +356,7 @@ class DratekEinkPanel extends HTMLElement {
     this._scheduleDeviceStatusPoll(1000);
     this._scheduleGatewayStatusPoll?.(1500);
     if (!this._automations) this._loadAutomations?.(false);
+    if (this._hass) this._applyPendingDeepLink();
   }
 
   disconnectedCallback() {
@@ -307,6 +372,15 @@ class DratekEinkPanel extends HTMLElement {
     if (this._customImageCardClickHandler) {
       this.shadowRoot.removeEventListener("click", this._customImageCardClickHandler, true);
       this._customImageCardClickHandler = null;
+    }
+    if (this._deepLinkLocationHandler) {
+      window.removeEventListener("location-changed", this._deepLinkLocationHandler);
+      this._deepLinkLocationHandler = null;
+    }
+    if (this._stickyHeaderObserver) {
+      this._stickyHeaderObserver.disconnect();
+      this._stickyHeaderObserver = null;
+      this._observedStickyHeader = null;
     }
     this._stopCountdownTicker?.();
     window.clearTimeout(this._propertyEditTimer);
@@ -359,6 +433,7 @@ class DratekEinkPanel extends HTMLElement {
           this._paint();
         });
       }
+      this._applyPendingDeepLink();
     } else if (this._refreshTemplateEntityElements?.() || templateLiveDataChanged) {
       if (this._backgroundUiCanRender?.() !== false) {
         this._render();

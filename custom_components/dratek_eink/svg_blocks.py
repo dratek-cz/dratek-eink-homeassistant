@@ -493,8 +493,18 @@ def block_spark(
     bottom = min(values)
     span = (top - bottom) or 1
     step = box["w"] / (len(values) - 1)
+    # The caption gets a band of the row and the chart is plotted underneath
+    # it. It used to be printed at 14 % down the plot itself, which is where
+    # the curve is whenever the series peaks early.
+    caption = spark.get("caption")
+    caption_size = (
+        max(8.5, min(box["h"] * 0.16, box["w"] * 0.04)) if caption is not None else 0.0
+    )
+    caption_band = caption_size * 1.4 if caption is not None else 0.0
+    chart_y = box["y"] + caption_band
+    chart_h = max(1.0, box["h"] - caption_band)
     points = [
-        (box["x"] + step * index, box["y"] + box["h"] - ((value - bottom) / span) * box["h"])
+        (box["x"] + step * index, chart_y + chart_h - ((value - bottom) / span) * chart_h)
         for index, value in enumerate(values)
     ]
     drawn = " ".join(f"{x:.2f},{y:.2f}" for x, y in points)
@@ -503,29 +513,28 @@ def block_spark(
     # needs to read at all, and it says "how much" the way a line alone cannot.
     if preserve_yellow and spark.get("accent") == "yellow":
         parts.append(
-            f'<polygon points="{box["x"]:.2f},{box["y"] + box["h"]:.2f} {drawn}'
-            f' {box["x"] + box["w"]:.2f},{box["y"] + box["h"]:.2f}"'
+            f'<polygon points="{box["x"]:.2f},{chart_y + chart_h:.2f} {drawn}'
+            f' {box["x"] + box["w"]:.2f},{chart_y + chart_h:.2f}"'
             f' fill="{YELLOW}"></polygon>'
         )
     parts += [
-        hairline(box["x"], box["y"] + box["h"], box["w"], 1),
+        hairline(box["x"], chart_y + chart_h, box["w"], 1),
         f'<polyline points="{drawn}" fill="none" stroke="{ink(spark.get("color"))}"'
-        f' stroke-width="{max(1.5, box["h"] * 0.045):.2f}" stroke-linejoin="round"'
+        f' stroke-width="{max(1.5, chart_h * 0.045):.2f}" stroke-linejoin="round"'
         f' stroke-linecap="round"></polyline>',
     ]
     last_x, last_y = points[-1]
     parts.append(
         f'<circle cx="{last_x:.2f}" cy="{last_y:.2f}"'
-        f' r="{max(1.5, box["h"] * 0.08):.2f}" fill="{RED}"></circle>'
+        f' r="{max(1.5, chart_h * 0.08):.2f}" fill="{RED}"></circle>'
     )
-    caption = spark.get("caption")
     if caption is not None:
         parts.append(
             svg_text(
                 caption,
                 box["x"],
-                box["y"] + box["h"] * 0.14,
-                max(8.5, box["h"] * 0.22),
+                box["y"] + caption_band * 0.5,
+                caption_size,
                 anchor="start",
                 max_width=box["w"] * 0.6,
             )
@@ -635,12 +644,24 @@ def block_ring(
 def block_dial(
     dial: dict[str, Any], box: dict[str, float], preserve_yellow: bool = False
 ) -> str:
-    """Port of `_blockDial` - a half dial, open at the bottom."""
+    """Port of `_blockDial` - a half dial, open at the bottom.
+
+    The row is divided before anything is drawn into it: a band at the foot
+    for the scale ends, the caption up in the arc's mouth beside the reading,
+    and the arc sized into what is left. Placing the scale and the caption
+    from the arc's own baseline is what used to push both of them past the
+    bottom edge and across the following row.
+    """
     cx = box["x"] + box["w"] / 2
-    outer = min(box["w"] * 0.46, box["h"] * 0.82)
+    scaled = dial.get("min") is not None or dial.get("max") is not None
+    scale_size = max(7.5, min(box["h"] * 0.15, box["w"] * 0.055)) if scaled else 0.0
+    scale_band = scale_size * 1.5 if scaled else 0.0
+    arc_band = max(4.0, box["h"] - scale_band)
+    outer = max(3.0, min(box["w"] * 0.46, arc_band))
     inner = outer * 0.7
-    cy = box["y"] + box["h"] * 0.5 + outer * 0.4
+    cy = box["y"] + (arc_band + outer) / 2
     percent = fill_fraction(dial.get("percent"))
+    captioned = dial.get("caption") is not None
     parts = [
         f'<path d="{arc_path(cx, cy, outer, inner, 180, 360)}" fill="none"'
         f' stroke="{BLACK}" stroke-width="1"></path>'
@@ -655,21 +676,29 @@ def block_dial(
     if dial.get("value") is not None:
         parts.append(
             svg_text(
-                dial.get("value"), cx, cy - outer * 0.28, outer * 0.42,
-                bold=True, max_width=inner * 1.8,
+                dial.get("value"),
+                cx,
+                cy - outer * (0.40 if captioned else 0.28),
+                outer * (0.40 if captioned else 0.44),
+                # The chord of the arc's mouth at the reading's own height,
+                # not the full inner diameter it has at the centre line.
+                bold=True, max_width=inner * (1.34 if captioned else 1.6),
             )
         )
-    if dial.get("caption") is not None:
+    if captioned:
         parts.append(
-            svg_text(dial.get("caption"), cx, cy + outer * 0.16, outer * 0.24, max_width=inner * 1.9)
+            svg_text(dial.get("caption"), cx, cy - outer * 0.09, outer * 0.20, max_width=inner * 1.9)
         )
+    # Anchored to the arc's own ends and reading inwards, so a worded scale
+    # cannot hang half out of the page the way a centred one did.
+    scale_y = cy + scale_size * 0.85
     if dial.get("min") is not None:
         parts.append(
-            svg_text(dial.get("min"), cx - outer, cy + outer * 0.22, outer * 0.2, max_width=outer * 0.7)
+            svg_text(dial.get("min"), cx - outer, scale_y, scale_size, anchor="start", max_width=outer * 0.62)
         )
     if dial.get("max") is not None:
         parts.append(
-            svg_text(dial.get("max"), cx + outer, cy + outer * 0.22, outer * 0.2, max_width=outer * 0.7)
+            svg_text(dial.get("max"), cx + outer, scale_y, scale_size, anchor="end", max_width=outer * 0.62)
         )
     return "".join(parts)
 
@@ -804,7 +833,7 @@ def block_board_two_line(
         if item.get("icon"):
             parts.append(icon(
                 str(item["icon"]), box["x"] + badge_width / 2, times_cy,
-                min(line_height * 0.30, badge_width * 0.62), chip,
+                min(line_height * 0.40, badge_width * 0.92), chip,
             ))
         parts.append(svg_text(
             item.get("label"), text_x, title_cy, title_size,
@@ -834,9 +863,49 @@ def block_board(
     if not items:
         return ""
     line_height = box["h"] / len(items)
-    badge_width = min(box["w"] * 0.22, line_height * 1.5)
+    # A line plate 1.5 rows wide is right when the row holds nothing else; on a
+    # tall landscape tag it left no space for the icon and the clock. Narrower
+    # only where those exist, so a board without them keeps its plate as it was.
+    has_extras = any(item.get("icon") or item.get("clock") for item in items)
+    badge_width = min(box["w"] * (0.16 if has_extras else 0.22), line_height * 1.5)
     badge_height = line_height * 0.68
     right = box["x"] + box["w"]
+    # The single-line board used to throw away the vehicle icon and the
+    # scheduled time, so a wide tag carried less than a narrow one. Both are
+    # optional, and both give way - clock first - when the destination would be
+    # left under a third of the row.
+    gap = max(3.0, badge_width * 0.2)
+    # See _blockBoard for both: 10 is svg_text's own floor, and the countdown
+    # column is reserved from its own content rather than a flat fraction.
+    value_size = max(11.0 if compact else 10.0, min(line_height * 0.56, box["w"] * 0.13))
+    value_demand = max(
+        [svg_text_width(item.get("value"), value_size, not compact) for item in items] or [0.0]
+    )
+    value_width = max(box["w"] * 0.26, min(value_demand + 2, box["w"] * 0.4))
+    label_floor = box["w"] * 0.3
+    # See _blockBoard: sized to the row, not tucked in beside it.
+    icon_size = min(line_height * 0.78, box["w"] * 0.12) if any(item.get("icon") for item in items) else 0.0
+    # 10, not 9 - see _blockBoard: the strip is measured at this size and
+    # svg_text will not draw under its own 10px floor.
+    clock_size = max(10.0, min(line_height * 0.42, box["w"] * 0.085))
+    clock_width = max(
+        [svg_text_width(item.get("clock"), clock_size, False) if item.get("clock") else 0.0 for item in items]
+        or [0.0]
+    )
+
+    def label_room() -> float:
+        return (
+            right
+            - (box["x"] + badge_width + gap + (icon_size + gap * 0.6 if icon_size else 0.0))
+            - value_width
+            - (clock_width + gap if clock_width else 0.0)
+        )
+
+    if clock_width and label_room() < label_floor:
+        clock_width = 0.0
+    if icon_size and label_room() < label_floor:
+        icon_size = 0.0
+
     parts: list[str] = []
     for index, item in enumerate(items):
         cy = box["y"] + line_height * (index + 0.5)
@@ -853,18 +922,147 @@ def block_board(
             max(10 if compact else 8.5, badge_height * 0.65),
             color=digit, bold=True, max_width=badge_width * 0.88,
         ))
-        text_x = box["x"] + badge_width + max(3, badge_width * 0.2)
-        value_width = box["w"] * 0.26
+        icon_x = box["x"] + badge_width + gap
+        if icon_size and item.get("icon"):
+            parts.append(icon(str(item.get("icon")), icon_x + icon_size / 2, cy, icon_size, chip))
+        text_x = icon_x + (icon_size + gap * 0.6 if icon_size else 0.0)
+        if clock_width and item.get("clock"):
+            parts.append(svg_text(
+                item.get("clock"), right - value_width - gap, cy, clock_size,
+                anchor="end", max_width=clock_width,
+            ))
         parts.append(svg_text(
             item.get("label"), text_x, cy,
             max(10 if compact else 8.5, min(line_height * 0.52, box["w"] * 0.12)),
-            anchor="start", max_width=right - text_x - value_width,
+            anchor="start",
+            max_width=right - text_x - value_width - (clock_width + gap if clock_width else 0.0),
         ))
         parts.append(svg_text(
-            item.get("value"), right, cy,
-            max(11 if compact else 9.5, min(line_height * 0.56, box["w"] * 0.13)),
+            item.get("value"), right, cy, value_size,
             anchor="end", bold=not compact, color=chip, max_width=value_width,
         ))
+    return "".join(parts)
+
+
+def _checkbox(
+    left: float, cy: float, mark: float, done: bool, color: Any, boxed: bool
+) -> list[str]:
+    """The marker and its tick - shared by both branches of `block_checklist`."""
+    parts = [
+        f'<rect x="{left:.2f}" y="{cy - mark / 2:.2f}" width="{mark:.2f}"'
+        f' height="{mark:.2f}" fill="{ink(color) if done else "#ffffff"}"'
+        + (f' stroke="{BLACK}" stroke-width="1"' if boxed else "")
+        + "></rect>"
+    ]
+    if done and boxed:
+        parts.append(
+            f'<path d="M{left + mark * 0.22:.2f} {cy:.2f} L{left + mark * 0.44:.2f}'
+            f' {cy + mark * 0.24:.2f} L{left + mark * 0.8:.2f} {cy - mark * 0.26:.2f}"'
+            f' fill="none" stroke="#ffffff" stroke-width="{max(1, mark * 0.13):.2f}"></path>'
+        )
+    return parts
+
+
+def block_checklist(
+    items: list[dict[str, Any]],
+    box: dict[str, float],
+    *,
+    columns: int = 1,
+    marker: str = "box",
+    strike: bool = True,
+    compact: bool = False,
+) -> str:
+    """Port of the panel's `_blockChecklist` - shopping.js's live list rows.
+
+    The panel's version can take the four-colour accent through `_markerInk`;
+    shopping.js never asks for it (its only colour is the red first outstanding
+    item, which `_markerInk` passes straight through to `_templateInk`), so this
+    port resolves the marker fill with `ink` alone.
+    """
+    if not items:
+        return ""
+    columns = max(1, int(columns or 1))
+    if columns > 1:
+        lines = max(1, math.ceil(len(items) / columns))
+        cell_width = box["w"] / columns
+        line_height = box["h"] / lines
+        # A checkbox has to hold a 1px outline, a gap and a tick. Under about
+        # seven pixels there is no room for all three and the whole thing
+        # thresholds into a solid dot, so below that the box is dropped and the
+        # state is carried by a filled square alone.
+        mark = max(6.0, min(line_height * 0.42, cell_width * 0.12))
+        boxed = mark >= 7
+        parts: list[str] = []
+        for index, item in enumerate(items):
+            column = index % columns
+            line = index // columns
+            left = box["x"] + column * cell_width
+            cy = box["y"] + line_height * (line + 0.5)
+            if column > 0:
+                parts.append(hairline(left, box["y"] + box["h"] * 0.08, 1, box["h"] * 0.84))
+            parts.extend(_checkbox(left + 3, cy, mark, bool(item.get("done")), item.get("color"), boxed))
+            text_x = left + mark + 7
+            right = left + cell_width - 3
+            font_size = max(10.0, min(line_height * 0.42, cell_width * 0.14))
+            parts.append(svg_text(
+                item.get("label"), text_x, cy, font_size,
+                anchor="start", min_size=9, color=ink(item.get("color")),
+                max_width=right - text_x,
+            ))
+            if item.get("done") and strike:
+                width = min(svg_text_width(item.get("label"), font_size, False), right - text_x)
+                parts.append(hairline(text_x, cy, width, 1))
+        return "".join(parts)
+
+    line_height = box["h"] / (len(items) or 1)
+    # Same floor as the multi-column branch above, for the same reason.
+    mark = max(6.0, min(line_height * 0.5, box["w"] * 0.11))
+    boxed = mark >= 7
+    font_size = max(10.0 if compact else 8.5, min(line_height * 0.6, box["w"] * 0.12))
+    parts = []
+    for index, item in enumerate(items):
+        cy = box["y"] + line_height * (index + 0.5)
+        left = box["x"]
+        done = bool(item.get("done"))
+        if marker == "dot":
+            parts.append(
+                f'<circle cx="{left + mark / 2:.2f}" cy="{cy:.2f}" r="{mark / 2:.2f}"'
+                f' fill="{ink(item.get("color")) if done else "#ffffff"}"'
+                f' stroke="{BLACK}" stroke-width="1"></circle>'
+            )
+        else:
+            parts.append(
+                f'<rect x="{left:.2f}" y="{cy - mark / 2:.2f}" width="{mark:.2f}"'
+                f' height="{mark:.2f}" fill="{ink(item.get("color")) if done else "#ffffff"}"'
+                + (f' stroke="{BLACK}" stroke-width="1"' if boxed else "")
+                + "></rect>"
+            )
+            if done:
+                # The single-column branch draws the tick whenever the item is
+                # done, box or no box - unlike the multi-column one above, and
+                # with a marginally heavier stroke. Both quirks are the panel's.
+                parts.append(
+                    f'<path d="M{left + mark * 0.22:.2f} {cy:.2f} L{left + mark * 0.44:.2f}'
+                    f' {cy + mark * 0.24:.2f} L{left + mark * 0.8:.2f} {cy - mark * 0.26:.2f}"'
+                    f' fill="none" stroke="#ffffff" stroke-width="{max(1, mark * 0.14):.2f}"></path>'
+                )
+        text_x = left + mark + max(2.0, mark * 0.4)
+        right = box["x"] + box["w"]
+        # `minSize: row.compact ? 8.5 : undefined` on the panel side - undefined
+        # means the builder's own readability floor, so the argument is only
+        # passed at all when the row asked to go below it.
+        floor = {"min_size": 8.5} if compact else {}
+        parts.append(svg_text(
+            item.get("label"), text_x, cy, font_size,
+            anchor="start", bold=bool(item.get("bold")),
+            color=ink(item.get("color")), max_width=right - text_x,
+            **floor,
+        ))
+        # A struck-through line says "already handled" without spending a column
+        # on a second state word next to every item.
+        if done and strike:
+            width = min(svg_text_width(item.get("label"), font_size, bool(item.get("bold"))), right - text_x)
+            parts.append(hairline(text_x, cy, width, 1))
     return "".join(parts)
 
 
@@ -882,10 +1080,12 @@ def block_split(halves: list[dict[str, Any]], box: dict[str, float], banner: boo
             div_color = "#ffffff" if (banner and color == "red") else BLACK
             parts.append(hairline(box["x"] + cell_width * index, box["y"] + box["h"] * 0.12, 1, box["h"] * 0.76, div_color))
         has_icon = bool(half.get("icon"))
-        label_y = box["y"] + box["h"] * (0.22 if has_icon else 0.28)
-        val_y = box["y"] + box["h"] * (0.76 if has_icon else 0.72)
-        label_size = max(9.0, min(box["h"] * 0.22, cell_width * 0.22))
-        val_size = max(12.0, min(box["h"] * 0.44, cell_width * 0.42))
+        # Three bands that do not touch: the iconed variant used to draw its
+        # glyph through the reading underneath it.
+        label_y = box["y"] + box["h"] * (0.20 if has_icon else 0.28)
+        val_y = box["y"] + box["h"] * (0.77 if has_icon else 0.72)
+        label_size = max(9.0, min(box["h"] * (0.20 if has_icon else 0.22), cell_width * 0.22))
+        val_size = max(12.0, min(box["h"] * (0.40 if has_icon else 0.44), cell_width * 0.42))
 
         is_red_banner = banner and color == "red"
         default_text_color = "#ffffff" if is_red_banner else BLACK
@@ -902,8 +1102,8 @@ def block_split(halves: list[dict[str, Any]], box: dict[str, float], banner: boo
         if half.get("icon"):
             parts.append(
                 icon(
-                    str(half.get("icon")), cx, box["y"] + box["h"] * 0.48,
-                    min(box["h"] * 0.28, cell_width * 0.35), val_color,
+                    str(half.get("icon")), cx, box["y"] + box["h"] * 0.44,
+                    min(box["h"] * 0.19, cell_width * 0.26), val_color,
                 )
             )
         if half.get("value"):

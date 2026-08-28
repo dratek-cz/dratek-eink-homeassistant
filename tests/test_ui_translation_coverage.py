@@ -39,6 +39,16 @@ ALLOWED_UNTRANSLATED = {
     "Spotřeba vody …", "Výroba …", "PODÍL", "VÝVOJ", "ZMĚNY", "Dveře ·",
     "Met.no: 21.5°C • Déšť", "■ Slabé ■ Silné", "0,86 Kč", "3 / 3 v pořádku",
     "Kč", "Kč/kWh", "kč",
+    # Sample copy in the starter designs _templateDefinitions() drops onto the
+    # canvas. It is drawn into the bitmap the display receives, so it stays
+    # Czech whatever language the panel around it is showing.
+    "Kč / kWh", "Naskenuj pro připojení", "Nejlevnější dnes", "Papír",
+    "Poslední aktualizace", "PÁTEK", "Pátek", "Skončí v 14:30", "Tento měsíc",
+    "Všechno v pořádku", "ZÍTRA", "Zítra má svátek", "za 7 dní",
+    "Úspora CO2: 125 kg",
+    # shopping.js's sample list, drawn onto the panel by _templateShoppingList
+    # until a real todo.* entity is bound. Panel content, not UI copy.
+    "Mléko", "Chléb", "Káva", "Prací gel",
     # Czech weekday/month abbreviations printed on the panel.
     "PÁ", "ÚT", "ČT", "KVĚ",
     # Brand name.
@@ -54,6 +64,9 @@ ALLOWED_UNTRANSLATED = {
     "vít", "vítr", "výkon", "výrob", "věk", "zastáv", "zboží", "zbývaj",
     "zbývající čas", "změn", "zálivk", "zám", "zásilk", "zásob", "úspora",
     "čas", "číslo",
+    # The todo_list slot kind's own stems, matched against a template's slot
+    # label the same way the ones above are.
+    "nákupní seznam", "úkolovník",
 }
 
 
@@ -74,7 +87,9 @@ def _en_patterns() -> list[re.Pattern[str]]:
         return []
     compiled = []
     for line in match.group(1).splitlines():
-        found = re.match(r'\s*\[/(.*?)/,\s*"', line)
+        # A replacement is either a literal string or a function, the latter so
+        # a frame can hand the name it captured back through the dictionary.
+        found = re.match(r'\s*\[/(.*?)/,\s*["(]', line)
         if found:
             try:
                 compiled.append(re.compile(found.group(1)))
@@ -153,6 +168,11 @@ class UiTranslationCoverageTests(unittest.TestCase):
         for path in files:
             if path.name == "panel-i18n.mixin.js":
                 continue
+            # The Lovelace card is a separate custom element with no access to
+            # the panel's prototype, so it carries its own two-language table.
+            # test_the_overview_card_translates_itself covers it instead.
+            if path.name == "dratek-eink-overview-card.js":
+                continue
             for value in _translatable_strings(path, path.name == "panel-devices.mixin.js"):
                 if not _is_whole_phrase(value):
                     continue
@@ -171,6 +191,27 @@ class UiTranslationCoverageTests(unittest.TestCase):
             "panel-i18n.mixin.js, or to ALLOWED_UNTRANSLATED here with a reason "
             "if it is display content or a code fragment rather than UI copy.",
         )
+
+    def test_the_overview_card_translates_itself(self) -> None:
+        source = (FRONTEND / "dratek-eink-overview-card.js").read_text(encoding="utf-8")
+        block = re.search(r"const STRINGS = \{(.*?)\n\};", source, re.S)
+        self.assertIsNotNone(block, "the card's STRINGS table is gone")
+        tables = re.findall(r"\n  (cs|en): \{(.*?)\n  \},", block.group(1), re.S)
+        self.assertEqual([name for name, _ in tables], ["cs", "en"])
+        keys = {name: set(re.findall(r"^\s{4}(\w+):", body, re.M)) for name, body in tables}
+        self.assertEqual(
+            keys["cs"], keys["en"],
+            "the Czech and English card copy no longer describe the same strings",
+        )
+        # Nothing renders unless the language is picked per render.
+        self.assertIn("const t = this._t;", source)
+        self.assertIn('window.localStorage.getItem("dratek-eink-language")', source)
+
+    def test_the_overview_card_counts_in_czech(self) -> None:
+        source = (FRONTEND / "dratek-eink-overview-card.js").read_text(encoding="utf-8")
+        # "1 displejů" is wrong Czech; one, a few and many each take their own form.
+        self.assertIn("const czechPlural = ", source)
+        self.assertIn('czechPlural(n, "displej", "displeje", "displejů")', source)
 
     def test_interpolated_copy_has_a_pattern(self) -> None:
         """A text node that mixes Czech words with a ${...} value needs a rule.
