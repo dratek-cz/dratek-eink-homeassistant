@@ -212,10 +212,14 @@ class BrowserFlashWiringTests(unittest.TestCase):
 
     def test_the_browser_route_is_refused_outside_a_secure_context(self) -> None:
         # navigator.serial simply is not there on plain http, so the panel has
-        # to say why rather than render a button that cannot work.
+        # to say why. The route card itself must remain selectable: it opens
+        # that explanation; only the actual port picker is disabled.
         flasher = (PANEL / "esp-web-flasher.js").read_text(encoding="utf-8")
         self.assertIn("isSecureContext", flasher)
         self.assertIn("_renderBrowserFlashNotice", self.mixin)
+        self.assertIn("const disabled = this._gatewayBusy;", self.mixin)
+        self.assertIn("this._gatewayBusy || blocked ? \"disabled\"", self.mixin)
+        self.assertNotIn('route.id === "browser" && Boolean(blocked));', self.mixin)
 
 
 if __name__ == "__main__":

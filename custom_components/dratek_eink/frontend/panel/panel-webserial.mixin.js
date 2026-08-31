@@ -443,11 +443,16 @@ export const webSerialMixin = {
     const blocked = this._browserFlashBlockReason();
     return `<div class="gateway-route-picker" role="radiogroup" aria-label="Kam je deska zapojená">${FLASH_ROUTES.map((route) => {
       const selected = this._flashRoute === route.id;
-      const disabled = this._gatewayBusy || (route.id === "browser" && Boolean(blocked));
+      // Výběr trasy je navigace mezi dvěma instalačními panely, ne samotné
+      // otevření sériového portu. I na nezabezpečeném HTTP proto musí jít
+      // prohlížečovou cestu zvolit, aby uživatel viděl přesný důvod a návod.
+      // Web Serial blokujeme až u tlačítka „Vybrat desku“ níže.
+      const disabled = this._gatewayBusy;
+      const unavailable = route.id === "browser" && Boolean(blocked);
       return `<button type="button" class="gateway-route-card ${selected ? "is-selected" : ""}" role="radio" aria-checked="${selected ? "true" : "false"}" data-flash-route="${route.id}" ${disabled ? "disabled" : ""}>
         <span class="route-card-head"><ha-icon icon="${route.icon}"></ha-icon><strong>${this._escape(route.title)}</strong></span>
         <span class="route-card-art">${ROUTE_DIAGRAMS[route.id] || ""}</span>
-        <small>${this._escape(route.hint)}</small>
+        <small>${this._escape(unavailable ? `${route.hint} · vyžaduje HTTPS nebo localhost` : route.hint)}</small>
       </button>`;
     }).join("")}</div>`;
   },

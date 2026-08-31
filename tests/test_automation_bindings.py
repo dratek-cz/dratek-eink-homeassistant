@@ -516,6 +516,44 @@ class AutomationBindingTests(unittest.TestCase):
         self.assertEqual([address], timer_cancelled)
         self.assertEqual({"configs": {}}, manager._store.saved)
 
+    def test_changing_config_does_not_cancel_an_in_flight_transfer(self):
+        address = "FF:FF:92:81:46:32"
+
+        class RunningTask:
+            cancelled = False
+
+            def done(self):
+                return False
+
+            def cancel(self):
+                self.cancelled = True
+
+        task = RunningTask()
+        manager = automation.EntityAutoUpdateManager.__new__(
+            automation.EntityAutoUpdateManager
+        )
+        manager._initialized = True
+        manager._configs = {
+            address: {
+                "enabled": True,
+                "bindings": [{"type": "text", "entity_id": "sensor.time"}],
+            }
+        }
+        manager._last_refresh_at = {address: 123.0}
+        manager._last_refresh_wall_time = {}
+        manager._pending_refreshes = {address}
+        manager._timers = {}
+        manager._refresh_tasks = {address: task}
+        manager._store = _Store()
+        manager._refresh_listener = lambda: None
+        manager._sync_interval_timer = lambda _address: None
+
+        asyncio.run(manager.async_set_config(address, None))
+
+        self.assertFalse(task.cancelled)
+        self.assertIs(task, manager._refresh_tasks[address])
+        self.assertNotIn(address, manager._pending_refreshes)
+
     def test_deleting_gallery_image_removes_its_persisted_cycle_payload(self):
         address = "FF:FF:92:81:46:32"
         manager = automation.EntityAutoUpdateManager.__new__(

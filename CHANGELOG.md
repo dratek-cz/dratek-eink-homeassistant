@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.353] - 2026-08-31
+
+### Opraveno
+- **Mezi oběma způsoby nahrání gatewaye lze znovu přepínat**: volba „Do tohoto počítače“ byla na obyčejném HTTP úplně zakázaná, takže nešla ani otevřít a vysvětlit, že prohlížeč pustí Web Serial jen přes HTTPS nebo `localhost`. Přepínač teď vždy otevře zvolenou cestu; dokud stránka nemá bezpečné připojení, zůstane vypnuté jen skutečné tlačítko „Vybrat desku“ a přímo pod volbou je vidět přesný návod.
+- **Změna automatiky už nepřeruší rozběhnutý zápis přes gateway**: uložení nového návrhu dokázalo zrušit automatický přenos uprostřed bloku. Fronta považovala úlohu za ukončenou, ale ESP32 ještě držela Bluetooth spojení, takže všechny čekající zápisy vzápětí selhaly jako `gateway_busy`. Běžící fyzický přenos se teď nechá bezpečně dokončit a nový ruční zápis počká za ním na stejném zámku.
+
 ## [0.1.352] - 2026-08-31
 
 ### Přidáno

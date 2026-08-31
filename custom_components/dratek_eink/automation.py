@@ -1045,9 +1045,17 @@ class EntityAutoUpdateManager:
         cancel_timer = self._timers.pop(normalized, None)
         if cancel_timer:
             cancel_timer()
-        refresh_task = getattr(self, "_refresh_tasks", {}).pop(normalized, None)
-        if refresh_task is not None and not refresh_task.done():
-            refresh_task.cancel()
+        refresh_task = getattr(self, "_refresh_tasks", {}).get(normalized)
+        if refresh_task is not None and refresh_task.done():
+            self._refresh_tasks.pop(normalized, None)
+        # A refresh task may already be inside a physical BLE/gateway write.
+        # Cancelling it here used to cut a gateway transfer mid-block, release
+        # TransferQueue's resource lock and leave the ESP32 itself busy. Every
+        # job that had waited behind it then reached the gateway at once and
+        # failed with gateway_busy. Clearing _pending_refreshes above is enough
+        # to stop another loop iteration; an in-flight write must finish. The
+        # manual upload that changed this config is already serialised by the
+        # queue's device/resource locks and safely runs next.
         if (
             isinstance(config, dict)
             and (config.get("bindings") or config.get("image_cycle"))
