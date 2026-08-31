@@ -68,6 +68,7 @@ from .ws_projects import (
 from .ws_queue import websocket_cancel_queue_job, websocket_clear_queue, websocket_transfer_queue
 from .ws_sending import (
     websocket_commit_design_upload,
+    websocket_identify,
     websocket_send_design,
     websocket_send_partial_design,
     websocket_send_text,
@@ -93,6 +94,7 @@ COMMANDS = (
     websocket_render_preview,
     websocket_set_rgb_led,
     websocket_flash_identify,
+    websocket_identify,
     websocket_send_text,
     websocket_send_design,
     websocket_send_partial_design,

@@ -19,7 +19,7 @@ from .render import render_text_image
 from .queue import get_transfer_queue
 from .transfer import DratekTransfer
 from .automation import get_entity_auto_update_manager
-from .gateway import async_send_gateway_payload
+from .gateway import async_send_gateway_payload, async_set_gateway_led
 from .ws_shared import (
     _activate_entity_automation,
     _clear_entity_automation_if_matches,
@@ -693,3 +693,139 @@ async def websocket_send_text(
         return
 
     connection.send_result(msg["id"], result)
+
+
+# How long "find this display" keeps the indicator lit.
+#
+# The vendor's 0x30 packet carries a flash time whose unit the SDK never
+# documents and whose whole range (0-255) is far too short to walk a building
+# with, so the duration is held on this side instead: the LED is switched on,
+# and a scheduled call switches it off again. That also means the light can be
+# turned off early by pressing the same control twice.
+IDENTIFY_MINUTES = 3
+IDENTIFY_TIMERS_KEY = "identify_timers"
+# The panel's own teal, which is what the button that starts this is coloured.
+IDENTIFY_COLOR = (0, 162, 165)
+
+
+def _identify_timers(hass: HomeAssistant) -> dict[str, Any]:
+    return hass.data.setdefault(DOMAIN, {}).setdefault(IDENTIFY_TIMERS_KEY, {})
+
+
+def _cancel_identify_timer(hass: HomeAssistant, address: str) -> None:
+    timer = _identify_timers(hass).pop(address.upper(), None)
+    if timer is not None:
+        timer()
+
+
+async def _async_drive_indicator(
+    hass: HomeAssistant,
+    address: str,
+    *,
+    mode: int,
+    log,
+) -> dict[str, Any]:
+    """Light or extinguish one display's indicator, over whichever route reaches it.
+
+    Routed exactly like a picture is - pinned gateway, then the gateway pool,
+    then Home Assistant's own adapter - because the display that needs finding
+    is by definition the one the user cannot see, and on a gateway-only
+    installation the local path is not an answer at all.
+    """
+    red, green, blue = IDENTIFY_COLOR if mode else (0, 0, 0)
+
+    async def run_local(add_log) -> dict[str, Any]:
+        transfer = DratekTransfer(log=add_log, hass=hass)
+        await transfer.set_rgb_led(address, mode, 10, red, green, blue)
+        return {"ok": True, "address": address, "log": []}
+
+    def gateway_runner_factory(route):
+        async def run_gateway(add_log) -> dict[str, Any]:
+            result = await async_set_gateway_led(
+                hass,
+                str(route.get("id") or route.get("gateway_id") or ""),
+                address,
+                mode,
+                10,
+                red,
+                green,
+                blue,
+                log_callback=add_log,
+            )
+            return result or {"ok": False, "error": "gateway_unknown", "gateway_side": True}
+
+        return run_gateway
+
+    return await _async_submit_routed_transfer(
+        hass,
+        address=address,
+        operation="rgb_led",
+        local_runner=run_local,
+        gateway_runner_factory=gateway_runner_factory,
+        wait_for_completion=True,
+    )
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/identify",
+        "address": str,
+        vol.Optional("on", default=True): bool,
+    }
+)
+@websocket_api.async_response
+async def websocket_identify(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Light a display's indicator so it can be found, and put it out again."""
+    address = str(msg["address"]).upper()
+    turn_on = bool(msg.get("on", True))
+    log_lines: list[str] = []
+
+    def log(message: str) -> None:
+        log_lines.append(str(message))
+
+    # Whatever the request, any pending automatic switch-off is stale now: a
+    # second press must not be undone by the first press's timer.
+    _cancel_identify_timer(hass, address)
+
+    try:
+        result = await _async_drive_indicator(
+            hass, address, mode=1 if turn_on else 0, log=log
+        )
+    except Exception as exc:  # BLE stack can raise platform-specific exceptions
+        connection.send_result(
+            msg["id"],
+            {"ok": False, "address": address, "on": turn_on, "error": str(exc), "log": log_lines},
+        )
+        return
+
+    if turn_on and result and result.get("ok") is not False:
+        from homeassistant.helpers.event import async_call_later
+
+        async def _switch_off(_now) -> None:
+            _identify_timers(hass).pop(address, None)
+            try:
+                await _async_drive_indicator(hass, address, mode=0, log=log)
+            except Exception:
+                # Nothing useful to do about a display that has since gone out
+                # of range; its indicator is on a battery it will outlive.
+                _LOGGER.debug("[%s] Could not switch the indicator back off.", address)
+
+        _identify_timers(hass)[address] = async_call_later(
+            hass, IDENTIFY_MINUTES * 60, _switch_off
+        )
+
+    payload = dict(result or {})
+    payload.update(
+        {
+            "address": address,
+            "on": turn_on,
+            "minutes": IDENTIFY_MINUTES if turn_on else 0,
+            "log": log_lines + list(payload.get("log") or []),
+        }
+    )
+    connection.send_result(msg["id"], payload)

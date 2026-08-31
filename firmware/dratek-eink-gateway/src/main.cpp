@@ -12,7 +12,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.62-gateway";
+static const char* FIRMWARE_VERSION = "0.1.63-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 static const size_t INITIAL_UPLOAD_RESERVE_BYTES = 128UL * 1024UL;
@@ -256,8 +256,13 @@ void handleStatus() {
     doc["transfer_phase"] = transferJob.phase;
     doc["transfer_last_block"] = transferJob.lastBlock;
     doc["transfer_total_blocks"] = transferJob.totalBlocks;
-    doc["transfer_stall_ms"] = transferJob.status == "running" || transferJob.status == "cancelling"
-      ? millis() - transferJob.updatedMs
+    // Clamped for the same reason the watchdog's copy is: an unsigned wrap
+    // here would report a stall of about 4294967295 ms, which is the number a
+    // user reads when they are trying to work out why a transfer died.
+    uint32_t statusNow = millis();
+    doc["transfer_stall_ms"] = (transferJob.status == "running" || transferJob.status == "cancelling")
+        && statusNow >= transferJob.updatedMs
+      ? statusNow - transferJob.updatedMs
       : 0;
     xSemaphoreGive(transferMutex);
   }
@@ -1153,8 +1158,13 @@ void handleTransferStatus() {
   doc["progress_percent"] = transferJob.totalBlocks > 0
     ? (transferJob.lastBlock * 100) / transferJob.totalBlocks
     : 0;
-  doc["stall_ms"] = transferJob.status == "running" || transferJob.status == "cancelling"
-    ? millis() - transferJob.updatedMs
+  // Clamped like the watchdog's own copy: this is the stall age Home Assistant
+  // polls and puts in the transfer log, so a wrap here is a wrong number in
+  // front of whoever is trying to work out why a transfer died.
+  uint32_t jobNow = millis();
+  doc["stall_ms"] = (transferJob.status == "running" || transferJob.status == "cancelling")
+      && jobNow >= transferJob.updatedMs
+    ? jobNow - transferJob.updatedMs
     : 0;
   doc["recovery_restart_pending"] = transferRecoveryRestartAtMs != 0;
   JsonArray log = doc["log"].to<JsonArray>();
@@ -1191,6 +1201,98 @@ bool requestRunningTransferRecovery(const String& error, const String& message) 
   }
   xSemaphoreGive(transferMutex);
   return requested;
+}
+
+// A log sink for the short control-point exchanges that are not transfers.
+// They have no job to append to, so the lines go to the serial console and
+// into the HTTP response, which is what Home Assistant puts in the queue log.
+class CollectingLog : public TransferLogSink {
+ public:
+  void add(const String& line) override {
+    if (lines.size() < 40) lines.push_back(line);
+    Serial.println(line);
+  }
+  std::vector<String> lines;
+};
+
+// Drive the display's indicator LED.
+//
+// The vendor's 0x30 control packet - mode, flash time, then R, G and B - is
+// the same one the local Bluetooth path has always written; this endpoint only
+// gives a gateway-attached display a way to receive it. Without it, "find this
+// display" worked solely for installations that have a Home Assistant
+// Bluetooth adapter, which is exactly the ones that need it least: a display
+// reached through a gateway is the one that could be in another room.
+//
+// Refuses while a transfer is running for the same reason /api/scan does -
+// one radio, one BLE central at a time.
+void handleLed() {
+  JsonDocument doc;
+  if (gatewayOperationBusy()) {
+    doc["ok"] = false;
+    doc["error"] = "gateway_busy";
+    doc["message"] = "A display transfer is currently running.";
+    sendJson(doc, 409);
+    return;
+  }
+  String address = server.arg("address");
+  if (address.length() < 11) {
+    doc["ok"] = false;
+    doc["error"] = "address_required";
+    sendJson(doc, 400);
+    return;
+  }
+  auto byteArg = [&](const char* name, int fallback) -> uint8_t {
+    if (!server.hasArg(name)) return (uint8_t)fallback;
+    return (uint8_t)max(0, min(255, (int)server.arg(name).toInt()));
+  };
+  uint8_t mode = byteArg("mode", 1);
+  if (mode > 2) mode = 1;
+  uint8_t packet[6] = {
+    0x30, mode, byteArg("flash_time", 10),
+    byteArg("red", 0), byteArg("green", 162), byteArg("blue", 165),
+  };
+
+  ensureBleInitialized();
+  CollectingLog log;
+  NimBLEClient* client = NimBLEDevice::createClient();
+  client->setConnectTimeout(SCANNED_CONNECT_TIMEOUT_SECONDS);
+  addLog(log, "Connecting to display " + address + " to set its indicator.");
+  NimBLERemoteCharacteristic* controlChar = nullptr;
+  NimBLERemoteCharacteristic* writeChar = nullptr;
+  String serviceUuid = "";
+  if (!connectToDisplay(client, address, log, controlChar, writeChar, serviceUuid)) {
+    NimBLEDevice::deleteClient(client);
+    doc["ok"] = false;
+    doc["error"] = "display_unreachable";
+    JsonArray out = doc["log"].to<JsonArray>();
+    for (const String& line : log.lines) out.add(line);
+    sendJson(doc, 502);
+    return;
+  }
+  if (controlChar->canNotify()) controlChar->subscribe(true, notifyCallback);
+  delay(200);
+  clearNotifications();
+  bool written = controlChar->writeValue(packet, sizeof(packet), true);
+  // The echo confirms the display acted on it. A write that is accepted at the
+  // GATT layer but never echoed is the display ignoring the command, and
+  // reporting that as success would send the user looking for a lit LED that
+  // was never going to light.
+  std::vector<uint8_t> response;
+  bool echoed = written && waitForPacket(0x30, response, 3000);
+  addLog(log, written
+    ? (echoed ? "Display acknowledged the indicator command." : "Display did not acknowledge the indicator command.")
+    : "Indicator command could not be written.");
+  // releaseTransferClient disconnects, deletes and nulls the pointer itself.
+  releaseTransferClient(client);
+
+  doc["ok"] = echoed;
+  doc["address"] = address;
+  doc["mode"] = mode;
+  if (!echoed) doc["error"] = written ? "display_did_not_acknowledge" : "led_write_failed";
+  JsonArray out = doc["log"].to<JsonArray>();
+  for (const String& line : log.lines) out.add(line);
+  sendJson(doc, echoed ? 200 : 502);
 }
 
 void handleTransferCancel() {
@@ -1254,7 +1356,6 @@ void handleTransferCancel() {
 
 void monitorTransferWatchdog() {
   if (!transferMutex || transferRecoveryRestartAtMs != 0) return;
-  uint32_t now = millis();
   uint32_t stalledFor = 0;
   uint32_t runtime = 0;
   String phase;
@@ -1262,10 +1363,22 @@ void monitorTransferWatchdog() {
   int32_t totalBlocks = 0;
   bool running = false;
   xSemaphoreTake(transferMutex, portMAX_DELAY);
+  // millis() is read under the mutex, not before taking it. Read outside, the
+  // transfer task could stamp updatedMs in the gap - with a value later than
+  // the `now` already in hand - and the unsigned subtraction below then wrapped
+  // to about 4294967295 ms. The watchdog read that as a stall of 4294967 s,
+  // aborted a transfer that was in fact making progress, and restarted the
+  // gateway: "Transfer watchdog: no progress for 4294967s at phase
+  // writing_block, block 21/125", reported to the queue as
+  // gateway_transfer_lost_after_restart.
+  uint32_t now = millis();
   running = transferJob.status == "running";
   if (running) {
-    stalledFor = now - transferJob.updatedMs;
-    runtime = now - transferJob.createdMs;
+    // Belt and braces for the same class of fault from any other source (a
+    // clock that has not advanced yet, a future timestamp): a stall cannot be
+    // negative, so clamp instead of wrapping.
+    stalledFor = (now >= transferJob.updatedMs) ? (now - transferJob.updatedMs) : 0;
+    runtime = (now >= transferJob.createdMs) ? (now - transferJob.createdMs) : 0;
     phase = transferJob.phase;
     lastBlock = transferJob.lastBlock;
     totalBlocks = transferJob.totalBlocks;
@@ -1393,8 +1506,13 @@ bool ensureTransferWorker() {
 void startQueuedTransfer() {
   if (!transferMutex) return;
   xSemaphoreTake(transferMutex, portMAX_DELAY);
+  // The same guard as everywhere else this subtracts two millis() stamps: a
+  // wrap would read as an enormous age and start the job before the one-second
+  // settle it is waiting out.
+  uint32_t startNow = millis();
   bool shouldStart = transferJob.status == "queued" && !transferTaskActive
-    && millis() - transferJob.createdMs >= 1000;
+    && startNow >= transferJob.createdMs
+    && startNow - transferJob.createdMs >= 1000;
   if (shouldStart) transferTaskActive = true;
   xSemaphoreGive(transferMutex);
   if (!shouldStart) return;
@@ -1766,6 +1884,7 @@ void setup() {
   server.on("/api/transfer/upload", HTTP_POST, handleTransferUploadComplete, handleTransferUploadChunk);
   server.on("/api/transfer/status", HTTP_GET, handleTransferStatus);
   server.on("/api/transfer/cancel", HTTP_POST, handleTransferCancel);
+  server.on("/api/led", HTTP_POST, handleLed);
   server.on("/api/ota/upload", HTTP_POST, handleOtaUploadComplete, handleOtaUploadChunk);
   server.on("/api/config", HTTP_GET, handleConfig);
   server.on("/api/config", HTTP_POST, handleConfig);

@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.351";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.352";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG, DISPLAY_TEMPLATES_BY_ID } from "./templates/index.js?v=thermostat-live-dial-1";
 
 // Generation of the graphic-row capture written into every series()/ratio()/
@@ -576,7 +576,7 @@ export const devicesMixin = {
         <header class="display-tile-header">
           <span class="display-online-dot ${temporarilyUnseen ? "stale" : ""}" title="${temporarilyUnseen ? "Displej nebyl zachycen v posledním krátkém skenu" : "Displej je dostupný"}"></span>
           <div class="display-tile-identity ${editing ? "is-editing" : ""}">${editing ? `<input class="display-name-inline" data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Například Kuchyň" aria-label="Název displeje">` : `<strong>${this._escape(this._deviceTitle(device))}</strong>`}<span>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</span></div>
-          <span class="display-tile-tools">${this._renderDisplayPaletteBookmarks(device)}${editing ? `<button class="tile-icon-btn tile-save-name-btn" data-device-name-save="${this._escape(device.address)}" title="Uložit název" aria-label="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button>` : `<button class="tile-icon-btn" data-device-rename="${this._escape(device.address)}" title="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}" aria-label="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>`}</span>
+          <span class="display-tile-tools">${this._renderDisplayPaletteBookmarks(device)}${this._renderIdentifyButton(device)}${editing ? `<button class="tile-icon-btn tile-save-name-btn" data-device-name-save="${this._escape(device.address)}" title="Uložit název" aria-label="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button>` : `<button class="tile-icon-btn" data-device-rename="${this._escape(device.address)}" title="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}" aria-label="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>`}</span>
           ${mode === "list" ? `<span class="display-resolution"><ha-icon icon="mdi:aspect-ratio"></ha-icon>${previewSize.width} × ${previewSize.height}</span>` : ""}
           ${mode === "list" ? transferState : ""}
         </header>
@@ -606,6 +606,61 @@ export const devicesMixin = {
       </article>`;
     }).join("")}</div>
     ${this._renderPriceSaleDialog()}`;
+  },
+
+  // "Which one of these is it?" - the light on the display itself, from the
+  // list where the user is looking at all of them at once.
+  //
+  // A toggle rather than a momentary flash: finding a display means walking to
+  // it, so the light has to still be on when you get there. The backend puts
+  // it out on its own after a few minutes; pressing again puts it out now.
+  _renderIdentifyButton(device) {
+    const address = String(device.address || "");
+    const lit = this._identifying?.has(address.toUpperCase());
+    const busy = this._identifyBusy === address.toUpperCase();
+    const label = lit ? "Zhasnout kontrolku displeje" : "Rozsvítit kontrolku displeje";
+    return `<button class="tile-icon-btn tile-identify-btn ${lit ? "is-lit" : ""}"`
+      + ` data-device-identify="${this._escape(address)}" data-device-identify-on="${lit ? "0" : "1"}"`
+      + ` title="${label}" aria-label="${label}" aria-pressed="${lit ? "true" : "false"}" ${busy ? "disabled" : ""}>`
+      + `<ha-icon icon="mdi:${busy ? "loading" : lit ? "led-on" : "led-outline"}" class="${busy ? "spin" : ""}"></ha-icon></button>`;
+  },
+
+  async _toggleDisplayIdentify(address, turnOn) {
+    if (!this._hass || !address) return;
+    const key = address.toUpperCase();
+    this._identifying ||= new Set();
+    this._identifyBusy = key;
+    this._render();
+    this._paint();
+    try {
+      const result = await this._hass.callWS({
+        type: "dratek_eink/identify",
+        address,
+        on: !!turnOn,
+      });
+      if (result?.ok === false) throw new Error(result.error || "Displej neodpověděl.");
+      if (turnOn) this._identifying.add(key);
+      else this._identifying.delete(key);
+      // The light goes out on its own after the backend's timeout, so the
+      // button has to stop claiming otherwise at the same moment.
+      window.clearTimeout(this._identifyTimers?.[key]);
+      this._identifyTimers ||= {};
+      if (turnOn && Number(result?.minutes) > 0) {
+        this._identifyTimers[key] = window.setTimeout(() => {
+          this._identifying.delete(key);
+          this._render();
+          this._paint();
+        }, Number(result.minutes) * 60 * 1000);
+      }
+    } catch (err) {
+      this._identifying.delete(key);
+      // The same surface the devices page reports every other failure on.
+      this._error = `Kontrolku displeje se nepodařilo ovládnout: ${this._message(err)}`;
+    } finally {
+      this._identifyBusy = "";
+      this._render();
+      this._paint();
+    }
   },
 
   // The cenovka dialog and the AKCE badge on a device card both belong to one
@@ -1203,18 +1258,16 @@ export const devicesMixin = {
     const canvasRotation = this._userTemplateCanvasRotationStyle(template, orientation);
     const markup = elements.map((source) => {
       const item = this._orientedUserTemplateElement(source, template, orientation);
-      const style = `left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;transform:rotate(${item.rotation}deg);--element-color:${item.color};--element-fill:${item.fill};--element-stroke:${item.stroke};--element-stroke-width:${item.strokeWidth}px;--element-radius:${item.radius}px;--element-font-size:${item.fontSize}px;--element-font-weight:${item.fontWeight};--element-font-family:${item.fontFamily};--element-font-style:${item.fontStyle};--element-text-decoration:${item.textDecoration};--element-text-outline-width:${item.textOutlineWidth}px;--element-text-outline-color:${item.textOutlineColor};--element-text-border-width:${item.textBorderWidth}px;--element-text-border-color:${item.textBorderColor};--element-overlay-opacity:${item.overlayOpacity}%;--element-text-align:${item.textAlign};--element-value:${Math.max(0, Math.min(100, item.value))}%`;
+      const style = `left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;transform:rotate(${item.rotation}deg);--element-color:${item.color};--element-fill:${item.fill};--element-stroke:${item.stroke};--element-stroke-width:${item.strokeWidth}px;--element-radius:${item.radius}px;--element-font-size:${item.fontSize}px;--element-font-weight:${item.fontWeight};--element-font-family:${item.fontFamily};--element-font-style:${item.fontStyle};--element-text-decoration:${item.textDecoration};--element-text-outline-width:${item.textOutlineWidth}px;--element-text-outline-color:${item.textOutlineColor};--element-text-border-width:${item.textBorderWidth}px;--element-text-border-color:${item.textBorderColor};--element-overlay-opacity:${item.overlayOpacity}%;${this._overlayFillScreenStyle(item.fill, item.overlayOpacity)};--element-text-align:${item.textAlign};--element-value:${Math.max(0, Math.min(100, item.value))}%`;
       let content = "";
       if (item.type === "image") content = `<img src="${this._escape(this._paletteImageSrc(item))}" alt="">`;
-      else if (["text", "button"].includes(item.type)) content = `<span>${this._escape(item.text || item.label)}</span>`;
-      else if (item.type === "icon") content = `<ha-icon icon="mdi:${this._escape(item.icon || "star")}"></ha-icon>`;
-      else if (item.type === "qr") content = this._renderTemplateQrVisual(item);
-      else if (item.type === "barcode") content = this._renderTemplateBarcodeVisual(item);
-      else if (item.type === "slider") content = this._renderTemplateProgressVisual(item);
-      else if (item.type === "chart") content = this._renderTemplateChartVisual(item);
-      else if (item.type === "gauge") content = this._renderTemplateGaugeVisual(item);
-      else if (item.type === "signal") content = this._renderTemplateSignalVisual(item);
-      return `<span class="template-overlay template-overlay-${item.type} variant-${this._escape(item.variant || "default")}" style="${style}" aria-hidden="true">${content}</span>`;
+      // Composite elements are one SVG drawn by the component renderer;
+      // the same markup is rasterised for the bitmap, so preview and print
+      // cannot drift apart the way they had.
+      else if (this._isTemplateComponentKind(item.type)) content = this._renderTemplateComponentSvg(item, width, height);
+      else if (item.type === "text") content = `<span>${this._escape(item.text || item.label)}</span>`;
+      else if (item.type === "block") content = this._renderTemplateBlockVisual(item, width, height);
+      return `<span class="template-overlay template-overlay-${item.type} variant-${this._escape(item.blockKind || item.variant || "default")}" style="${style}" aria-hidden="true">${content}</span>`;
     }).join("");
     return `<span class="user-template-catalog-canvas">${baseMarkup}<span class="user-template-rotated-canvas ${canvasRotation.turn ? "is-whole-canvas-rotated" : ""}" style="${canvasRotation.style}">${markup}</span></span>`;
   },
@@ -2206,8 +2259,14 @@ export const devicesMixin = {
 
         <main class="display-template-editor-canvas" data-photoshop-canvas>
           <div class="display-template-preview-card photoshop-canvas-card">
-            <div class="display-template-editor-stage">
-              <div class="template-standalone-editor template-designer-screen viewport-${viewport}" data-template-designer-viewport-canvas style="--template-canvas-ratio:${canvasWidth}/${canvasHeight};--template-canvas-width:${previewCanvasWidth}px;--template-preview-zoom:${previewZoom};--template-designer-pan-x:${this._templateDesignerPan?.x || 0}px;--template-designer-pan-y:${this._templateDesignerPan?.y || 0}px" aria-label="Plátno šablony ${this._escape(template.title)}">
+            <!-- The stage is the window you look through and the artboard is
+                 the panel itself. Zoom and pan therefore belong on the stage
+                 (it is what the wheel and the drag are aimed at) and are
+                 applied to the artboard, so the whole display grows - bezel,
+                 border and content together - instead of the drawing swelling
+                 inside a frame that stays the same size. -->
+            <div class="display-template-editor-stage" data-template-designer-viewport-canvas style="--template-preview-zoom:${previewZoom};--template-designer-pan-x:${this._templateDesignerPan?.x || 0}px;--template-designer-pan-y:${this._templateDesignerPan?.y || 0}px">
+              <div class="template-standalone-editor template-designer-screen viewport-${viewport}" data-template-designer-artboard style="--template-canvas-ratio:${canvasWidth}/${canvasHeight};--template-canvas-width:${previewCanvasWidth}px" aria-label="Plátno šablony ${this._escape(template.title)}">
                 ${this._renderDisplayTemplateSurface(template, canvasFormat, true, "primary", true, "large", false, canvasWidth, canvasHeight)}
               </div>
             </div>
@@ -2718,37 +2777,57 @@ export const devicesMixin = {
     const areaOrientation = item
       ? (Number(item.w || 0) >= Number(item.h || 0) ? "landscape" : "portrait")
       : ((partQuarterTurn ? !partLandscape : partLandscape) ? "landscape" : "portrait");
-    const viewportOptions = [
-      ["narrow", "phone-rotate-portrait", "Úzká"],
-      ["wide", "phone-rotate-landscape", "Široká"],
-      ["large", "monitor", "Velký displej"],
-      ["large-portrait", "tablet", "Velký na výšku"],
-    ];
-    const activeViewport = viewportOptions.find(([value]) => value === viewport) || viewportOptions[1];
+    // The four viewports are really two independent choices - which panel and
+    // which way up - and offering them as four opaque icons behind a popup made
+    // the user work that out for themselves every time. Two labelled pairs say
+    // the same thing without hiding anything, and the resolution beside them
+    // answers the question the icons never could: what am I designing for.
+    const viewportShapes = {
+      narrow: { large: false, portrait: true, width: 128, height: 296 },
+      wide: { large: false, portrait: false, width: 296, height: 128 },
+      large: { large: true, portrait: false, width: 800, height: 480 },
+      "large-portrait": { large: true, portrait: true, width: 480, height: 800 },
+    };
+    const shape = viewportShapes[viewport] || viewportShapes.wide;
+    const viewportFor = (large, portrait) => large
+      ? (portrait ? "large-portrait" : "large")
+      : (portrait ? "narrow" : "wide");
+    // The orientation pair keeps its icons - a portrait and a landscape
+    // rectangle *are* the meaning, and read faster than the words. The size
+    // pair drops them: "Malý"/"Velký" says it, and two more glyphs only cost
+    // the bar the width it has none of.
+    const formatButton = (target, active, icon, label, hint) => `<button type="button" class="${active ? "is-active" : ""}"`
+      + ` data-template-designer-viewport="${target}" aria-pressed="${active}" title="${this._escape(hint)}">`
+      + `${icon ? `<ha-icon icon="mdi:${icon}"></ha-icon>` : ""}<span>${this._escape(label)}</span></button>`;
+    const resolutionOf = (id) => `${viewportShapes[id].width} × ${viewportShapes[id].height} px`;
+    const zoomPercent = Math.round(previewZoom * 100);
     return `<section class="template-selection-bar is-locked-controls ${hasSelection ? "has-selection" : "has-no-selection"}" aria-label="Pevné ovládání designeru">
       <div class="template-selection-fixed-tools">
         <div class="template-toolbar-cluster is-view">
-        <div class="template-viewport-menu-wrap">
-          <button type="button" class="template-viewport-menu-trigger ${this._templateViewportMenuOpen ? "is-active" : ""}" data-template-viewport-menu aria-expanded="${this._templateViewportMenuOpen}" title="Formát náhledu: ${activeViewport[2]}"><ha-icon icon="mdi:${activeViewport[1]}"></ha-icon></button>
-          ${this._templateViewportMenuOpen ? `<div class="template-viewport-popup" role="dialog" aria-label="Formát náhledu šablony">
-            <header><span><strong>Formát náhledu</strong><small>${this._escape(activeTemplate?.title || "Šablona")}</small></span><button type="button" data-template-viewport-menu-close title="Zavřít"><ha-icon icon="mdi:close"></ha-icon></button></header>
-            <div>${viewportOptions.map(([value, icon, label]) => `<button type="button" class="${viewport === value ? "is-active" : ""}" data-template-designer-viewport="${value}" aria-pressed="${viewport === value}"><ha-icon icon="mdi:${icon}"></ha-icon><span>${label}</span></button>`).join("")}</div>
-          </div>` : ""}
+        <div class="template-format-control" role="group" aria-label="Formát šablony">
+          <span class="template-format-group is-size" role="group" aria-label="Velikost displeje">
+            ${formatButton(viewportFor(false, shape.portrait), !shape.large, "", "Malý", `Malý cenovkový tag - ${resolutionOf(viewportFor(false, shape.portrait))}`)}
+            ${formatButton(viewportFor(true, shape.portrait), shape.large, "", "Velký", `Velký displej - ${resolutionOf(viewportFor(true, shape.portrait))}`)}
+          </span>
+          <span class="template-format-group is-orientation" role="group" aria-label="Orientace šablony">
+            ${formatButton(viewportFor(shape.large, true), shape.portrait, "crop-portrait", "Na výšku", `Na výšku - ${resolutionOf(viewportFor(shape.large, true))}`)}
+            ${formatButton(viewportFor(shape.large, false), !shape.portrait, "crop-landscape", "Na šířku", `Na šířku - ${resolutionOf(viewportFor(shape.large, false))}`)}
+          </span>
+          <span class="template-format-size" aria-label="Rozlišení šablony">${shape.width} × ${shape.height} px</span>
         </div>
         <span class="template-selection-divider"></span>
-        <span class="template-designer-mouse-hint"><ha-icon icon="mdi:mouse"></ha-icon>Kolečko zoom · tažením posun</span>
-        </div>
-        <span class="template-selection-divider"></span>
-        <div class="template-toolbar-cluster is-transform">
-        <div class="template-selection-orientation" role="group" aria-label="Orientace vybrané oblasti">
-          <button type="button" class="${hasSelection && areaOrientation === "portrait" ? "is-active" : ""}" data-template-element-area-orientation="portrait" title="Oblast na výšku" aria-label="Oblast na výšku" ${disabled}><ha-icon icon="mdi:rectangle-outline"></ha-icon></button>
-          <button type="button" class="${hasSelection && areaOrientation === "landscape" ? "is-active" : ""}" data-template-element-area-orientation="landscape" title="Oblast na šířku" aria-label="Oblast na šířku" ${disabled}><ha-icon icon="mdi:rectangle-outline" class="is-landscape"></ha-icon></button>
+        <div class="template-zoom-control" title="Kolečkem myši přiblížíte, tažením plátna posunete">
+          <ha-icon icon="mdi:mouse"></ha-icon>
+          <button type="button" data-template-designer-zoom-reset title="Zpět na 100 % a vycentrovat"><b data-template-designer-zoom-value>${zoomPercent} %</b></button>
         </div>
         </div>
         <span class="template-selection-divider"></span>
         <div class="template-selection-tool-group template-toolbar-cluster is-actions" role="toolbar" aria-label="Historie, transformace a vrstvy">
           <button type="button" data-template-history="undo" title="Zpět" ${this._templateUndoStack?.length ? "" : "disabled"}><ha-icon icon="mdi:undo"></ha-icon></button>
           <button type="button" data-template-history="redo" title="Vpřed" ${this._templateRedoStack?.length ? "" : "disabled"}><ha-icon icon="mdi:redo"></ha-icon></button>
+          <span class="template-selection-divider"></span>
+          <button type="button" class="${hasSelection && areaOrientation === "portrait" ? "is-active" : ""}" data-template-element-area-orientation="portrait" title="Postavit vybraný prvek na výšku" aria-label="Postavit vybraný prvek na výšku" ${disabled}><ha-icon icon="mdi:crop-portrait"></ha-icon></button>
+          <button type="button" class="${hasSelection && areaOrientation === "landscape" ? "is-active" : ""}" data-template-element-area-orientation="landscape" title="Položit vybraný prvek na šířku" aria-label="Položit vybraný prvek na šířku" ${disabled}><ha-icon icon="mdi:crop-landscape"></ha-icon></button>
           <span class="template-selection-divider"></span>
           <button type="button" data-template-element-rotate="-90" title="Otočit o 90° doleva" ${disabled}><ha-icon icon="mdi:rotate-left"></ha-icon></button>
           <button type="button" data-template-element-rotate="90" title="Otočit o 90° doprava" ${disabled}><ha-icon icon="mdi:rotate-right"></ha-icon></button>
@@ -2763,45 +2842,6 @@ export const devicesMixin = {
     </section>`;
   },
 
-  _renderPhotoshopOptionsBar(activeTemplate, device, orientation, previewZoom) {
-    const key = String(this._selectedTemplatePart || "");
-    const adjustment = this._templateElementAdjustments?.[key];
-    const partNumber = key ? Number(key.split(":").at(-1)) + 1 : 0;
-    const selectedColor = adjustment?.color || "black";
-    const size = this._devicePreviewSize(device);
-
-    return `<div class="photoshop-options-bar">
-      ${key && adjustment ? `
-        <div class="photoshop-options-group">
-          <span class="photoshop-options-badge"><ha-icon icon="mdi:vector-selection"></ha-icon> Prvek ${partNumber}</span>
-          <div class="photoshop-options-divider"></div>
-          <div class="photoshop-options-colors">
-            <span class="photoshop-options-label">Barva:</span>
-            <button type="button" class="color-swatch is-black ${selectedColor === "black" ? "is-selected" : ""}" data-template-part-color="black" title="Černá barva"></button>
-            <button type="button" class="color-swatch is-red ${selectedColor === "red" ? "is-selected" : ""}" data-template-part-color="red" title="Červená barva"></button>
-            <button type="button" class="color-swatch is-white ${selectedColor === "white" ? "is-selected" : ""}" data-template-part-color="white" title="Bílá barva"></button>
-          </div>
-          <div class="photoshop-options-divider"></div>
-          <button type="button" class="photoshop-btn" data-template-part-reset="${this._escape(key)}"><ha-icon icon="mdi:restore"></ha-icon> Resetovat polohu</button>
-        </div>
-      ` : `
-        <div class="photoshop-options-group">
-          <span class="photoshop-options-badge"><ha-icon icon="mdi:palette-swatch-outline"></ha-icon> <small>Designer</small> eInk Studio</span>
-          <div class="photoshop-options-divider"></div>
-          <span class="photoshop-options-info">${this._escape(device?.name || "Displej")} · <strong>${size.width} × ${size.height} px</strong></span>
-          <div class="photoshop-options-divider"></div>
-          <div class="template-preview-controls">
-            <span class="template-designer-mouse-hint"><ha-icon icon="mdi:mouse"></ha-icon>Kolečko zoom · tažením posun</span>
-            <div class="photoshop-options-divider"></div>
-            <div class="display-template-orientation" role="group" aria-label="Orientace displeje">
-              <button type="button" class="${orientation === "portrait" ? "is-active" : ""}" data-template-orientation="portrait" title="Na výšku"><ha-icon icon="mdi:phone-rotate-portrait"></ha-icon></button>
-              <button type="button" class="${orientation === "landscape" ? "is-active" : ""}" data-template-orientation="landscape" title="Na šířku"><ha-icon icon="mdi:phone-rotate-landscape"></ha-icon></button>
-            </div>
-          </div>
-        </div>
-      `}
-    </div>`;
-  },
 
   // Resolves the fallback SVG renderer request. The normal send path captures
   // the visible HTML template so the editor and physical display stay WYSIWYG.
@@ -2886,7 +2926,7 @@ export const devicesMixin = {
   async _renderCurrentDisplayTemplateImage(device = this._device(), customSourceOverride = "") {
     const request = this._currentDisplayTemplateSvgRequest(device);
     if (!request) throw new Error("Není vybrána žádná šablona.");
-    const overlays = this._collectTemplateOverlayBoxes();
+    const overlays = this._collectTemplateOverlayBoxes(request);
     const previousCustomImage = this._customImageDataUrl;
     const usesCustomImage = request.templates.some((template) =>
       template?.id === "custom_image" || template?.base_template_id === "custom_image"
@@ -2908,6 +2948,11 @@ export const devicesMixin = {
     const previousRenderingDevice = this._renderingDeviceAddress;
     this._renderingDeviceAddress = device?.address || null;
     try {
+      // Template blocks draw themselves as SVG, which has to be decoded into an
+      // image before the painter - which is synchronous - can put it on the
+      // canvas. Inside the try so a failure here still restores the rendering
+      // device and the custom image below.
+      await this._prepareTemplateOverlayImages(overlays, request.width, request.height);
       return await this._rasterizeDisplayTemplateSvg(
         request.templates,
         request.width,
@@ -2921,43 +2966,132 @@ export const devicesMixin = {
     }
   },
 
-  // Elements added in the element editor live only in the preview's HTML, so they
-  // are measured where they sit on screen and re-drawn onto the bitmap in device
-  // pixels. Without this they would simply stop reaching the panel the moment the
-  // send path stopped screenshotting the DOM.
-  _collectTemplateOverlayBoxes() {
-    if (!(this._templateEditorElements || []).length) return [];
-    const surface = this.shadowRoot.querySelector(".display-template-editor-stage .display-template-surface")
-      || this.shadowRoot.querySelector(".display-template-dropzone .display-template-surface");
-    const frame = surface?.getBoundingClientRect();
-    if (!frame?.width || !frame?.height) return [];
-    return [...surface.querySelectorAll(".template-overlay")].map((element) => {
-      const image = element.querySelector("img");
-      const source = (this._templateEditorElements || []).find((item) => item.id === element.dataset.templateOverlayId) || {};
-      const model = this._quarterTurnedUserTemplateElement(source);
-      return {
-        kind: model.type || "rect",
-        x: Number(model.x || 0) / 100,
-        y: Number(model.y || 0) / 100,
-        w: Number(model.w || 2) / 100,
-        h: Number(model.h || 2) / 100,
-        text: model.text || element.textContent.trim(),
-        unit: String(model.unit || ""), chartTitle: String(model.chartTitle || ""),
-        chartMin: model.chartMin ?? "", chartMax: model.chartMax ?? "",
-        src: image?.getAttribute("src") || "",
-        icon: model.icon || "star", color: model.color || "#111111", fill: model.fill || "transparent",
-        variant: model.variant || "default",
-        stroke: model.stroke || "#111111", strokeWidth: Number(model.strokeWidth ?? 2), radius: Number(model.radius || 0),
-        fontSize: Number(model.fontSize || 16), fontWeight: String(model.fontWeight || "700"), fontFamily: String(model.fontFamily || "DRATEK eInk Sans"), fontStyle: model.fontStyle === "italic" ? "italic" : "normal", textDecoration: model.textDecoration || "none", textAlign: model.textAlign || "center",
-        textOutlineWidth: Number(model.textOutlineWidth || 0), textOutlineColor: model.textOutlineColor || "#ffffff", textBorderWidth: Number(model.textBorderWidth || 0), textBorderColor: model.textBorderColor || "#111111", overlayOpacity: Number(model.overlayOpacity ?? 100),
-        value: Number.isFinite(Number(model.value)) ? Number(model.value) : 50, rotation: Number(model.rotation || 0),
-        showValue: model.showValue !== false, showPercent: model.showPercent !== false, showLabel: model.showLabel !== false,
-        showGrid: model.showGrid !== false, showPoints: model.showPoints !== false, showFill: model.showFill !== false,
-        showTrack: model.showTrack !== false, showScale: model.showScale !== false, showIcon: model.showIcon !== false, showState: model.showState !== false,
-        historyLimit: Number(model.historyLimit || 10), historyValues: structuredClone(model.historyValues || []),
-        resolvedActive: typeof model.resolvedActive === "boolean" ? model.resolvedActive : undefined,
-      };
+  // Which elements a slot's template carries. Exactly the resolution
+  // _renderTemplateEditorOverlays and the automation bindings already use:
+  // _templateEditorElements holds only the template currently open in the
+  // editor, every other one keeps its own list in _templateEditorStates (put
+  // there by _rememberActiveTemplateEditorState the instant editing moves
+  // away) or, for a saved template never opened this session, on the template
+  // itself.
+  _templateEditorElementsFor(template) {
+    if (!template) return [];
+    const id = String(template.id || "");
+    if (id && id === this._activeTemplateEditorStateId()) return this._templateEditorElements || [];
+    return this._templateEditorStates?.[id]?.editor_elements
+      || (template.user_created ? template.editor_elements : null)
+      || [];
+  },
+
+  // The overlay elements, in fractions of the whole panel, ready for the
+  // painter.
+  //
+  // This used to measure the DOM: it looked up the designer's own surface and
+  // walked the .template-overlay nodes inside it. That made the bitmap depend
+  // on what happened to be on screen, and it dropped elements in three
+  // different ways. With the designer stage not mounted - which is the case
+  // for every device-preview thumbnail, since those render from the overview
+  // and the settings pane - there is no surface, so it returned nothing at all
+  // and the custom elements were missing from the preview. It read only
+  // _templateEditorElements, so a multi-slot layout kept the elements of
+  // whichever template was open and silently lost every other slot's. And it
+  // took the first surface only, so slot 1's percentages were applied to the
+  // whole display rather than to that slot's rectangle.
+  //
+  // Reading the model instead makes the send and the preview independent of
+  // the DOM, and lets each slot's elements land inside their own slot.
+  _collectTemplateOverlayBoxes(request) {
+    const templates = request?.templates || [];
+    if (!templates.length) return [];
+    const width = Math.max(1, Number(request.width) || 1);
+    const height = Math.max(1, Number(request.height) || 1);
+    const slots = this._displayTemplateLayoutSlots(request.layout, width, height);
+    const boxes = [];
+    templates.forEach((template, slotIndex) => {
+      if (!template) return;
+      const slot = slots[slotIndex] || slots[0] || { x: 0, y: 0, w: width, h: height };
+      for (const source of this._templateEditorElementsFor(template)) {
+        boxes.push(this._templateOverlayBox(source, template, slot, width, height));
+      }
     });
+    return boxes;
+  },
+
+  _templateOverlayBox(source, template, slot, width, height) {
+    const model = this._quarterTurnedUserTemplateElement(source, template);
+    return {
+      kind: model.type || "rect",
+      blockKind: String(model.blockKind || ""),
+      gridColor: model.gridColor || "", labelColor: model.labelColor || "",
+      valueColor: model.valueColor || "", pointColor: model.pointColor || "", trackColor: model.trackColor || "",
+      block: model.block && typeof model.block === "object" ? structuredClone(model.block) : null,
+      // Element coordinates are percentages of the slot they were designed
+      // in; the painter wants fractions of the whole panel.
+      x: (slot.x + (Number(model.x || 0) / 100) * slot.w) / width,
+      y: (slot.y + (Number(model.y || 0) / 100) * slot.h) / height,
+      w: ((Number(model.w || 2) / 100) * slot.w) / width,
+      h: ((Number(model.h || 2) / 100) * slot.h) / height,
+      text: model.text || model.label || "",
+      unit: String(model.unit || ""), chartTitle: String(model.chartTitle || ""),
+      chartMin: model.chartMin ?? "", chartMax: model.chartMax ?? "",
+      // The palette-matched variant, the same one the preview's <img> shows.
+      src: this._paletteImageSrc(model),
+      source: String(model.source || ""),
+      icon: model.icon || "star", color: model.color || "#111111", fill: model.fill || "transparent",
+      variant: model.variant || "default",
+      stroke: model.stroke || "#111111", strokeWidth: Number(model.strokeWidth ?? 2), radius: Number(model.radius || 0),
+      fontSize: Number(model.fontSize || 16), fontWeight: String(model.fontWeight || "700"), fontFamily: String(model.fontFamily || "DRATEK eInk Sans"), fontStyle: model.fontStyle === "italic" ? "italic" : "normal", textDecoration: model.textDecoration || "none", textAlign: model.textAlign || "center",
+      textOutlineWidth: Number(model.textOutlineWidth || 0), textOutlineColor: model.textOutlineColor || "#ffffff", textBorderWidth: Number(model.textBorderWidth || 0), textBorderColor: model.textBorderColor || "#111111", overlayOpacity: Number(model.overlayOpacity ?? 100),
+      value: Number.isFinite(Number(model.value)) ? Number(model.value) : 50, rotation: Number(model.rotation || 0),
+      showValue: model.showValue !== false, showPercent: model.showPercent !== false, showLabel: model.showLabel !== false,
+      showGrid: model.showGrid !== false, showPoints: model.showPoints !== false, showFill: model.showFill !== false,
+      showTrack: model.showTrack !== false, showScale: model.showScale !== false, showIcon: model.showIcon !== false, showState: model.showState !== false,
+      historyLimit: Number(model.historyLimit || 10), historyValues: structuredClone(model.historyValues || []),
+      resolvedActive: typeof model.resolvedActive === "boolean" ? model.resolvedActive : undefined,
+    };
+  },
+
+  // Opacity means nothing to a panel with three inks: the quantizer has no
+  // shade between ink and paper to give it. A background at 50% black was
+  // filled with rgb(128) and thresholded straight to solid black, and one at
+  // 30% landed on rgb(178) and thresholded to nothing at all - the box simply
+  // was not on the printed picture. Snapping to the four ordered screens the
+  // preview's CSS draws too gives a density the hardware can print, in pixels
+  // that are already pure ink or pure paper and so survive the quantizer
+  // untouched.
+  //
+  // The pattern is anchored to the canvas origin rather than to the box, which
+  // is what keeps two adjacent screened boxes in phase with each other.
+  _overlayFillStyle(context, color, opacity) {
+    const density = Math.round(Math.max(0, Math.min(100, Number(opacity ?? 100))) / 25) * 25;
+    if (density >= 100) return color;
+    if (density <= 0) return null;
+    const cell = document.createElement("canvas");
+    cell.width = 2;
+    cell.height = 2;
+    const cellContext = cell.getContext("2d");
+    cellContext.fillStyle = color;
+    ({ 25: [[0, 0]], 50: [[0, 0], [1, 1]], 75: [[0, 0], [1, 1], [1, 0]] }[density] || [])
+      .forEach(([dx, dy]) => cellContext.fillRect(dx, dy, 1, 1));
+    return context.createPattern(cell, "repeat");
+  },
+
+  // The CSS half of the same four screens, so the designer shows a halftone
+  // where the panel prints one. `transparent` in a gradient interpolates
+  // through transparent black in some engines, so the stops are hard and the
+  // unpainted quadrants are left to the element's own background.
+  _overlayFillScreenStyle(fill, opacity) {
+    const density = Math.round(Math.max(0, Math.min(100, Number(opacity ?? 100))) / 25) * 25;
+    if (fill === "transparent" || density <= 0) return "--element-fill-screen:none;--element-fill-screen-color:transparent";
+    if (density >= 100) return "--element-fill-screen:none;--element-fill-screen-color:var(--element-fill)";
+    // One quadrant of the 2px cell per 25%, written out as explicit stops
+    // rather than leaning on the spec's clamping of an out-of-order position.
+    const ink = "var(--element-fill)";
+    const stops = {
+      25: `${ink} 0deg 90deg,transparent 90deg 360deg`,
+      50: `${ink} 0deg 90deg,transparent 90deg 180deg,${ink} 180deg 270deg,transparent 270deg 360deg`,
+      75: `${ink} 0deg 270deg,transparent 270deg 360deg`,
+    }[density];
+    return `--element-fill-screen:conic-gradient(${stops});--element-fill-screen-color:transparent`;
   },
 
   _paintTemplateOverlays(context, overlays, width, height) {
@@ -2967,7 +3101,8 @@ export const devicesMixin = {
       const textX = item.textAlign === "left" ? x + padding : item.textAlign === "right" ? x + w - padding : x + w / 2;
       const textY = y + h / 2;
       if (item.fill !== "transparent") {
-        context.save(); context.globalAlpha = Math.max(0, Math.min(1, Number(item.overlayOpacity ?? 100) / 100)); context.fillStyle = item.fill; context.fillRect(x, y, w, h); context.restore();
+        const style = this._overlayFillStyle(context, item.fill, item.overlayOpacity);
+        if (style) { context.save(); context.fillStyle = style; context.fillRect(x, y, w, h); context.restore(); }
       }
       if (Number(item.textBorderWidth || 0) > 0) {
         context.strokeStyle = item.textBorderColor || "#111111"; context.lineWidth = Math.max(1, Number(item.textBorderWidth) * Math.min(width, height) / 300); context.strokeRect(x, y, w, h);
@@ -2987,10 +3122,15 @@ export const devicesMixin = {
     };
     context.save();
     for (const item of overlays) {
-      const x = item.x * width;
-      const y = item.y * height;
-      const w = Math.max(1, item.w * width);
-      const h = Math.max(1, item.h * height);
+      // Whole pixels, and the same rounding _prepareTemplateOverlayImages used
+      // to pick the raster size. A blit onto a fractional offset, or at a size
+      // half a pixel away from the bitmap's own, makes the browser resample -
+      // and resampling a one-pixel halftone screen turns it back into the grey
+      // the screen exists to avoid.
+      const x = Math.round(item.x * width);
+      const y = Math.round(item.y * height);
+      const w = Math.max(1, Math.round(item.w * width));
+      const h = Math.max(1, Math.round(item.h * height));
       context.save();
       context.translate(x + w / 2, y + h / 2);
       context.rotate((item.rotation || 0) * Math.PI / 180);
@@ -2998,25 +3138,36 @@ export const devicesMixin = {
       context.fillStyle = item.color || "#111111";
       context.strokeStyle = item.stroke || "#111111";
       context.lineWidth = Math.max(1, item.strokeWidth * Math.min(width, height) / 300);
-      if (item.kind === "image" && item.src.startsWith("data:image/")) {
-        const bitmap = new Image();
-        bitmap.src = item.src;
-        // Already decoded: the element is on screen, so the browser has it.
-        if (bitmap.complete) {
+      if (item.kind === "image") {
+        // _prepareTemplateOverlayPhotos re-dithered the original at exactly
+        // this box; it waited for the decode, so unlike the `new Image()` this
+        // used to build here - whose .complete was still false on the very
+        // first send, which quietly dropped the picture - there is something
+        // to draw.
+        if (item.overlayImage) {
           const smoothing = context.imageSmoothingEnabled;
           // The source is already exactly black/white/red. Interpolation would
           // invent warm edge colours and the final quantizer could turn those
           // into false red pixels, so scale it like actual eInk pixels.
           context.imageSmoothingEnabled = false;
-          context.drawImage(bitmap, x, y, w, h);
+          context.drawImage(item.overlayImage, x, y, w, h);
           context.imageSmoothingEnabled = smoothing;
         }
-      } else if (item.kind === "qr") {
-        context.translate(x, y);
-        this._drawQr(context, { text: item.text, color: "black", backgroundColor: "white" }, { w, h });
-      } else if (item.kind === "barcode") {
-        context.translate(x, y);
-        this._drawBarcode(context, { text: item.text, color: "black", backgroundColor: "white" }, { w, h });
+      } else if (item.kind === "block" || this._isTemplateComponentKind(item.kind)) {
+        // Already rasterised at exactly w x h from the same SVG the preview
+        // shows, so this is a straight blit. It replaces a canvas
+        // re-implementation per kind that had drifted badly from the preview -
+        // the icon branch drew a "◆" because it could not reach the glyph.
+        //
+        // Smoothing off and on whole pixels: the block and component markup
+        // now carries one-pixel halftone screens, and resampling those turns
+        // a halftone back into the grey it exists to avoid.
+        if (item.overlayImage) {
+          const smoothing = context.imageSmoothingEnabled;
+          context.imageSmoothingEnabled = false;
+          context.drawImage(item.overlayImage, x, y, w, h);
+          context.imageSmoothingEnabled = smoothing;
+        }
       } else if (item.kind === "text") {
         paintRichText(item, x, y, w, h);
       } else if (item.kind === "line") {
@@ -3029,80 +3180,6 @@ export const devicesMixin = {
         context.beginPath();
         context.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
         context.stroke();
-      } else if (item.kind === "button") {
-        paintRichText(item, x, y, w, h, 3);
-        context.strokeStyle = item.stroke || "#111111";
-        context.lineWidth = Math.max(1, item.strokeWidth * Math.min(width, height) / 300);
-        context.strokeRect(x, y, w, h);
-      } else if (item.kind === "slider") {
-        const trackH = Math.max(3, h * .18); const trackY = y + h * .5;
-        const progress = Math.max(0, Math.min(100, item.value));
-        if (item.showTrack) { context.strokeStyle = item.stroke || "#111111"; context.lineWidth = Math.max(1, trackH * .28); context.strokeRect(x, trackY, w, trackH); }
-        context.fillStyle = item.color || "#d71912"; context.fillRect(x, trackY, w * progress / 100, trackH);
-        if (item.showValue) { context.fillStyle = item.stroke || "#111111"; context.font = `900 ${Math.max(7, h * .3)}px Arial`; context.textAlign = "right"; context.textBaseline = "top"; context.fillText(`${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}${item.showPercent && item.unit ? item.unit : ""}`, x + w, y, w * .5); }
-        if (item.showScale) { context.font = `700 ${Math.max(4, h * .16)}px Arial`; context.textBaseline = "bottom"; context.textAlign = "left"; context.fillText("0", x, y + h); context.textAlign = "center"; context.fillText("50", x + w / 2, y + h); context.textAlign = "right"; context.fillText("100", x + w, y + h); }
-      } else if (item.kind === "chart") {
-        const labels = { line: "VÝVOJ", area: "PLOCHA", bar: "SLOUPCE", steps: "ZMĚNY", donut: "PODÍL", sparkline: "TREND" };
-        const headerH = item.variant === "donut" || (!item.showLabel && !item.showValue) ? 0 : Math.max(8, h * .22);
-        const gx = x + 2, gy = y + headerH, gw = Math.max(1, w - 4), gh = Math.max(1, h - headerH - 2);
-        const points = this._templateChartNormalizedPoints(item).map((point) => [point.x / 100, point.y / 60]);
-        const dataColor = item.color || "#d71912";
-        const inkColor = item.stroke || "#111111";
-        context.strokeStyle = dataColor; context.lineWidth = Math.max(1, item.strokeWidth * Math.min(width, height) / 300);
-        if (item.showGrid && item.variant !== "donut" && item.variant !== "sparkline") { context.save(); context.strokeStyle = inkColor; context.lineWidth = 1; context.setLineDash([2, 3]); [.2,.5,.8].forEach((line) => { context.beginPath(); context.moveTo(gx, gy + gh * line); context.lineTo(gx + gw, gy + gh * line); context.stroke(); }); context.restore(); }
-        if (item.variant === "bar") {
-          const slot = .92 / Math.max(1, points.length);
-          const barWidth = Math.min(.14, slot * .62);
-          points.forEach(([px, py], index) => {
-            context.fillStyle = index % 3 === 0 ? dataColor : inkColor;
-            context.fillRect(gx + gw * Math.max(.02, px - barWidth / 2), gy + gh * py, gw * barWidth, gh * (1 - py));
-          });
-        } else if (item.variant === "donut") {
-          const radius = Math.min(gw, gh) * .34;
-          context.lineWidth = Math.max(3, radius * .28); if (item.showTrack) { context.strokeStyle = inkColor; context.beginPath(); context.arc(gx + gw / 2, gy + gh / 2, radius, 0, Math.PI * 2); context.stroke(); }
-          context.strokeStyle = dataColor; context.lineCap = "butt"; context.beginPath(); context.arc(gx + gw / 2, gy + gh / 2, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, Math.min(100, item.value)) / 100); context.stroke();
-        } else if (item.variant === "steps") {
-          const steps = points.flatMap((point, index) => index ? [[point[0], points[index - 1][1]], point] : [point]);
-          context.beginPath(); steps.forEach(([px, py], index) => index ? context.lineTo(gx + gw * px, gy + gh * py) : context.moveTo(gx + gw * px, gy + gh * py)); context.stroke();
-        } else {
-          if (item.variant === "area" && item.showFill) {
-            context.fillStyle = dataColor; context.beginPath(); points.forEach(([px, py], index) => index ? context.lineTo(gx + gw * px, gy + gh * py) : context.moveTo(gx + gw * px, gy + gh * py)); context.lineTo(gx + gw * points.at(-1)[0], gy + gh); context.lineTo(gx + gw * points[0][0], gy + gh); context.closePath(); context.fill();
-          }
-          context.strokeStyle = dataColor;
-          context.beginPath(); points.forEach(([px, py], index) => index ? context.lineTo(gx + gw * px, gy + gh * py) : context.moveTo(gx + gw * px, gy + gh * py)); context.stroke();
-          if (item.variant !== "sparkline" && item.showPoints) points.filter((_, index) => points.length <= 10 || index % 2 === 0).forEach(([px, py]) => { context.fillStyle = "#fff"; context.strokeStyle = dataColor; context.beginPath(); context.arc(gx + gw * px, gy + gh * py, Math.max(1.5, context.lineWidth * 1.25), 0, Math.PI * 2); context.fill(); context.stroke(); });
-        }
-        if (item.showValue) { context.fillStyle = inkColor; context.font = `900 ${Math.max(7, Math.min(w, h) * .22)}px Arial`; context.textAlign = item.variant === "donut" ? "center" : "right"; context.textBaseline = "middle"; context.fillText(`${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}${item.unit || ""}`, item.variant === "donut" ? x + w / 2 : x + w - 1, item.variant === "donut" ? y + h / 2 : y + headerH / 2, w * .48); }
-        if (item.showLabel) { context.fillStyle = inkColor; context.font = `900 ${Math.max(4, h * .1)}px Arial`; context.textAlign = item.variant === "donut" ? "center" : "left"; context.textBaseline = item.variant === "donut" ? "bottom" : "middle"; context.fillText(item.chartTitle || labels[item.variant] || "DATA", item.variant === "donut" ? x + w / 2 : x + 1, item.variant === "donut" ? y + h : y + headerH / 2, w * .48); }
-      } else if (item.kind === "gauge") {
-        const vx = x, vy = y, vw = w, vh = h;
-        const dataColor = item.color || "#d71912";
-        const inkColor = item.stroke || "#111111";
-        if (item.variant === "battery") {
-          context.strokeStyle = inkColor; context.lineWidth = Math.max(1, vh * .07); context.strokeRect(vx + vw * .05, vy + vh * .2, vw * .78, vh * .6); context.fillStyle = inkColor; context.fillRect(vx + vw * .84, vy + vh * .38, vw * .08, vh * .24); context.fillStyle = dataColor; context.fillRect(vx + vw * .09, vy + vh * .27, vw * .68 * Math.max(0, Math.min(100, item.value)) / 100, vh * .46);
-        } else if (item.variant === "thermometer") {
-          context.strokeStyle = inkColor; context.lineWidth = Math.max(2, vw * .08); context.beginPath(); context.moveTo(vx + vw / 2, vy + vh * .76); context.lineTo(vx + vw / 2, vy + vh * .14); context.stroke(); context.strokeStyle = dataColor; context.beginPath(); context.moveTo(vx + vw / 2, vy + vh * .82); context.lineTo(vx + vw / 2, vy + vh * (.76 - .56 * Math.max(0, Math.min(100, item.value)) / 100)); context.stroke();
-        } else {
-          const semicircle = item.variant === "semicircle";
-          const start = semicircle ? Math.PI : -Math.PI / 2;
-          const extent = semicircle ? Math.PI : Math.PI * 2;
-          const radius = Math.min(vw, vh) * .34; context.lineWidth = Math.max(2, radius * .24); if (item.showTrack) { context.strokeStyle = inkColor; context.beginPath(); context.arc(vx + vw / 2, vy + vh / 2, radius, start, start + extent); context.stroke(); }
-          context.strokeStyle = dataColor; context.beginPath(); context.arc(vx + vw / 2, vy + vh / 2, radius, start, start + extent * Math.max(0, Math.min(100, item.value)) / 100); context.stroke();
-        }
-        if (item.showValue) { context.fillStyle = inkColor; context.font = `900 ${Math.max(7, Math.min(w, h) * .2)}px Arial`; context.textAlign = "center"; context.textBaseline = "middle"; context.fillText(`${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}${item.showPercent ? item.unit || "" : ""}`, x + w / 2, y + h / 2, w * .72); }
-        if (item.showLabel) { context.fillStyle = inkColor; context.font = `900 ${Math.max(4, h * .1)}px Arial`; context.textAlign = "center"; context.textBaseline = "bottom"; context.fillText(item.text || "HODNOTA", x + w / 2, y + h, w); }
-      } else if (item.kind === "signal") {
-        const active = typeof item.resolvedActive === "boolean" ? item.resolvedActive : !["off", "inactive"].includes(item.variant);
-        const inactive = !active;
-        context.fillStyle = "#ffffff"; context.fillRect(x, y, w, h); context.strokeStyle = "#111111"; context.lineWidth = Math.max(1, h * .07); context.strokeRect(x, y, w, h); context.fillStyle = inactive ? "#111111" : "#d71912"; context.fillRect(x, y, Math.max(3, w * .06), h);
-        let cursorX = x + Math.max(5, w * .1);
-        if (item.showIcon) { const iconSize = Math.max(4, h * .38); context.fillRect(cursorX, y + (h - iconSize) / 2, iconSize, iconSize); cursorX += iconSize + 4; }
-        if (item.showLabel) { context.fillStyle = "#111111"; context.font = `900 ${Math.max(6, h * .32)}px Arial`; context.textAlign = "left"; context.textBaseline = "middle"; context.fillText(item.text || "Stav", cursorX, y + h / 2, w - (cursorX - x) - (item.showState ? w * .22 : 3)); }
-        if (item.showState && ["on", "off"].includes(item.variant)) { const tw = Math.max(14, w * .2); const th = Math.max(7, h * .45); const tx = x + w - tw - 3; const ty = y + (h - th) / 2; context.strokeStyle = "#111111"; context.strokeRect(tx, ty, tw, th); context.fillStyle = active ? "#d71912" : "#111111"; context.fillRect(active ? tx + tw * .58 : tx + 2, ty + 2, tw * .28, Math.max(2, th - 4)); }
-      } else if (item.kind === "icon") {
-        // MDI web components cannot be drawn directly onto a bitmap; use a clear,
-        // palette-safe symbol fallback while preserving the selected icon in preview.
-        context.fillStyle = item.color; context.font = `700 ${Math.max(10, Math.min(w, h) * .72)}px Arial`; context.textAlign = "center"; context.textBaseline = "middle"; context.fillText("◆", x + w / 2, y + h / 2);
       } else {
         if (item.fill !== "transparent") { context.fillStyle = item.fill; context.fillRect(x, y, w, h); }
         context.strokeRect(x, y, w, h);
@@ -4261,6 +4338,7 @@ export const devicesMixin = {
 
   _renderTemplateEditorTools() {
     const categories = [
+      ["blocks", "view-dashboard-variant-outline", "Prvky šablon"],
       ["text", "format-text", "Text"], ["shapes", "shape-outline", "Tvary"], ["icons", "emoticon-outline", "Ikony"],
       ["codes", "qrcode", "Kódy"],
       ["charts", "chart-box-outline", "Grafy"], ["gauges", "gauge", "Ukazatele"], ["controls", "toggle-switch-outline", "Signalizace"],
@@ -4274,30 +4352,25 @@ export const devicesMixin = {
     const category = String(this._templateElementPaletteCategory || "");
     if (!category) return "";
     const meta = {
+      blocks: ["Prvky šablon", "Stejné bloky, ze kterých jsou složené připravené šablony"],
       text: ["Text", "Texty a popisky"], shapes: ["Tvary", "Základní geometrické prvky"], icons: ["Ikony", "Symboly Material Design"],
       codes: ["QR a čárové kódy", "Generované kódy s upravitelným obsahem"],
       charts: ["Grafy", "Vizuální průběhy, sloupce a podíly"], gauges: ["Ukazatele", "Hodnoty, kapacita a průběh"], controls: ["Signalizace", "Stavy zapnuto, vypnuto a aktivita"],
       images: ["Obrázky", "Vlastní soubor z počítače"], layers: ["Vrstvy", "Pořadí objektů na displeji"],
     };
     const [title, description] = meta[category] || meta.shapes;
-    const anchorIndex = ["text", "shapes", "icons", "codes", "charts", "gauges", "controls", "images", "layers"].indexOf(category);
+    const anchorIndex = ["blocks", "text", "shapes", "icons", "codes", "charts", "gauges", "controls", "images", "layers"].indexOf(category);
     const toolPreview = (type, settings) => {
       const item = this._normalizeTemplateEditorElement({ type, ...settings });
       const style = `--element-color:${item.color};--element-fill:${item.fill};--element-stroke:${item.stroke};--element-stroke-width:${item.strokeWidth}px;--element-radius:${item.radius}px;--element-font-size:${item.fontSize}px;--element-font-weight:${item.fontWeight};--element-value:${Math.max(0, Math.min(100, item.value))}%`;
       let preview = "";
       if (item.type === "text") preview = `<b class="template-palette-text-sample">${this._escape(item.text || item.label)}</b>`;
-      else if (item.type === "button") preview = `<b class="template-palette-button-sample">${this._escape(item.text || item.label)}</b>`;
       else if (item.type === "rect") preview = `<i class="template-palette-shape-sample is-rect"></i>`;
       else if (item.type === "circle") preview = `<i class="template-palette-shape-sample is-circle"></i>`;
       else if (item.type === "line") preview = `<i class="template-palette-line-sample"></i>`;
-      else if (item.type === "icon") preview = `<ha-icon icon="mdi:${this._escape(item.icon || "star")}"></ha-icon>`;
-      else if (item.type === "qr") preview = this._renderTemplateQrVisual(item);
-      else if (item.type === "barcode") preview = this._renderTemplateBarcodeVisual(item);
-      else if (item.type === "slider") preview = this._renderTemplateProgressVisual(item);
-      else if (item.type === "chart") preview = this._renderTemplateChartVisual(item);
-      else if (item.type === "gauge") preview = this._renderTemplateGaugeVisual(item);
-      else if (item.type === "signal") preview = this._renderTemplateSignalVisual(item);
-      const componentClass = ["chart", "gauge", "slider", "signal"].includes(item.type) ? ` template-overlay-${item.type}` : "";
+      // The tile is the component itself, at the proportions it will land in.
+      else if (this._isTemplateComponentKind(item.type)) preview = this._renderTemplateComponentSvg(item, 296, 128);
+      const componentClass = this._isTemplateComponentKind(item.type) ? ` template-overlay-${item.type}` : "";
       return `<span class="template-palette-visual template-palette-preview${componentClass} variant-${this._escape(item.variant || item.type)}" style="${style}">${preview}</span>`;
     };
     const tool = (type, icon, label, preset = {}) => {
@@ -4317,7 +4390,8 @@ export const devicesMixin = {
       ["bell-outline", "Zvonek"], ["camera-outline", "Kamera"], ["package-variant-closed", "Zásilka"], ["tools", "Dílna"],
     ];
     let content = "";
-    if (category === "text") content = [
+    if (category === "blocks") content = this._renderTemplateBlockPalette();
+    else if (category === "text") content = [
       tool("text", "format-title", "Nadpis", { text: "Nadpis", fontSize: 28, fontWeight: "900", h: 13, variant: "heading" }),
       tool("text", "format-text", "Běžný text", { text: "Vlastní text", fontSize: 17, fontWeight: "400", variant: "body" }),
       tool("text", "numeric", "Velká hodnota", { text: "24,5 °C", fontSize: 32, fontWeight: "900", h: 16, variant: "value" }),
@@ -4359,9 +4433,9 @@ export const devicesMixin = {
     }
     else if (category === "layers") {
       const selected = String(this._selectedTemplateEditorElementId || "");
-      content = `<div class="template-palette-layers">${(this._templateEditorElements || []).length ? [...this._templateEditorElements].reverse().map((item) => `<div class="${selected === item.id ? "is-selected" : ""}" data-template-editor-select="${this._escape(item.id)}"><ha-icon icon="mdi:${item.type === "image" ? "image-outline" : item.icon || ({ text: "format-text", rect: "rectangle-outline", circle: "circle-outline", line: "vector-line", button: "label-outline", slider: "progress-check", chart: "chart-box-outline", gauge: "gauge", signal: "toggle-switch-outline" }[item.type] || "shape-outline")}"></ha-icon><button type="button" class="template-layer-name" data-template-editor-select="${this._escape(item.id)}">${this._escape(item.label)}</button><button type="button" data-template-editor-remove="${this._escape(item.id)}" title="Odstranit"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button></div>`).join("") : `<p class="template-layers-empty">Na plátně zatím nejsou žádné vlastní prvky.</p>`}</div>`;
+      content = `<div class="template-palette-layers">${(this._templateEditorElements || []).length ? [...this._templateEditorElements].reverse().map((item) => `<div class="${selected === item.id ? "is-selected" : ""}" data-template-editor-select="${this._escape(item.id)}"><ha-icon icon="mdi:${item.type === "block" ? (this._templateBlockSpec(item.blockKind)?.icon || "view-dashboard-variant-outline") : item.type === "image" ? "image-outline" : item.icon || ({ text: "format-text", rect: "rectangle-outline", circle: "circle-outline", line: "vector-line", button: "label-outline", slider: "progress-check", chart: "chart-box-outline", gauge: "gauge", signal: "toggle-switch-outline" }[item.type] || "shape-outline")}"></ha-icon><button type="button" class="template-layer-name" data-template-editor-select="${this._escape(item.id)}">${this._escape(item.label)}</button><button type="button" data-template-editor-remove="${this._escape(item.id)}" title="Odstranit"><ha-icon icon="mdi:trash-can-outline"></ha-icon></button></div>`).join("") : `<p class="template-layers-empty">Na plátně zatím nejsou žádné vlastní prvky.</p>`}</div>`;
     }
-    return `<section class="card template-bottom-palette is-${category}" aria-label="Paleta ${this._escape(title)}" style="--palette-anchor:${Math.max(0, anchorIndex)}"><header><span><strong>${this._escape(title)}</strong><small>${this._escape(description)}</small></span><button type="button" data-template-palette-close title="Zavřít paletu" aria-label="Zavřít paletu"><ha-icon icon="mdi:close"></ha-icon></button></header><div class="template-palette-items ${category === "layers" ? "is-layers" : ""}">${content}</div></section>`;
+    return `<section class="card template-bottom-palette is-${category}" aria-label="Paleta ${this._escape(title)}" style="--palette-anchor:${Math.max(0, anchorIndex)}"><header><span><strong>${this._escape(title)}</strong><small>${this._escape(description)}</small></span><button type="button" data-template-palette-close title="Zavřít paletu" aria-label="Zavřít paletu"><ha-icon icon="mdi:close"></ha-icon></button></header><div class="template-palette-items ${category === "layers" ? "is-layers" : ""}" data-scroll-key="template-palette:${category}">${content}</div></section>`;
   },
 
   _templateEditorElement() {
@@ -4379,7 +4453,7 @@ export const devicesMixin = {
     const textField = (title, prop, value, placeholder = "") => `<label class="template-property-wide"><span>${title}</span><input type="text" value="${this._escape(value ?? "")}" data-template-element-prop="${prop}" placeholder="${this._escape(placeholder)}"></label>`;
     const freeNumber = (title, prop, value, placeholder = "Automaticky") => `<label class="template-property-wide"><span>${title}</span><input type="number" step="any" value="${value === "" || value == null ? "" : this._escape(value)}" data-template-element-prop="${prop}" placeholder="${placeholder}"></label>`;
     const editorColors = [["#111111", "Černá"], ["#d71912", "Červená"], ...(this._displaySupportsYellow() ? [["#f4c400", "Žlutá"]] : []), ["#ffffff", "Bílá"]];
-    const colors = (prop, value, allowTransparent = false) => `<div class="template-property-colors" data-template-color-group="${prop}">${allowTransparent ? `<button type="button" class="is-transparent ${value === "transparent" ? "is-selected" : ""}" data-template-element-color="${prop}:transparent" title="Bez barvy"><ha-icon icon="mdi:water-off-outline"></ha-icon></button>` : ""}${editorColors.map(([color, title]) => `<button type="button" style="--swatch:${color}" class="${value === color ? "is-selected" : ""}" data-template-element-color="${prop}:${color}" title="${title}"></button>`).join("")}</div>`;
+    const colors = (prop, value, allowTransparent = false, inheritTitle = "") => `<div class="template-property-colors" data-template-color-group="${prop}">${inheritTitle ? `<button type="button" class="is-inherit ${value === "" ? "is-selected" : ""}" data-template-element-color="${prop}:" title="${this._escape(inheritTitle)}"><ha-icon icon="mdi:link-variant"></ha-icon></button>` : ""}${allowTransparent ? `<button type="button" class="is-transparent ${value === "transparent" ? "is-selected" : ""}" data-template-element-color="${prop}:transparent" title="Bez barvy"><ha-icon icon="mdi:water-off-outline"></ha-icon></button>` : ""}${editorColors.map(([color, title]) => `<button type="button" style="--swatch:${color}" class="${value === color ? "is-selected" : ""}" data-template-element-color="${prop}:${color}" title="${title}"></button>`).join("")}</div>`;
     const toggles = (items) => `<div class="template-component-toggles">${items.map(([prop, label]) => `<label><input type="checkbox" data-template-element-toggle="${prop}" ${item[prop] !== false ? "checked" : ""}><span><i></i>${label}</span></label>`).join("")}</div>`;
     const intervalOptions = [["change", "Při každé změně"], ["minute", "Nejvýše 1× za minutu"], ["hour", "Nejvýše 1× za hodinu"], ["day", "Nejvýše 1× denně"], ["week", "Nejvýše 1× týdně"]];
     const resetOptions = [["never", "Nemazat automaticky"], ["hour", "Vymazat po hodině"], ["day", "Vymazat po dni"], ["week", "Vymazat po týdnu"]];
@@ -4393,7 +4467,9 @@ export const devicesMixin = {
     return `<div class="template-element-inspector">
       <div class="template-editor-panel-heading"><ha-icon icon="mdi:tune-vertical-variant"></ha-icon><span><strong>Vlastnosti prvku</strong><small>${this._escape(item.label)}</small></span></div>
       <div class="template-inspector-actions"><button type="button" data-template-element-duplicate><ha-icon icon="mdi:content-duplicate"></ha-icon>Duplikovat</button><button type="button" class="is-danger" data-template-element-delete><ha-icon icon="mdi:trash-can-outline"></ha-icon>Smazat</button></div>
-      ${propertyTab("Umístění, velikost a barva", `<div class="template-property-row">${field("X", "x", item.x, 0, 100, .1, "%")}${field("Y", "y", item.y, 0, 100, .1, "%")}</div><div class="template-property-row">${field("Šířka", "w", item.w, 2, 100, .1, "%")}${field("Výška", "h", item.h, 2, 100, .1, "%")}</div>${field("Natočení", "rotation", item.rotation, -180, 180, 1, "°")}<label class="template-property-wide"><span>Barva podkladu</span>${colors("fill", item.fill, true)}</label>`, true)}
+      ${propertyTab("Umístění, velikost a barva", `<div class="template-property-row">${field("X", "x", item.x, 0, 100, .1, "%")}${field("Y", "y", item.y, 0, 100, .1, "%")}</div><div class="template-property-row">${field("Šířka", "w", item.w, 2, 100, .1, "%")}${field("Výška", "h", item.h, 2, 100, .1, "%")}</div>${field("Natočení", "rotation", item.rotation, -180, 180, 1, "°")}${item.type === "block" ? "" : `<label class="template-property-wide"><span>Barva podkladu</span>${colors("fill", item.fill, true)}</label>`}`, true)}
+      ${item.type === "block" ? this._renderTemplateBlockInspector(item) : ""}
+      ${this._isTemplateComponentKind(item.type) ? propertyTab("Barvy jednotlivých částí", `${this._templateComponentParts(item.type).map(([prop, title, inherits]) => `<label class="template-property-wide"><span>${this._escape(title)}</span>${colors(prop, item[prop] || "", true, inherits ? "Podle hlavní barvy" : "")}</label>`).join("")}<p class="template-entity-help">${this._displaySupportsYellow() ? "Displej tiskne jen černou, bílou, červenou a žlutou - jiné odstíny na něm neexistují." : "Displej tiskne jen černou, bílou a červenou - jiné odstíny na něm neexistují."}</p>`, true) : ""}
       ${["qr", "barcode"].includes(item.type) ? propertyTab(item.type === "qr" ? "Obsah QR kódu" : "Data EAN-13", `<label class="template-property-wide"><span>${item.type === "qr" ? "Text, URL nebo Wi-Fi konfigurace" : "12 nebo 13 číslic"}</span><input type="text" value="${this._escape(item.text || "")}" data-template-element-prop="text"></label><p class="template-entity-help">Kód se po změně automaticky znovu vygeneruje.</p>`, true) : ""}
       ${textTypes.includes(item.type) ? `${propertyTab("Text a typografie", `
         <label class="template-property-wide"><span>Obsah</span><input type="text" value="${this._escape(item.text || "")}" data-template-element-prop="text"></label>
@@ -4564,6 +4640,11 @@ export const devicesMixin = {
       chart: { w: 52, h: 32, value: 68, fill: "#ffffff", radius: 0, strokeWidth: 2, entityId: "", entityAttribute: "", chartTitle: "Vývoj hodnoty", unit: "%", chartMin: "", chartMax: "", barColor: "#d71912", historyLimit: 10, sampleInterval: "change", resetInterval: "never", historyValues: [], historyUpdatedAt: 0, historyResetAt: 0, showValue: true, showPercent: false, showLabel: true, showGrid: true, showPoints: true, showFill: true, showTrack: true },
       gauge: { w: 26, h: 34, value: 72, text: "Hodnota", unit: "%", fill: "#ffffff", radius: 0, strokeWidth: 2, entityId: "", entityAttribute: "", variant: "ring", showValue: true, showPercent: true, showLabel: true, showTrack: true },
       signal: { w: 40, h: 14, value: 100, text: "Aktivní", icon: "check-circle", fontSize: 9, fill: "#ffffff", radius: 6, strokeWidth: 2, entityId: "", entityAttribute: "", variant: "active", showIcon: true, showLabel: true, showState: true },
+      // A template block carries its own spec in `block` and paints itself
+      // through _renderTemplateBlock, so the overlay wrapper must add nothing:
+      // a fill or a border here would frame every block with a box no prepared
+      // template has.
+      block: { w: 70, h: 20, fill: "transparent", stroke: "transparent", strokeWidth: 0, radius: 0, blockKind: "text" },
     }[type] || { w: 30, h: 20, fill: "transparent" };
     const legacy = source.w === undefined || source.h === undefined;
     const w = Math.max(2, Math.min(100, Number(source.w ?? defaults.w)));
@@ -4578,8 +4659,19 @@ export const devicesMixin = {
       if (["#f4c400", "#ffd400", "#ffff00", "yellow"].includes(normalized)) return this._displaySupportsYellow() ? "#f4c400" : "#d71912";
       return "#111111";
     };
+    // Part colours are stored empty when untouched, which is what "inherit
+    // from the main colour" means. Running them through paletteColor instead
+    // would turn every unset part black and repaint every template already
+    // saved.
+    const partColor = (value) => {
+      const normalized = String(value ?? "").trim().toLowerCase();
+      return ["#111111", "#d71912", "#f4c400", "#ffffff", "transparent"].includes(normalized) ? normalized : "";
+    };
     return {
       ...defaults, ...source, type, w, h,
+      gridColor: partColor(source.gridColor), labelColor: partColor(source.labelColor),
+      valueColor: partColor(source.valueColor), pointColor: partColor(source.pointColor),
+      trackColor: partColor(source.trackColor),
       x: Math.max(0, Math.min(100 - w, legacy ? sourceX - w / 2 : sourceX)),
       y: Math.max(0, Math.min(100 - h, legacy ? sourceY - h / 2 : sourceY)),
       rotation: Number(source.rotation || 0), color: paletteColor(source.color, "#111111"), fill: paletteColor(source.fill, defaults.fill ?? "transparent", true),
@@ -4650,7 +4742,7 @@ export const devicesMixin = {
 
   _addTemplateEditorElement(type, icon = "", position = null, preset = {}) {
     const settings = preset && typeof preset === "object" && !Array.isArray(preset) ? preset : {};
-    const labels = { text: "Vlastní text", rect: "Obdélník", circle: "Kruh", line: "Čára", icon: "Ikona", qr: "QR kód", barcode: "EAN-13", button: "Text v rámečku", slider: "Stupnice", chart: "Graf", gauge: "Ukazatel", signal: "Signalizace" };
+    const labels = { text: "Vlastní text", rect: "Obdélník", circle: "Kruh", line: "Čára", icon: "Ikona", qr: "QR kód", barcode: "EAN-13", button: "Text v rámečku", slider: "Stupnice", chart: "Graf", gauge: "Ukazatel", signal: "Signalizace", block: "Prvek šablony" };
     this._templateEditorElements ||= [];
     this._pushTemplateHistory();
     const item = this._normalizeTemplateEditorElement({
@@ -4662,6 +4754,10 @@ export const devicesMixin = {
     // Circular primitives start with an exact visual selection. Users can still
     // resize width and height independently afterwards.
     if (["icon", "circle", "qr"].includes(type) || (type === "chart" && item.variant === "donut") || (type === "gauge" && ["ring", "semicircle"].includes(item.variant))) this._fitTemplateElementVisualAspect(item, 1);
+    // A block whose drawing is a circle (the ring gauge, a lone icon) is only
+    // round if its box is - every other block wants the width the palette
+    // proposed for it.
+    if (type === "block" && this._templateBlockSpec?.(item.blockKind)?.square) this._fitTemplateElementVisualAspect(item, 1);
     item.x = Math.max(0, Math.min(100 - item.w, Number(position?.x ?? 50) - item.w / 2));
     item.y = Math.max(0, Math.min(100 - item.h, Number(position?.y ?? 50) - item.h / 2));
     this._templateEditorElements.push(item);
@@ -5386,59 +5482,7 @@ export const devicesMixin = {
   // maintaining a second, parallel set of chart/gauge/signal graphics - one
   // drawing routine per shape, reused by both the free-form designer and
   // every prepared template.
-  _templateEditorBlockBox(padding = 3) {
-    return { x: padding, y: padding, w: 100 - padding * 2, h: 60 - padding * 2 };
-  },
-
-  _templateEditorBlockValues(item) {
-    const values = (item.historyValues || []).map(Number).filter(Number.isFinite);
-    return values.length >= 2 ? values : [10, 18, 14, 22, 17, 25];
-  },
-
-  _renderTemplateChartVisual(item) {
-    const variant = String(item.variant || "bars");
-    const ink = this._templateAutomationPalette(item.color, "black");
-    const values = this._templateEditorBlockValues(item);
-    const row = variant === "spark"
-      ? { spark: { values, caption: item.showLabel !== false ? (item.chartTitle || "Trend") : null, color: ink } }
-      : { bars: { values, labels: [], highlight: null } };
-    return `<svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet">${this._renderTemplateBlock(row, this._templateEditorBlockBox())}</svg>`;
-  },
-
-  _renderTemplateProgressVisual(item) {
-    const ink = this._templateAutomationPalette(item.color, "red");
-    const percent = Math.max(0, Math.min(100, Number(item.value) || 0)) / 100;
-    const unit = String(item.unit || "%");
-    const value = item.showValue !== false ? `${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}${unit}` : null;
-    const meter = { label: item.showLabel !== false ? (item.text || "Průběh") : "", value, percent, color: ink };
-    return `<svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet">${this._renderTemplateBlock({ meters: [meter] }, this._templateEditorBlockBox())}</svg>`;
-  },
-
-  _renderTemplateGaugeVisual(item) {
-    const variant = String(item.variant || "ring");
-    const ink = this._templateAutomationPalette(item.color, "red");
-    const percent = Math.max(0, Math.min(100, Number(item.value) || 0)) / 100;
-    const unit = String(item.unit || "%");
-    const value = item.showValue !== false ? `${Number(item.value).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })}${unit}` : null;
-    const caption = item.showLabel !== false ? (item.text || "Hodnota") : null;
-    const row = variant === "dial"
-      ? { dial: { percent, value, caption, color: ink, min: "0", max: "100" } }
-      : { ring: { percent, value, caption, color: ink } };
-    return `<svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet">${this._renderTemplateBlock(row, this._templateEditorBlockBox())}</svg>`;
-  },
-
-  _renderTemplateSignalVisual(item) {
-    const active = typeof item.resolvedActive === "boolean" ? item.resolvedActive : String(item.variant || "") !== "off";
-    const ink = active ? this._templateAutomationPalette(item.color, "red") : "black";
-    const band = {
-      color: ink === "black" && active ? "black" : ink === "red" ? "red" : "black",
-      label: item.showLabel !== false ? (item.text || item.label || "Stav") : null,
-      value: item.showState !== false ? (active ? "Zapnuto" : "Vypnuto") : null,
-    };
-    return `<svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet">${this._renderTemplateBlock({ band }, this._templateEditorBlockBox(2))}</svg>`;
-  },
-
-  _renderTemplateEditorOverlays(template = this._currentUserDisplayTemplate(), targetOrientation = this._displayTemplateOrientation, targetRatio = 0) {
+  _renderTemplateEditorOverlays(template = this._currentUserDisplayTemplate(), targetOrientation = this._displayTemplateOrientation, targetRatio = 0, canvasWidth = 0, canvasHeight = 0) {
     const handles = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
     const canvasRotation = this._userTemplateCanvasRotationStyle(template, targetOrientation, targetRatio);
     const sourceElements = String(template?.id || "") === String(this._selectedDisplayTemplateId || "")
@@ -5449,18 +5493,16 @@ export const devicesMixin = {
       if (String(template?.id || "") === String(this._selectedDisplayTemplateId || "")) Object.assign(raw, normalized);
       const item = this._orientedUserTemplateElement(normalized, template, targetOrientation);
       const selected = item.id === this._selectedTemplateEditorElementId;
-      const style = `left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;transform:rotate(${item.rotation}deg);--element-color:${item.color};--element-fill:${item.fill};--element-stroke:${item.stroke};--element-stroke-width:${item.strokeWidth}px;--element-radius:${item.radius}px;--element-font-size:${item.fontSize}px;--element-font-weight:${item.fontWeight};--element-font-family:${item.fontFamily};--element-font-style:${item.fontStyle};--element-text-decoration:${item.textDecoration};--element-text-outline-width:${item.textOutlineWidth}px;--element-text-outline-color:${item.textOutlineColor};--element-text-border-width:${item.textBorderWidth}px;--element-text-border-color:${item.textBorderColor};--element-overlay-opacity:${item.overlayOpacity}%;--element-text-align:${item.textAlign};--element-value:${Math.max(0, Math.min(100, item.value))}%`;
+      const style = `left:${item.x}%;top:${item.y}%;width:${item.w}%;height:${item.h}%;transform:rotate(${item.rotation}deg);--element-color:${item.color};--element-fill:${item.fill};--element-stroke:${item.stroke};--element-stroke-width:${item.strokeWidth}px;--element-radius:${item.radius}px;--element-font-size:${item.fontSize}px;--element-font-weight:${item.fontWeight};--element-font-family:${item.fontFamily};--element-font-style:${item.fontStyle};--element-text-decoration:${item.textDecoration};--element-text-outline-width:${item.textOutlineWidth}px;--element-text-outline-color:${item.textOutlineColor};--element-text-border-width:${item.textBorderWidth}px;--element-text-border-color:${item.textBorderColor};--element-overlay-opacity:${item.overlayOpacity}%;${this._overlayFillScreenStyle(item.fill, item.overlayOpacity)};--element-text-align:${item.textAlign};--element-value:${Math.max(0, Math.min(100, item.value))}%`;
       let content = "";
       if (item.type === "image") content = `<img src="${this._escape(this._paletteImageSrc(item))}" alt="${this._escape(item.label)}">`;
-      else if (["text", "button"].includes(item.type)) content = `<span>${this._escape(item.text || item.label)}</span>`;
-      else if (item.type === "icon") content = `<ha-icon icon="mdi:${this._escape(item.icon || "star")}"></ha-icon>`;
-      else if (item.type === "qr") content = this._renderTemplateQrVisual(item);
-      else if (item.type === "barcode") content = this._renderTemplateBarcodeVisual(item);
-      else if (item.type === "slider") content = this._renderTemplateProgressVisual(item);
-      else if (item.type === "chart") content = this._renderTemplateChartVisual(item);
-      else if (item.type === "gauge") content = this._renderTemplateGaugeVisual(item);
-      else if (item.type === "signal") content = this._renderTemplateSignalVisual(item);
-      return `<span class="template-overlay template-overlay-${item.type} variant-${this._escape(item.variant || "default")} ${selected ? "is-selected" : ""}" data-template-overlay-id="${this._escape(item.id)}" style="${style}" role="button" tabindex="0" aria-label="${this._escape(item.label)}">${content}${selected ? `<span class="template-overlay-selection">${handles.map((name) => `<i class="template-resize-handle is-${name}" data-template-resize-handle="${name}"></i>`).join("")}</span>` : ""}</span>`;
+      // Composite elements are one SVG drawn by the component renderer;
+      // the same markup is rasterised for the bitmap, so preview and print
+      // cannot drift apart the way they had.
+      else if (this._isTemplateComponentKind(item.type)) content = this._renderTemplateComponentSvg(item, canvasWidth, canvasHeight);
+      else if (item.type === "text") content = `<span>${this._escape(item.text || item.label)}</span>`;
+      else if (item.type === "block") content = this._renderTemplateBlockVisual(item, canvasWidth, canvasHeight);
+      return `<span class="template-overlay template-overlay-${item.type} variant-${this._escape(item.blockKind || item.variant || "default")} ${selected ? "is-selected" : ""}" data-template-overlay-id="${this._escape(item.id)}" style="${style}" role="button" tabindex="0" aria-label="${this._escape(item.label)}">${content}${selected ? `<span class="template-overlay-selection">${handles.map((name) => `<i class="template-resize-handle is-${name}" data-template-resize-handle="${name}"></i>`).join("")}</span>` : ""}</span>`;
     }).join("")}</div>`;
   },
 
@@ -6518,7 +6560,7 @@ export const devicesMixin = {
             <div xmlns="http://www.w3.org/1999/xhtml" class="template-responsive-preview-body">${this._templateSvgPreviewBody(template, templateWidth, templateHeight)}</div>
           </foreignObject>
         </svg>
-        ${primary && (!autoFit || template.user_created) ? this._renderTemplateEditorOverlays(template, orientation, templateWidth / Math.max(1, templateHeight)) : ""}
+        ${primary && (!autoFit || template.user_created) ? this._renderTemplateEditorOverlays(template, orientation, templateWidth / Math.max(1, templateHeight), templateWidth, templateHeight) : ""}
         ${placeable ? `<span class="template-canvas-selection-label">${this._escape(template.title)}</span>` : ""}
         ${this._renderTemplateConfigurationWarning(template, configStatus)}
       </div>

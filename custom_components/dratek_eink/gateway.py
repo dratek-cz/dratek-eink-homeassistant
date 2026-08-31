@@ -22,7 +22,7 @@ from PIL import Image
 from . import quicklz
 from .const import DOMAIN
 from .discovery import resolve_raw_type
-from .render import pack_bwr_image, pack_bwr_region
+from .render import pack_bwr_image, pack_bwr_region, packing_description
 
 GATEWAY_STORE_KEY = "dratek_eink.gateways"
 GATEWAY_STORE_VERSION = 1
@@ -753,6 +753,72 @@ def _exception_message(exc: BaseException) -> str:
     return message or type(exc).__name__
 
 
+async def async_set_gateway_led(
+    hass: HomeAssistant,
+    gateway_id: str,
+    address: str,
+    mode: int,
+    flash_time: int,
+    red: int,
+    green: int,
+    blue: int,
+    log_callback: Any = None,
+) -> dict[str, Any] | None:
+    """Drive a gateway-attached display's indicator LED.
+
+    The same vendor 0x30 packet the local Bluetooth path writes, handed to the
+    gateway that can actually hear the display. Returns None when the gateway
+    id is unknown, so the caller can fall through to another route.
+    """
+    gateways = await async_load_gateways(hass)
+    gateway = next((item for item in gateways if item.get("id") == gateway_id), None)
+    if not gateway:
+        return None
+
+    def add_log(message: str) -> None:
+        if log_callback:
+            log_callback(str(message))
+
+    session = async_get_clientsession(hass)
+    params = {
+        "address": address,
+        "mode": str(int(mode)),
+        "flash_time": str(int(flash_time)),
+        "red": str(int(red)),
+        "green": str(int(green)),
+        "blue": str(int(blue)),
+    }
+    url = f"{_gateway_base_url(gateway)}/api/led"
+    add_log(f"Setting the indicator via gateway {gateway.get('host')}.")
+    try:
+        async with session.post(url, params=params, timeout=DEFAULT_TIMEOUT + 20) as response:
+            status = response.status
+            payload = await response.json(content_type=None)
+    except Exception as exc:
+        add_log(f"Gateway did not answer the indicator request: {exc}")
+        return {"ok": False, "error": str(exc), "gateway_side": True}
+    if not isinstance(payload, dict):
+        payload = {}
+    for line in payload.get("log") or []:
+        add_log(str(line))
+    if not payload.get("ok"):
+        # A gateway old enough not to have /api/led answers 404, and with no
+        # body of ours to read. Name that case rather than leaving a bare error
+        # code, because the fix is a firmware update and nothing else.
+        if status == 404:
+            add_log(
+                "This gateway's firmware has no indicator command; update it to "
+                "use find-me on displays it carries."
+            )
+            return {"ok": False, "error": "gateway_firmware_too_old", "gateway_side": True}
+        return {
+            "ok": False,
+            "error": str(payload.get("error") or "gateway_led_failed"),
+            "gateway_side": True,
+        }
+    return {"ok": True, "address": address}
+
+
 async def async_send_gateway_payload(
     hass: HomeAssistant,
     gateway_id: str,
@@ -785,6 +851,11 @@ async def async_send_gateway_payload(
             *([image] if partial else [sdk_type, image, transform, orientation]),
         )
         raw_type = resolve_raw_type(hass, address)
+        # Which packer ran, on every send. A display given the wrong one still
+        # accepts the payload and prints it, so the failure looks like a broken
+        # panel rather than a mismatched type.
+        if not partial:
+            add_log(packing_description(sdk_type))
         if raw_type is None:
             add_log(
                 "Display has not been seen advertising, so its payload framing is "

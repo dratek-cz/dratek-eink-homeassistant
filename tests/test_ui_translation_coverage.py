@@ -49,6 +49,15 @@ ALLOWED_UNTRANSLATED = {
     # shopping.js's sample list, drawn onto the panel by _templateShoppingList
     # until a real todo.* entity is bound. Panel content, not UI copy.
     "Mléko", "Chléb", "Káva", "Prací gel",
+    # Sample content the template blocks in panel-template-blocks.mixin.js
+    # ship with. Each block carries a filled-in example so the palette shows
+    # a real drawing rather than an empty frame, and that example is printed
+    # onto the panel - the same kind of Czech display content as the sample
+    # data in templates/*.js, not UI copy.
+    "OBÝVÁK", "LOŽNICE", "KUCHYŇ", "TEPLOTA V OBÝVÁKU", "PAMĚŤ", "Doběh",
+    "VÝCHOD", "ZÁPAD", "ČAS", "ČISTÝ", "ZÁTĚŽ", "PRANÍ", "MÁCHÁNÍ",
+    "ODSTŘEĎ.", "Náměstí Míru", "Letiště", "128 dní", "199,- Kč", "ČVN",
+    "Út", "Čt", "Pá",
     # Czech weekday/month abbreviations printed on the panel.
     "PÁ", "ÚT", "ČT", "KVĚ",
     # Brand name.

@@ -100,6 +100,30 @@ export const automationsMixin = {
     </div>`;
   },
 
+  // The writes this display still has outstanding, and a way to call off the
+  // ones that have not started. Only a job still waiting can be cancelled -
+  // async_cancel_job refuses anything already "writing", because a BLE or
+  // gateway transfer may be mid-block and dropping it there leaves the
+  // display's controller frozen rather than failing cleanly - so a write in
+  // progress is shown without a button rather than with one that would fail.
+  //
+  // The button carries the same data-cancel-queue-job the queue tab uses, and
+  // is wired by the same handler in _bind; there is no second code path to
+  // keep in step.
+  _renderAutomationQueue(jobs) {
+    if (!jobs.length) return "";
+    const labels = { design: "Návrh", partial_design: "Částečný zápis", text: "Text", service_text: "HA služba", entity_update: "Změna entity" };
+    return `<section class="automation-queue" aria-label="Zápisy ve frontě">${jobs.map((job) => {
+      const waiting = job.status === "queued";
+      const operation = labels[job.operation] || job.operation || "Zápis";
+      return `<span class="automation-queue-job ${waiting ? "is-queued" : "is-writing"}">
+        <ha-icon icon="mdi:${waiting ? "tray-full" : "progress-upload"}"></ha-icon>
+        <span><strong>${waiting ? "Čeká ve frontě" : "Právě zapisuje"}</strong><small>${this._escape(operation)}</small></span>
+        ${waiting ? `<button type="button" class="automation-queue-cancel" data-cancel-queue-job="${this._escape(job.id || "")}" title="Zrušit tento zápis" aria-label="Zrušit tento zápis"><ha-icon icon="mdi:close"></ha-icon></button>` : ""}
+      </span>`;
+    }).join("")}</section>`;
+  },
+
   _renderAutomations() {
     const automations = this._automations || [];
     const writingAddresses = new Set(
@@ -107,6 +131,19 @@ export const automationsMixin = {
         .filter((job) => job.status === "writing" && job.operation === "entity_update")
         .map((job) => String(job.address || "").toUpperCase()),
     );
+    // Every write still outstanding for each display, waiting ones included.
+    // The tab used to read the queue only to learn which addresses were
+    // mid-write, so a write still waiting its turn was invisible here - and the
+    // one page a user watches automatic updates from was the one page they
+    // could not call one off from. Cancelling meant finding the job again in
+    // Fronta zápisu, by which time it had usually started.
+    const activeJobs = new Map();
+    for (const job of this._queue?.jobs || []) {
+      if (!["queued", "writing"].includes(job.status)) continue;
+      const key = String(job.address || "").toUpperCase();
+      if (!activeJobs.has(key)) activeJobs.set(key, []);
+      activeJobs.get(key).push(job);
+    }
     const entityCount = automations.reduce(
       (total, item) => total + Math.max(
         Array.isArray(item.entity_ids) ? item.entity_ids.length : 0,
@@ -154,6 +191,7 @@ export const automationsMixin = {
           <div class="automation-display-preview">${device ? this._renderDevicePreview(device, "mini") : `<span class="automation-preview-missing"><ha-icon icon="mdi:monitor-off"></ha-icon></span>`}</div>
           <span class="automation-schedule-copy"><small>Nastavený interval</small><strong>Každých ${this._escape(this._automationIntervalLabel(automation))}</strong><span><ha-icon icon="${enabled ? triggerIcon : "mdi:pause-circle-outline"}"></ha-icon>${enabled ? this._escape(this._automationTriggerLabel(automation.refresh_trigger_mode)) : "Aktualizace je pozastavená"}</span>${enabled ? this._renderAutomationCountdown(automation, writing) : ""}</span>
         </section>
+        ${this._renderAutomationQueue(activeJobs.get(String(automation.address || "").toUpperCase()) || [])}
         <footer class="automation-card-actions">${this._automationIntervalSelect(automation)}<button type="button" class="automation-delete" title="Smazat automatický zápis" data-automation-delete="${this._escape(automation.address)}" ${busy ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon><span>Smazat zápis</span></button></footer>
         <details class="automation-entity-details">
           <summary><span><ha-icon icon="mdi:${cycleImages ? "image-sync-outline" : "database-sync-outline"}"></ha-icon>${cycleImages ? "Obrázky v cyklu" : "Aktualizované entity"}</span><b>${cycleImages || bindings}</b><ha-icon class="automation-details-chevron" icon="mdi:chevron-down"></ha-icon></summary>

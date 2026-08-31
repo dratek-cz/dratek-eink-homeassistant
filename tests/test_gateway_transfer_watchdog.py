@@ -57,6 +57,40 @@ class GatewayTransferWatchdogTests(unittest.TestCase):
         )
         self.assertIn('transferJob.error = "transfer_cancelled";', self.firmware)
 
+    def test_the_stall_age_cannot_wrap_and_abort_a_healthy_transfer(self) -> None:
+        """An unsigned wrap here kills transfers that are making progress.
+
+        `now` was sampled before the mutex was taken. The transfer task could
+        then stamp `updatedMs` in that gap, with a value later than the `now`
+        already in hand, and `now - updatedMs` wrapped to about 4294967295 ms.
+        The watchdog read that as a 4294967-second stall and restarted the
+        gateway mid-write. Captured from a real queue log: four aborts on one
+        gateway, every one of them reporting exactly that number - at
+        "writing_block, block 21/125" and "block 31/125", i.e. while the
+        display was still acknowledging blocks - and each surfacing to the user
+        as gateway_transfer_lost_after_restart.
+        """
+        watchdog = self.firmware[self.firmware.index("void monitorTransferWatchdog()") :]
+        watchdog = watchdog[: watchdog.index("\nvoid runQueuedTransfer()")]
+        # Sampled under the lock that guards the value it is compared against.
+        self.assertLess(
+            watchdog.index("xSemaphoreTake(transferMutex, portMAX_DELAY);"),
+            watchdog.index("uint32_t now = millis();"),
+            "millis() is read before the mutex, so updatedMs can overtake it",
+        )
+        self.assertIn(
+            "stalledFor = (now >= transferJob.updatedMs) ? (now - transferJob.updatedMs) : 0;",
+            watchdog,
+        )
+        self.assertIn(
+            "runtime = (now >= transferJob.createdMs) ? (now - transferJob.createdMs) : 0;",
+            watchdog,
+        )
+        # The same clamp on the number the status endpoint reports, since that
+        # is what a user reads when working out why a transfer died.
+        self.assertIn("&& statusNow >= transferJob.updatedMs", self.firmware)
+        self.assertNotIn("? millis() - transferJob.updatedMs", self.firmware)
+
     def test_home_assistant_cancels_the_remote_job_after_its_poll_timeout(self) -> None:
         self.assertIn('/api/transfer/cancel?id={quote(job_id, safe=\'\')}', self.gateway)
         self.assertIn("async with session.post(cancel_url, timeout=8)", self.gateway)

@@ -347,6 +347,12 @@ export const inspectorMixin = {
       this._render();
       this._paint();
     });
+    // The whole tile is a button that opens the display's settings, so the
+    // tools inside its header have to keep their clicks to themselves.
+    this.shadowRoot.querySelectorAll("[data-device-identify]").forEach((button) => button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this._toggleDisplayIdentify(button.dataset.deviceIdentify, button.dataset.deviceIdentifyOn === "1");
+    }));
     this.shadowRoot.querySelectorAll("[data-device-rename]").forEach((button) => button.addEventListener("click", () => {
       const device = (this._result?.devices || []).find((item) => item.address === button.dataset.deviceRename);
       if (!device) return;
@@ -877,10 +883,27 @@ export const inspectorMixin = {
     const designerViewport = this.shadowRoot.querySelector("[data-template-designer-viewport-canvas]");
     if (designerViewport) {
       const applyDesignerViewport = () => {
-        designerViewport.style.setProperty("--template-preview-zoom", String(this._displayTemplatePreviewZoom || 1));
+        const zoom = Math.max(0.5, Math.min(16, Number(this._displayTemplatePreviewZoom || 1)));
+        // Set on the stage, read by the artboard inside it - so one write
+        // moves and scales the whole panel, bezel included.
+        designerViewport.style.setProperty("--template-preview-zoom", String(zoom));
         designerViewport.style.setProperty("--template-designer-pan-x", `${this._templateDesignerPan?.x || 0}px`);
         designerViewport.style.setProperty("--template-designer-pan-y", `${this._templateDesignerPan?.y || 0}px`);
+        // Wheel zooming used to leave no trace anywhere on screen: there was
+        // no way to tell 140 % from 160 %, and no way back to 100 % except a
+        // double-click nobody knew about. The readout is both.
+        const readout = this.shadowRoot.querySelector("[data-template-designer-zoom-value]");
+        if (readout) readout.textContent = `${Math.round(zoom * 100)} %`;
       };
+      const resetDesignerViewport = () => {
+        this._displayTemplatePreviewZoom = 1;
+        this._templateDesignerPan = { x: 0, y: 0 };
+        applyDesignerViewport();
+      };
+      this.shadowRoot.querySelector("[data-template-designer-zoom-reset]")?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        resetDesignerViewport();
+      });
       applyDesignerViewport();
       designerViewport.addEventListener("wheel", (event) => {
         event.preventDefault();
@@ -914,11 +937,7 @@ export const inspectorMixin = {
       const stopDesignerPan = () => { designerPan = null; designerViewport.classList.remove("is-panning"); };
       designerViewport.addEventListener("pointerup", stopDesignerPan);
       designerViewport.addEventListener("pointercancel", stopDesignerPan);
-      designerViewport.addEventListener("dblclick", () => {
-        this._displayTemplatePreviewZoom = 1;
-        this._templateDesignerPan = { x: 0, y: 0 };
-        applyDesignerViewport();
-      });
+      designerViewport.addEventListener("dblclick", resetDesignerViewport);
     }
     const imageDropzone = this.shadowRoot.querySelector(".display-template-dropzone.has-template");
     if (imageDropzone) {
@@ -964,28 +983,13 @@ export const inspectorMixin = {
         applyImageViewport();
       });
     }
-    this.shadowRoot.querySelectorAll("[data-template-viewport-menu]").forEach((button) => button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      this._templateViewportMenuOpen = !this._templateViewportMenuOpen;
-      this._render();
-      this._paint();
-    }));
-    this.shadowRoot.querySelectorAll("[data-template-viewport-menu-close]").forEach((button) => button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      this._templateViewportMenuOpen = false;
-      this._render();
-      this._paint();
-    }));
+    // The format buttons are all on the bar now, so there is no popup to open
+    // or close - picking one either changes the viewport or is already the
+    // active choice, in which case there is nothing at all to do.
     this.shadowRoot.querySelectorAll("[data-template-designer-viewport]").forEach((button) => button.addEventListener("click", () => {
       const viewport = button.dataset.templateDesignerViewport || "wide";
       if (!["narrow", "wide", "large", "large-portrait"].includes(viewport)) return;
-      const unchanged = viewport === this._templateDesignerViewport;
-      this._templateViewportMenuOpen = false;
-      if (unchanged) {
-        this._render();
-        this._paint();
-        return;
-      }
+      if (viewport === this._templateDesignerViewport) return;
       this._templateDesignerViewport = viewport;
       const portrait = viewport === "narrow" || viewport === "large-portrait";
       this._displayTemplateOrientation = portrait ? "portrait" : "landscape";
@@ -1270,7 +1274,11 @@ export const inspectorMixin = {
       item.y = Math.max(0, Math.min(100 - item.h, Number(item.y || 0)));
       this._templateSaveResult = null;
       if (prop === "entityAttribute" || prop === "sampleInterval" || prop === "resetInterval") this._refreshTemplateEntityElements?.();
-      if (shouldRender) {
+      // A component is one piece of SVG built from all of its properties at
+      // once, so there is no single node to patch the way a text overlay has -
+      // it has to be drawn again. The caret and scroll position survive it;
+      // _captureUiState puts them back.
+      if (shouldRender || this._isTemplateComponentKind?.(item.type) || item.type === "block") {
         this._render(); this._paint();
         return;
       }
@@ -1281,6 +1289,13 @@ export const inspectorMixin = {
       element.style.setProperty("--element-color", item.color); element.style.setProperty("--element-fill", item.fill); element.style.setProperty("--element-stroke", item.stroke);
       element.style.setProperty("--element-stroke-width", `${item.strokeWidth}px`); element.style.setProperty("--element-radius", `${item.radius}px`); element.style.setProperty("--element-font-size", `${item.fontSize}px`); element.style.setProperty("--element-font-weight", item.fontWeight); element.style.setProperty("--element-text-align", item.textAlign); element.style.setProperty("--element-value", `${item.value}%`);
       element.style.setProperty("--element-font-family", item.fontFamily); element.style.setProperty("--element-font-style", item.fontStyle); element.style.setProperty("--element-text-decoration", item.textDecoration); element.style.setProperty("--element-text-outline-width", `${item.textOutlineWidth}px`); element.style.setProperty("--element-text-outline-color", item.textOutlineColor); element.style.setProperty("--element-text-border-width", `${item.textBorderWidth}px`); element.style.setProperty("--element-text-border-color", item.textBorderColor); element.style.setProperty("--element-overlay-opacity", `${item.overlayOpacity}%`);
+      // The tint is an ordered screen now, so the live drag has to restate
+      // both halves of it or the box keeps the density it had until the next
+      // full re-render.
+      this._overlayFillScreenStyle(item.fill, item.overlayOpacity).split(";").forEach((rule) => {
+        const separator = rule.indexOf(":");
+        if (separator > 0) element.style.setProperty(rule.slice(0, separator), rule.slice(separator + 1));
+      });
       if (["text", "button"].includes(item.type)) element.querySelector(":scope > span:not(.template-overlay-selection)")?.replaceChildren(document.createTextNode(item.text || item.label));
       if (item.type === "icon") element.querySelector("ha-icon")?.setAttribute("icon", `mdi:${item.icon || "star-outline"}`);
       if (item.type === "signal") {
@@ -1471,6 +1486,7 @@ export const inspectorMixin = {
       else this._redoTemplateHistory?.();
     }));
     this._bindTemplatePartEditor?.();
+    this._bindTemplateBlockInspector?.();
     this._bindTemplateEditorOverlays?.();
     this.shadowRoot.querySelectorAll("[data-template-part-prop]").forEach((input) => {
       const key = String(this._selectedTemplatePart || "");

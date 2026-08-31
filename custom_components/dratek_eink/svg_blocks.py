@@ -458,13 +458,25 @@ def block_bars(
             f' width="{bar_width:.2f}" height="{bar_height:.2f}"'
             f' fill="{fill}"{edge}></rect>'
         )
+    # Only selected ticks carry a label (typically 0, 6, 12 and 18). They may
+    # use the empty neighbouring intervals instead of being squeezed into the
+    # width of one narrow bar - but only the intervals that really are empty.
+    # Borrowing a flat 3.5 steps whatever the spacing meant that on a fully
+    # labelled axis the clamp which keeps a wide label inside the box pinned the
+    # first two labels to one x and the last two to another: on a seven-bar
+    # week, "Po" printed on top of "Út" and "So" on top of "Ne".
+    labelled_indexes = [
+        index for index, label in enumerate(labels) if label is not None and label != ""
+    ]
+    label_spacing = (
+        min(right - left for left, right in zip(labelled_indexes, labelled_indexes[1:]))
+        if len(labelled_indexes) > 1
+        else len(values)
+    )
+    label_width = min(box["w"], max(step * 0.95, step * min(3.5, label_spacing * 0.95)))
     for index, label in enumerate(labels):
         if label is None or label == "":
             continue
-        # Only selected ticks carry a label (typically 0, 6, 12 and 18). They may
-        # use the empty neighbouring intervals instead of being squeezed into the
-        # width of one narrow bar.
-        label_width = min(box["w"], max(step * 0.95, step * 3.5))
         raw_x = box["x"] + step * (index + 0.5)
         label_x = max(
             box["x"] + label_width / 2,
@@ -694,11 +706,11 @@ def block_dial(
     scale_y = cy + scale_size * 0.85
     if dial.get("min") is not None:
         parts.append(
-            svg_text(dial.get("min"), cx - outer, scale_y, scale_size, anchor="start", max_width=outer * 0.62)
+            svg_text(dial.get("min"), cx - outer, scale_y, scale_size, anchor="start", max_width=outer * 0.85)
         )
     if dial.get("max") is not None:
         parts.append(
-            svg_text(dial.get("max"), cx + outer, scale_y, scale_size, anchor="end", max_width=outer * 0.62)
+            svg_text(dial.get("max"), cx + outer, scale_y, scale_size, anchor="end", max_width=outer * 0.85)
         )
     return "".join(parts)
 

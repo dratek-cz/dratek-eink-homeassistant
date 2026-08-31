@@ -48,10 +48,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
         # attribute it feeds rather than nine literal strings that never appear.
         self.assertIn('data-template-palette-category="${id}"', self.source)
         self.assertIn(
-            '["text", "shapes", "icons", "codes", "charts", "gauges", "controls", "images", "layers"]',
+            '["blocks", "text", "shapes", "icons", "codes", "charts", "gauges", "controls", "images", "layers"]',
             self.source,
         )
-        for category in ("text", "shapes", "icons", "codes", "charts", "gauges", "controls", "images", "layers"):
+        for category in ("blocks", "text", "shapes", "icons", "codes", "charts", "gauges", "controls", "images", "layers"):
             self.assertIn(f'{category}: [', self.source)
         self.assertNotIn('data-tool-category="custom"', self.source)
         # The dead folder renderer must not come back.
@@ -634,7 +634,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('return this._normalizeTemplateEditorElement(source);', self.source)
         self.assertIn('x: 100 - item.y - item.h, y: item.x, w: item.h, h: item.w, rotation: item.rotation + 90', self.source)
         self.assertIn('x: item.y, y: 100 - item.x - item.w, w: item.h, h: item.w, rotation: item.rotation - 90', self.source)
-        self.assertIn('const model = this._quarterTurnedUserTemplateElement(source);', self.source)
+        # The overlay collector reads each slot's own template out of the model
+        # now, so the turn is taken against that template rather than against
+        # whichever one happens to be open in the editor.
+        self.assertIn('const model = this._quarterTurnedUserTemplateElement(source, template);', self.source)
         self.assertIn('if (!largeDisplay && !userTemplate)', self.source)
         self.assertNotIn('this._displayTemplateOrientation = template.orientation === "landscape" ? "landscape" : "portrait";', self.source)
 
@@ -652,10 +655,17 @@ class FrontendToolLibraryTests(unittest.TestCase):
             self.assertIn(f'variant: {variant}', self.source)
         for label in ("Zapnuto", "Vypnuto", "Výstraha"):
             self.assertIn(label, self.source)
-        self.assertIn('_renderTemplateChartVisual(item)', self.source)
-        self.assertIn('_renderTemplateGaugeVisual(item)', self.source)
-        self.assertIn('_renderTemplateSignalVisual(item)', self.source)
-        self.assertIn('this._renderTemplateBlock(row, this._templateEditorBlockBox())', self.source)
+        # Chart, gauge, progress bar and indicator used to be built by
+        # borrowing a template block into a fixed 100x60 box. They have their
+        # own renderer now, drawn at the element's real pixel size, with a
+        # separate colour per part.
+        self.assertIn('_componentChart(item, box)', self.source)
+        self.assertIn('_componentGauge(item, box)', self.source)
+        self.assertIn('_componentSignal(item, box)', self.source)
+        # The definition, not the name: the component mixin's header comment
+        # says what it replaced, and that mention is the point of it.
+        self.assertNotIn('_renderTemplateChartVisual(item) {', self.source)
+        self.assertNotIn('_templateEditorBlockBox(', self.source)
         self.assertIn('template-component-toggles', self.source)
         self.assertNotIn('paintEditorialCard(', self.source)
         self.assertIn('data-template-element-toggle=', self.source)
@@ -866,16 +876,47 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn(".display-template-surface.size-large.format-wide{width:94%;height:88%}", self.source)
         self.assertIn("100 - drag.itemWidth", self.source)
         self.assertNotIn("display-template-orientation-popover", self.source)
-        self.assertIn('class="template-preview-controls"', self.source)
         self.assertIn('aria-label="Orientace displeje"', self.source)
+        # _renderPhotoshopOptionsBar wrapped a second copy of that control in a
+        # .template-preview-controls row and had no caller at all, so the copy
+        # could drift from the live one for releases without anyone noticing.
+        self.assertNotIn("_renderPhotoshopOptionsBar", self.source)
+        self.assertNotIn("template-preview-controls", self.source)
         self.assertNotIn('aria-label="Orientace vybrané šablony"', self.source)
         self.assertNotIn('data-template-preview-zoom="out"', self.source)
         self.assertNotIn('data-template-preview-zoom="reset"', self.source)
         self.assertNotIn('data-template-preview-zoom="in"', self.source)
-        self.assertIn('data-template-designer-viewport-canvas', self.source)
+        # Zoom and pan are aimed at the stage and applied to the artboard, so
+        # the whole panel scales - bezel and all. Scaling the slot inside the
+        # frame instead grew the drawing against a frame that never moved.
+        self.assertIn(
+            'class="display-template-editor-stage" data-template-designer-viewport-canvas',
+            self.source,
+        )
+        self.assertIn('data-template-designer-artboard', self.source)
+        self.assertIn(
+            ".display-template-editor-stage[data-template-designer-viewport-canvas]{overflow:hidden;cursor:grab",
+            self.source,
+        )
+        self.assertIn(
+            ".template-standalone-editor[data-template-designer-artboard]{transform:translate("
+            "var(--template-designer-pan-x,0px),var(--template-designer-pan-y,0px)) "
+            "scale(var(--template-preview-zoom,1));transform-origin:center",
+            self.source,
+        )
+        # The old inner-slot scale would otherwise apply on top of it.
+        self.assertIn(
+            ".template-standalone-editor[data-template-designer-artboard]>.template-display-slot{transform:none}",
+            self.source,
+        )
         self.assertIn('designerViewport.addEventListener("wheel"', self.source)
         self.assertIn('designerViewport.addEventListener("pointerdown"', self.source)
-        self.assertIn('Kolečko zoom · tažením posun', self.source)
+        # Wheel zoom has to report where it got to, and offer a way back that
+        # is not an undiscoverable double-click.
+        self.assertIn('data-template-designer-zoom-value', self.source)
+        self.assertIn('data-template-designer-zoom-reset', self.source)
+        self.assertIn('Kolečkem myši přiblížíte, tažením plátna posunete', self.source)
+        self.assertNotIn('Kolečko zoom · tažením posun', self.source)
         self.assertIn("this._displayTemplatePreviewZoom = 1;", self.source)
         self.assertIn('designerViewport.style.setProperty("--template-preview-zoom"', self.source)
         self.assertNotIn("zoom:var(--template-preview-zoom,1)", self.source)
@@ -946,7 +987,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn("_rasterizeDisplayTemplatePreview", self.source)
         self.assertNotIn("template-export-preview-body", self.source)
         self.assertIn("return await this._rasterizeDisplayTemplateSvg(", self.source)
-        self.assertIn("_collectTemplateOverlayBoxes() {", self.source)
+        self.assertIn("_collectTemplateOverlayBoxes(request) {", self.source)
         self.assertIn("_paintTemplateOverlays(context, overlays, width, height) {", self.source)
         self.assertIn("if (paintOverlay) paintOverlay(context, width, height);", self.source)
         self.assertIn('bitmap.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;', self.source)
@@ -971,7 +1012,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn("context.putImageData(pixels, 0, 0)", self.source)
         self.assertIn('this._displaySettingsView = stayInCatalog ? "templates" : "designer";', self.source)
         self.assertIn('this._templateDesignerReturnView = "templates";', self.source)
-        self.assertIn('<small>Designer</small>', self.source)
+        # Was the badge inside _renderPhotoshopOptionsBar, which nothing
+        # ever called. The designer's own bar is pinned in
+        # test_template_studio_uses_component_previews_without_empty_info_panels.
+        self.assertIn('class="template-selection-bar is-locked-controls', self.source)
         self.assertIn(".display-template-editor-left{grid-column:1;grid-row:1/3;min-height:0;overflow:auto}", self.source)
         self.assertIn(".display-template-editor-bottom{grid-column:2;grid-row:2;box-sizing:border-box;height:150px}", self.source)
         self.assertIn("grid-template-rows:540px 150px", self.source)
@@ -1525,7 +1569,12 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('font-weight="${bold ? 700 : 400}"', self.source)
         self.assertIn('_svgReadableText(value, size, maxWidth, bold', self.source)
         self.assertIn("Math.max(7, labelHeight * 0.7)", self.source)
-        self.assertIn("step * 3.5", self.source)
+        # A bar label may still borrow up to 3.5 steps, but only across
+        # intervals that carry no label of their own. A flat 3.5 whatever the
+        # spacing made the clamp that keeps a wide label inside the box stack
+        # the first two labels of a fully labelled axis on one x, and the last
+        # two on another - a seven-bar week printed "Po" over "Út".
+        self.assertIn("step * Math.min(3.5, labelSpacing * 0.95)", self.source)
         self.assertIn("Math.max(10, Math.min(box.h * 0.32, cellWidth * 0.33))", self.source)
 
     def test_device_cards_do_not_request_background_backend_previews(self):
@@ -1682,25 +1731,41 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertNotIn("Nastavení pracovní plochy", self.source)
         self.assertNotIn("Vyberte oblast v náhledu pro úpravu rozměrů a orientace.", self.source)
         self.assertIn("const toolPreview = (type, settings) =>", self.source)
-        self.assertIn("this._renderTemplateChartVisual(item)", self.source)
-        self.assertIn("this._renderTemplateGaugeVisual(item)", self.source)
-        self.assertIn("this._renderTemplateSignalVisual(item)", self.source)
+        self.assertIn("this._renderTemplateComponentSvg(item, 296, 128)", self.source)
+        self.assertIn("_isTemplateComponentKind(item.type)", self.source)
         self.assertIn("template-palette-shape-sample", self.source)
         self.assertIn("template-palette-text-sample", self.source)
         self.assertNotIn('class="template-selection-bar is-global-controls"', self.source)
         self.assertIn('class="template-selection-fixed-tools"', self.source)
         self.assertIn('class="template-toolbar-cluster is-view"', self.source)
-        self.assertIn('class="template-toolbar-cluster is-transform"', self.source)
         self.assertIn('template-selection-tool-group template-toolbar-cluster is-actions', self.source)
         self.assertNotIn('template-toolbar-cluster-label', self.source)
         self.assertIn('.template-toolbar-cluster ha-icon{--mdc-icon-size:22px}', self.source)
         self.assertIn('.template-selection-fixed-tools>.template-toolbar-cluster.is-actions ha-icon{--mdc-icon-size:22px}', self.source)
-        self.assertIn('data-template-viewport-menu aria-expanded=', self.source)
-        self.assertIn('class="template-viewport-popup"', self.source)
-        self.assertIn('data-template-designer-viewport="${value}"', self.source)
-        self.assertIn('["narrow", "phone-rotate-portrait", "Úzká"]', self.source)
-        self.assertIn('["wide", "phone-rotate-landscape", "Široká"]', self.source)
-        self.assertIn('["large", "monitor", "Velký displej"]', self.source)
+        # The four viewports are two independent choices - which panel, which
+        # way up - so the bar offers them as two labelled pairs. They used to
+        # be four opaque icons behind a popup the user had to open to find out
+        # what shape they were designing for; the popup is gone for good.
+        self.assertNotIn('data-template-viewport-menu', self.source)
+        self.assertNotIn('template-viewport-popup', self.source)
+        self.assertNotIn('_templateViewportMenuOpen', self.source)
+        self.assertIn('data-template-designer-viewport="${target}"', self.source)
+        self.assertIn('class="template-format-group is-size"', self.source)
+        self.assertIn('class="template-format-group is-orientation"', self.source)
+        self.assertIn('aria-label="Orientace šablony"', self.source)
+        self.assertIn('"crop-portrait", "Na výšku"', self.source)
+        self.assertIn('"crop-landscape", "Na šířku"', self.source)
+        # The live resolution is the thing the icons could never say.
+        self.assertIn('class="template-format-size"', self.source)
+        self.assertIn('${shape.width} × ${shape.height} px', self.source)
+        for viewport, size in (
+            ("narrow", "width: 128, height: 296"),
+            ("wide", "width: 296, height: 128"),
+            ("large", "width: 800, height: 480"),
+            ("large-portrait", "width: 480, height: 800"),
+        ):
+            with self.subTest(viewport=viewport):
+                self.assertIn(size, self.source)
         self.assertNotIn('data-template-element-format="bold"', self.source)
         self.assertIn('data-template-element-align="${value}"', self.source)
         self.assertIn('data-template-history="undo"', self.source)
@@ -2007,8 +2072,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('savedUserTemplate.preview_image = preview;', inspector)
         self.assertIn('String(template?.preview_image || "").startsWith("data:image/")', self.source)
         self.assertIn('class="user-template-captured-preview"', self.source)
-        self.assertIn('else if (item.type === "qr") content = this._renderTemplateQrVisual(item);', self.source)
-        self.assertIn('else if (item.type === "barcode") content = this._renderTemplateBarcodeVisual(item);', self.source)
+        self.assertIn(
+            'else if (this._isTemplateComponentKind(item.type)) content = this._renderTemplateComponentSvg(item, width, height);',
+            self.source,
+        )
 
     def test_builtin_template_catalog_previews_are_lazy_and_cached(self):
         self.assertIn('data-template-catalog-preview=', self.source)
@@ -2035,10 +2102,13 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('tool("qr", "qrcode", "QR kód"', self.source)
         self.assertIn('tool("qr", "wifi", "QR pro Wi-Fi"', self.source)
         self.assertIn('tool("barcode", "barcode", "EAN-13"', self.source)
-        self.assertIn('_renderTemplateQrVisual(item)', self.source)
-        self.assertIn('_renderTemplateBarcodeVisual(item)', self.source)
-        self.assertIn('this._drawQr(context, { text: item.text', self.source)
-        self.assertIn('this._drawBarcode(context, { text: item.text', self.source)
+        # The codes are drawn once, by the component renderer, and rasterised
+        # from that same markup for the bitmap. The canvas re-implementations
+        # they used to have are gone along with every other duplicated kind.
+        self.assertIn('_componentQr(item, box)', self.source)
+        self.assertIn('_componentBarcode(item, box)', self.source)
+        self.assertNotIn('_renderTemplateQrVisual', self.source)
+        self.assertNotIn('this._drawQr(context, { text: item.text', self.source)
         self.assertIn('this._displaySupportsYellow() ? "#f4c400" : "#d71912"', self.source)
         self.assertIn('const yellow = red >= 161 && green >= 128 && blue < 96;', self.source)
         self.assertIn('if (yellow) return this._displaySupportsYellow?.() ? [244, 196, 0] : [220, 20, 12];', self.source)

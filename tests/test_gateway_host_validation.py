@@ -52,6 +52,7 @@ def _load_gateway_module():
     render = types.ModuleType(f"{PACKAGE}.render")
     render.pack_bwr_image = lambda *_args, **_kwargs: b""
     render.pack_bwr_region = lambda *_args, **_kwargs: b""
+    render.packing_description = lambda *_args, **_kwargs: "SDK type stub"
     sys.modules[render.__name__] = render
 
     spec = importlib.util.spec_from_file_location(f"{PACKAGE}.gateway", COMPONENT / "gateway.py")

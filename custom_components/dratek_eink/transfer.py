@@ -18,7 +18,7 @@ from .const import (
 )
 from . import quicklz
 from .discovery import resolve_raw_type
-from .render import pack_bwr_image, pack_bwr_region
+from .render import pack_bwr_image, pack_bwr_region, packing_description
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -208,6 +208,10 @@ class DratekTransfer:
         QuickLZ stream: they accept every block of a raw payload and acknowledge
         the transfer, then refresh nothing at all.
         """
+        # Which packer ran, on every send. A display given the wrong one still
+        # accepts the payload and prints it, so the failure looks like a broken
+        # panel rather than a mismatched type.
+        self.log(packing_description(sdk_type))
         raw_type = resolve_raw_type(self._hass, address)
         if raw_type is None:
             self.log(

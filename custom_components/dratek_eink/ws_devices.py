@@ -516,6 +516,13 @@ async def websocket_scan(
         {
             "ok": True,
             "scanner_count": scanner_count,
+            # Travels with scanner_count so the panel can decide in one go
+            # whether the "no Bluetooth adapter" warning is worth showing. A
+            # gateway drives displays over the network and needs no Home
+            # Assistant adapter at all, and asking for the gateway list
+            # separately would make the banner flash on every load in the gap
+            # before that second answer arrived.
+            "gateway_count": len(gateways),
             "ble_count": len(service_infos),
             "devices": devices,
             "ble_devices": ble_devices,

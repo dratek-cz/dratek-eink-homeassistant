@@ -12,7 +12,7 @@ from typing import Any
 from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageMath
 
 from . import svg_blocks, svg_render
-from .const import DEVICE_SIZES
+from .const import DEVICE_SIZES, SDK_MODELS
 from .meteoradar import fit_to_size
 from .svg_text import svg_text as build_text_element
 
@@ -2536,6 +2536,31 @@ PE29_CODES = {40, 43, 46, 48, 51}
 BWRY_296X128_CODE = 46
 BWRY_CODES = {46, 78, 142, 270, 302, 310, 318, 558, 654, 686, 2670, 2702}
 BWR_800X480_CODES = {299, 302, 310, 315, 318}
+
+
+def packing_description(sdk_type: int) -> str:
+    """Which packer `pack_bwr_image` will use, in words, for the transfer log.
+
+    A display fed the wrong packing does not fail: it accepts the payload and
+    prints it, and two bits per pixel read one bit at a time is white/red/black
+    grain across the whole panel. Nothing in the log said which packer had run,
+    so the only way to tell that from a display fault was to own two of them.
+
+    Note that BWRY_CODES is tested first and returns, so a code in both sets -
+    302, 310 and 318, each named "800x480 BWR" in SDK_MODELS - never reaches
+    the three-colour branch at all. That is what this line makes visible.
+    """
+    code = int(sdk_type)
+    width, height = display_size(code)
+    if code in BWRY_CODES:
+        kind = "four-colour, 2 bits/pixel"
+        if code in BWR_800X480_CODES:
+            kind += " (also listed as an 800x480 three-colour type)"
+    elif code in BWR_800X480_CODES:
+        kind = "three-colour, vertical flip and inverted first plane"
+    else:
+        kind = "three-colour, two bit planes"
+    return f"SDK type {code} ({SDK_MODELS.get(code, 'unknown model')}), {width}x{height}, packed {kind}"
 
 
 def _finalize_bwry_orientation(image: Image.Image) -> Image.Image:

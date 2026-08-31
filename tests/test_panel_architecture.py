@@ -109,6 +109,31 @@ class RenderCostTests(unittest.TestCase):
             with self.subTest(expected=expected):
                 self.assertIn(expected, capture)
 
+    def test_a_scroller_without_an_id_is_carried_over_too(self) -> None:
+        # Keying only on id quietly excluded the one scroller in the designer:
+        # the element palette is an anonymous div that the whole left panel
+        # scrolls inside, so every click in it - picking a block, selecting a
+        # layer - re-rendered and dropped the user back at the top of a list
+        # a thousand pixels long.
+        capture = self.styles[self.styles.index("_captureUiState()"):self.styles.index("_restoreUiState(state)")]
+        self.assertIn('root.querySelectorAll("[id],[data-scroll-key]")', capture)
+        self.assertIn("`key:${element.dataset.scrollKey}`", capture)
+        restore = self.styles[self.styles.index("_restoreUiState(state)"):]
+        restore = restore[: restore.index("\n  _render() {")]
+        self.assertIn('root.querySelector(`[data-scroll-key="${CSS.escape(key.slice(4))}"]`)', restore)
+
+    def test_the_designer_palette_declares_a_per_category_scroll_key(self) -> None:
+        devices = (
+            Path(__file__).resolve().parents[1]
+            / "custom_components" / "dratek_eink" / "frontend" / "panel"
+            / "panel-devices.mixin.js"
+        ).read_text(encoding="utf-8")
+        # Per category, not one key for the palette: the categories are
+        # different lists of different lengths behind the same element, and a
+        # shared key would restore the block palette's offset into the layer
+        # list the moment you switched between them.
+        self.assertIn('data-scroll-key="template-palette:${category}"', devices)
+
 
 if __name__ == "__main__":
     unittest.main()

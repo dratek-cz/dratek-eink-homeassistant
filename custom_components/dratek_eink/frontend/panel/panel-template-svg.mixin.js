@@ -16,7 +16,7 @@
 // are identical by construction.
 
 import qrcode from "../qrcode-generator.js";
-import { DISPLAY_TEMPLATES } from "./templates/index.js?v=release-0.1.351";
+import { DISPLAY_TEMPLATES } from "./templates/index.js?v=release-0.1.352";
 import { TRANSIT_KIND_ICONS } from "./templates/shared.js?v=transit-two-line-1";
 
 const RED = "#e31b1b";
@@ -1379,31 +1379,6 @@ export const templateSvgMixin = {
     return color === "red" ? RED : BLACK;
   },
 
-  _renderTemplateQrVisual(item) {
-    try {
-      const code = qrcode(0, "M");
-      code.addData(String(item?.text || "https://dratek.cz"));
-      code.make();
-      const count = code.getModuleCount();
-      const quiet = 4;
-      const cells = [];
-      for (let row = 0; row < count; row++) for (let column = 0; column < count; column++) {
-        if (code.isDark(row, column)) cells.push(`<rect x="${column + quiet}" y="${row + quiet}" width="1" height="1"></rect>`);
-      }
-      const size = count + quiet * 2;
-      return `<svg class="template-generated-code" viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><rect width="${size}" height="${size}" fill="#fff"></rect><g fill="#111">${cells.join("")}</g></svg>`;
-    } catch (_error) {
-      return `<ha-icon icon="mdi:qrcode"></ha-icon>`;
-    }
-  },
-
-  _renderTemplateBarcodeVisual(item) {
-    const digits = this._normalizeEan13?.(item?.text || "859123456789") || "8591234567890";
-    const pattern = this._ean13Pattern?.(digits) || "1010101";
-    const bars = [...pattern].map((bit, index) => bit === "1" ? `<rect x="${index}" y="0" width="1" height="42"></rect>` : "").join("");
-    return `<svg class="template-generated-code" viewBox="0 0 ${pattern.length} 52" preserveAspectRatio="none" aria-hidden="true"><rect width="${pattern.length}" height="52" fill="#fff"></rect><g fill="#111">${bars}</g><text x="${pattern.length / 2}" y="51" text-anchor="middle" font-size="8" font-family="Arial">${digits}</text></svg>`;
-  },
-
   _svgHairline(x, y, w, h, color = BLACK) {
     return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${Math.max(1, w).toFixed(2)}" height="${Math.max(1, h).toFixed(2)}" fill="${color}"></rect>`;
   },
@@ -1617,12 +1592,22 @@ export const templateSvgMixin = {
       parts.push(`<rect x="${(box.x + step * index + (step - barWidth) / 2).toFixed(2)}" y="${(box.y + chartHeight - barHeight).toFixed(2)}"`
         + ` width="${barWidth.toFixed(2)}" height="${barHeight.toFixed(2)}" fill="${fill}"${edge}></rect>`);
     });
+    // Only selected ticks carry a label (typically 0, 6, 12 and 18). They may
+    // use the empty neighbouring intervals instead of being squeezed into the
+    // width of one narrow bar - but only the intervals that really are empty.
+    // Borrowing a flat 3.5 steps whatever the spacing meant that on a fully
+    // labelled axis the clamp which keeps a wide label inside the box pinned
+    // the first two labels to one x and the last two to another: on a
+    // seven-bar week, "Po" printed on top of "Út" and "So" on top of "Ne".
+    const labelledIndexes = labels
+      .map((label, index) => (label == null || label === "" ? -1 : index))
+      .filter((index) => index >= 0);
+    const labelSpacing = labelledIndexes.length > 1
+      ? Math.min(...labelledIndexes.slice(1).map((index, position) => index - labelledIndexes[position]))
+      : values.length;
+    const labelWidth = Math.min(box.w, Math.max(step * 0.95, step * Math.min(3.5, labelSpacing * 0.95)));
     labels.forEach((label, index) => {
       if (label == null || label === "") return;
-      // Only selected ticks carry a label (typically 0, 6, 12 and 18). They may
-      // use the empty neighbouring intervals instead of being squeezed into the
-      // width of one narrow bar.
-      const labelWidth = Math.min(box.w, Math.max(step * 0.95, step * 3.5));
       const rawX = box.x + step * (index + 0.5);
       const labelX = Math.max(box.x + labelWidth / 2, Math.min(box.x + box.w - labelWidth / 2, rawX));
       parts.push(this._svgText(label, labelX, box.y + chartHeight + labelHeight * 0.58, Math.max(7, labelHeight * 0.7), { maxWidth: labelWidth }));
@@ -1744,8 +1729,14 @@ export const templateSvgMixin = {
     // page, and an axis label under the leg it belongs to reads as a scale
     // either way.
     const scaleY = cy + scaleSize * 0.85;
-    if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, scaleY, scaleSize, { anchor: "start", maxWidth: outer * 0.62 }));
-    if (dial.max != null) parts.push(this._svgText(dial.max, cx + outer, scaleY, scaleSize, { anchor: "end", maxWidth: outer * 0.62 }));
+        // The two end captions are anchored outwards from the arc ends, so the
+    // only thing between them is empty paper. At 0.62 they were each allowed
+    // little more than half the room actually there and a five-letter word
+    // ellipsised with a third of the band still blank - _svgText will not go
+    // below MIN_READABLE_FONT_SIZE, so a tight allowance clips rather than
+    // shrinks. 0.85 still leaves a clear gap in the middle.
+if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, scaleY, scaleSize, { anchor: "start", maxWidth: outer * 0.85 }));
+    if (dial.max != null) parts.push(this._svgText(dial.max, cx + outer, scaleY, scaleSize, { anchor: "end", maxWidth: outer * 0.85 }));
     return parts.join("");
   },
 
