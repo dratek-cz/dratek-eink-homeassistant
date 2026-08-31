@@ -193,6 +193,35 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         image = self._compose((220, 20, 12, 255), max_dimension=64)
         self.assertLessEqual(max(image.size), 64)
 
+    def test_target_aspect_expands_the_real_map_instead_of_letterboxing(self) -> None:
+        aspect = 1.45
+        x_min, y_min, x_max, y_max = meteoradar.tile_bounds(
+            self.DIAMOND_BORDER,
+            zoom=self.ZOOM,
+            tile_size=self.TILE_SIZE,
+            target_aspect=aspect,
+            margin=0,
+        )
+        grid = {
+            (x, y): _uniform_tile(self.TILE_SIZE, (220, 20, 12, 255))
+            for x in range(x_min, x_max + 1)
+            for y in range(y_min, y_max + 1)
+        }
+        image = meteoradar.compose_country_radar_image(
+            grid,
+            zoom=self.ZOOM,
+            tile_size=self.TILE_SIZE,
+            x_min=x_min,
+            y_min=y_min,
+            x_max=x_max,
+            y_max=y_max,
+            border=self.DIAMOND_BORDER,
+            margin=0,
+            target_aspect=aspect,
+        )
+        self.assertAlmostEqual(image.width / image.height, aspect, delta=0.02)
+        self.assertNotEqual(image.getpixel((image.width // 2, 0)), (255, 255, 255))
+
     def test_low_alpha_trace_echo_does_not_count_as_precipitation(self) -> None:
         image = self._compose((0, 100, 200, 30))  # below the threshold
         self.assertNotIn(meteoradar.PRECIPITATION_COLOR, list(image.getdata()))

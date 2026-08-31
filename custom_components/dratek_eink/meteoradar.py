@@ -536,21 +536,65 @@ def mercator_pixel(lat: float, lon: float, zoom: int, tile_size: int) -> tuple[f
 
 
 def tile_bounds(
-    border: tuple[tuple[float, float], ...], zoom: int, tile_size: int
+    border: tuple[tuple[float, float], ...],
+    zoom: int,
+    tile_size: int,
+    *,
+    target_aspect: float | None = None,
+    margin: int = 0,
 ) -> tuple[int, int, int, int]:
-    """Return the inclusive (x_min, y_min, x_max, y_max) tile range covering `border`."""
+    """Return the inclusive tile range covering the requested map viewport."""
     xs: list[float] = []
     ys: list[float] = []
     for lon, lat in border:
         x, y = mercator_pixel(lat, lon, zoom, tile_size)
-        xs.append(x / tile_size)
-        ys.append(y / tile_size)
-    return (
-        int(math.floor(min(xs))),
-        int(math.floor(min(ys))),
-        int(math.floor(max(xs))),
-        int(math.floor(max(ys))),
+        xs.append(x)
+        ys.append(y)
+    left, top, right, bottom = _radar_view_bounds(
+        xs, ys, margin=margin, target_aspect=target_aspect
     )
+    return (
+        int(math.floor(left / tile_size)),
+        int(math.floor(top / tile_size)),
+        int(math.floor(right / tile_size)),
+        int(math.floor(bottom / tile_size)),
+    )
+
+
+def _radar_view_bounds(
+    xs: list[float],
+    ys: list[float],
+    *,
+    margin: int = 0,
+    target_aspect: float | None = None,
+) -> tuple[float, float, float, float]:
+    """Expand a geographic crop to the map slot's aspect ratio.
+
+    Expanding instead of stretching preserves the country's shape, and unlike
+    letterboxing it fills every pixel available beside the forecast sidebar.
+    The extra area is real neighbouring radar coverage, which is useful context
+    for precipitation moving toward the selected country.
+    """
+    left = min(xs) - margin
+    top = min(ys) - margin
+    right = max(xs) + margin
+    bottom = max(ys) + margin
+    aspect = float(target_aspect or 0)
+    if aspect <= 0:
+        return left, top, right, bottom
+    width = max(1.0, right - left)
+    height = max(1.0, bottom - top)
+    if width / height < aspect:
+        wanted = height * aspect
+        extra = (wanted - width) / 2
+        left -= extra
+        right += extra
+    else:
+        wanted = width / aspect
+        extra = (wanted - height) / 2
+        top -= extra
+        bottom += extra
+    return left, top, right, bottom
 
 
 def wind_flow_vector(direction_from_degrees: float, length: float) -> tuple[float, float]:
@@ -864,6 +908,7 @@ def compose_country_radar_image(
     home_location: tuple[float, float] | None = None,
     preserve_yellow: bool = True,
     max_dimension: int = MAX_NATIVE_DIMENSION,
+    target_aspect: float | None = None,
 ) -> Image.Image:
     """Stitch tiles and draw full-section precipitation below the country outline.
 
@@ -886,11 +931,14 @@ def compose_country_radar_image(
 
     xs = [point[0] for point in polygon]
     ys = [point[1] for point in polygon]
+    view_left, view_top, view_right, view_bottom = _radar_view_bounds(
+        xs, ys, margin=margin, target_aspect=target_aspect
+    )
     crop_box = (
-        max(0, int(min(xs)) - margin),
-        max(0, int(min(ys)) - margin),
-        min(composite.width, int(max(xs)) + margin),
-        min(composite.height, int(max(ys)) + margin),
+        max(0, math.floor(view_left)),
+        max(0, math.floor(view_top)),
+        min(composite.width, math.ceil(view_right)),
+        min(composite.height, math.ceil(view_bottom)),
     )
     crop_left, crop_top = crop_box[:2]
     composite = composite.crop(crop_box)
@@ -980,6 +1028,7 @@ def compose_multi_country_radar_image(
     home_location: tuple[float, float] | None = None,
     preserve_yellow: bool = True,
     max_dimension: int = MAX_NATIVE_DIMENSION,
+    target_aspect: float | None = None,
 ) -> Image.Image:
     """The Europe-overview counterpart to `compose_country_radar_image`."""
     composite, origin_x, origin_y = _stitch_tiles(tiles, x_min, y_min, x_max, y_max, tile_size)
@@ -1000,11 +1049,14 @@ def compose_multi_country_radar_image(
 
     xs = [x for polygon in polygons for x, _y in polygon]
     ys = [y for polygon in polygons for _x, y in polygon]
+    view_left, view_top, view_right, view_bottom = _radar_view_bounds(
+        xs, ys, margin=margin, target_aspect=target_aspect
+    )
     crop_box = (
-        max(0, int(min(xs)) - margin),
-        max(0, int(min(ys)) - margin),
-        min(composite.width, int(max(xs)) + margin),
-        min(composite.height, int(max(ys)) + margin),
+        max(0, math.floor(view_left)),
+        max(0, math.floor(view_top)),
+        min(composite.width, math.ceil(view_right)),
+        min(composite.height, math.ceil(view_bottom)),
     )
     crop_left, crop_top = crop_box[:2]
     composite = composite.crop(crop_box)
@@ -1110,6 +1162,7 @@ def _render_cache_key(
     home_location: tuple[float, float] | None,
     preserve_yellow: bool,
     max_dimension: int,
+    target_aspect: float | None = None,
 ) -> str:
     # ``dotted_light`` remains in the signature so old stored automations and
     # websocket clients keep working, but direct raster dithering has no such
@@ -1119,7 +1172,7 @@ def _render_cache_key(
     return (
         f"{str(country or 'cz').lower()}_p{int(show_precipitation)}"
         f"_w{int(show_wind)}_y{int(preserve_yellow)}_h{marker_key}"
-        f"_m{max(1, int(max_dimension))}"
+        f"_m{max(1, int(max_dimension))}_a{float(target_aspect or 0):.5f}"
     )
 
 
@@ -1224,6 +1277,7 @@ async def _async_composed_base_image_uncached(
     home_location: tuple[float, float] | None = None,
     preserve_yellow: bool = True,
     max_dimension: int = MAX_NATIVE_DIMENSION,
+    target_aspect: float | None = None,
 ) -> Image.Image | None:
     """Return the current country (or "eu" overview) map at native resolution,
     refetching only when RainViewer's own frame timestamp has actually moved on.
@@ -1239,6 +1293,7 @@ async def _async_composed_base_image_uncached(
         home_location,
         preserve_yellow,
         max_dimension,
+        target_aspect,
     )
     country_key = str(country or "cz").lower()
     is_europe = country_key == "eu"
@@ -1279,7 +1334,13 @@ async def _async_composed_base_image_uncached(
     ):
         return cached["composed"]  # type: ignore[return-value]
 
-    x_min, y_min, x_max, y_max = tile_bounds(all_points, ZOOM, TILE_SIZE)
+    x_min, y_min, x_max, y_max = tile_bounds(
+        all_points,
+        ZOOM,
+        TILE_SIZE,
+        target_aspect=target_aspect,
+        margin=12,
+    )
     tile_urls = {
         (tile_x, tile_y): (
             f"{host}{path}/{TILE_SIZE}/{ZOOM}/{tile_x}/{tile_y}/{COLOR_SCHEME}/{SMOOTH}_{SNOW}.png"
@@ -1314,6 +1375,7 @@ async def _async_composed_base_image_uncached(
                     home_location=home_location,
                     preserve_yellow=preserve_yellow,
                     max_dimension=max_dimension,
+                    target_aspect=target_aspect,
                 )
             )
         else:
@@ -1335,6 +1397,7 @@ async def _async_composed_base_image_uncached(
                     home_location=home_location,
                     preserve_yellow=preserve_yellow,
                     max_dimension=max_dimension,
+                    target_aspect=target_aspect,
                 )
             )
     _cache[key] = {
@@ -1359,6 +1422,7 @@ async def _async_composed_base_image(
     home_location: tuple[float, float] | None = None,
     preserve_yellow: bool = True,
     max_dimension: int = MAX_NATIVE_DIMENSION,
+    target_aspect: float | None = None,
 ) -> Image.Image | None:
     """Share one in-flight render between callers requesting identical output."""
     key = _render_cache_key(
@@ -1369,6 +1433,7 @@ async def _async_composed_base_image(
         home_location,
         preserve_yellow,
         max_dimension,
+        target_aspect,
     )
     task = _inflight_renders.get(key)
     if task is None:
@@ -1382,6 +1447,7 @@ async def _async_composed_base_image(
                 home_location=home_location,
                 preserve_yellow=preserve_yellow,
                 max_dimension=max_dimension,
+                target_aspect=target_aspect,
             )
         )
         _inflight_renders[key] = task
@@ -1417,6 +1483,11 @@ async def async_render_meteoradar(
         if value is not None
     ]
     max_dimension = max(target_dimensions, default=MAX_NATIVE_DIMENSION)
+    target_aspect = (
+        max(1, int(target_width)) / max(1, int(target_height))
+        if target_width is not None and target_height is not None
+        else None
+    )
     base = await _async_composed_base_image(
         hass,
         country=country,
@@ -1426,6 +1497,7 @@ async def async_render_meteoradar(
         home_location=home_location,
         preserve_yellow=preserve_yellow,
         max_dimension=max_dimension,
+        target_aspect=target_aspect,
     )
     if base is None:
         return None

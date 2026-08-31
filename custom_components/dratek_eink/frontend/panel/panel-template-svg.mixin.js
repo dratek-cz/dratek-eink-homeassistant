@@ -16,7 +16,7 @@
 // are identical by construction.
 
 import qrcode from "../qrcode-generator.js";
-import { DISPLAY_TEMPLATES } from "./templates/index.js?v=release-0.1.353";
+import { DISPLAY_TEMPLATES } from "./templates/index.js?v=release-0.1.354";
 import { TRANSIT_KIND_ICONS } from "./templates/shared.js?v=transit-two-line-1";
 
 const RED = "#e31b1b";
@@ -2400,7 +2400,7 @@ if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, scaleY, sca
       if (layout.portrait) {
         const forecastY = box.y + layout.mapH;
         const map = `<image data-radar-part="map" x="${x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${layout.mapW.toFixed(2)}" height="${layout.mapH.toFixed(2)}"`
-          + ` preserveAspectRatio="xMidYMid meet" href="${cached.dataUrl}"></image>`;
+          + ` preserveAspectRatio="none" href="${cached.dataUrl}"></image>`;
         const divider = this._svgHairline(x, forecastY, w, 2);
         const forecast = cached.sidebarDataUrl
           ? `<image data-radar-part="sidebar" x="${x.toFixed(2)}" y="${forecastY.toFixed(2)}" width="${layout.forecastW.toFixed(2)}" height="${layout.forecastH.toFixed(2)}"`
@@ -2415,7 +2415,7 @@ if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, scaleY, sca
         : "";
       const divider = this._svgHairline(mapX, box.y, 2, box.h);
       const map = `<image data-radar-part="map" x="${mapX.toFixed(2)}" y="${box.y.toFixed(2)}" width="${layout.mapW.toFixed(2)}" height="${layout.mapH.toFixed(2)}"`
-        + ` preserveAspectRatio="xMidYMid meet" href="${cached.dataUrl}"></image>`;
+        + ` preserveAspectRatio="none" href="${cached.dataUrl}"></image>`;
       return forecast + divider + map;
     }
     const label = cached?.error

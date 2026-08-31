@@ -2191,7 +2191,13 @@ async def async_render_camera_binding_data_url(
         )
         if radar_img is not None:
             def _prepare_radar() -> bytes:
-                fitted = fit_to_size(radar_img, width, height)
+                # The composer has already expanded the geographic viewport to
+                # this exact aspect ratio. A final exact resize is therefore a
+                # 1:1 fit without the old white letterbox around the map.
+                fitted = radar_img.resize(
+                    (max(1, int(width)), max(1, int(height))),
+                    Image.Resampling.LANCZOS,
+                )
                 return _encode_radar_png(fitted, preserve_yellow)
 
             png_bytes = await hass.async_add_executor_job(_prepare_radar)

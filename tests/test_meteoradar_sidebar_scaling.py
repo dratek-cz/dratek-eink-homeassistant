@@ -131,6 +131,13 @@ class LayoutMirrorTests(unittest.TestCase):
     def test_landscape_layout_keeps_forecast_beside_the_map(self) -> None:
         self.assertIn("const mapX = x + layout.forecastW;", self.js)
 
+    def test_map_bitmap_fills_its_entire_slot(self) -> None:
+        radar_block = self.js[self.js.index("_blockRadarMap(row, box)") :]
+        radar_block = radar_block[:radar_block.index("_blockBoardTwoLine")]
+        self.assertIn('data-radar-part="map"', radar_block)
+        self.assertNotIn('preserveAspectRatio="xMidYMid meet"', radar_block)
+        self.assertIn('preserveAspectRatio="none"', radar_block)
+
     def test_portrait_footer_draws_hourly_items_horizontally(self) -> None:
         drawn: list[int] = []
         original = render._weather_condition_icon_image

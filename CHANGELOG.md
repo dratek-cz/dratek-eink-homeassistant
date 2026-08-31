@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.354] - 2026-08-31
+
+### Opraveno
+- **Meteoradar vyplní celou plochu napravo od předpovědi**: mapa se dřív ořízla těsně kolem hranic vybraného státu a pak se vložila do širšího prostoru se zachováním poměru stran. Výsledkem byly velké bílé pásy nahoře a dole a radar vypadal jako malý, podivně oříznutý obrázek. Výřez se teď geograficky rozšíří podle skutečného poměru mapové části displeje: tvar státu zůstane správný, levý panel se nezmění a všechny zbývající pixely vyplní skutečná radarová mapa okolí.
+
 ## [0.1.353] - 2026-08-31
 
 ### Opraveno
