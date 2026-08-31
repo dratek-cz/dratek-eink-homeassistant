@@ -25,6 +25,6 @@ export const template = {
     note: "Integrace si sama zakládá kamerovou entitu camera.meteoradar, kterou tato šablona používá - žádnou vlastní kameru ani URL adresu není potřeba nastavovat. Panel ukazuje hodinové předpovědi pouze jejich skutečným časem, bez popisků +1 h, +2 h. Srážky nejsou oříznuté státními hranicemi a nemají umělou legendu; skutečný radarový obrázek se ditheringem převádí přímo na barvy konkrétního displeje.",
   },
   design: () => [
-    { radarMap: true, bleed: true, h: 1 },
+    { radarMap: true, bleed: true, pixelPerfect: true, h: 1 },
   ],
 };

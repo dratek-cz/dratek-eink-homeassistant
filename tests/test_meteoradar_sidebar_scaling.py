@@ -13,6 +13,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENT = ROOT / "custom_components" / "dratek_eink"
 SVG_MIXIN = COMPONENT / "frontend" / "panel" / "panel-template-svg.mixin.js"
+RADAR_TEMPLATE = COMPONENT / "frontend" / "panel" / "templates" / "radar.js"
 
 
 def _load_render():
@@ -137,6 +138,13 @@ class LayoutMirrorTests(unittest.TestCase):
         self.assertIn('data-radar-part="map"', radar_block)
         self.assertNotIn('preserveAspectRatio="xMidYMid meet"', radar_block)
         self.assertIn('preserveAspectRatio="none"', radar_block)
+
+    def test_radar_owns_the_exact_full_panel_rectangle(self) -> None:
+        template = RADAR_TEMPLATE.read_text(encoding="utf-8")
+        self.assertIn("radarMap: true", template)
+        self.assertIn("pixelPerfect: true", template)
+        self.assertIn("rows[0]?.radarMap", self.js)
+        self.assertIn("const box = { x: 0, y: 0, w: width, h: height", self.js)
 
     def test_portrait_footer_draws_hourly_items_horizontally(self) -> None:
         drawn: list[int] = []

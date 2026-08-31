@@ -16,7 +16,7 @@
 // are identical by construction.
 
 import qrcode from "../qrcode-generator.js";
-import { DISPLAY_TEMPLATES } from "./templates/index.js?v=release-0.1.354";
+import { DISPLAY_TEMPLATES } from "./templates/index.js?v=release-0.1.355";
 import { TRANSIT_KIND_ICONS } from "./templates/shared.js?v=transit-two-line-1";
 
 const RED = "#e31b1b";
@@ -1122,11 +1122,9 @@ export const templateSvgMixin = {
   // same layout math, not something worth recomputing separately (and risking
   // it drifting from what actually gets drawn).
   _layoutTemplateSvg(rows, width, height, collector) {
-    // brandLogo joins dither/customImage here so the logo template really does
-    // get the whole panel: no page padding, no footer band, no column split -
-    // the block is handed the display's exact rectangle and centres the lockup
-    // inside it itself.
-    if (rows.length === 1 && (rows[0]?.dither || rows[0]?.customImage || rows[0]?.brandLogo) && rows[0]?.pixelPerfect) {
+    // Pixel-perfect full-panel blocks own their internal layout. Hand them the
+    // display's exact rectangle: no page padding, footer band, or column split.
+    if (rows.length === 1 && (rows[0]?.dither || rows[0]?.customImage || rows[0]?.brandLogo || rows[0]?.radarMap) && rows[0]?.pixelPerfect) {
       const box = { x: 0, y: 0, w: width, h: height, fullX: 0, fullW: width };
       if (collector && rows[0].__rowIndex !== undefined) collector.push({ rowIndex: rows[0].__rowIndex, box });
       return this._renderTemplateBlock(rows[0], box);

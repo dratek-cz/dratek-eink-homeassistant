@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.355] - 2026-08-31
+
+### Opraveno
+- **Meteoradar sahá skutečně až ke krajům displeje**: samotný radarový obrázek už vyplňoval mapovou část, ale celá šablona stále procházela obecným rozvržením s vnějším odsazením. Meteoradar teď dostává přesný obdélník panelu bez horního, spodního ani bočního okraje; levý panel s předpovědí a jeho dělicí čára zůstávají součástí obrazu.
+
 ## [0.1.354] - 2026-08-31
 
 ### Opraveno

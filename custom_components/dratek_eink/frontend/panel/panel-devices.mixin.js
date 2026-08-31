@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.354";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.355";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG, DISPLAY_TEMPLATES_BY_ID } from "./templates/index.js?v=thermostat-live-dial-1";
 
 // Generation of the graphic-row capture written into every series()/ratio()/
