@@ -20,9 +20,9 @@ import { templateBlocksMixin } from "./panel/panel-template-blocks.mixin.js?v=te
 import { templateComponentsMixin } from "./panel/panel-template-components.mixin.js?v=component-parts-2";
 // INTERNAL - remove with the rest of the brand-logo feature before the retail
 // release (PRIVATE-NOTES.md).
-import { brandLogoMixin } from "./panel/panel-brand-logo.mixin.js?v=logo-flat-6";
+import { brandLogoMixin } from "./panel/panel-brand-logo.mixin.js?v=logo-tonal-7";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.356";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.357";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {

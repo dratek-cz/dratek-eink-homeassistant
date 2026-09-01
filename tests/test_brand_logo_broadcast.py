@@ -72,27 +72,57 @@ class BrandLogoTemplateTests(unittest.TestCase):
         self.assertNotIn("3 / 16", mixin)
         self.assertNotIn("5 / 16", mixin)
 
-    def test_small_panels_print_the_module_in_solid_ink_not_a_lattice(self) -> None:
-        # An ordered cell only reads as a grey once it repeats often enough
-        # across the shape it fills. On a 296x128 tag the module is ~51px tall,
-        # so the screen's flat grey printed as a visible mesh of single black
-        # pixels - a grid, not a tone. Under the bar the thresholds collapse to
-        # a plain half-way decision and the module prints as white inside its
-        # black outline.
-        mixin = MIXIN.read_text(encoding="utf-8")
-        self.assertIn("export const BRAND_LOGO_MIN_TONAL_MODULE_HEIGHT = 120;", mixin)
-        self.assertIn("_brandLogoModuleIsTonal(width, height, sourceWidth, sourceHeight)", mixin)
-        self.assertIn("rect.bottom - rect.top + 1 >= BRAND_LOGO_MIN_TONAL_MODULE_HEIGHT", mixin)
-        self.assertIn("tonal ? (matrix[y % matrixSize][x % matrixSize] + 0.5) / levels : 0.5", mixin)
-        self.assertIn("this._ditherBrandLogoImageData(pixels, width, height, paletteKey, tonal);", mixin)
-        # The coarse 4x4 cell existed only to make the small tags bearable and
-        # no panel that still dithers is anywhere near it.
-        self.assertNotIn("[0, 8, 2, 10]", mixin)
+    def test_every_panel_size_dithers_the_module(self) -> None:
+        """The same logo has to look like the same logo across a shelf.
 
-    def test_the_outline_and_the_tonal_test_read_the_same_rectangle(self) -> None:
+        There used to be a module height below which the lockup was not
+        dithered at all: the screen printed as plain white inside its black
+        outline, so a 296x128 tag showed an empty frame while a 800x480 panel
+        showed the shading. That switch was the wrong answer to a real problem.
+        The small tags did print the screen as a coarse mesh - but because they
+        were dithered with a 4x4 cell, not because they were dithered at all.
+
+        The module's grey is RGB 210,210,208, a light tone wanting roughly one
+        pixel in six. A 4x4 cell can only place that as one dot per sixteen on a
+        hard four-pixel pitch, which is a visible grid; the 8x8 cell spreads
+        about eleven dots through sixty-four and reads as a tint at any size.
+        Compared side by side at 3x in the panel harness before this changed.
+        """
+        mixin = MIXIN.read_text(encoding="utf-8")
+        # No size threshold, and no way back to a flat half-way decision.
+        self.assertNotIn("BRAND_LOGO_MIN_TONAL_MODULE_HEIGHT", mixin)
+        self.assertNotIn("_brandLogoModuleIsTonal", mixin)
+        self.assertNotIn(": 0.5;", mixin)
+        self.assertIn(
+            "const thresholdAt = (x, y) => (matrix[y % matrixSize][x % matrixSize] + 0.5) / levels;",
+            mixin,
+        )
+        self.assertIn("this._ditherBrandLogoImageData(pixels, width, height, paletteKey);", mixin)
+        # And still not the 4x4 cell, which is the one that actually meshed.
+        self.assertNotIn("[0, 8, 2, 10]", mixin)
+        self.assertIn("[0, 32, 8, 40, 2, 34, 10, 42]", mixin)
+
+    def test_the_cache_key_changed_with_the_artwork(self) -> None:
+        """A cached bitmap outlives the code that produced it.
+
+        _brandLogoDitherCache and the preview both key on this string, so a
+        change to how the lockup is drawn that leaves the key alone keeps
+        serving the previous rendering until the panel is reloaded.
+        """
+        mixin = MIXIN.read_text(encoding="utf-8")
+        self.assertNotIn("logo-flat-6", mixin)
+        self.assertIn("logo-tonal-7", mixin)
+
+    def test_the_outline_reads_the_module_rectangle(self) -> None:
+        """One definition of where the module is.
+
+        The outline is the only reader now that the size threshold is gone; it
+        must still derive the rectangle rather than restate the bounds, or the
+        black edge drifts off the screen it is supposed to frame.
+        """
         mixin = MIXIN.read_text(encoding="utf-8")
         self.assertIn("_brandLogoModuleRect(width, height, sourceWidth, sourceHeight) {", mixin)
-        self.assertEqual(2, mixin.count("this._brandLogoModuleRect("))
+        self.assertEqual(1, mixin.count("this._brandLogoModuleRect("))
 
     def test_wordmark_and_eink_dot_have_semantic_colours(self) -> None:
         mixin = MIXIN.read_text(encoding="utf-8")
@@ -119,7 +149,7 @@ class BrandLogoTemplateTests(unittest.TestCase):
         # afterthought.
         mixin = MIXIN.read_text(encoding="utf-8")
         self.assertIn("this._displayPaletteKey?.(device)", mixin)
-        self.assertIn("`${source}:${w}x${h}:${paletteKey}:logo-flat-6`", mixin)
+        self.assertIn("`${source}:${w}x${h}:${paletteKey}:", mixin)
 
     def test_the_logo_is_letterboxed_and_never_cropped(self) -> None:
         mixin = MIXIN.read_text(encoding="utf-8")

@@ -16,9 +16,18 @@
 
 export const BRAND_LOGO_TEMPLATE_ID = "dratek_logo";
 
-// Printed pixels of Eink-module height below which the lockup is rendered in
-// solid ink instead of ordered dither. See _brandLogoModuleIsTonal.
-export const BRAND_LOGO_MIN_TONAL_MODULE_HEIGHT = 120;
+// The lockup is dithered at every panel size. There used to be a height below
+// which it was not: the module's screen printed as plain white inside its black
+// outline, so the small tags showed an empty frame where the large ones showed
+// the shading, and the same logo did not look like the same logo across a shelf.
+//
+// That switch was the wrong answer to a real problem. The small tags did print
+// the screen as a coarse mesh - but because they were dithered with a 4x4 cell,
+// not because they were dithered at all. The module's grey is RGB 210,210,208,
+// a light tone that wants roughly one pixel in six: a 4x4 cell can only place
+// that as one dot per sixteen on a hard four-pixel pitch, which is a visible
+// grid, while the 8x8 cell spreads about eleven dots through sixty-four and
+// reads as a tint at any size. So the cell went, not the tone.
 
 export const brandLogoMixin = {
 
@@ -46,13 +55,12 @@ export const brandLogoMixin = {
     const h = Math.max(1, Math.round(height));
     const source = this._brandLogoAsset(stacked);
     const paletteKey = this._displayPaletteKey?.(device) || "bwr";
-    return { source, w, h, paletteKey, cacheKey: `${source}:${w}x${h}:${paletteKey}:logo-flat-6` };
+    return { source, w, h, paletteKey, cacheKey: `${source}:${w}x${h}:${paletteKey}:logo-tonal-7` };
   },
 
-  // The tonal cell. Only panels that clear BRAND_LOGO_MIN_TONAL_MODULE_HEIGHT
-  // ever reach it, and those all have room for the smooth 8x8 scale - a coarser
-  // cell only ever existed to make the small tags bearable, and they no longer
-  // dither at all.
+  // One cell for every panel. 8x8 is the smallest matrix that can place a light
+  // tone as something other than a regular grid, which is the whole reason the
+  // small tags looked wrong under the 4x4 cell they used to get.
   _brandLogoBayerMatrix() {
     return [
       [0, 32, 8, 40, 2, 34, 10, 42], [48, 16, 56, 24, 50, 18, 58, 26],
@@ -91,7 +99,7 @@ export const brandLogoMixin = {
     return canvas;
   },
 
-  _ditherBrandLogoImageData(pixels, width, height, paletteKey = "", tonal = true) {
+  _ditherBrandLogoImageData(pixels, width, height, paletteKey = "") {
     const supportsYellow = paletteKey === "bwry";
     const red = [220, 20, 12];
     const yellow = [244, 196, 0];
@@ -101,12 +109,7 @@ export const brandLogoMixin = {
     const matrix = this._brandLogoBayerMatrix();
     const matrixSize = matrix.length;
     const levels = matrixSize * matrixSize;
-    // On a panel too small for a tone, every ordered threshold collapses to a
-    // plain half-way decision, which is what turns the module's flat grey into
-    // solid white instead of a lattice of single black pixels.
-    const thresholdAt = (x, y) => (
-      tonal ? (matrix[y % matrixSize][x % matrixSize] + 0.5) / levels : 0.5
-    );
+    const thresholdAt = (x, y) => (matrix[y % matrixSize][x % matrixSize] + 0.5) / levels;
     const distance = (colour, target) => (
       (colour[0] - target[0]) ** 2
       + (colour[1] - target[1]) ** 2
@@ -163,9 +166,9 @@ export const brandLogoMixin = {
   },
 
   // Bounds of the real Eink module in the two supplied source lockups, mapped
-  // into the target pixels the panel is actually printed in. Both the outline
-  // and the decision below about whether a tone is even legible are questions
-  // about this one rectangle, so they read it from the same place.
+  // into the target pixels the panel is actually printed in. The outline is
+  // drawn from it after the dither, so the module keeps a continuous, sharp
+  // edge around a screen that is a tone rather than a solid.
   _brandLogoModuleRect(width, height, sourceWidth, sourceHeight) {
     const stacked = sourceWidth === sourceHeight;
     const bounds = stacked
@@ -182,19 +185,6 @@ export const brandLogoMixin = {
       bottom: Math.min(height - 1, Math.round(offsetY + (bounds.bottom + 1) * scale) - 1),
       radius: Math.max(2, Math.round((stacked ? 28 : 19) * scale)),
     };
-  },
-
-  // Ordered dithering only reads as a grey once the cell repeats often enough
-  // across the shape it fills. The module's screen is the largest flat tone in
-  // the lockup, so it is the honest yardstick: below this many printed pixels
-  // of module height the 8x8 cell stops being a texture and becomes a visible
-  // lattice - the small tags printed the screen as a mesh of single black
-  // pixels rather than as grey. Panels under the bar get solid ink instead,
-  // where the module is white, its rounded outline black and Eink crisp.
-  // 640x360 is the smallest panel above the bar; 400x300 the largest below it.
-  _brandLogoModuleIsTonal(width, height, sourceWidth, sourceHeight) {
-    const rect = this._brandLogoModuleRect(width, height, sourceWidth, sourceHeight);
-    return rect.bottom - rect.top + 1 >= BRAND_LOGO_MIN_TONAL_MODULE_HEIGHT;
   },
 
   _outlineBrandLogoModule(pixels, width, height, sourceWidth, sourceHeight) {
@@ -251,8 +241,7 @@ export const brandLogoMixin = {
         const sourceWidth = image.naturalWidth || image.width;
         const sourceHeight = image.naturalHeight || image.height;
         const pixels = context.getImageData(0, 0, width, height);
-        const tonal = this._brandLogoModuleIsTonal(width, height, sourceWidth, sourceHeight);
-        this._ditherBrandLogoImageData(pixels, width, height, paletteKey, tonal);
+        this._ditherBrandLogoImageData(pixels, width, height, paletteKey);
         this._outlineBrandLogoModule(pixels, width, height, sourceWidth, sourceHeight);
         context.putImageData(pixels, 0, 0);
         resolve(canvas.toDataURL("image/png"));

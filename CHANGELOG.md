@@ -2,6 +2,11 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.357] - 2026-09-01
+
+### Opraveno
+- **Logo Drátek má stínování na všech displejích, ne jen na tom největším**: pod určitou výškou modulu se logo vůbec nerastrovalo – displej vytiskl jen bílé pole s černým rámečkem, takže malé cenovky ukazovaly prázdný rámeček tam, kde velký panel ukazoval stínovanou plochu, a jedno logo přes regál nevypadalo jako jedno logo. Ten vypínač byl špatná odpověď na skutečný problém: malé štítky opravdu tiskly plochu jako hrubou mřížku, ale kvůli tomu, že se rastrovaly buňkou 4×4, ne kvůli rastrování jako takovému. Šedá modulu je RGB 210,210,208, tedy světlý tón, který chce zhruba každý šestý pixel – buňka 4×4 ho umí položit jen jako jeden bod ze šestnácti v pevném čtyřpixelovém rastru, což je viditelná mřížka, kdežto buňka 8×8 rozprostře asi jedenáct bodů do čtyřiašedesáti a čte se jako tón v jakékoli velikosti. Odstranila se tedy ta buňka, ne ten tón. Porovnáno vedle sebe ve trojnásobném zvětšení.
+
 ## [0.1.356] - 2026-09-01
 
 ### Firmware gatewaye 0.1.64
