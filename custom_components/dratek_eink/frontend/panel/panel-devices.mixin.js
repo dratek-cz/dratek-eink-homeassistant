@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.357";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.358";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG, DISPLAY_TEMPLATES_BY_ID } from "./templates/index.js?v=thermostat-live-dial-1";
 
 // Generation of the graphic-row capture written into every series()/ratio()/
@@ -616,6 +616,12 @@ export const devicesMixin = {
   // it out on its own after a few minutes; pressing again puts it out now.
   _renderIdentifyButton(device) {
     const address = String(device.address || "");
+    // Nothing at all rather than a disabled button: this display was asked and
+    // wrote back that it has no indicator, so a greyed-out light is a control
+    // for a feature the hardware does not have. The backend only ever sets
+    // this after a real refusal, so a display that has never been asked keeps
+    // the button.
+    if (device.has_indicator === false) return "";
     const lit = this._identifying?.has(address.toUpperCase());
     const busy = this._identifyBusy === address.toUpperCase();
     const label = lit ? "Zhasnout kontrolku displeje" : "Rozsvítit kontrolku displeje";
@@ -623,6 +629,14 @@ export const devicesMixin = {
       + ` data-device-identify="${this._escape(address)}" data-device-identify-on="${lit ? "0" : "1"}"`
       + ` title="${label}" aria-label="${label}" aria-pressed="${lit ? "true" : "false"}" ${busy ? "disabled" : ""}>`
       + `<ha-icon icon="mdi:${busy ? "loading" : lit ? "led-on" : "led-outline"}" class="${busy ? "spin" : ""}"></ha-icon></button>`;
+  },
+
+  // Applied to the scan result the cards are drawn from, so the button goes
+  // away on this render rather than after the next scan.
+  _markDisplayWithoutIndicator(key) {
+    for (const device of this._result?.devices || []) {
+      if (String(device.address || "").toUpperCase() === key) device.has_indicator = false;
+    }
   },
 
   async _toggleDisplayIdentify(address, turnOn) {
@@ -638,6 +652,15 @@ export const devicesMixin = {
         address,
         on: !!turnOn,
       });
+      if (result?.supported === false) {
+        // The display was reached and declined. Repeating it costs half a
+        // minute and a little of its battery for the same answer, so the card
+        // drops the control instead of leaving it to be pressed again.
+        this._identifying.delete(key);
+        this._markDisplayWithoutIndicator(key);
+        this._error = "Tenhle displej kontrolku nemá – příkaz přijal, ale nerozsvítil se. Tlačítko u něj mizí.";
+        return;
+      }
       if (result?.ok === false) throw new Error(result.error || "Displej neodpověděl.");
       if (turnOn) this._identifying.add(key);
       else this._identifying.delete(key);

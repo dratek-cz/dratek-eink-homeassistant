@@ -380,6 +380,9 @@ async def websocket_scan(
     devices = list(devices_by_address.values())
     project_data = await _load_project_data(hass)
     device_names = project_data.get("device_names", {})
+    without_indicator = {
+        str(item).upper() for item in project_data.get("displays_without_indicator") or []
+    }
     gateway_preferences = project_data.get("device_gateway_preferences", {})
     for device in devices:
         device["paths"].sort(
@@ -481,6 +484,10 @@ async def websocket_scan(
                 }
         device["rssi"] = device["preferred_path"].get("rssi")
         device["display_name"] = str(device_names.get(address, ""))
+        # False only once a display has actually been asked and refused - see
+        # async_remember_display_without_indicator. Unknown displays stay True
+        # so the control is offered until the hardware says otherwise.
+        device["has_indicator"] = address not in without_indicator
 
     entry_id = integration_entry_id(hass)
     if entry_id:

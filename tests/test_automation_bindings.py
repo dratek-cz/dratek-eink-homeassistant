@@ -1638,10 +1638,16 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
             automation.async_load_gateways = original_load
             automation.async_scan_gateway = original_scan
 
+        # The endpoint travels with every route, including this fallback one:
+        # queue.gateway_resource locks on it, and a route built without it gets
+        # a different lock from a live-scanned route for the same gateway. This
+        # stub gateway has no host, so it comes back empty - which is the case
+        # where keying by id is the honest answer.
         self.assertEqual(
             [
                 {
                     "id": "office",
+                    "endpoint": "",
                     "name": "Gateway kancelář",
                     "rssi": -51.0,
                     "temporarily_unseen": True,

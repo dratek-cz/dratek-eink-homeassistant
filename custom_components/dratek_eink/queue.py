@@ -42,6 +42,14 @@ RETRYABLE_BLUETOOTH_ERROR_MARKERS = (
 TransferRunner = Callable[[Callable[[str], None]], Awaitable[dict[str, Any]]]
 GatewayRunnerFactory = Callable[[dict[str, Any]], TransferRunner]
 GATEWAY_FALLBACK_MIN_RSSI_DBM = -80.0
+# Operations that light the indicator rather than repaint the panel.
+#
+# The cooldown below exists to wait out a physical e-ink refresh, and these
+# never start one - so they neither have to sit through it nor arm it for the
+# job after them. A queue log showed "Waiting 6.0s for physical e-ink screen
+# refresh to complete" in front of an LED command that touches no pixels, and
+# every failed indicator attempt then made the next real write wait too.
+INDICATOR_OPERATIONS = frozenset({"rgb_led", "flash_identify"})
 
 
 def gateway_resource(route: dict[str, Any]) -> str:
@@ -412,7 +420,8 @@ class TransferQueue:
                     return await runner(log_line)
 
         normalized_address = job["address"].upper()
-        last_finish = self._last_finish_at.get(normalized_address)
+        repaints = job.get("operation") not in INDICATOR_OPERATIONS
+        last_finish = self._last_finish_at.get(normalized_address) if repaints else None
         if last_finish is not None:
             cooldown = 15.0 if int(job.get("sdk_type") or 0) in {75, 264, 267, 270} or int(job.get("payload_size") or 0) >= 20000 else 6.0
             elapsed = time.monotonic() - last_finish
@@ -485,7 +494,7 @@ class TransferQueue:
             # complete" above). A skipped job never wrote anything, so arming
             # it there made the next real transfer sit out six to fifteen
             # seconds for a refresh that never happened.
-            if job.get("status") != "skipped":
+            if job.get("status") != "skipped" and repaints:
                 self._last_finish_at[normalized_address] = time.monotonic()
             if job.get("status") == "failed" and job.get("error") != "Transfer cancelled.":
                 if gateway_side_failure:

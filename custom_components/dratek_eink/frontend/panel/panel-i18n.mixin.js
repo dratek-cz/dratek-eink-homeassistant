@@ -682,6 +682,7 @@ const EN_EXACT = new Map(Object.entries({
   "Posílám Wi-Fi konfiguraci bez zásahu do firmwaru.": "Sending the Wi-Fi settings without touching the firmware.",
   "Prohlížeč se zeptá, který port smí použít.": "The browser will ask which port it may use.",
   "Prohlížeč tady k USB nepustí": "The browser will not reach USB here",
+  "Tenhle displej kontrolku nemá – příkaz přijal, ale nerozsvítil se. Tlačítko u něj mizí.": "This display has no indicator - it accepted the command and nothing lit up. The button is removed for it.",
   "Množství balení": "Package size",
   "Měrná cena (nepovinné)": "Unit price (optional)",
   "Země původu": "Country of origin",

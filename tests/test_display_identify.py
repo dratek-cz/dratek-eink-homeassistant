@@ -45,11 +45,56 @@ class IdentifyCommandTests(unittest.TestCase):
         # so local-only would have missed the whole point.
         driver = self.sending[self.sending.index("async def _async_drive_indicator("):]
         driver = driver[: driver.index("\n@websocket_api")]
-        self.assertIn("return await _async_submit_routed_transfer(", driver)
+        self.assertIn("result = await _async_submit_routed_transfer(", driver)
         self.assertIn("local_runner=run_local,", driver)
         self.assertIn("gateway_runner_factory=gateway_runner_factory,", driver)
         self.assertIn("await transfer.set_rgb_led(address, mode, 10, red, green, blue)", driver)
         self.assertIn("await async_set_gateway_led(", driver)
+
+    def test_a_refusal_is_remembered_instead_of_retried(self) -> None:
+        """A display that has no indicator says so, and says it every time.
+
+        The 0x30 packet is accepted at the GATT layer and never echoed. Asking
+        again walks all three attempts of every route to arrive at the same
+        answer - about half a minute per display, and a little of its battery -
+        so the refusal is recorded the first time and the control disappears.
+        Confirmed against real hardware: four displays (SDK 46, 51 and 75, all
+        software 129) each returned display_did_not_acknowledge, and none of
+        them lit.
+        """
+        self.assertIn('INDICATOR_UNSUPPORTED = "display_has_no_indicator"', self.sending)
+        self.assertIn("def _indicator_refused(result: Any) -> bool:", self.sending)
+        # Reached-and-declined, not failed-to-reach: both routes report it in
+        # their own words, so both are recognised.
+        self.assertIn('"display_did_not_acknowledge",', self.sending)
+        self.assertIn('"timed out waiting for rgb led",', self.sending)
+        driver = self.sending[self.sending.index("async def _async_drive_indicator("):]
+        driver = driver[: driver.index("\n@websocket_api")]
+        # Asked once, then not asked again...
+        self.assertIn("if address.upper() in await async_displays_without_indicator(hass):", driver)
+        self.assertIn("await async_remember_display_without_indicator(hass, address)", driver)
+        # ...but a display that starts working clears its own record, because a
+        # gateway or a display can come back with newer firmware.
+        self.assertIn(
+            "await async_remember_display_without_indicator(hass, address, missing=False)",
+            driver,
+        )
+
+    def test_the_card_stops_offering_a_control_the_display_lacks(self) -> None:
+        panel = (
+            Path(__file__).resolve().parents[1]
+            / "custom_components" / "dratek_eink" / "frontend" / "panel"
+            / "panel-devices.mixin.js"
+        ).read_text(encoding="utf-8")
+        # Nothing, not a disabled button: a greyed-out light is still a control
+        # for a feature the hardware does not have.
+        self.assertIn("if (device.has_indicator === false) return \"\";", panel)
+        self.assertIn("this._markDisplayWithoutIndicator(key);", panel)
+        devices = (
+            Path(__file__).resolve().parents[1]
+            / "custom_components" / "dratek_eink" / "ws_devices.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('device["has_indicator"] = address not in without_indicator', devices)
 
     def test_the_light_is_switched_off_again_on_a_timer(self) -> None:
         # The vendor's own flash time is undocumented in unit and capped at 255,

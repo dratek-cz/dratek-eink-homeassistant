@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.358] - 2026-09-01
+
+### Opraveno
+- **Do jedné gatewaye se opravdu nezapisuje dvakrát naráz**: oprava z 0.1.356 byla neúplná. Trasy k displeji se skládají na třech místech – z živého skenu, ze záznamu nedávno viděných displejů, když sken nic nevrátil, a z vlastní paměti plánovače – a adresu, na které fronta řadí přenosy, dostávalo jen to první. Trasa bez adresy spadne na klíč podle `id` záznamu, takže tatáž gateway držela dva různé zámky podle toho, odkud trasa přišla. V logu je to vidět na rozeslání loga: osm zápisů během jedné vteřiny, část displejů směrovaná ze skenu a část z paměti, a tři z nich dorazily na ESP32, která už zapisovala – `gateway_busy` do vteřiny od vytvoření, tedy bez jediného čekání na zámek. Adresu teď nese každá trasa a test hlídá všechna tři místa naráz.
+- **Kontrolka displeje se neptá pořád dokola**: příkaz kontrolky projde do displeje po Bluetooth, ale displej ho nepotvrdí a nic se nerozsvítí – ověřeno na čtyřech kusech (SDK 46, 51 i 75, software 129), žádný z nich kontrolku nemá. Integrace to brala jako přechodné selhání a zkoušela to třikrát přes gateway a pak ještě třikrát přes Bluetooth Home Assistantu, tedy zhruba půl minuty a kus baterky na displej, aby došla ke stejné odpovědi. Odmítnutí se teď zapamatuje a tlačítko u toho displeje zmizí. Když displej později kontrolku ovládnout dokáže – třeba po aktualizaci firmwaru – záznam se sám zruší.
+- **Kontrolka nečeká na překreslení e-inku**: fronta drží po každém zápisu 6 až 15 sekund, než se displeje dotkne znovu, aby stihl fyzicky překreslit obraz. Příkaz kontrolky ale žádný pixel nemění – přesto si tu pauzu odseděl a ještě ji nastavil dalšímu zápisu v řadě. V logu to je jako „Waiting 6.0s for physical e-ink screen refresh to complete" před rozsvícením kontrolky.
+
 ## [0.1.357] - 2026-09-01
 
 ### Opraveno

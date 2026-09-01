@@ -2298,6 +2298,14 @@ class EntityAutoUpdateManager:
                                 or gateway.get("host")
                                 or "DRATEK eInk gateway"
                             ),
+                            # Every builder in this function has to stamp this.
+                            # A route without it falls back to queue.py's
+                            # id-keyed resource, so the same gateway ends up
+                            # holding two locks depending on which builder
+                            # produced the route - and a broadcast that fires
+                            # eight sends in one second gets some routes from
+                            # the live scan and some from here.
+                            "endpoint": gateway_send_endpoint(gateway),
                             "rssi": rssi,
                             "temporarily_unseen": True,
                         }
@@ -2322,6 +2330,10 @@ class EntityAutoUpdateManager:
                         continue
                     routes.setdefault(normalized_addr, []).append({
                         **prev_route,
+                        # Repaired rather than trusted: a route cached by an
+                        # older build carries no endpoint, and the gateway may
+                        # since have moved anyway.
+                        "endpoint": gateway_send_endpoint(gateway),
                         "temporarily_unseen": True,
                     })
                     live_ids.add(gateway_id)

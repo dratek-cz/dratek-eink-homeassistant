@@ -27,6 +27,8 @@ from .ws_shared import (
     _install_entity_automation,
     _load_project_data,
     _request_entity_automation_refresh,
+    async_displays_without_indicator,
+    async_remember_display_without_indicator,
 )
 
 
@@ -711,6 +713,24 @@ IDENTIFY_MINUTES = 3
 IDENTIFY_TIMERS_KEY = "identify_timers"
 # The panel's own teal, which is what the button that starts this is coloured.
 IDENTIFY_COLOR = (0, 162, 165)
+# What a display says when it has no indicator. The gateway returns this
+# verbatim; the local Bluetooth path times out waiting for the same echo.
+INDICATOR_UNSUPPORTED = "display_has_no_indicator"
+_INDICATOR_REFUSAL_MARKERS = (
+    "display_did_not_acknowledge",
+    "did not acknowledge the indicator",
+    "timed out waiting for rgb led",
+)
+
+
+def _indicator_refused(result: Any) -> bool:
+    """True when the display was reached and declined, rather than missed."""
+    if not isinstance(result, dict) or result.get("ok") is not False:
+        return False
+    haystack = " ".join(
+        [str(result.get("error") or ""), *[str(line) for line in result.get("log") or []]]
+    ).lower()
+    return any(marker in haystack for marker in _INDICATOR_REFUSAL_MARKERS)
 
 
 def _identify_timers(hass: HomeAssistant) -> dict[str, Any]:
@@ -761,7 +781,20 @@ async def _async_drive_indicator(
 
         return run_gateway
 
-    return await _async_submit_routed_transfer(
+    if address.upper() in await async_displays_without_indicator(hass):
+        log(
+            "This display has no indicator: it accepted the command at the "
+            "Bluetooth layer once before and never acted on it."
+        )
+        return {
+            "ok": False,
+            "address": address,
+            "error": INDICATOR_UNSUPPORTED,
+            "supported": False,
+            "log": [],
+        }
+
+    result = await _async_submit_routed_transfer(
         hass,
         address=address,
         operation="rgb_led",
@@ -769,6 +802,22 @@ async def _async_drive_indicator(
         gateway_runner_factory=gateway_runner_factory,
         wait_for_completion=True,
     )
+    # A refusal is an answer, not a failure to reach the display.
+    #
+    # The packet is written to the control characteristic and the display never
+    # echoes it. Every route in turn then tries three times and reports the
+    # same thing, which costs about half a minute per display and a little of
+    # its battery to rediscover something that will not change. Recorded once.
+    if _indicator_refused(result):
+        await async_remember_display_without_indicator(hass, address)
+        result = dict(result or {})
+        result["supported"] = False
+        result["error"] = INDICATOR_UNSUPPORTED
+    elif result and result.get("ok") is not False:
+        # It worked, so any remembered "no" is out of date - a display can come
+        # back with newer firmware.
+        await async_remember_display_without_indicator(hass, address, missing=False)
+    return result
 
 
 @websocket_api.require_admin

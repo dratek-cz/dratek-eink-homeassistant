@@ -199,5 +199,32 @@ async def _load_project_data(hass: HomeAssistant) -> dict[str, Any]:
     return normalized
 
 
+async def async_displays_without_indicator(hass: HomeAssistant) -> set[str]:
+    """Addresses known to have no indicator to light."""
+    data = await _load_project_data(hass)
+    return {str(a).upper() for a in data.get("displays_without_indicator") or []}
+
+
+async def async_remember_display_without_indicator(
+    hass: HomeAssistant, address: str, *, missing: bool = True
+) -> None:
+    """Record - or clear - that a display refuses the indicator command.
+
+    Clearing matters as much as recording: a display can come back with newer
+    firmware, and a user who reflashes one should not have to know that Home
+    Assistant is still holding a "no" from before.
+    """
+    normalized = str(address or "").strip().upper()
+    if not normalized:
+        return
+    data = await _load_project_data(hass)
+    known = {str(a).upper() for a in data.get("displays_without_indicator") or []}
+    updated = known | {normalized} if missing else known - {normalized}
+    if updated == known:
+        return
+    data["displays_without_indicator"] = sorted(updated)
+    await _project_store(hass).async_save(data)
+
+
 def _normalize_address(address: str) -> str:
     return str(address or "").strip().upper()

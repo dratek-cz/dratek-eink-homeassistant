@@ -135,6 +135,20 @@ def normalize_project_data(value: Any) -> dict[str, Any]:
         and isinstance(gateway_id, (str, int, float))
         and str(gateway_id).strip()
     } if isinstance(gateway_preferences, dict) else {}
+    # Displays that answered the indicator command with a refusal.
+    #
+    # Not a cache of a transient failure: a display that receives the 0x30
+    # packet at the GATT layer and never echoes it does not have an indicator
+    # to light, and asking again produces the same answer three attempts and
+    # two routes later. Remembered so the panel can stop offering a button that
+    # cannot do anything, and so a broadcast does not spend half a minute per
+    # display finding that out again.
+    without_indicator = source.get("displays_without_indicator")
+    normalized["displays_without_indicator"] = sorted({
+        str(address).strip().upper()
+        for address in without_indicator
+        if str(address).strip()
+    }) if isinstance(without_indicator, (list, tuple, set)) else []
     normalized["custom_elements"] = normalize_custom_elements(
         source.get("custom_elements")
     )
