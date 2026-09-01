@@ -413,11 +413,26 @@ const TEMPLATE_BLOCK_KINDS = {
       { path: "pricetag.currency", kind: "text", label: "Měna" },
       { path: "pricetag.unit", kind: "text", label: "Jednotka (např. / kg)" },
       { path: "pricetag.was", kind: "text", label: "Původní cena" },
-      { path: "pricetag.sale", kind: "bool", label: "Akční (červený podklad)" },
+      { path: "pricetag.sale", kind: "bool", label: "Akční (červená cena a sleva)" },
+      { path: "pricetag.discount", kind: "text", label: "Sleva (prázdné = dopočítá se)" },
       {
         path: "pricetag.accent", kind: "select", label: "Zvýraznění rámečku",
         options: [["", "Bez rámečku"], ["yellow", "Žlutý rámeček"]],
       },
+    ],
+  },
+
+  barcode: {
+    label: "Čárový kód",
+    hint: "Skutečný EAN-13, EAN-8 nebo Code 128",
+    icon: "barcode",
+    w: 60, h: 16,
+    // `text` is stated rather than left to the renderer's default, so the
+    // toggle in the inspector starts out matching what the block draws.
+    row: () => ({ barcode: { value: "8594001234561", text: true } }),
+    fields: [
+      { path: "barcode.value", kind: "text", label: "Kód zboží / EAN" },
+      { path: "barcode.text", kind: "bool", label: "Vypsat číslice pod kódem" },
     ],
   },
 
@@ -467,7 +482,7 @@ const TEMPLATE_BLOCK_GROUPS = [
     kinds: ["list", "strip", "grid", "split", "checklist", "steps", "board", "datebox", "splitDates"],
   },
   { id: "meters", title: "Ukazatele a grafy", kinds: ["dial", "ring", "meters", "bars", "spark"] },
-  { id: "layout", title: "Rozvržení a speciální", kinds: ["duo", "pricetag", "footer"] },
+  { id: "layout", title: "Rozvržení a speciální", kinds: ["duo", "pricetag", "barcode", "footer"] },
 ];
 
 // Detection order must match _renderTemplateBlock's own dispatch, or a row that
@@ -475,7 +490,7 @@ const TEMPLATE_BLOCK_GROUPS = [
 const BLOCK_DETECTION_ORDER = [
   "icon", "rule", "list", "stat", "band", "bars", "meters", "ring", "dial",
   "grid", "steps", "checklist", "strip", "split", "duo", "splitDates", "spark",
-  "datebox", "board", "pricetag", "footer", "text",
+  "datebox", "board", "barcode", "pricetag", "footer", "text",
 ];
 
 export const templateBlocksMixin = {

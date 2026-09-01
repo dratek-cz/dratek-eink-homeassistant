@@ -22,7 +22,7 @@ import { templateComponentsMixin } from "./panel/panel-template-components.mixin
 // release (PRIVATE-NOTES.md).
 import { brandLogoMixin } from "./panel/panel-brand-logo.mixin.js?v=logo-flat-6";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.355";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.356";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {

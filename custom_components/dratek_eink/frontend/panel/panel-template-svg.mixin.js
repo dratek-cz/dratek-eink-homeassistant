@@ -16,7 +16,7 @@
 // are identical by construction.
 
 import qrcode from "../qrcode-generator.js";
-import { DISPLAY_TEMPLATES } from "./templates/index.js?v=release-0.1.355";
+import { DISPLAY_TEMPLATES } from "./templates/index.js?v=release-0.1.356";
 import { TRANSIT_KIND_ICONS } from "./templates/shared.js?v=transit-two-line-1";
 
 const RED = "#e31b1b";
@@ -1317,6 +1317,7 @@ export const templateSvgMixin = {
     if (row.datebox) return this._blockDatebox(row, box);
     if (row.board) return this._blockBoard(row, box);
     if (row.qr) return this._blockQr(row, box);
+    if (row.barcode) return this._blockBarcode(row, box);
     if (row.radarMap) return this._blockRadarMap(row, box);
     if (row.pricetag) return this._blockPriceTag(row, box);
     if (row.brandLogo) return this._blockBrandLogo(row, box);
@@ -2243,51 +2244,237 @@ if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, scaleY, sca
 
   // The price itself, and what a promotion does to it.
   //
-  // On promotion the old price is struck through above the new one and the whole
-  // block reverses out of a filled panel, so a shopper reads "this is cheaper than
-  // it was" from across the aisle without reading either number. That is the entire
-  // job of a shelf label, and it is why the promotion is a switch on the template
-  // rather than yet another value someone has to bind an entity to.
+  // On promotion the former price is struck through above the new one, the new
+  // one turns red, and a small red chip states the discount outright, so a
+  // shopper reads "this is cheaper than it was, by about a quarter" from across
+  // the aisle without reading either number. That is the entire job of a shelf
+  // label, and it is why the promotion is a switch on the template rather than
+  // yet another value someone has to bind an entity to.
   _blockPriceTag(row, box) {
     const tag = row.pricetag;
     const sale = !!tag.sale;
     const parts = [];
+    // The tag stays on white paper whether or not it is on promotion.
+    //
+    // It used to flood the whole block with red and knock the type out in
+    // white. On a panel that thresholds every pixel to one of three pigments
+    // that is the worst available use of the third ink: the largest possible
+    // red area, the price rendered in the one "colour" the panel cannot
+    // actually print (it is bare paper showing through), and a full-area red
+    // pass on every refresh. Red now marks only what changed - the price
+    // itself and a small discount chip - and everything structural stays black
+    // on white, which is what a shopper can still read from three metres away.
     if (!sale && tag.accent === "yellow" && this._displaySupportsYellow?.()) {
       parts.push(`<rect x="${(box.x + 3).toFixed(2)}" y="${(box.y + 3).toFixed(2)}" width="${Math.max(1, box.w - 6).toFixed(2)}" height="${Math.max(1, box.h - 6).toFixed(2)}" fill="none" stroke="${YELLOW}" stroke-width="5"></rect>`);
       parts.push(`<rect x="${(box.x + 1).toFixed(2)}" y="${(box.y + 1).toFixed(2)}" width="${Math.max(1, box.w - 2).toFixed(2)}" height="${Math.max(1, box.h - 2).toFixed(2)}" fill="none" stroke="${BLACK}" stroke-width="1"></rect>`);
     }
-    if (sale) {
-      parts.push(`<rect x="${box.x.toFixed(2)}" y="${box.y.toFixed(2)}" width="${box.w.toFixed(2)}" height="${box.h.toFixed(2)}" fill="${RED}"></rect>`);
+    const priceInk = sale ? RED : BLACK;
+    const wasText = tag.was ? String(tag.was) : "";
+    const discount = this._priceTagDiscount(tag);
+    const unitText = this._priceTagUnitLine(tag);
+    const noteText = tag.note ? String(tag.note) : "";
+    const clubText = tag.club ? String(tag.club) : "";
+    const roomy = box.h >= 70 && box.w >= 180;
+
+    // The chip is the one place white-on-red earns its keep: a small filled
+    // shape with two or three characters in it, read as a symbol rather than
+    // as type, and the only element that has to win against a price set four
+    // times its size. It is laid out first because everything else has to keep
+    // out of its way.
+    let chip = null;
+    if (sale && discount) {
+      const chipH = Math.max(11, Math.min(box.h * 0.22, box.w * 0.16));
+      const chipTextSize = chipH * 0.56;
+      const chipW = Math.min(box.w * 0.34, this._svgTextWidth(discount, chipTextSize, true) + chipH * 0.7);
+      chip = {
+        x: box.x + box.w - chipW - box.w * 0.03,
+        y: box.y + box.h * 0.04,
+        w: chipW,
+        h: chipH,
+        textSize: chipTextSize,
+      };
     }
-    const ink = sale ? "#ffffff" : BLACK;
-    const cx = box.x + box.w / 2;
-    let top = box.y + box.h * 0.06;
-    if (sale && tag.was) {
-      const wasSize = Math.max(6, Math.min(box.h * 0.17, box.w * 0.13));
+
+    // Everything below the price is reserved before the price is sized, so the
+    // price grows into whatever is genuinely left rather than being laid over
+    // the lines that come after it. Each line only exists if it was filled in.
+    const unitSize = unitText ? Math.max(8, Math.min(box.h * 0.13, box.w * 0.055)) : 0;
+    const noteSize = noteText ? Math.max(6.5, Math.min(box.h * 0.085, box.w * 0.032)) : 0;
+    const footHeight = (unitText ? unitSize * 1.5 : 0) + (noteText ? noteSize * 1.5 : 0);
+
+    let top = box.y + box.h * 0.05;
+    const wasSize = wasText ? Math.max(8, Math.min(box.h * 0.16, box.w * 0.1)) : 0;
+    if (wasText) {
+      // Left-aligned rather than centred: struck over centred type it reads as
+      // one number with a line through it, which is precisely the reading a
+      // shelf label must not invite. Sitting above and to the left of a much
+      // larger price it reads as "was", which is the whole point.
+      const wasX = box.x + box.w * 0.06;
       const wasY = top + wasSize * 0.6;
-      parts.push(this._svgText(tag.was, cx, wasY, wasSize, { color: ink, maxWidth: box.w * 0.7 }));
-      // The strike is what makes it a former price rather than a second one.
-      const struck = Math.min(this._svgTextWidth(tag.was, wasSize, false), box.w * 0.7);
-      parts.push(this._svgHairline(cx - struck / 2, wasY, struck, Math.max(1, wasSize * 0.09), ink));
-      top = wasY + wasSize * 0.55;
+      const wasRoom = chip ? chip.x - wasX - box.w * 0.02 : box.w * 0.88;
+      const wasWidth = Math.min(this._svgTextWidth(wasText, wasSize, false), wasRoom);
+      parts.push(this._svgText(wasText, wasX, wasY, wasSize, { anchor: "start", color: BLACK, maxWidth: wasRoom }));
+      parts.push(this._svgHairline(wasX, wasY, wasWidth, Math.max(1, wasSize * 0.1), BLACK));
+      top = wasY + wasSize * 0.62;
     }
-    const priceHeight = box.y + box.h * (tag.unit ? 0.82 : 0.94) - top;
-    const unitRatio = 0.36;
-    const span = (size) => this._svgTextWidth(tag.price, size, true)
-      + (tag.currency ? this._svgTextWidth(` ${tag.currency}`, size * unitRatio, true) : 0);
-    let size = Math.max(9, priceHeight * 0.86);
-    if (span(size) > box.w * 0.94) size = Math.max(8, (size * box.w * 0.94) / span(size));
-    const left = cx - span(size) / 2;
-    const baseline = top + priceHeight * 0.55;
-    parts.push(this._svgText(tag.price, left, baseline, size, { anchor: "start", bold: true, color: ink }));
-    if (tag.currency) {
-      parts.push(this._svgText(tag.currency, left + this._svgTextWidth(tag.price, size, true) + size * unitRatio * 0.3,
-        baseline + size * 0.24, size * unitRatio, { anchor: "start", bold: true, color: ink }));
+
+    // A loyalty price is a second price, not a note about the first one, so it
+    // gets a bordered box of its own beside the main price rather than another
+    // line of small type nobody reads. Only where there is width for both.
+    let club = null;
+    if (clubText && roomy && box.w >= 240) {
+      const clubW = Math.min(box.w * 0.3, Math.max(74, box.w * 0.26));
+      const clubH = Math.min(box.h * 0.38, clubW * 0.52);
+      club = {
+        x: box.x + box.w - clubW - box.w * 0.03,
+        y: box.y + box.h - footHeight - clubH - box.h * 0.05,
+        w: clubW,
+        h: clubH,
+      };
     }
-    if (tag.unit) {
-      parts.push(this._svgText(tag.unit, cx, box.y + box.h * 0.91, Math.max(5, Math.min(box.h * 0.13, box.w * 0.1)), { color: ink, maxWidth: box.w * 0.92 }));
+
+    const priceBottom = box.y + box.h - footHeight - box.h * 0.03;
+    const priceHeight = Math.max(10, priceBottom - top);
+    const currencyRatio = 0.34;
+    const priceText = String(tag.price ?? "");
+    const currency = tag.currency ? String(tag.currency) : "";
+    // The price and its currency are one line on one baseline. They used to be
+    // set on two baselines a quarter of the price size apart, which is why
+    // "Kc" hung below "149,-" at every size and read as a rendering fault.
+    const span = (size) => this._svgTextWidth(priceText, size, true)
+      + (currency ? this._svgTextWidth(currency, size * currencyRatio, true) + size * currencyRatio * 0.45 : 0);
+    // The chip and the loyalty box only steal width from the price on a tag
+    // wide enough for them to sit beside it; on a narrow portrait tag they are
+    // above it and the full width is the price's to use.
+    const rightEdge = club ? club.x : (chip && box.w >= box.h * 0.9 ? chip.x : box.x + box.w);
+    const sideBySide = rightEdge < box.x + box.w;
+    const priceRoom = (sideBySide ? rightEdge - box.x - box.w * 0.04 : box.w) * 0.94;
+    let size = Math.max(10, priceHeight * 0.9);
+    if (span(size) > priceRoom) size = Math.max(9, (size * priceRoom) / span(size));
+    const priceCx = sideBySide ? box.x + (rightEdge - box.x) / 2 : box.x + box.w / 2;
+    // On a tall, narrow tag the price is limited by width, not by height: it
+    // came out a fraction of the size the block had room for, centred in a
+    // band of empty paper, because the currency was taking a fifth of the one
+    // dimension that was scarce. Moving "Kc" onto its own line under the
+    // number buys the number that fifth back, which is worth roughly a third
+    // more cap height on a portrait shelf label - the difference between a
+    // price read from the aisle and one read from arm's length.
+    const priceOnlyEms = this._svgTextWidth(priceText, 1, true) || 1;
+    const stackedSize = Math.min(priceHeight * 0.6, (priceRoom * 0.98) / priceOnlyEms);
+    const stackCurrency = !!currency && stackedSize > size * 1.15;
+    if (stackCurrency) {
+      const currencySize = Math.max(9, stackedSize * currencyRatio * 1.15);
+      const groupHeight = stackedSize + currencySize * 1.15;
+      const groupTop = top + Math.max(0, (priceHeight - groupHeight) / 2);
+      parts.push(this._svgText(priceText, priceCx, groupTop + stackedSize * 0.5, stackedSize, { bold: true, color: priceInk }));
+      parts.push(this._svgText(currency, priceCx, groupTop + stackedSize + currencySize * 0.65, currencySize, { bold: true, color: priceInk }));
+    } else {
+      const left = priceCx - span(size) / 2;
+      const baseline = top + priceHeight * 0.5;
+      parts.push(this._svgText(priceText, left, baseline, size, { anchor: "start", bold: true, color: priceInk }));
+      if (currency) {
+        parts.push(this._svgText(currency, left + this._svgTextWidth(priceText, size, true) + size * currencyRatio * 0.45,
+          baseline, size * currencyRatio, { anchor: "start", bold: true, color: priceInk }));
+      }
+    }
+    if (club) {
+      parts.push(`<rect x="${club.x.toFixed(2)}" y="${club.y.toFixed(2)}" width="${club.w.toFixed(2)}" height="${club.h.toFixed(2)}" rx="${(club.h * 0.16).toFixed(2)}" fill="none" stroke="${BLACK}" stroke-width="1.5"></rect>`);
+      parts.push(this._svgText("S KARTOU", club.x + club.w / 2, club.y + club.h * 0.27, Math.max(7, club.h * 0.22), {
+        bold: true, color: BLACK, maxWidth: club.w * 0.86, minSize: 6.5,
+      }));
+      parts.push(this._svgText(clubText, club.x + club.w / 2, club.y + club.h * 0.68, Math.max(10, club.h * 0.4), {
+        bold: true, color: BLACK, maxWidth: club.w * 0.9,
+      }));
+    }
+    // The unit price is the number the law is actually about and the one a
+    // shopper compares two brands with, so it is set as real type under the
+    // price rather than as fine print beside the barcode.
+    let footTop = box.y + box.h - footHeight;
+    if (unitText) {
+      parts.push(this._svgText(unitText, box.x + box.w / 2, footTop + unitSize * 0.75, unitSize, {
+        color: BLACK, bold: true, maxWidth: box.w * 0.94, minSize: 7.5,
+      }));
+      footTop += unitSize * 1.5;
+    }
+    if (noteText) {
+      parts.push(this._svgText(noteText, box.x + box.w / 2, footTop + noteSize * 0.75, noteSize, {
+        color: BLACK, maxWidth: box.w * 0.96, minSize: 6.5,
+      }));
+    }
+    if (chip) {
+      const radius = (chip.h * 0.28).toFixed(2);
+      parts.push(`<rect x="${chip.x.toFixed(2)}" y="${chip.y.toFixed(2)}" width="${chip.w.toFixed(2)}" height="${chip.h.toFixed(2)}" rx="${radius}" ry="${radius}" fill="${RED}"></rect>`);
+      parts.push(this._svgText(discount, chip.x + chip.w / 2, chip.y + chip.h * 0.52, chip.textSize, {
+        bold: true, color: "#ffffff", minSize: 8, maxWidth: chip.w * 0.86,
+      }));
     }
     return parts.join("");
+  },
+
+  // "1 kg · 149,90 Kc/kg" - the package size and what it costs per unit.
+  //
+  // The unit price is what a shelf label exists to let you compare, and on a
+  // Czech shop floor it is not optional decoration: goods sold by weight,
+  // volume, length or count have to carry it. Working it out by hand for every
+  // tag is exactly the sort of arithmetic that gets copied wrong, so it is
+  // derived from the price and the package size and only taken from the field
+  // when someone states it explicitly.
+  _priceTagUnitLine(tag) {
+    const stated = String(tag.unit ?? "").trim();
+    // price.js already joins amount and a stated unit price; a line that
+    // carries its own currency has nothing left to work out.
+    if (stated.includes("/")) return stated;
+    const derived = this._priceTagUnitPrice(tag.price, tag.amount ?? stated, tag.currency);
+    if (!derived) return stated;
+    return stated ? `${stated} · ${derived}` : derived;
+  },
+
+  _priceTagUnitPrice(price, amount, currency) {
+    const toNumber = (value) => {
+      const match = String(value ?? "").replace(/\s| /g, "").replace(",", ".").match(/\d+(\.\d+)?/);
+      return match ? Number(match[0]) : NaN;
+    };
+    const value = toNumber(price);
+    const quantity = toNumber(amount);
+    if (!Number.isFinite(value) || !Number.isFinite(quantity) || value <= 0 || quantity <= 0) return "";
+    // Grams and millilitres are quoted per kilo and per litre, which is both
+    // the convention and the legal reference quantity.
+    const unit = String(amount ?? "").toLowerCase();
+    const scale = /(\d|\s)(g|gram)\b/.test(unit) ? [1000, "kg"]
+      : /(\d|\s)(ml)\b/.test(unit) ? [1000, "l"]
+        : /\bkg\b/.test(unit) ? [1, "kg"]
+          : /\b(l|litr)\b/.test(unit) ? [1, "l"]
+            : /\b(ks|kus)\b/.test(unit) ? [1, "ks"]
+              : /\bm\b/.test(unit) ? [1, "m"]
+                : null;
+    if (!scale) return "";
+    const perUnit = (value / quantity) * scale[0];
+    if (!Number.isFinite(perUnit) || perUnit <= 0 || perUnit >= 1000000) return "";
+    // Haléře stay in: rounding 379,80 Kc/kg to 380 hides part of the very
+    // number this line exists to let a shopper compare. Only past a thousand,
+    // where the decimals are noise and the width is not, do they go.
+    const rounded = perUnit >= 1000 ? perUnit.toFixed(0) : perUnit.toFixed(2);
+    return `${rounded.replace(".", ",")} ${currency || "Kč"}/${scale[1]}`;
+  },
+
+  // "-25 %" from the two prices the tag already carries, or nothing.
+  //
+  // Both numbers arrive as display strings a person typed ("199,- Kc",
+  // "1 490 Kc"), so the digits are dug out rather than parsed strictly. A
+  // discount that does not come out as a sensible whole percentage - the old
+  // price missing, the new one higher, a rounding to zero - simply omits the
+  // chip rather than printing a wrong or silly one.
+  _priceTagDiscount(tag) {
+    if (tag.discount != null && tag.discount !== "") return String(tag.discount);
+    const toNumber = (value) => {
+      const digits = String(value ?? "").replace(/\s| /g, "").replace(",", ".").match(/-?\d+(\.\d+)?/);
+      return digits ? Number(digits[0]) : NaN;
+    };
+    const was = toNumber(tag.was);
+    const now = toNumber(tag.price);
+    if (!Number.isFinite(was) || !Number.isFinite(now) || was <= 0 || now <= 0 || now >= was) return "";
+    const percent = Math.round(((was - now) / was) * 100);
+    return percent >= 1 && percent <= 99 ? `-${percent} %` : "";
   },
 
   // A real, scannable code.
@@ -2335,6 +2522,169 @@ if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, scaleY, sca
     return `<rect x="${frameX.toFixed(0)}" y="${frameY.toFixed(0)}" width="${frameSize.toFixed(0)}"`
       + ` height="${(drawn + margin * 2).toFixed(0)}" fill="#ffffff"></rect>`
       + `<path d="${path}" fill="${BLACK}" shape-rendering="crispEdges"></path>`;
+  },
+
+  // A real, scannable barcode - the thing a shelf label is actually for.
+  //
+  // The price tag used to print its EAN as a line of 8 px digits in the footer,
+  // which no scanner can read and no person needs. Encoded properly it is the
+  // one element on the tag with a hard correctness bar: modules land on whole
+  // device pixels (a bar on a half pixel comes out grey, and the three-colour
+  // quantiser then pushes that grey to whichever of black or white it is
+  // nearer, which is how a code stops scanning), the quiet zone is real, and
+  // the bars are always pure black - never the red accent, which the red LED
+  // in a scanner reads as paper.
+  //
+  // EAN-13/EAN-8 for retail codes, Code 128-B for anything with letters in it,
+  // so an internal SKU works as well as a shop's own EAN.
+  _barcodeModules(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+    const digits = raw.replace(/\s/g, "");
+    if (/^\d{12,13}$/.test(digits)) return this._barcodeEan(digits, 13);
+    if (/^\d{7,8}$/.test(digits)) return this._barcodeEan(digits, 8);
+    return this._barcodeCode128(raw);
+  },
+
+  _barcodeEanCheckDigit(body, length) {
+    // EAN-13 weights the digits 1,3,1,3... from the left; EAN-8 starts at 3.
+    let sum = 0;
+    for (let i = 0; i < body.length; i++) {
+      const weight = length === 13 ? (i % 2 === 0 ? 1 : 3) : (i % 2 === 0 ? 3 : 1);
+      sum += Number(body[i]) * weight;
+    }
+    return (10 - (sum % 10)) % 10;
+  },
+
+  _barcodeEan(digits, length) {
+    const body = digits.slice(0, length - 1);
+    if (body.length !== length - 1) return null;
+    // A supplied check digit that does not add up is recomputed rather than
+    // trusted: a wrong last digit prints a symbol that scans to a product that
+    // does not exist, which is worse than a tag with no code on it at all.
+    const code = body + String(this._barcodeEanCheckDigit(body, length));
+    const L = ["0001101", "0011001", "0010011", "0111101", "0100011", "0110001", "0101111", "0111011", "0110111", "0001011"];
+    const G = ["0100111", "0110011", "0011011", "0100001", "0011101", "0111001", "0000101", "0010001", "0001001", "0010111"];
+    const R = ["1110010", "1100110", "1101100", "1000010", "1011100", "1001110", "1010000", "1000100", "1001000", "1110100"];
+    const PARITY = ["LLLLLL", "LLGLGG", "LLGGLG", "LLGGGL", "LGLLGG", "LGGLLG", "LGGGLL", "LGLGLG", "LGLGGL", "LGGLGL"];
+    let bits = "101";
+    if (length === 13) {
+      const parity = PARITY[Number(code[0])];
+      for (let i = 1; i <= 6; i++) bits += (parity[i - 1] === "L" ? L : G)[Number(code[i])];
+      bits += "01010";
+      for (let i = 7; i <= 12; i++) bits += R[Number(code[i])];
+    } else {
+      for (let i = 0; i < 4; i++) bits += L[Number(code[i])];
+      bits += "01010";
+      for (let i = 4; i < 8; i++) bits += R[Number(code[i])];
+    }
+    bits += "101";
+    // Where the guard bars sit, so the caller can run them past the digits the
+    // way a printed EAN does.
+    const guards = length === 13
+      ? [[0, 3], [45, 50], [92, 95]]
+      : [[0, 3], [31, 36], [64, 67]];
+    return { bits, text: code, guards, kind: "ean" + length };
+  },
+
+  _barcodeCode128(value) {
+    const PATTERNS = [
+      "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
+      "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
+      "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211",
+      "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313",
+      "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331",
+      "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111",
+      "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214",
+      "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111",
+      "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141",
+      "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141",
+      "114131", "311141", "411131", "211412", "211214", "211232", "2331112",
+    ];
+    // Code set B covers ASCII 32-126, which is every character a product code
+    // realistically carries. Anything outside it is dropped rather than
+    // encoded wrong.
+    const chars = [...String(value)].filter((character) => {
+      const code = character.charCodeAt(0);
+      return code >= 32 && code <= 126;
+    });
+    if (!chars.length) return null;
+    const values = chars.map((character) => character.charCodeAt(0) - 32);
+    const START_B = 104;
+    let checksum = START_B;
+    values.forEach((code, index) => { checksum += code * (index + 1); });
+    const sequence = [START_B, ...values, checksum % 103, 106];
+    let bits = "";
+    for (const code of sequence) {
+      const widths = PATTERNS[code];
+      // Widths alternate bar, space, bar, ... starting with a bar.
+      for (let i = 0; i < widths.length; i++) bits += (i % 2 === 0 ? "1" : "0").repeat(Number(widths[i]));
+    }
+    return { bits, text: chars.join(""), guards: [], kind: "code128" };
+  },
+
+  _blockBarcode(row, box) {
+    const spec = row.barcode || {};
+    const encoded = this._barcodeModules(spec.value);
+    if (!encoded) return "";
+    const showText = spec.text !== false;
+    const quiet = encoded.kind === "code128" ? 10 : 9;
+    const total = encoded.bits.length + quiet * 2;
+    // Whole device pixels per module or nothing: a fractional module is the one
+    // way this block can produce something that looks right on screen and then
+    // does not scan on paper.
+    const module = Math.floor(box.w / total);
+    // One device pixel per module is below the narrowest bar any scanner is
+    // specified to read (on these panels a pixel is around 0.22 mm, against an
+    // EAN minimum of 0.26 mm). A symbol drawn at that width looks right and
+    // cannot be scanned, which is worse than no symbol at all - so the row
+    // prints the digits instead, big enough for a person to read and key in.
+    // Decided here rather than by the caller: the module count depends on which
+    // symbology the value resolves to, and that is this block's own knowledge.
+    if (module < 2) {
+      const size = Math.max(8, Math.min(box.h * 0.55, box.w * 0.075));
+      return this._svgText(encoded.text, box.x + box.w / 2, box.y + box.h * 0.5, size, {
+        color: BLACK, bold: true, minSize: 7, maxWidth: box.w * 0.94,
+      });
+    }
+    const drawn = module * encoded.bits.length;
+    const x = Math.round(box.x + (box.w - drawn) / 2);
+    const textSize = showText ? Math.max(7, Math.min(box.h * 0.26, module * 7)) : 0;
+    const textGap = showText ? textSize * 0.3 : 0;
+    const barsTop = Math.round(box.y);
+    const guardDrop = encoded.guards.length && showText ? Math.round(textSize * 0.5) : 0;
+    const barsHeight = Math.max(6, Math.round(box.h - textSize - textGap - guardDrop));
+    const inGuard = (index) => encoded.guards.some((span) => index >= span[0] && index < span[1]);
+    let path = "";
+    let index = 0;
+    while (index < encoded.bits.length) {
+      if (encoded.bits[index] !== "1") { index += 1; continue; }
+      let end = index;
+      while (end < encoded.bits.length && encoded.bits[end] === "1" && inGuard(end) === inGuard(index)) end += 1;
+      const barX = x + index * module;
+      const barW = (end - index) * module;
+      const height = barsHeight + (inGuard(index) ? guardDrop : 0);
+      path += "M" + barX + " " + barsTop + "h" + barW + "v" + height + "h" + (-barW) + "z";
+      index = end;
+    }
+    const parts = [
+      '<rect x="' + (x - quiet * module).toFixed(0) + '" y="' + barsTop.toFixed(0) + '"'
+      + ' width="' + (drawn + quiet * module * 2).toFixed(0) + '" height="'
+      + (barsHeight + guardDrop + textGap + textSize).toFixed(0) + '" fill="#ffffff"></rect>',
+      '<path d="' + path + '" fill="' + BLACK + '" shape-rendering="crispEdges"></path>',
+    ];
+    if (showText) {
+      const baseline = barsTop + barsHeight + guardDrop + textGap + textSize * 0.5;
+      const label = encoded.kind === "ean13"
+        ? encoded.text.slice(0, 1) + "  " + encoded.text.slice(1, 7) + "  " + encoded.text.slice(7)
+        : encoded.kind === "ean8"
+          ? encoded.text.slice(0, 4) + "  " + encoded.text.slice(4)
+          : encoded.text;
+      parts.push(this._svgText(label, x + drawn / 2, baseline, textSize, {
+        color: BLACK, bold: false, minSize: 7, maxWidth: drawn + quiet * module * 1.6,
+      }));
+    }
+    return parts.join("");
   },
 
   // ------------------------------------------------------------- branding ---
@@ -2731,7 +3081,12 @@ if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, scaleY, sca
       // around the modules - a coloured plate behind that zone is the only
       // place on the panel where this accent takes something away instead
       // of adding to it.
-      for (const key of ["ring", "dial", "spark", "pricetag"]) {
+      // Deliberately not the price tag. A yellow frame round the price was the
+      // only yellow this theme could find on a cenovka, and on a shelf label it
+      // reads as a stray highlighter box rather than as structure - the tag's
+      // own band, rule and red accents already say where everything is. A price
+      // tag is black, red and white in every shop for a reason.
+      for (const key of ["ring", "dial", "spark"]) {
         if (row[key] && typeof row[key] === "object") { row[key].accent = "yellow"; return true; }
       }
       if (row.datebox) {

@@ -30,6 +30,14 @@ async def _async_none(*_args, **_kwargs):
     return None
 
 
+async def _async_gateway_route(_hass, gateway_id):
+    """Stand in for gateway.async_gateway_route without a gateway store."""
+    stored = str(gateway_id or "").strip()
+    if not stored:
+        return None
+    return {"id": stored, "name": stored, "endpoint": stored, "rssi": None}
+
+
 async def _async_gateway_preferences(hass, *_args, **_kwargs):
     return dict(getattr(hass, "gateway_preferences", {}))
 
@@ -69,15 +77,31 @@ def _load_automation_module():
             "PARTIAL_UPDATE_CONFIRMED_SDK_TYPES": {2635},
         },
         "gateway": {
+            # One stored gateway as a route. The pinned-gateway path used to
+            # build this by hand with a placeholder name and no endpoint, so it
+            # could neither serialise per radio nor label its own jobs.
+            "async_gateway_route": _async_gateway_route,
             "async_gateway_status": lambda *_args, **_kwargs: None,
             "async_load_gateways": lambda *_args, **_kwargs: None,
             "async_scan_gateway": lambda *_args, **_kwargs: None,
             "async_send_gateway_payload": lambda *_args, **_kwargs: None,
+            # The address a transfer actually goes to. _async_gateway_routes
+            # stamps it onto every route so the queue can serialise per radio
+            # rather than per stored gateway record.
+            "gateway_send_endpoint": lambda gateway: str(gateway.get("host") or ""),
         },
         "gateway_preferences": {
             "async_load_gateway_preferences": _async_gateway_preferences,
         },
-        "queue": {"get_transfer_queue": lambda _hass: None},
+        "queue": {
+            "get_transfer_queue": lambda _hass: None,
+            # The lock a gateway route serialises on: the endpoint the
+            # transfer really goes to, not the id of the stored record.
+            "gateway_resource": lambda route: (
+                f"gateway@{route['endpoint']}" if route.get("endpoint")
+                else f"gateway:{route.get('id') or ''}"
+            ),
+        },
         "render": {
             "BWRY_CODES": {46, 78, 142, 270, 302, 310, 318, 558, 654, 686, 2670, 2702},
             "prepare_image_for_display": lambda _sdk, image, *_args: image,
@@ -1800,7 +1824,11 @@ class AutomaticGatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["ok"])
         self.assertFalse(route_scan_called)
         self.assertEqual("workshop", submitted["sent_gateway_id"])
-        self.assertEqual("gateway:workshop", submitted["resource"])
+        # Keyed by the endpoint the pinned gateway is actually reached at, not
+        # by the id of its stored record - two records for one ESP32 have to
+        # queue behind each other. The stub resolves the id to itself as the
+        # endpoint; gateway.async_gateway_route resolves it to the host.
+        self.assertEqual("gateway@workshop", submitted["resource"])
 
 
 class CzechNumberFormattingTests(unittest.TestCase):

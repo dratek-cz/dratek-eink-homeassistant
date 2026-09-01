@@ -33,8 +33,9 @@ from .gateway import (
     async_serial_gateway_wifi,
     async_start_flash_gateway,
     async_start_gateway_ota,
+    gateway_send_endpoint,
 )
-from .queue import get_transfer_queue
+from .queue import gateway_resource, get_transfer_queue
 from .ws_shared import (
     _activate_entity_automation,
     _clear_entity_automation_if_matches,
@@ -267,8 +268,12 @@ async def websocket_send_gateway_design(
                 )
                 raise
 
-        result = await get_transfer_queue(hass).async_submit(
-            resource=f"gateway:{msg['gateway_id']}",
+        queue = get_transfer_queue(hass)
+        result = await queue.async_submit(
+            resource=gateway_resource({
+                "id": msg["gateway_id"],
+                "endpoint": gateway_send_endpoint(gateway),
+            }),
             transport_type="gateway",
             transport_name=str(gateway.get("name") or gateway.get("host") or "DRATEK eInk gateway"),
             address=msg["address"],

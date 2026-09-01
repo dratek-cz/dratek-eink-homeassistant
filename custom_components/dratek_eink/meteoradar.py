@@ -29,7 +29,9 @@ from __future__ import annotations
 import asyncio
 import functools
 import io
+import json
 import math
+import re
 import time
 from typing import TYPE_CHECKING
 
@@ -60,6 +62,55 @@ PRECIPITATION_YELLOW = (244, 196, 0)
 BORDER_COLOR = (0, 0, 0)
 INDEX_RECHECK_INTERVAL_SECONDS = 60
 HTTP_TIMEOUT_SECONDS = 15
+# Ceilings on what a remote answer may weigh. Both are read into memory whole,
+# so without a cap the size of a Home Assistant allocation is decided by
+# whatever the far end sends. A radar tile is a 512x512 PNG of flat colour -
+# tens of kilobytes - and the index is a short document listing frames.
+MAX_TILE_BYTES = 4 * 1024 * 1024
+# And a ceiling on the decoded bitmap, which the byte cap does not imply.
+MAX_TILE_DIMENSION = TILE_SIZE * 4
+MAX_INDEX_BYTES = 1 * 1024 * 1024
+# The one host the radar frames may come from.
+#
+# RainViewer's index names the host its own tiles are served from, and that
+# value used to be interpolated straight into the tile URL. A tampered or
+# compromised answer therefore chose what address Home Assistant connected to,
+# from inside the user's network - the same class of hole gateway.py's
+# _validated_host exists to close, left open here only because the value
+# arrives from an API rather than from a person. It has to look like a bare
+# https host and it has to be RainViewer.
+RAINVIEWER_HOST_SUFFIX = ".rainviewer.com"
+_TILE_HOST_PATTERN = re.compile(
+    r"^https://[A-Za-z0-9](?:[A-Za-z0-9.-]{0,253}[A-Za-z0-9])?$"
+)
+# The frame path names a directory on that host: slash-separated, no traversal,
+# no query, no fragment.
+_FRAME_PATH_PATTERN = re.compile(r"^/[A-Za-z0-9._/-]{0,200}$")
+
+
+def _validated_tile_base(host: str, path: str) -> tuple[str, str] | None:
+    """Return the tile host and frame path, or None when either is not one.
+
+    Nothing here repairs a bad value: a radar frame that does not look like a
+    radar frame means the answer did not come from the API this module knows
+    how to talk to, and the caller keeps the previously composed image instead.
+    """
+    host = str(host or "").strip().rstrip("/")
+    path = str(path or "").strip()
+    if not _TILE_HOST_PATTERN.match(host):
+        return None
+    hostname = host[len("https://"):]
+    if hostname != "rainviewer.com" and not hostname.endswith(RAINVIEWER_HOST_SUFFIX):
+        return None
+    # "//" is refused as well as "..". Against a host that is already fixed a
+    # leading "//" is only an odd path rather than a protocol-relative URL, but
+    # a real frame path never contains one, and a rule that admits nothing it
+    # does not have to is the point of the exercise.
+    if not _FRAME_PATH_PATTERN.match(path) or ".." in path or "//" in path:
+        return None
+    return host, path
+
+
 WIND_RECHECK_INTERVAL_SECONDS = 15 * 60
 # The final image is downscaled at least twice after compositing - once here
 # (any composed crop wider/taller than this gets shrunk before caching) and
@@ -1188,12 +1239,34 @@ def _render_semaphore() -> asyncio.Semaphore:
     return _compose_semaphore
 
 
+async def _read_bounded(response: object, limit: int) -> bytes | None:
+    """The body, or None once it goes past ``limit``.
+
+    Deliberately a chunk loop rather than ``content.read(limit + 1)``:
+    aiohttp's reader returns *up to* the requested count, so a single read can
+    stop early on a perfectly good response and hand back a truncated PNG. And
+    ``response.read()`` alone has no ceiling at all - the size of the
+    allocation would be whatever the far end decided to send.
+    """
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in response.content.iter_chunked(64 * 1024):  # type: ignore[attr-defined]
+        size += len(chunk)
+        if size > limit:
+            return None
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 async def _async_fetch_json(hass: "HomeAssistant", url: str) -> object:
     from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
     session = async_get_clientsession(hass)
     async with session.get(url, timeout=HTTP_TIMEOUT_SECONDS) as response:
-        return await response.json(content_type=None)
+        raw = await _read_bounded(response, MAX_INDEX_BYTES)
+    if raw is None:
+        raise ValueError("Radar index exceeded the size this integration reads.")
+    return json.loads(raw)
 
 
 async def _async_current_wind_samples(
@@ -1259,11 +1332,20 @@ async def _async_fetch_tile(hass: "HomeAssistant", url: str) -> Image.Image | No
         async with session.get(url, timeout=HTTP_TIMEOUT_SECONDS) as response:
             if response.status != 200:
                 return None
-            raw = await response.read()
+            raw = await _read_bounded(response, MAX_TILE_BYTES)
+            if raw is None:
+                return None
     except Exception:  # network hiccups must not break the caller
         return None
     try:
-        return Image.open(io.BytesIO(raw)).convert("RGBA")
+        tile = Image.open(io.BytesIO(raw))
+        # Checked before the pixels are realised. A few hundred kilobytes of
+        # PNG can decode to hundreds of megabytes of bitmap, and Image.open
+        # only reads the header - so the dimensions are known while it is still
+        # cheap to walk away. Every real tile is TILE_SIZE square.
+        if max(tile.size) > MAX_TILE_DIMENSION:
+            return None
+        return tile.convert("RGBA")
     except Exception:
         return None
 
@@ -1314,14 +1396,14 @@ async def _async_composed_base_image_uncached(
         frames = (index.get("radar") or {}).get("past") or []
         if not frames:
             return cached.get("composed") if cached else None  # type: ignore[return-value]
-        host = str(index.get("host") or "")
-        path = str(frames[-1].get("path") or "")
+        validated = _validated_tile_base(index.get("host"), frames[-1].get("path"))
     except Exception:
         return cached.get("composed") if cached else None  # type: ignore[return-value]
 
-    frame_key = f"{host}{path}"
-    if not host or not path:
+    if validated is None:
         return cached.get("composed") if cached else None  # type: ignore[return-value]
+    host, path = validated
+    frame_key = f"{host}{path}"
     if show_wind:
         wind_samples, wind_key = await _async_current_wind_samples(hass, country_key)
     else:

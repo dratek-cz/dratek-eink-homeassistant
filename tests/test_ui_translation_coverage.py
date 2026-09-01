@@ -39,6 +39,10 @@ ALLOWED_UNTRANSLATED = {
     "Spotřeba vody …", "Výroba …", "PODÍL", "VÝVOJ", "ZMĚNY", "Dveře ·",
     "Met.no: 21.5°C • Déšť", "■ Slabé ■ Silné", "0,86 Kč", "3 / 3 v pořádku",
     "Kč", "Kč/kWh", "kč",
+    # Placeholder money and origin in the cenovka dialog. Each is an example of
+    # what to type, and the same string is printed onto the tag - a translated
+    # placeholder would suggest a format the display cannot show.
+    "0,00 Kč", "149,90 Kč/kg", "179,90 Kč", "ČR",
     # Sample copy in the starter designs _templateDefinitions() drops onto the
     # canvas. It is drawn into the bitmap the display receives, so it stays
     # Czech whatever language the panel around it is showing.

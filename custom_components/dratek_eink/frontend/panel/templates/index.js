@@ -27,7 +27,7 @@ import { template as parcel } from "./parcel.js?v=yellow-shaded-accents-1";
 import { template as birthdays } from "./birthdays.js?v=compact-landscape-content-6";
 import { template as server } from "./server.js?v=yellow-shaded-accents-1";
 import { template as garden } from "./garden.js?v=compact-landscape-content-6";
-import { template as price } from "./price.js?v=yellow-shaded-accents-1";
+import { template as price } from "./price.js?v=pricetag-barcode-rework-1";
 // INTERNAL - remove with the rest of the brand-logo feature before the retail
 // release (PRIVATE-NOTES.md). Imported last so it also sits last in the grid.
 import { template as dratekLogo } from "./dratek_logo.js?v=logo-dither-1";

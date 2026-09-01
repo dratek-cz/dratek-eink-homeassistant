@@ -12,7 +12,7 @@
 #include <esp_system.h>
 #include <vector>
 
-static const char* FIRMWARE_VERSION = "0.1.63-gateway";
+static const char* FIRMWARE_VERSION = "0.1.64-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 static const size_t INITIAL_UPLOAD_RESERVE_BYTES = 128UL * 1024UL;
@@ -1730,7 +1730,13 @@ void startMdns() {
     Serial.println("mDNS start failed.");
     return;
   }
-  MDNS.setInstanceName("DRATEK eInk gateway");
+  // Musi byt pro kazdou gateway jine. mDNS vyzaduje jedinecny nazev instance
+  // na siti, takze kdyz dve desky ohlasi tentyz konstantni nazev, resolver
+  // jednu z nich prejmenuje na "... -2". Home Assistant pak tu prejmenovanou
+  // instanci ulozi jako dalsi gateway se jmenem, ktere uzivatel nikdy nezadal,
+  // a v seznamu vzniknou dva zaznamy pro jednu desku - aniz by kdokoli cokoli
+  // udelal. Nazev hostitele je per-deska (vychozi je odvozeny z MAC).
+  MDNS.setInstanceName(hostname.c_str());
   MDNS.addService("dratek-eink-gateway", "tcp", 80);
   MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "id", gatewayId.c_str());
   MDNS.addServiceTxt("dratek-eink-gateway", "tcp", "name", hostname.c_str());

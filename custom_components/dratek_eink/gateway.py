@@ -165,12 +165,64 @@ def _looks_like_ip(host: str) -> bool:
     return host.count(".") == 3
 
 
-def _gateway_send_base_url(gateway: dict[str, Any]) -> str:
+def gateway_send_endpoint(gateway: dict[str, Any]) -> str:
+    """The bare address a transfer to this gateway is sent to.
+
+    A probed IP is preferred over the stored host, because the host may be an
+    mDNS name that this machine cannot resolve while the gateway itself
+    answered on an address a moment ago - but only while it is still the same
+    address. _remember_gateway_status deliberately keeps the last successful
+    status (IP included) through a failed probe so a gateway does not vanish
+    from routing, and mDNS updates `host` on a DHCP renewal without touching
+    that status. The two then disagree, and sends followed the older of them:
+    the queue reserved one gateway and the bytes went to whichever box now
+    holds the previous address. A queue log showing one gateway name streaming
+    to two different IPs within the same minute is this.
+
+    So the probe only wins while nothing newer contradicts it.
+    """
     status = gateway.get("status") if isinstance(gateway.get("status"), dict) else {}
     status_ip = _normalize_host(str(status.get("ip") or ""))
+    host = _normalize_host(gateway.get("host", ""))
     if status.get("ok") and _looks_like_ip(status_ip):
-        return f"http://{status_ip}"
-    return _gateway_base_url(gateway)
+        host_without_port = host.split(":", 1)[0]
+        probed_at = int(status.get("checked_at") or 0)
+        moved_at = int(gateway.get("discovered_at") or 0)
+        # Same address, or the probe is not older than the last time discovery
+        # rewrote the host. Otherwise the stored host is the newer fact.
+        if status_ip == host_without_port or probed_at >= moved_at:
+            return status_ip
+    return host
+
+
+async def async_gateway_route(hass: HomeAssistant, gateway_id: str) -> dict[str, Any] | None:
+    """One stored gateway as the route shape the queue and runners expect.
+
+    The pinned-gateway paths used to build this by hand as
+    ``{"id": gateway_id, "name": "DRATEK eInk gateway"}`` - a placeholder label
+    with no endpoint. Two things followed. The queue could only key its lock on
+    the id, which is the stored record rather than the radio; and every job that
+    took a pinned route was filed in the queue log under that placeholder
+    instead of the gateway's real name, which is why a log can show transfers
+    from a gateway nobody ever named that.
+    """
+    stored = str(gateway_id or "").strip()
+    if not stored:
+        return None
+    for gateway in await async_load_gateways(hass):
+        if str(gateway.get("id") or "") != stored:
+            continue
+        return {
+            "id": stored,
+            "name": str(gateway.get("name") or gateway.get("host") or "DRATEK eInk gateway"),
+            "endpoint": gateway_send_endpoint(gateway),
+            "rssi": None,
+        }
+    return None
+
+
+def _gateway_send_base_url(gateway: dict[str, Any]) -> str:
+    return f"http://{gateway_send_endpoint(gateway)}"
 
 
 async def async_add_gateway(hass: HomeAssistant, name: str, host: str) -> dict[str, Any]:
@@ -237,6 +289,24 @@ async def async_upsert_discovered_gateway(
             # Keep a user-selected display name, but follow DHCP address changes.
             gateway["host"] = stored_host
             gateway["gateway_id"] = stable_id
+        # Following an address change can move this gateway onto an address
+        # another record already claims - the box that used to be there was
+        # renumbered, or the same gateway was once added by hand as well. Two
+        # records for one ESP32 is not a cosmetic duplicate: routing counts them
+        # as two radios and writes to both at once. async_add_gateway has always
+        # de-duplicated on insert; this is the same rule on update.
+        #
+        # The stale record is dropped rather than merged, and only when it is
+        # certain to be stale: it must not carry a different advertised
+        # gateway_id, since two genuinely different gateways behind one NAT
+        # address would share a host legitimately.
+        gateways = [
+            item
+            for item in gateways
+            if item is gateway
+            or _normalize_host(item.get("host", "")).lower() != _normalize_host(stored_host).lower()
+            or str(item.get("gateway_id") or "").strip() not in ("", stable_id)
+        ]
         gateway["discovered_at"] = now
         gateway["updated_at"] = now
         gateway["discovery"] = {

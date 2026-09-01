@@ -44,6 +44,30 @@ GatewayRunnerFactory = Callable[[dict[str, Any]], TransferRunner]
 GATEWAY_FALLBACK_MIN_RSSI_DBM = -80.0
 
 
+def gateway_resource(route: dict[str, Any]) -> str:
+    """The queue resource one gateway route has to serialise on.
+
+    Keyed by the endpoint the transfer is actually sent to, not by the id of the
+    stored record naming it. Two records can point at one ESP32 - a gateway
+    added by hand and the same box later found over mDNS, or one that took over
+    another's address at a DHCP renewal - and keying by id gave each of them its
+    own lock. The queue then ran two transfers at once against a single radio,
+    which is exactly the "Connection reset by peer", exhausted-heap and failed
+    BLE-connect pattern a queue log shows in that state.
+
+    A module function rather than a method, because the pinned-gateway paths in
+    ws_sending.py, ws_gateways.py and automation.py all have to derive the same
+    key and none of them should be reaching into the queue to do it.
+
+    Falls back to the id when a caller supplies no endpoint, so a route from
+    somewhere that does not know the host still serialises against itself.
+    """
+    endpoint = str(route.get("endpoint") or route.get("host") or "").strip().lower()
+    if endpoint:
+        return f"gateway@{endpoint}"
+    return f"gateway:{str(route.get('id') or '')}"
+
+
 class TransferQueue:
     """Serialize transfers per Bluetooth transport and retain recent results."""
 
@@ -239,12 +263,11 @@ class TransferQueue:
                 "error": "No gateway currently receives this display.",
                 "log": [],
             }
-        gateway_id = str(route.get("id") or "")
         gateway_name = str(
             route.get("name") or route.get("host") or "DRATEK eInk gateway"
         )
         return await self.async_submit(
-            resource=f"gateway:{gateway_id}",
+            resource=gateway_resource(route),
             transport_type="gateway",
             transport_name=gateway_name,
             address=address,
@@ -275,7 +298,7 @@ class TransferQueue:
             for route in ranked:
                 if self._route_rssi(route) < GATEWAY_FALLBACK_MIN_RSSI_DBM:
                     continue
-                resource = f"gateway:{route['id']}"
+                resource = gateway_resource(route)
                 if not allow_backed_off and self._is_gateway_backing_off(resource):
                     continue
                 if not any(

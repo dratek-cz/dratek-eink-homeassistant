@@ -16,10 +16,10 @@ import voluptuous as vol
 from .const import DOMAIN, LOCAL_ROUTE_ID
 from .display_preview import async_save_display_preview
 from .render import render_text_image
-from .queue import get_transfer_queue
+from .queue import gateway_resource, get_transfer_queue
 from .transfer import DratekTransfer
 from .automation import get_entity_auto_update_manager
-from .gateway import async_send_gateway_payload, async_set_gateway_led
+from .gateway import async_gateway_route, async_send_gateway_payload, async_set_gateway_led
 from .ws_shared import (
     _activate_entity_automation,
     _clear_entity_automation_if_matches,
@@ -104,9 +104,11 @@ async def _async_submit_routed_transfer(
         and manual_route
         and manual_route != LOCAL_ROUTE_ID
     ):
-        route = {"id": manual_route, "name": "DRATEK eInk gateway", "rssi": None}
+        route = await async_gateway_route(hass, manual_route) or {
+            "id": manual_route, "name": "DRATEK eInk gateway", "rssi": None,
+        }
         result = await queue.async_submit(
-            resource=f"gateway:{manual_route}",
+            resource=gateway_resource(route),
             transport_type="gateway",
             transport_name=str(route["name"]),
             address=address,
@@ -274,15 +276,18 @@ async def websocket_send_design(
                 wait_for_completion=False,
             )
         elif use_gateway:
+            pinned = await async_gateway_route(hass, target_gateway_id) or {
+                "id": target_gateway_id,
+                "name": transport_name or "DRATEK eInk gateway",
+                "rssi": None,
+            }
             result = await queue.async_submit(
-                resource=f"gateway:{target_gateway_id}",
+                resource=gateway_resource(pinned),
                 transport_type="gateway",
-                transport_name=transport_name or "DRATEK eInk gateway",
+                transport_name=str(pinned["name"]),
                 address=address,
                 operation="design",
-                runner=gateway_runner_factory(
-                    {"id": target_gateway_id, "name": transport_name, "rssi": None}
-                ),
+                runner=gateway_runner_factory(pinned),
                 wait_for_completion=False,
             )
         else:

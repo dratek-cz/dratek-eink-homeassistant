@@ -457,21 +457,55 @@ export const webSerialMixin = {
     }).join("")}</div>`;
   },
 
+  // Proč to nejde, ne jen že to nejde.
+  //
+  // Web Serial je v prohlížeči vázané na secure context: stránku k sériovému
+  // portu pustí jen přes HTTPS nebo na origin localhost/127.0.0.1. Home
+  // Assistant otevřený jako http://<ip-v-siti>:8123 - což je většina instalací
+  // - tuhle podmínku nesplňuje, a žádné nastavení integrace to nezmění.
+  // Uživatel proto vidí adresu, na které právě je (tam je ten problém vidět),
+  // jednou větou pravidlo prohlížeče, a tři cesty ven seřazené od nejméně
+  // práce po nejvíc.
+  _browserFlashOriginHints() {
+    const origin = typeof window !== "undefined" && window.location ? window.location.origin : "";
+    const host = typeof window !== "undefined" && window.location ? window.location.hostname : "";
+    const port = (typeof window !== "undefined" && window.location && window.location.port) || "8123";
+    // Tunel dává smysl jen k cizímu hostiteli. Na loopbacku by příkaz zněl
+    // "protuneluj si localhost na localhost" - tam je stránka zabezpečená už
+    // teď a blokovat ji mohl leda chybějící Web Serial.
+    const loopback = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(String(host).toLowerCase());
+    return {
+      origin: origin || "http://…",
+      tunnel: host && !loopback ? `ssh -L ${port}:localhost:${port} uzivatel@${host}` : "",
+      localUrl: `http://localhost:${port}`,
+    };
+  },
+
   _renderBrowserFlashNotice() {
     const blocked = this._browserFlashBlockReason();
     if (!blocked) return "";
-    const copy = blocked === "insecure"
-      ? {
-        title: "Prohlížeč tady k USB nepustí",
-        body: "Nahrávání z počítače potřebuje zabezpečené připojení. Otevřete Home Assistant přes HTTPS nebo na adrese http://localhost, a nebo zvolte nahrání přes zařízení s Home Assistantem.",
-      }
-      : {
-        title: "Tenhle prohlížeč neumí Web Serial",
-        body: "Nahrávání z počítače funguje v Chrome, Edge a Opeře na počítači. V ostatních prohlížečích zvolte nahrání přes zařízení s Home Assistantem.",
-      };
-    return `<div class="gateway-alert-card gateway-alert-compact is-warning">
+    const hints = this._browserFlashOriginHints();
+    const body = blocked === "insecure"
+      ? `<strong>Prohlížeč tady k USB nepustí</strong>
+        <small>K sériovému portu pustí prohlížeč jen stránku běžící přes HTTPS nebo na adrese localhost. Je to bezpečnostní pravidlo samotného prohlížeče - integrace ani Home Assistant ho nemůžou vypnout. Tahle stránka běží na:</small>
+        <code class="gateway-alert-origin">${this._escape(hints.origin)}</code>
+        <small>Jak se k nahrání přes USB dostat:</small>
+        <ol class="gateway-alert-steps">
+          <li><strong>Nechte to na serveru.</strong> <span>Přepněte výše na „Do zařízení s Home Assistantem“. Firmware nahraje sám Home Assistant přes esptool a prohlížeč k USB vůbec nepotřebuje. Deska pak musí být v USB toho zařízení, ne tohoto počítače.</span></li>
+          <li><strong>Otevřete Home Assistant přes HTTPS.</strong> <span>Stačí Nabu Casa nebo vlastní reverzní proxy s certifikátem. Pak tenhle průvodce funguje z jakéhokoli počítače v síti.</span></li>
+          <li><strong>Nebo si Home Assistant protáhněte na localhost</strong> <span>a otevřete ho jako</span> <code>${this._escape(hints.localUrl)}</code><span>. Adresa localhost se za zabezpečenou považuje i bez certifikátu.</span></li>
+        </ol>
+        ${hints.tunnel ? `<code class="gateway-alert-origin">${this._escape(hints.tunnel)}</code>` : ""}`
+      : `<strong>Tenhle prohlížeč neumí Web Serial</strong>
+        <small>Nahrávání z počítače staví na rozhraní Web Serial, které zatím mají jen prohlížeče postavené na Chromiu - Chrome, Edge, Opera a Brave na počítači. Safari, Firefox ani mobilní prohlížeče ho nemají, takže tady tlačítko nic neotevře.</small>
+        <small>Jak dál:</small>
+        <ol class="gateway-alert-steps">
+          <li><strong>Otevřete tuhle stránku v Chrome nebo Edge</strong> <span>na počítači, do kterého je deska zapojená.</span></li>
+          <li><strong>Nebo přepněte výše na „Do zařízení s Home Assistantem“.</strong> <span>Firmware nahraje server a na prohlížeči pak nezáleží.</span></li>
+        </ol>`;
+    return `<div class="gateway-alert-card gateway-alert-compact gateway-alert-usb is-warning">
       <span class="alert-icon-wrap"><ha-icon icon="mdi:usb-off"></ha-icon></span>
-      <div><strong>${this._escape(copy.title)}</strong><small>${this._escape(copy.body)}</small></div>
+      <div>${body}</div>
     </div>`;
   },
 

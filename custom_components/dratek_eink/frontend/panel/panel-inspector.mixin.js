@@ -1634,42 +1634,74 @@ export const inspectorMixin = {
         this._paint();
       });
     });
-    const priceSaleFieldValues = () => ({
-      title: this.shadowRoot.querySelector("#priceSaleTitle")?.value || "Jablka Golden",
-      oldPrice: this.shadowRoot.querySelector("#priceSaleOldPrice")?.value || "199",
-      newPrice: this.shadowRoot.querySelector("#priceSaleNewPrice")?.value || "149",
-      code: this.shadowRoot.querySelector("#priceSaleCode")?.value || "8594001234567",
-    });
+    const priceSaleFieldValues = () => {
+      const read = (id, fallback = "") => this.shadowRoot.querySelector(id)?.value?.trim() ?? fallback;
+      return {
+        title: read("#priceSaleTitle", "Jablka Golden") || "Jablka Golden",
+        oldPrice: read("#priceSaleOldPrice", "199,90") || "199,90",
+        newPrice: read("#priceSaleNewPrice", "149,90") || "149,90",
+        code: read("#priceSaleCode"),
+        amount: read("#priceSaleAmount"),
+        unitPrice: read("#priceSaleUnitPrice"),
+        origin: read("#priceSaleOrigin"),
+        grade: read("#priceSaleGrade"),
+        validity: read("#priceSaleValidity"),
+        lowest: read("#priceSaleLowest"),
+        club: read("#priceSaleClub"),
+      };
+    };
 
     // The dialog is opened from one device card, which is not necessarily the
     // display open in the editor, so the values are written into that card's
     // own draft. template_config is the shape a draft is reloaded from; the
     // flat keys stay written for drafts saved by older versions.
+    //
+    // The keys come from _priceTemplateBindingKeys, which derives them the same
+    // way the renderer resolves them. They used to be four hand-written
+    // literals named after the variables' MDI icons - keys nothing reads - so
+    // the dialog round-tripped its own values and the display kept printing the
+    // sample apples. Never restate them here.
     const writePriceSaleDraft = (address, values) => {
       const upperAddr = String(address).toUpperCase();
       this._deviceDrafts ||= {};
       this._deviceDrafts[upperAddr] ||= { template: "price", assigned_templates: ["price"] };
       const draft = this._deviceDrafts[upperAddr];
       draft.template_config ||= {};
-      draft.template_config.bindings = {
-        ...(draft.template_config.bindings || {}),
-        "price:tag-outline": values.title,
-        "price:cash-multiple": String(values.oldPrice),
-        "price:currency-usd": String(values.newPrice),
-        "price:barcode": values.code,
+      const keys = this._priceTemplateBindingKeys();
+      // Manual values are stored with the "literal:" prefix, exactly as the
+      // designer's own "Ruční hodnota" field stores them. Without it anything
+      // containing a dot is taken for an entity id - both by
+      // _templateDisplayValue here and by automation.py on the backend - so
+      // "I. jakost", "do 15. 9." and any price written with a decimal point
+      // were looked up as entities, found nothing, and printed as blank.
+      const literal = (value) => (String(value ?? "").trim() ? `literal:${String(value).trim()}` : "");
+      const byKey = {
+        [keys.title]: literal(values.title),
+        [keys.price]: literal(values.newPrice),
+        [keys.was]: literal(values.oldPrice),
+        [keys.code]: literal(values.code),
+        [keys.amount]: literal(values.amount),
+        [keys.unitPrice]: literal(values.unitPrice),
+        [keys.origin]: literal(values.origin),
+        [keys.grade]: literal(values.grade),
+        [keys.validity]: literal(values.validity),
+        [keys.lowest]: literal(values.lowest),
+        [keys.club]: literal(values.club),
       };
-      draft.bindings = {
-        ...(draft.bindings || {}),
-        "tag-outline": values.title,
-        "cash-multiple": String(values.oldPrice),
-        "currency-usd": String(values.newPrice),
-        "barcode": values.code,
-      };
-      this._displayTemplateBindings ||= {};
-      this._displayTemplateBindings["price:tag-outline"] = values.title;
-      this._displayTemplateBindings["price:cash-multiple"] = String(values.oldPrice);
-      this._displayTemplateBindings["price:currency-usd"] = String(values.newPrice);
-      this._displayTemplateBindings["price:barcode"] = values.code;
+      delete byKey[""];
+      draft.template_config.bindings = { ...(draft.template_config.bindings || {}), ...byKey };
+      // The same values under the unprefixed keys, which _templateBinding
+      // consults first for a draft saved by an older panel.
+      const flat = {};
+      for (const [key, value] of Object.entries(byKey)) flat[key.replace(/^price:/, "")] = value;
+      draft.bindings = { ...(draft.bindings || {}), ...flat };
+      // ...and into the live editor state only when this really is the display
+      // the editor has open. Writing it unconditionally pushed the values typed
+      // for one card onto whichever other display happened to be selected, and
+      // the next autosave of that display then persisted them.
+      if (upperAddr === String(this._selectedDeviceAddress || "").toUpperCase()) {
+        this._displayTemplateBindings = { ...(this._displayTemplateBindings || {}), ...byKey };
+      }
       return draft;
     };
 
@@ -1677,15 +1709,23 @@ export const inspectorMixin = {
       const address = this._activePriceSaleDeviceAddress;
       if (!address) return;
       const values = priceSaleFieldValues();
-      const oldVal = parseFloat(String(values.oldPrice).replace(",", ".")) || 0;
-      const newVal = parseFloat(String(values.newPrice).replace(",", ".")) || 0;
-      const pct = oldVal > 0 ? Math.round(((oldVal - newVal) / oldVal) * 100) : 0;
-      const saved = Math.max(0, oldVal - newVal);
+      const summary = this._priceSaleSummary(values.oldPrice, values.newPrice);
 
       const pctEl = this.shadowRoot.querySelector(".summary-discount-badge");
       const saveEl = this.shadowRoot.querySelector(".summary-save-text strong");
-      if (pctEl) pctEl.textContent = `- ${pct} %`;
-      if (saveEl) saveEl.textContent = `${saved.toFixed(1).replace(".", ",")} Kč`;
+      if (pctEl) pctEl.textContent = `- ${summary.percent} %`;
+      if (saveEl) saveEl.textContent = summary.saved;
+      // Which symbol the code will become, and whether its check digit had to
+      // be corrected, while it is still being typed.
+      const noteEl = this.shadowRoot.querySelector("#priceSaleCodeNote");
+      if (noteEl) noteEl.innerHTML = this._priceSaleCodeNote(values.code);
+      const unitEl = this.shadowRoot.querySelector("#priceSaleAmountNote");
+      if (unitEl) {
+        unitEl.innerHTML = this._priceSaleUnitNote(
+          this._priceTagUnitPrice(values.newPrice, values.amount, "Kč"),
+          values.unitPrice,
+        );
+      }
 
       writePriceSaleDraft(address, values);
       this._paint();
@@ -1694,7 +1734,11 @@ export const inspectorMixin = {
     // Bound here on every render the dialog is part of, rather than from a
     // timer started by the opening click: a repaint landing inside that delay
     // left the fields without their live recalculation.
-    ["#priceSaleTitle", "#priceSaleOldPrice", "#priceSaleNewPrice", "#priceSaleCode"].forEach((selector) => {
+    [
+      "#priceSaleTitle", "#priceSaleOldPrice", "#priceSaleNewPrice", "#priceSaleCode",
+      "#priceSaleAmount", "#priceSaleUnitPrice", "#priceSaleOrigin", "#priceSaleGrade",
+      "#priceSaleValidity", "#priceSaleLowest", "#priceSaleClub",
+    ].forEach((selector) => {
       this.shadowRoot.querySelector(selector)?.addEventListener("input", updateLiveDiscount);
     });
 
@@ -1726,11 +1770,15 @@ export const inspectorMixin = {
         "price:sale": isSaleActive,
       };
       draft.options = { ...(draft.options || {}), sale: isSaleActive };
-      this._displayTemplateOptions ||= {};
-      this._displayTemplateOptions["price:sale"] = isSaleActive;
+      const upperAddr = String(address).toUpperCase();
+      // Same reason as in writePriceSaleDraft: the editor's live switch belongs
+      // to the display the editor has open, not to whichever card was clicked.
+      if (upperAddr === String(this._selectedDeviceAddress || "").toUpperCase()) {
+        this._displayTemplateOptions ||= {};
+        this._displayTemplateOptions["price:sale"] = isSaleActive;
+      }
 
       this._activePriceSaleDeviceAddress = null;
-      const upperAddr = String(address).toUpperCase();
       const device = (this._result?.devices || [])
         .find((item) => String(item.address || "").toUpperCase() === upperAddr) || { address };
       try {

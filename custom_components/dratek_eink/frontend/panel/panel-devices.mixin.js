@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.355";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.356";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG, DISPLAY_TEMPLATES_BY_ID } from "./templates/index.js?v=thermostat-live-dial-1";
 
 // Generation of the graphic-row capture written into every series()/ratio()/
@@ -669,6 +669,64 @@ export const devicesMixin = {
   // save) whatever display happened to be selected elsewhere. Both read that
   // display's own draft first and fall back to the live editor state only for
   // the display currently open in the editor, whose unsaved edits win.
+  // Which key each field of the cenovka dialog has to be written under.
+  //
+  // This is the bug the whole dialog was built on. The renderer resolves a
+  // template variable through _templateVariableMeta, whose key is derived from
+  // the variable's *label* and its index - "price:0-nazev-zbozi",
+  // "price:1-cena" and so on. The dialog instead wrote "price:tag-outline",
+  // "price:currency-usd", ... - the variables' MDI *icon* names, which nothing
+  // ever reads. It round-tripped perfectly (it read its own keys straight back)
+  // so the dialog always showed what you last typed, and the display always
+  // showed the sample apples. Only the AKCE switch worked, because an option
+  // travels a different path entirely.
+  //
+  // Derived from the catalogue rather than restated as four literals, so
+  // renaming a variable moves the dialog with it instead of silently
+  // disconnecting it again.
+  _priceTemplateBindingKeys() {
+    const variables = DISPLAY_TEMPLATES_BY_ID?.price?.catalog?.variables || [];
+    const keyAt = (index) => {
+      const variable = variables[index];
+      return variable ? `price:${this._templateVariableMeta(variable, index).key}` : "";
+    };
+    return {
+      title: keyAt(0),
+      price: keyAt(1),
+      was: keyAt(2),
+      code: keyAt(3),
+      amount: keyAt(4),
+      unitPrice: keyAt(5),
+      origin: keyAt(6),
+      grade: keyAt(7),
+      validity: keyAt(8),
+      lowest: keyAt(9),
+      club: keyAt(10),
+    };
+  },
+
+  // Reading a field back for the dialog, newest storage shape first.
+  //
+  // Drafts written before the key fix carry the icon-named keys. They are still
+  // read here - not to render from, but so reopening the dialog shows the text
+  // whoever set it up actually typed, and saving once moves it onto the key the
+  // renderer reads.
+  _devicePriceSaleField(bindings, key, legacyIcon, fallback = "") {
+    for (const candidate of [key, key.replace(/^price:/, ""), `price:${legacyIcon}`, legacyIcon]) {
+      if (candidate && bindings[candidate] !== undefined && bindings[candidate] !== "") {
+        const stored = String(bindings[candidate]);
+        // Stored the way the designer stores a typed value. The dialog shows
+        // the text, not the storage form.
+        if (stored.startsWith("literal:")) return stored.slice("literal:".length);
+        // An entity binding is not editable text - the field stays on its
+        // placeholder rather than offering an entity id to type over.
+        if (stored.includes(".") || stored.startsWith("internal:")) return fallback;
+        return stored;
+      }
+    }
+    return fallback;
+  },
+
   _devicePriceSaleBindings(address) {
     const upperAddr = String(address || "").toUpperCase();
     const draft = this._deviceDrafts?.[upperAddr] || {};
@@ -680,14 +738,29 @@ export const devicesMixin = {
     };
   },
 
+  // Delegated rather than restated: the badge and the tag it describes have to
+  // answer from the same store in the same order, and keeping two copies of
+  // that rule is exactly how they came to disagree.
   _devicePriceSaleActive(address) {
-    const upperAddr = String(address || "").toUpperCase();
-    const isSelected = !!upperAddr && upperAddr === String(this._selectedDeviceAddress || "").toUpperCase();
-    if (isSelected && this._displayTemplateOptions?.["price:sale"] !== undefined) {
-      return !!this._displayTemplateOptions["price:sale"];
+    return this._templateOptionState({ id: "price" }, "sale", address);
+  },
+
+  // Co se z napsaného kódu doopravdy vytiskne.
+  //
+  // Renderer si kontrolní číslici EAN dopočítá sám a případně přepíše - kód s
+  // vadnou poslední číslicí se totiž načte na zboží, které neexistuje, což je
+  // horší než cenovka bez kódu. Tichá oprava by ale byla past, takže dialog
+  // rovnou ukazuje výsledek: typ symbolu a číslice, které pod ním budou.
+  _priceSaleCodeNote(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw) return this._escape("Bez kódu se čárový kód na cenovku nevytiskne.");
+    const encoded = this._barcodeModules?.(raw);
+    if (!encoded) return this._escape("Tenhle kód nelze zakódovat - použijte číslice nebo běžné znaky bez diakritiky.");
+    const kind = { ean13: "EAN-13", ean8: "EAN-8", code128: "Code 128" }[encoded.kind] || encoded.kind;
+    if (encoded.text !== raw.replace(/\s/g, "")) {
+      return `${this._escape(kind)} · ${this._escape("kontrolní číslice opravena na")} <strong>${this._escape(encoded.text)}</strong>`;
     }
-    const draft = this._deviceDrafts?.[upperAddr] || {};
-    return !!(draft.template_config?.options?.["price:sale"] ?? draft.options?.sale);
+    return `${this._escape(kind)} · ${this._escape("vytiskne se")} <strong>${this._escape(encoded.text)}</strong>`;
   },
 
   _renderPriceSaleDialog() {
@@ -698,14 +771,32 @@ export const devicesMixin = {
       || { address, display_name: address };
 
     const bindings = this._devicePriceSaleBindings(address);
+    const keys = this._priceTemplateBindingKeys();
+    const field = (key, legacyIcon, fallback) => this._devicePriceSaleField(bindings, key, legacyIcon, fallback);
 
-    const productTitle = bindings["price:tag-outline"] || bindings["tag-outline"] || "Jablka Golden";
-    const oldPriceVal = parseFloat(String(bindings["price:cash-multiple"] || bindings["cash-multiple"] || "199").replace(",", ".")) || 199;
-    const newPriceVal = parseFloat(String(bindings["price:currency-usd"] || bindings["currency-usd"] || "149").replace(",", ".")) || 149;
-    const productCode = bindings["price:barcode"] || bindings["barcode"] || "8594001234567";
+    const productTitle = field(keys.title, "tag-outline", "Jablka Golden");
+    const oldPriceVal = field(keys.was, "cash-multiple", "199,90");
+    const newPriceVal = field(keys.price, "currency-usd", "149,90");
+    const productCode = field(keys.code, "barcode", "8594001234561");
+    const amount = field(keys.amount, "weight", "");
+    const unitPrice = field(keys.unitPrice, "scale-balance", "");
+    const origin = field(keys.origin, "earth", "");
+    const grade = field(keys.grade, "medal-outline", "");
+    const validity = field(keys.validity, "calendar-range", "");
+    const lowest = field(keys.lowest, "chart-timeline-variant", "");
+    const club = field(keys.club, "card-account-details-outline", "");
 
-    const discountPercent = oldPriceVal > 0 ? Math.round(((oldPriceVal - newPriceVal) / oldPriceVal) * 100) : 0;
-    const savedAmount = Math.max(0, oldPriceVal - newPriceVal);
+    const summary = this._priceSaleSummary(oldPriceVal, newPriceVal);
+    const derivedUnit = this._priceTagUnitPrice?.(newPriceVal, amount, "Kč") || "";
+
+    const textField = (id, label, icon, value, placeholder, note = "") => `
+      <div class="price-sale-input-group">
+        <label for="${id}"><ha-icon icon="mdi:${icon}"></ha-icon> ${label}</label>
+        <div class="price-sale-input-wrap">
+          <input type="text" id="${id}" value="${this._escape(value)}" placeholder="${this._escape(placeholder)}">
+        </div>
+        ${note ? `<p class="price-sale-code-note" id="${id}Note">${note}</p>` : ""}
+      </div>`;
 
     return `<div class="modal-backdrop price-sale-dialog-backdrop" data-price-sale-close>
       <section class="price-sale-dialog card" role="dialog" aria-modal="true">
@@ -729,27 +820,38 @@ export const devicesMixin = {
           </div>
 
           <div class="price-sale-inputs-grid">
-            <div class="price-sale-input-group">
-              <label for="priceSaleOldPrice"><ha-icon icon="mdi:currency-usd-off"></ha-icon> Běžná / Původní cena</label>
-              <div class="price-sale-input-wrap">
-                <input type="number" id="priceSaleOldPrice" value="${oldPriceVal}" step="0.1" placeholder="199">
-                <span class="currency-tag">Kč</span>
-              </div>
-            </div>
+            ${textField("priceSaleOldPrice", "Běžná / Původní cena", "currency-usd-off", oldPriceVal, "199,90")}
+            ${textField("priceSaleNewPrice", "Akční cena (sleva)", "tag-text-outline", newPriceVal, "149,90")}
+          </div>
 
-            <div class="price-sale-input-group">
-              <label for="priceSaleNewPrice"><ha-icon icon="mdi:tag-text-outline"></ha-icon> Akční cena (sleva)</label>
-              <div class="price-sale-input-wrap is-accent">
-                <input type="number" id="priceSaleNewPrice" value="${newPriceVal}" step="0.1" placeholder="149">
-                <span class="currency-tag">Kč</span>
-              </div>
-            </div>
+          <div class="price-sale-inputs-grid">
+            ${textField("priceSaleAmount", "Množství balení", "weight", amount, "1 kg / 0,75 l / 6 ks",
+              this._priceSaleUnitNote(derivedUnit, unitPrice))}
+            ${textField("priceSaleUnitPrice", "Měrná cena (nepovinné)", "scale-balance", unitPrice, derivedUnit || "149,90 Kč/kg")}
+          </div>
+
+          <div class="price-sale-inputs-grid">
+            ${textField("priceSaleOrigin", "Země původu", "earth", origin, "ČR")}
+            ${textField("priceSaleGrade", "Třída jakosti", "medal-outline", grade, "I. jakost")}
           </div>
 
           <div class="price-sale-full-field">
             <label for="priceSaleCode"><ha-icon icon="mdi:barcode"></ha-icon> Kód zboží / EAN (volitelné)</label>
             <div class="price-sale-input-wrap">
-              <input type="text" id="priceSaleCode" value="${this._escape(productCode)}" placeholder="8594001234567">
+              <input type="text" id="priceSaleCode" value="${this._escape(productCode)}" placeholder="8594001234561">
+            </div>
+            <p class="price-sale-code-note" id="priceSaleCodeNote">${this._priceSaleCodeNote(productCode)}</p>
+          </div>
+
+          <div class="price-sale-inputs-grid">
+            ${textField("priceSaleValidity", "Platnost akce", "calendar-range", validity, "do 15. 9.")}
+            ${textField("priceSaleLowest", "Nejnižší cena za 30 dní", "chart-timeline-variant", lowest, "179,90 Kč")}
+          </div>
+
+          <div class="price-sale-full-field">
+            <label for="priceSaleClub"><ha-icon icon="mdi:card-account-details-outline"></ha-icon> Klubová cena s věrnostní kartou (nepovinné)</label>
+            <div class="price-sale-input-wrap">
+              <input type="text" id="priceSaleClub" value="${this._escape(club)}" placeholder="129,90">
             </div>
           </div>
 
@@ -757,10 +859,10 @@ export const devicesMixin = {
             <div class="price-sale-summary-icon"><ha-icon icon="mdi:ticket-percent-outline"></ha-icon></div>
             <div class="price-sale-summary-text">
               <div class="summary-discount-row">
-                <span class="summary-discount-badge">- ${discountPercent} %</span>
-                <span class="summary-save-text">Ušetříte <strong>${savedAmount.toFixed(1).replace(".", ",")} Kč</strong></span>
+                <span class="summary-discount-badge">- ${summary.percent} %</span>
+                <span class="summary-save-text">Ušetříte <strong>${this._escape(summary.saved)}</strong></span>
               </div>
-              <small>Akce zapne červené grafické prvky a přeškrtnutou cenu. Bez akce bude cenovka čistě černobílá.</small>
+              <small>Akce vysází cenu červeně, přeškrtne původní a přidá červený štítek se slevou. Podklad zůstane bílý, aby cenovka zůstala čitelná i z dálky.</small>
             </div>
           </div>
         </div>
@@ -775,6 +877,30 @@ export const devicesMixin = {
         </footer>
       </section>
     </div>`;
+  },
+
+  // Both prices arrive as whatever a person typed, so the arithmetic is done on
+  // the digits dug out of them rather than on a strict parse.
+  _priceSaleSummary(oldValue, newValue) {
+    const toNumber = (value) => {
+      const match = String(value ?? "").replace(/\s| /g, "").replace(",", ".").match(/\d+(\.\d+)?/);
+      return match ? Number(match[0]) : NaN;
+    };
+    const was = toNumber(oldValue);
+    const now = toNumber(newValue);
+    if (!Number.isFinite(was) || !Number.isFinite(now) || was <= 0 || now < 0 || now >= was) {
+      return { percent: 0, saved: "0,00 Kč" };
+    }
+    return {
+      percent: Math.round(((was - now) / was) * 100),
+      saved: `${(was - now).toFixed(2).replace(".", ",")} Kč`,
+    };
+  },
+
+  _priceSaleUnitNote(derived, stated) {
+    if (stated) return this._escape("Měrnou cenu jste zadali ručně, dopočet se nepoužije.");
+    if (derived) return `${this._escape("Dopočítá se na")} <strong>${this._escape(derived)}</strong>`;
+    return this._escape("Doplňte jednotku (kg, g, l, ml, ks, m), ať jde měrná cena dopočítat.");
   },
 
   _renderDisplaySettingsPage() {
@@ -1576,11 +1702,31 @@ export const devicesMixin = {
     </div>`;
   },
 
+  // _displayTemplateAssignments is filled by _applyDisplayTemplateConfig, which
+  // only ever runs for the display open in the editor. The overview renders
+  // every card, so asking this there used to answer "no templates" for every
+  // display but the one last opened - which is why the AKCE / SLEVA button on a
+  // cenovka card appeared only after you had been inside that display's editor
+  // at least once, and vanished again after a reload.
+  //
+  // The drafts are loaded for all displays up front (_loadDevicePreviewDrafts),
+  // and template_config.assignments in a draft is the very list this map is
+  // rebuilt from, so it is the right fallback. Same precedence as
+  // _devicePriceSaleActive: the live editor state wins for the selected
+  // display, the stored draft answers for all the others.
   _assignedDisplayTemplates(device = this._device()) {
     const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
+    const isSelected = !!address && address === String(this._selectedDeviceAddress || "").toUpperCase();
     const assigned = this._displayTemplateAssignments?.[address];
     if (Array.isArray(assigned) && assigned.length) return assigned.filter(Boolean).slice(0, 6);
-    return [];
+    if (isSelected && Array.isArray(assigned)) return [];
+    const draft = this._deviceDrafts?.[address] || {};
+    const stored = draft.template_config?.assignments;
+    if (Array.isArray(stored) && stored.length) return stored.filter((id) => typeof id === "string" && id).slice(0, 6);
+    // Drafts written before template_config existed carry the flat shape.
+    const legacy = Array.isArray(draft.assigned_templates) ? draft.assigned_templates : [];
+    if (legacy.length) return legacy.filter((id) => typeof id === "string" && id).slice(0, 6);
+    return typeof draft.template === "string" && draft.template ? [draft.template] : [];
   },
 
   _sentDisplayTemplates(device = this._device()) {
@@ -5634,19 +5780,43 @@ export const devicesMixin = {
   // a switch can still be driven by an entity - a helper toggle, a binary sensor
   // from the till system - so the manual switch and the bound entity are ORed: the
   // shop can flip it by hand today and automate it tomorrow without rebuilding.
-  _templateOptionActive(template, option) {
+  // Whether one template switch is on, for one display.
+  //
+  // This is the single reader. It used to be two: the renderer asked here and
+  // the AKCE badge on a device card asked _devicePriceSaleActive, and the two
+  // walked different stores in different orders - so they disagreed in both
+  // directions at once. Turning the switch off in the designer left the drawn
+  // tag on promotion (a stale flat `options.sale` in the draft outranked the
+  // live editor state here), while a sale set from a card and then autosaved -
+  // which drops that flat key, since _projectPayload never writes one - left
+  // the badge lit over a tag drawn without it, because this function never
+  // looked at template_config.options at all.
+  //
+  // Order, newest and most specific first:
+  //   1. the live editor state, but only for the display the editor has open;
+  //   2. that display's stored draft, in the shape a draft is reloaded from;
+  //   3. the same draft's flat legacy key, written by panels before 0.1.356;
+  //   4. an entity bound to the switch.
+  _templateOptionState(template, option, address = "") {
     const device = (typeof this._device === "function" ? this._device() : null);
-    const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
-    const draftOptions = this._deviceDrafts?.[address]?.options;
-    if (draftOptions && typeof draftOptions[option] === "boolean") {
-      return draftOptions[option];
+    const upperAddr = String(address || device?.address || this._selectedDeviceAddress || "").toUpperCase();
+    const key = `${template?.id ?? ""}:${option}`;
+    const isSelected = !!upperAddr && upperAddr === String(this._selectedDeviceAddress || "").toUpperCase();
+    if (isSelected && this._displayTemplateOptions?.[key] !== undefined) {
+      return !!this._displayTemplateOptions[key];
     }
-    if (this._displayTemplateOptions?.[`${template?.id}:${option}`] !== undefined) {
-      return !!this._displayTemplateOptions[`${template?.id}:${option}`];
-    }
+    const draft = this._deviceDrafts?.[upperAddr] || {};
+    const stored = draft.template_config?.options?.[key];
+    if (stored !== undefined) return !!stored;
+    const legacy = draft.options?.[option];
+    if (typeof legacy === "boolean") return legacy;
     const entity = this._templateEntityForKind(template, [option]);
     const state = entity ? this._hass?.states?.[entity] : null;
     return ["on", "true", "1", "akce", "sale"].includes(String(state?.state ?? "").toLowerCase());
+  },
+
+  _templateOptionActive(template, option) {
+    return this._templateOptionState(template, option);
   },
 
   _renderTemplateOptionSettings(template) {

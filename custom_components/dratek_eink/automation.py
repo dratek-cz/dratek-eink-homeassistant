@@ -35,9 +35,16 @@ from .const import (
     LOCAL_ROUTE_ID,
     PARTIAL_UPDATE_CONFIRMED_SDK_TYPES,
 )
-from .gateway import async_gateway_status, async_load_gateways, async_scan_gateway, async_send_gateway_payload
+from .gateway import (
+    async_gateway_route,
+    async_gateway_status,
+    async_load_gateways,
+    async_scan_gateway,
+    async_send_gateway_payload,
+    gateway_send_endpoint,
+)
 from .gateway_preferences import async_load_gateway_preferences
-from .queue import get_transfer_queue
+from .queue import gateway_resource, get_transfer_queue
 from .routing import route_preference_key
 from .render import (
     BWRY_CODES,
@@ -2099,15 +2106,15 @@ class EntityAutoUpdateManager:
                 if result and result.get("ok") is not False:
                     return result
             else:
-                manual_gateway_route = {
+                manual_gateway_route = await async_gateway_route(self.hass, gateway_id) or {
                     "id": gateway_id,
                     "name": transport_name or "DRATEK eInk gateway",
                     "rssi": None,
                 }
                 result = await queue.async_submit(
-                    resource=f"gateway:{gateway_id}",
+                    resource=gateway_resource(manual_gateway_route),
                     transport_type="gateway",
-                    transport_name=transport_name or "DRATEK eInk gateway",
+                    transport_name=str(manual_gateway_route["name"]),
                     address=address,
                     operation="entity_update",
                     runner=gateway_runner_factory(manual_gateway_route),
@@ -2240,6 +2247,10 @@ class EntityAutoUpdateManager:
                             or gateway.get("host")
                             or "DRATEK eInk gateway"
                         ),
+                        # The address the transfer is really sent to, so the
+                        # queue can serialise per radio rather than per stored
+                        # record - see TransferQueue._gateway_resource.
+                        "endpoint": gateway_send_endpoint(gateway),
                         "rssi": rssi,
                     })
 
