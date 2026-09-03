@@ -15,9 +15,9 @@ export const template = {
   setup: {
     summary: "Nahoře dnešní datum, den v týdnu a svátek, pod tím přehledný seznam nadcházejících událostí. Na velkých displejích se automaticky uspořádá do dvou sloupců až s 20 událostmi.",
     integrations: [
-      { name: "Místní kalendář", domain: "calendar", core: true, why: "Kalendář přímo v Home Assistantu, bez cloudu a bez účtu." },
-      { name: "Google Calendar", domain: "calendar", core: true, why: "Napojení na Google účet; události se načtou automaticky." },
-      { name: "CalDAV", domain: "calendar", core: true, why: "Pro Nextcloud, iCloud a další servery podporující CalDAV protokol." },
+      { name: "Místní kalendář", oneOf: "Zdroj kalendáře", domain: "calendar", core: true, why: "Kalendář přímo v Home Assistantu, bez cloudu a bez účtu." },
+      { name: "Google Calendar", oneOf: "Zdroj kalendáře", domain: "calendar", core: true, why: "Napojení na Google účet; události se načtou automaticky." },
+      { name: "CalDAV", oneOf: "Zdroj kalendáře", domain: "calendar", core: true, why: "Pro Nextcloud, iCloud a další servery podporující CalDAV protokol." },
     ],
     steps: [
       "Přidejte kalendářovou integraci v Nastavení → Zařízení a služby.",

@@ -546,14 +546,6 @@ EUROPE_OVERVIEW_BORDERS: tuple[tuple[str, tuple[tuple[float, float], ...]], ...]
     ("pl", POLAND_BORDER),
 )
 
-COUNTRY_NAMES: dict[str, str] = {
-    "cz": "Česká republika 🇨🇿",
-    "sk": "Slovensko 🇸🇰",
-    "de": "Německo 🇩🇪",
-    "at": "Rakousko 🇦🇹",
-    "pl": "Polsko 🇵🇱",
-    "eu": "Střední Evropa 🇪🇺",
-}
 
 # Representative inland points spread across each selectable country.  A
 # single country-centre direction made every arrow identical even when a front
@@ -733,20 +725,6 @@ def _dither_to_palette(
     ).convert("RGB")
 
 
-def dither_to_eink_palette(image: Image.Image, preserve_yellow: bool = True) -> Image.Image:
-    """Floyd-Steinberg dithering in Pillow's native C implementation.
-
-    The former implementation walked every pixel in Python and held the GIL
-    for tens of seconds on small Home Assistant hosts. Pillow performs the same
-    error diffusion without starving the event loop or other executor jobs.
-    """
-    colors = [(255, 255, 255)]
-    if preserve_yellow:
-        colors.append(PRECIPITATION_YELLOW)
-    colors.extend((PRECIPITATION_COLOR, BORDER_COLOR))
-    return _dither_to_palette(image, tuple(colors))
-
-
 def _paint_precipitation(
     output: Image.Image,
     composite: Image.Image,
@@ -866,7 +844,19 @@ def _draw_wind_vectors(
     extent: float,
     wind_samples: tuple[tuple[float, float, float, float], ...],
 ) -> None:
-    """Draw current wind arrows, using the nearest projected model sample."""
+    """Draw current wind arrows, using the nearest projected model sample.
+
+    Arrows are placed whole rather than drawn long and then cut off at the
+    border. Masking the finished arrows against the country - which is what
+    used to happen - sliced every arrow that reached an edge into an amputated
+    shaft or a floating head, and the grid puts several sample points close to
+    the outline on any real country.
+
+    Speed is carried by length *and* stroke weight. Length alone spanned
+    0.72-1.42 of one nominal arrow, so a breeze and a gale differed by about a
+    third of an arrow, which is not something anyone reads off a map at e-ink
+    sizes; weight survives the downscale to a panel far better.
+    """
     if not wind_samples:
         return
     xs = [p[0] for p in polygon]
@@ -879,38 +869,88 @@ def _draw_wind_vectors(
 
     country_mask = Image.new("1", image.size, 0)
     ImageDraw.Draw(country_mask).polygon(polygon, fill=1)
-    arrow_mask = Image.new("1", image.size, 0)
-    draw = ImageDraw.Draw(arrow_mask)
+    width_px, height_px = image.size
 
-    for y in range(int(min_y) + spacing // 2, int(max_y), spacing):
-        for x in range(int(min_x) + spacing // 2, int(max_x), spacing):
-            if country_mask.getpixel((x, y)):
-                _sample_x, _sample_y, direction_from, speed = min(
+    def _inside(point: tuple[float, float]) -> bool:
+        px, py = int(round(point[0])), int(round(point[1]))
+        if not (0 <= px < width_px and 0 <= py < height_px):
+            return False
+        return bool(country_mask.getpixel((px, py)))
+
+    def _geometry(x: float, y: float, direction_from: float, length: float, shaft: int):
+        dx, dy = wind_flow_vector(direction_from, length)
+        vector_length = max(1.0, math.hypot(dx, dy))
+        unit_x, unit_y = dx / vector_length, dy / vector_length
+        normal_x, normal_y = -unit_y, unit_x
+        # A head roughly as wide as it is long reads as an arrowhead. The old
+        # 0.34-length head on a fixed 5 px half-width was a long thin dart, and
+        # once the image is downscaled for a panel the hairline shaft drops out
+        # and leaves the spike floating.
+        head_length = length * 0.30
+        head_width = max(shaft * 1.6, head_length * 0.42)
+        tail = (x - dx / 2, y - dy / 2)
+        tip = (x + dx / 2, y + dy / 2)
+        base_x = tip[0] - unit_x * head_length
+        base_y = tip[1] - unit_y * head_length
+        corner_a = (base_x + normal_x * head_width, base_y + normal_y * head_width)
+        corner_b = (base_x - normal_x * head_width, base_y - normal_y * head_width)
+        # Probed with clearance, not just at the outline: the filled head is a
+        # triangle, so corners that each sit a pixel inside can still bridge a
+        # concave stretch of border between them.
+        margin = head_width * 0.6
+        probes = (
+            (tail[0] - unit_x * margin, tail[1] - unit_y * margin),
+            (tip[0] + unit_x * margin, tip[1] + unit_y * margin),
+            (corner_a[0] + normal_x * margin, corner_a[1] + normal_y * margin),
+            (corner_b[0] - normal_x * margin, corner_b[1] - normal_y * margin),
+            ((corner_a[0] + corner_b[0]) / 2, (corner_a[1] + corner_b[1]) / 2),
+        )
+        return (tail, tip, corner_a, corner_b), probes
+
+    def _collect(require_clearance: bool):
+        arrows = []
+        for y in range(int(min_y) + spacing // 2, int(max_y), spacing):
+            for x in range(int(min_x) + spacing // 2, int(max_x), spacing):
+                if not country_mask.getpixel((x, y)):
+                    continue
+                _sx, _sy, direction_from, speed = min(
                     wind_samples,
                     key=lambda sample: (sample[0] - x) ** 2 + (sample[1] - y) ** 2,
                 )
-                speed_factor = 0.72 + min(70.0, max(0.0, speed)) / 100.0
-                arrow_length = max(18, spacing * 0.52 * speed_factor)
-                dx, dy = wind_flow_vector(direction_from, arrow_length)
-                vector_length = max(1.0, math.hypot(dx, dy))
-                unit_x, unit_y = dx / vector_length, dy / vector_length
-                normal_x, normal_y = -unit_y, unit_x
-                head_length = arrow_length * 0.34
-                head_width = max(5, stroke_width * 2.6)
-                x1, y1 = x - dx / 2, y - dy / 2
-                x2, y2 = x + dx / 2, y + dy / 2
-                draw.line([(x1, y1), (x2, y2)], fill=1, width=stroke_width)
-                base_x = x2 - unit_x * head_length
-                base_y = y2 - unit_y * head_length
-                draw.polygon(
-                    [
-                        (x2, y2),
-                        (base_x + normal_x * head_width, base_y + normal_y * head_width),
-                        (base_x - normal_x * head_width, base_y - normal_y * head_width),
-                    ],
-                    fill=1,
-                )
+                speed_norm = min(60.0, max(0.0, speed)) / 60.0
+                shaft = stroke_width + round(stroke_width * speed_norm)
+                full_length = max(18, spacing * (0.42 + 0.34 * speed_norm))
+                if not require_clearance:
+                    shape, _probes = _geometry(x, y, direction_from, full_length, shaft)
+                    arrows.append((shape, shaft))
+                    continue
+                # Shortened before it is given up on: an arrow whose full
+                # length overruns a border often fits at two thirds of it.
+                for scale in (1.0, 0.78, 0.6, 0.45):
+                    shape, probes = _geometry(x, y, direction_from, full_length * scale, shaft)
+                    if all(_inside(point) for point in probes):
+                        arrows.append((shape, shaft))
+                        break
+        return arrows
 
+    arrows = _collect(require_clearance=True)
+    if not arrows:
+        # A crop small enough to reject every arrow - a tiny country, or a grid
+        # whose points all land near an edge - would otherwise lose its wind
+        # entirely, which is worse than the trimmed arrows this used to draw.
+        arrows = _collect(require_clearance=False)
+    if not arrows:
+        return
+
+    arrow_mask = Image.new("1", image.size, 0)
+    draw = ImageDraw.Draw(arrow_mask)
+    for (tail, tip, corner_a, corner_b), shaft in arrows:
+        draw.line([tail, tip], fill=1, width=shaft)
+        draw.polygon([tip, corner_a, corner_b], fill=1)
+
+    # Still intersected with the country: a shaft's own stroke width can put a
+    # pixel or two over an outline the probes cleared, and the fallback pass
+    # above relies on this to trim its arrows the way they always were.
     clipped_arrows = ImageChops.logical_and(country_mask, arrow_mask)
     image.paste(Image.new("RGB", image.size, BORDER_COLOR), mask=clipped_arrows)
 

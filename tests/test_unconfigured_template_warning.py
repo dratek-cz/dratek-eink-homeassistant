@@ -18,16 +18,34 @@ class UnconfiguredTemplateWarningTests(unittest.TestCase):
         cls.styles = STYLES.read_text(encoding="utf-8")
         cls.i18n = I18N.read_text(encoding="utf-8")
 
-    def test_one_warning_renderer_serves_catalog_and_display_preview(self) -> None:
+    def test_the_warning_belongs_to_the_template_catalog_only(self) -> None:
+        """One place says a template is unconfigured: its card in the list.
+
+        The same layer used to be painted over the physical display preview in
+        the display's own settings as well. There it captioned the picture of
+        the panel rather than the thing that is unconfigured, and the two
+        copies said it twice on one screen - so the preview shows the template
+        and the catalog card carries the warning.
+        """
         self.assertIn("_renderTemplateConfigurationWarning(template, status = null)", self.source)
         self.assertEqual(
-            2,
+            1,
             self.source.count("this._renderTemplateConfigurationWarning(template, configStatus)"),
         )
         self.assertIn(
             '${used ? this._renderTemplateConfigurationWarning(template, configStatus) : ""}',
             self.source,
         )
+
+    def test_the_display_preview_carries_no_warning_layer(self) -> None:
+        slot = self.source[self.source.index('<div class="template-display-slot"') :]
+        slot = slot[: slot.index("_batteryInfo")]
+        self.assertNotIn("_renderTemplateConfigurationWarning", slot)
+        self.assertNotIn("has-config-warning", slot)
+        # The container query only existed to size that layer against the
+        # preview, and the clamp rules it fed went with it.
+        self.assertNotIn(".display-template-surface.has-config-warning", self.styles)
+        self.assertNotIn(".display-template-surface .template-unconfigured-warning", self.styles)
 
     def test_complete_templates_have_no_warning(self) -> None:
         self.assertIn('if (!current || current.state === "complete") return "";', self.source)
@@ -77,7 +95,6 @@ class UnconfiguredTemplateWarningTests(unittest.TestCase):
         self.assertIn('data-display-template-configure="${this._escape(template.id)}"', self.source)
         self.assertIn(".template-unconfigured-warning-actions>button", self.styles)
         self.assertIn("cursor:pointer;pointer-events:auto", self.styles)
-        self.assertIn(".display-template-surface.has-config-warning{container-type:size}", self.styles)
         self.assertIn('data-has-config-warning="${hasConfigWarning ? "true" : "false"}"', self.source)
 
     def test_send_button_still_only_requires_an_assigned_template(self) -> None:

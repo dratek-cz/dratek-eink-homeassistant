@@ -25,10 +25,10 @@ export const template = {
   setup: {
     summary: "Půlkruhový budík AQI přes celou šířku a pod ním tři karty s CO₂, PM2.5 a vlhkostí.",
     integrations: [
-      { name: "Airly", domain: "sensor", core: true, why: "Venkovní kvalita ovzduší podle nejbližší veřejné stanice - nevyžaduje vlastní čidlo, jen zadání polohy." },
-      { name: "Netatmo", domain: "sensor", core: true, why: "Vnitřní senzor CO₂ a kvality vzduchu, pokud máte stanici Netatmo doma." },
-      { name: "ESPHome", domain: "sensor", core: true, why: "Vlastní senzor CO₂ (SCD40/SCD41, MH-Z19) nebo prachových částic (SDS011, PMS5003) postavený na ESP - device_class se nastaví přímo v ESPHome konfiguraci." },
-      { name: "IQAir AirVisual", domain: "sensor", why: "Alternativa k Airly pro venkovní AQI, dostupná přes HACS nebo cloud API." },
+      { name: "Airly", oneOf: "Zdroj kvality vzduchu", domain: "sensor", core: true, why: "Venkovní kvalita ovzduší podle nejbližší veřejné stanice - nevyžaduje vlastní čidlo, jen zadání polohy." },
+      { name: "Netatmo", oneOf: "Zdroj kvality vzduchu", domain: "sensor", core: true, why: "Vnitřní senzor CO₂ a kvality vzduchu, pokud máte stanici Netatmo doma." },
+      { name: "ESPHome", oneOf: "Zdroj kvality vzduchu", domain: "sensor", core: true, why: "Vlastní senzor CO₂ (SCD40/SCD41, MH-Z19) nebo prachových částic (SDS011, PMS5003) postavený na ESP - device_class se nastaví přímo v ESPHome konfiguraci." },
+      { name: "IQAir AirVisual", oneOf: "Zdroj kvality vzduchu", domain: "sensor", why: "Alternativa k Airly pro venkovní AQI, dostupná přes HACS nebo cloud API." },
     ],
     steps: [
       "Zprovozněte zdroj dat o vzduchu - Airly pro venkovní, Netatmo nebo vlastní ESPHome čidlo pro vnitřní.",

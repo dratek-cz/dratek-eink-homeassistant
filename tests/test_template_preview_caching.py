@@ -36,10 +36,30 @@ class TemplateThumbnailCacheTests(unittest.TestCase):
         self.body = match.group(1)
 
     def test_thumbnail_is_not_cached_while_the_radar_is_still_loading(self) -> None:
+        # "Is a frame in hand" is now asked for this display's own country and
+        # geometry - _meteoradarFrameReady - rather than "does the panel hold
+        # any frame at all", which a frame fetched for a different display
+        # satisfied.
         self.assertIn(
-            "!(this._templateNeedsRadarImage(rows) && !this._meteoradarImageCache?.dataUrl)",
+            "!(this._templateNeedsRadarImage(rows) && !this._meteoradarFrameReady(width, height))",
             self.body,
         )
+
+    def test_the_thumbnail_key_is_scoped_to_the_open_display(self) -> None:
+        # Two displays showing the same template at the same size draw
+        # different tiles as soon as their per-display settings differ, so the
+        # memo key has to carry those settings.
+        self.assertIn("this._perDisplayTemplateFingerprint()", self.body)
+        self.assertIn("_perDisplayTemplateFingerprint() {", self.source)
+        fingerprint = self.source.split("_perDisplayTemplateFingerprint() {")[1]
+        fingerprint = fingerprint.split("\n  },")[0]
+        for part in (
+            "this._selectedDeviceAddress",
+            "this._displayTemplateConfig",
+            "this._displayTemplateOptions",
+            "this._displayTemplateBindings",
+        ):
+            self.assertIn(part, fingerprint, f"{part} must be part of the tile key")
 
     def test_the_existing_async_guards_are_still_in_place(self) -> None:
         # The radar guard is one of a family - losing either of the others

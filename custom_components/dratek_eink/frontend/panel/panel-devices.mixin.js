@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.358";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.360";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG, DISPLAY_TEMPLATES_BY_ID } from "./templates/index.js?v=thermostat-live-dial-1";
 
 // Generation of the graphic-row capture written into every series()/ratio()/
@@ -10,6 +10,9 @@ import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG, DISPLAY_TEMPLATES_BY_ID } 
 //       few pixels from where the row was actually drawn (fixed in 0.1.346).
 //   2 - boxes measured in the layout the document is really built from.
 const GRAPHIC_BINDING_CAPTURE_VERSION = 2;
+// Mirrors DISCOVERY_UNSEEN_GRACE_SECONDS in const.py. Only used when the
+// backend payload predates out_of_range; the backend's own answer wins.
+const DISPLAY_UNSEEN_GRACE_SECONDS = 3 * 60;
 
 // The standard Czech civil name-day calendar, indexed [month][day - 1]
 // (getMonth() is already 0-based). Days with no name day (state/religious
@@ -144,6 +147,80 @@ export const devicesMixin = {
     // card showing yellow because a BWRY display was selected elsewhere.
     const address = this._renderingDeviceAddress || this._selectedDeviceAddress;
     return devices.find((device) => device.address === address) || null;
+  },
+
+  // The display the user has actually opened, never the one some render happens
+  // to be scoped to. _device() deliberately answers "whose palette and size is
+  // this drawing pass using", which is the right question for a preview and the
+  // wrong one for a write: a leaked render scope made _saveCurrentDeviceDraft
+  // address the wrong display and store the open display's settings - its
+  // meteoradar country among them - under another display's address. Anything
+  // that persists, sends or decides which draft is being edited resolves the
+  // device here instead.
+  _selectedDevice() {
+    const devices = this._result ? this._result.devices : [];
+    const address = this._selectedDeviceAddress;
+    return devices.find((device) => device.address === address) || null;
+  },
+
+  // Render scopes nest and, because the renderers are async, overlap: two
+  // repaints of the same display can both be inside _renderCurrentDisplayTemplateImage
+  // at once. Saving the previous value and restoring it in a `finally` cannot
+  // survive that - the second run captures the first run's value as "previous"
+  // and puts it back after the first run has already restored null, leaving
+  // _renderingDeviceAddress permanently pinned to a display nobody is looking
+  // at. A stack of tokens removed by identity always unwinds to empty however
+  // the runs interleave.
+  _pushRenderingDevice(address) {
+    const token = { address: address || null };
+    (this._renderingDeviceStack ||= []).push(token);
+    this._renderingDeviceAddress = token.address;
+    return token;
+  },
+
+  _popRenderingDevice(token) {
+    const stack = this._renderingDeviceStack || [];
+    const index = stack.lastIndexOf(token);
+    if (index >= 0) stack.splice(index, 1);
+    this._renderingDeviceAddress = stack.length ? stack[stack.length - 1].address : null;
+  },
+
+  // Seconds since this display was last actually heard, from whichever source
+  // heard it. Zero while it is being seen in every scan.
+  _displayUnseenFor(device) {
+    const reported = Number(device?.unseen_for);
+    if (Number.isFinite(reported) && reported >= 0) return reported;
+    if (!device?.temporarily_unseen) return 0;
+    const lastSeen = Number(device?.last_seen_at || 0);
+    if (!lastSeen) return 0;
+    return Math.max(0, Math.round(Date.now() / 1000) - lastSeen);
+  },
+
+  // Whether the user should be told the display is unreachable. The backend
+  // decides this against its own settle window; the fallback covers a payload
+  // from an older backend that only carried temporarily_unseen.
+  _displayIsOutOfRange(device) {
+    if (typeof device?.out_of_range === "boolean") return device.out_of_range;
+    if (!device?.temporarily_unseen) return false;
+    return this._displayUnseenFor(device) > DISPLAY_UNSEEN_GRACE_SECONDS;
+  },
+
+  _displayReachabilityTitle(device) {
+    if (!this._displayIsOutOfRange(device)) {
+      const unseenFor = this._displayUnseenFor(device);
+      return unseenFor
+        ? `Displej je dostupný – naposledy se ohlásil před ${this._formatUnseenFor(unseenFor)}`
+        : "Displej je dostupný";
+    }
+    return `Displej se neohlásil ${this._formatUnseenFor(this._displayUnseenFor(device))}`;
+  },
+
+  _formatUnseenFor(seconds) {
+    const value = Math.max(0, Math.round(Number(seconds) || 0));
+    if (value < 90) return `${value} s`;
+    const minutes = Math.round(value / 60);
+    if (minutes < 90) return `${minutes} min`;
+    return `${Math.round(minutes / 60)} h`;
   },
 
   _deviceTitle(device) {
@@ -550,7 +627,13 @@ export const devicesMixin = {
       const paths = device.paths || [];
       const preferredPath = device.preferred_path || paths[0];
       const previewSize = this._devicePreviewSize(device);
-      const temporarilyUnseen = !!device.temporarily_unseen;
+      // "Missed by the last scan" is not "gone". A display advertises
+      // intermittently and an on-demand gateway scan is a window of a few
+      // seconds, so one miss is routine - the card used to flip to "Čekám na
+      // signál" for a display that was answering writes perfectly well. The
+      // backend now says how long it has actually been silent (out_of_range,
+      // see DISCOVERY_UNSEEN_GRACE_SECONDS); only that earns the warning.
+      const temporarilyUnseen = this._displayIsOutOfRange(device);
       const editing = this._editingDeviceAddress === device.address;
       const writingJob = (this._queue?.jobs || []).find((job) =>
         job.status === "writing"
@@ -574,9 +657,9 @@ export const devicesMixin = {
 
       return `<article class="display-tile ${temporarilyUnseen ? "is-stale" : ""} ${writingJob ? "is-writing" : ""} ${recentlySucceededJob ? "is-uploaded" : ""}" data-device-card-settings="${this._escape(device.address)}" role="button" tabindex="0" aria-label="Upravit displej ${this._escape(this._deviceTitle(device))}">
         <header class="display-tile-header">
-          <span class="display-online-dot ${temporarilyUnseen ? "stale" : ""}" title="${temporarilyUnseen ? "Displej nebyl zachycen v posledním krátkém skenu" : "Displej je dostupný"}"></span>
+          <span class="display-online-dot ${temporarilyUnseen ? "stale" : ""}" title="${this._escape(this._displayReachabilityTitle(device))}"></span>
           <div class="display-tile-identity ${editing ? "is-editing" : ""}">${editing ? `<input class="display-name-inline" data-device-name-input="${this._escape(device.address)}" value="${this._escape(this._deviceNameDraft)}" placeholder="Například Kuchyň" aria-label="Název displeje">` : `<strong>${this._escape(this._deviceTitle(device))}</strong>`}<span>${this._escape(device.model || "eInk displej")} · ${this._escape(device.address)}</span></div>
-          <span class="display-tile-tools">${this._renderDisplayPaletteBookmarks(device)}${this._renderIdentifyButton(device)}${editing ? `<button class="tile-icon-btn tile-save-name-btn" data-device-name-save="${this._escape(device.address)}" title="Uložit název" aria-label="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button>` : `<button class="tile-icon-btn" data-device-rename="${this._escape(device.address)}" title="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}" aria-label="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>`}</span>
+          <span class="display-tile-tools">${this._renderDisplayPaletteBookmarks(device)}${editing ? `<button class="tile-icon-btn tile-save-name-btn" data-device-name-save="${this._escape(device.address)}" title="Uložit název" aria-label="Uložit název"><ha-icon icon="mdi:check"></ha-icon></button>` : `<button class="tile-icon-btn" data-device-rename="${this._escape(device.address)}" title="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}" aria-label="${device.display_name ? "Přejmenovat displej" : "Pojmenovat displej"}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>`}</span>
           ${mode === "list" ? `<span class="display-resolution"><ha-icon icon="mdi:aspect-ratio"></ha-icon>${previewSize.width} × ${previewSize.height}</span>` : ""}
           ${mode === "list" ? transferState : ""}
         </header>
@@ -606,84 +689,6 @@ export const devicesMixin = {
       </article>`;
     }).join("")}</div>
     ${this._renderPriceSaleDialog()}`;
-  },
-
-  // "Which one of these is it?" - the light on the display itself, from the
-  // list where the user is looking at all of them at once.
-  //
-  // A toggle rather than a momentary flash: finding a display means walking to
-  // it, so the light has to still be on when you get there. The backend puts
-  // it out on its own after a few minutes; pressing again puts it out now.
-  _renderIdentifyButton(device) {
-    const address = String(device.address || "");
-    // Nothing at all rather than a disabled button: this display was asked and
-    // wrote back that it has no indicator, so a greyed-out light is a control
-    // for a feature the hardware does not have. The backend only ever sets
-    // this after a real refusal, so a display that has never been asked keeps
-    // the button.
-    if (device.has_indicator === false) return "";
-    const lit = this._identifying?.has(address.toUpperCase());
-    const busy = this._identifyBusy === address.toUpperCase();
-    const label = lit ? "Zhasnout kontrolku displeje" : "Rozsvítit kontrolku displeje";
-    return `<button class="tile-icon-btn tile-identify-btn ${lit ? "is-lit" : ""}"`
-      + ` data-device-identify="${this._escape(address)}" data-device-identify-on="${lit ? "0" : "1"}"`
-      + ` title="${label}" aria-label="${label}" aria-pressed="${lit ? "true" : "false"}" ${busy ? "disabled" : ""}>`
-      + `<ha-icon icon="mdi:${busy ? "loading" : lit ? "led-on" : "led-outline"}" class="${busy ? "spin" : ""}"></ha-icon></button>`;
-  },
-
-  // Applied to the scan result the cards are drawn from, so the button goes
-  // away on this render rather than after the next scan.
-  _markDisplayWithoutIndicator(key) {
-    for (const device of this._result?.devices || []) {
-      if (String(device.address || "").toUpperCase() === key) device.has_indicator = false;
-    }
-  },
-
-  async _toggleDisplayIdentify(address, turnOn) {
-    if (!this._hass || !address) return;
-    const key = address.toUpperCase();
-    this._identifying ||= new Set();
-    this._identifyBusy = key;
-    this._render();
-    this._paint();
-    try {
-      const result = await this._hass.callWS({
-        type: "dratek_eink/identify",
-        address,
-        on: !!turnOn,
-      });
-      if (result?.supported === false) {
-        // The display was reached and declined. Repeating it costs half a
-        // minute and a little of its battery for the same answer, so the card
-        // drops the control instead of leaving it to be pressed again.
-        this._identifying.delete(key);
-        this._markDisplayWithoutIndicator(key);
-        this._error = "Tenhle displej kontrolku nemá – příkaz přijal, ale nerozsvítil se. Tlačítko u něj mizí.";
-        return;
-      }
-      if (result?.ok === false) throw new Error(result.error || "Displej neodpověděl.");
-      if (turnOn) this._identifying.add(key);
-      else this._identifying.delete(key);
-      // The light goes out on its own after the backend's timeout, so the
-      // button has to stop claiming otherwise at the same moment.
-      window.clearTimeout(this._identifyTimers?.[key]);
-      this._identifyTimers ||= {};
-      if (turnOn && Number(result?.minutes) > 0) {
-        this._identifyTimers[key] = window.setTimeout(() => {
-          this._identifying.delete(key);
-          this._render();
-          this._paint();
-        }, Number(result.minutes) * 60 * 1000);
-      }
-    } catch (err) {
-      this._identifying.delete(key);
-      // The same surface the devices page reports every other failure on.
-      this._error = `Kontrolku displeje se nepodařilo ovládnout: ${this._message(err)}`;
-    } finally {
-      this._identifyBusy = "";
-      this._render();
-      this._paint();
-    }
   },
 
   // The cenovka dialog and the AKCE badge on a device card both belong to one
@@ -978,15 +983,21 @@ export const devicesMixin = {
     };
   },
 
-  _renderDisplayTemplateSetupDialog() {
-    const templateId = this._displayTemplateSetupId;
-    if (!templateId) return "";
-    const template = this._displayTemplateCards().find((item) => item.id === templateId);
-    if (!template) return "";
-    const recipe = this._templateSetupRecipe(template);
-    const integrations = (recipe.integrations || []).map((item) => {
-      const states = this._hass?.states || {};
-      const normalize = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  // One requirement per card, even when several integrations satisfy it.
+  //
+  // Alternatives used to be listed as separate cards, each with its own
+  // status. Because the status is a domain check and alternatives share a
+  // domain, they always agreed - so one missing weather integration showed as
+  // three red "Chybí" badges, and installing Met.no turned AccuWeather and
+  // OpenWeatherMap green too, claiming integrations the user does not have.
+  // Entries that carry the same `oneOf` label are one requirement with one
+  // status and the options listed inside it.
+  _templateIntegrationGroups(recipe) {
+    const states = this._hass?.states || {};
+    const normalize = (value) => String(value || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const groups = [];
+    const byLabel = new Map();
+    for (const item of recipe.integrations || []) {
       const friendlyNames = new Set((item.entityFriendlyNames || []).map(normalize));
       const foundByPrefix = Array.isArray(item.entityPrefixes) && item.entityPrefixes.length
         && Object.keys(states).some((entityId) => item.entityPrefixes.some((prefix) => entityId.startsWith(prefix)));
@@ -995,13 +1006,44 @@ export const devicesMixin = {
         ? foundByPrefix || foundByName
         : this._hasEntityDomain(item.domain));
       const documentationUrl = item.url || (item.core && !item.helper ? `https://www.home-assistant.io/integrations/${item.domain}/` : "");
-      const link = documentationUrl
-        ? `<a href="${this._escape(documentationUrl)}" target="_blank" rel="noopener noreferrer">${this._escape(item.linkLabel || "Dokumentace")}</a>`
+      const option = { name: item.name, why: item.why, domain: item.domain, documentationUrl, linkLabel: item.linkLabel || "Dokumentace" };
+      const label = item.oneOf || "";
+      if (!label) {
+        groups.push({ label: item.name, domain: item.domain, found, choice: false, options: [option] });
+        continue;
+      }
+      const existing = byLabel.get(label);
+      if (existing) {
+        existing.options.push(option);
+        // Any one of them satisfies the requirement.
+        existing.found = existing.found || found;
+        continue;
+      }
+      const group = { label, domain: item.domain, found, choice: true, options: [option] };
+      byLabel.set(label, group);
+      groups.push(group);
+    }
+    return groups;
+  },
+
+  _renderDisplayTemplateSetupDialog() {
+    const templateId = this._displayTemplateSetupId;
+    if (!templateId) return "";
+    const template = this._displayTemplateCards().find((item) => item.id === templateId);
+    if (!template) return "";
+    const recipe = this._templateSetupRecipe(template);
+    const integrations = this._templateIntegrationGroups(recipe).map((group) => {
+      const option = group.options[0];
+      const link = option.documentationUrl
+        ? `<a href="${this._escape(option.documentationUrl)}" target="_blank" rel="noopener noreferrer">${this._escape(option.linkLabel)}</a>`
         : "";
-      return `<li class="template-setup-integration ${found ? "is-found" : "is-missing"}">
-        <span class="template-setup-status"><ha-icon icon="mdi:${found ? "check-circle" : "alert-circle-outline"}"></ha-icon></span>
-        <div><strong>${this._escape(item.name)}</strong><small>${this._escape(item.why)}</small>
-          <span class="template-setup-meta">${found ? `Nalezeno v Home Assistantu (${this._escape(item.domain)}.*)` : `Zatím nenalezeno – chybí entity ${this._escape(item.domain)}.*`} ${link}</span>
+      const detail = group.choice
+        ? `Stačí jedna z možností: ${this._escape(group.options.map((entry) => entry.name).join(", "))}`
+        : this._escape(option.why);
+      return `<li class="template-setup-integration ${group.found ? "is-found" : "is-missing"}">
+        <span class="template-setup-status"><ha-icon icon="mdi:${group.found ? "check-circle" : "alert-circle-outline"}"></ha-icon></span>
+        <div><strong>${this._escape(group.label)}</strong><small>${detail}</small>
+          <span class="template-setup-meta">${group.found ? `Nalezeno v Home Assistantu (${this._escape(group.domain)}.*)` : `Zatím nenalezeno – chybí entity ${this._escape(group.domain)}.*`} ${group.choice ? "" : link}</span>
         </div>
       </li>`;
     }).join("");
@@ -1978,7 +2020,7 @@ export const devicesMixin = {
     this._refreshTemplateEntityElements?.();
   },
 
-  _displayTemplateDraftPayload(device = this._device()) {
+  _displayTemplateDraftPayload(device = this._selectedDevice()) {
     const address = String(device?.address || this._selectedDeviceAddress || "").toUpperCase();
     this._rememberActiveTemplateEditorState();
     return {
@@ -2000,7 +2042,7 @@ export const devicesMixin = {
       placements: structuredClone(this._templateCanvasPlacements || {}),
       image_library: structuredClone(this._templateImageLibrary || []),
       designer_viewport: this._templateDesignerViewport || "wide",
-      meteoradar_country: this._meteoradarCountry || "cz",
+      meteoradar_country: this._activeMeteoradarCountry(),
       meteoradar_show_precipitation: this._displayTemplateConfig?.meteoradar_show_precipitation !== false,
       meteoradar_show_wind: this._displayTemplateConfig?.meteoradar_show_wind === true,
       transit_stop_id: this._displayTemplateConfig?.transit_stop_id || "",
@@ -2023,6 +2065,16 @@ export const devicesMixin = {
         ? this._customImageFitMode
         : "cover",
     };
+  },
+
+  // The one place the radar's country is read from. _displayTemplateConfig is
+  // rebuilt wholesale from the draft every time a display is opened, so it is
+  // the authority; _meteoradarCountry is the mirror the click handler and the
+  // draft payload keep alongside it, and is only a fallback here. Reading the
+  // mirror first meant a value left over from the previously opened display
+  // could win over the config just loaded for this one.
+  _activeMeteoradarCountry() {
+    return this._displayTemplateConfig?.meteoradar_country || this._meteoradarCountry || "cz";
   },
 
   _restoreDisplayTemplateConfig(config) {
@@ -2541,7 +2593,7 @@ export const devicesMixin = {
     return `<div class="interactive-country-map-widget">
       <div class="country-map-header">
         <ha-icon icon="mdi:map-legend"></ha-icon>
-        <strong>Výběr státu srážkové radarové mapy</strong>
+        <strong>Radarová mapa</strong>
         <span class="active-country-pill">${this._countryFlagSvg(activeCountryObj.id, 20, 13)} ${this._escape(activeCountryObj.name)}</span>
       </div>
       <div class="country-map-svg-wrap">
@@ -2597,26 +2649,25 @@ export const devicesMixin = {
         </button>`).join("")}
       </div>
 
-      <div class="meteoradar-home-note" style="display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 13px; opacity: 0.85;">
-        <ha-icon icon="mdi:home-map-marker"></ha-icon>
-        <span>Domov se na mapě značí automaticky tečkou podle polohy nastavené v Home Assistantu (Nastavení → Systém → Obecné).</span>
+      <div class="meteoradar-layers-card">
+        <strong><ha-icon icon="mdi:layers-outline"></ha-icon>Vrstvy na mapě</strong>
+        <div class="meteoradar-layers-options">
+          <label class="meteoradar-layer-toggle">
+            <input type="checkbox" id="mrOptPrecipitation" ${showPrecipitation ? "checked" : ""} data-device-address="${this._escape(address)}" />
+            <ha-icon icon="mdi:weather-pouring"></ha-icon>
+            <span>Srážky<small>Živá data z radaru</small></span>
+          </label>
+          <label class="meteoradar-layer-toggle">
+            <input type="checkbox" id="mrOptWind" ${showWind ? "checked" : ""} data-device-address="${this._escape(address)}" />
+            <ha-icon icon="mdi:weather-windy"></ha-icon>
+            <span>Vítr<small>Šipky ukazují, kam vítr fouká</small></span>
+          </label>
+        </div>
       </div>
 
-      <div class="meteoradar-options-card" style="margin-top: 14px; padding: 12px 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-          <ha-icon icon="mdi:checkbox-multiple-marked-outline" style="color: var(--primary-color, #03a9f4);"></ha-icon>
-          <strong style="font-size: 13px;">Prvky zobrazované na radarové mapě:</strong>
-        </div>
-        <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px;">
-          <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
-            <input type="checkbox" id="mrOptPrecipitation" ${showPrecipitation ? "checked" : ""} data-device-address="${this._escape(address)}" />
-            <span>🌧️ Zobrazovat srážky</span>
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
-            <input type="checkbox" id="mrOptWind" ${showWind ? "checked" : ""} data-device-address="${this._escape(address)}" />
-            <span>💨 Aktuální směr větru (šipky)</span>
-          </label>
-        </div>
+      <div class="meteoradar-home-note">
+        <ha-icon icon="mdi:home-map-marker"></ha-icon>
+        <span>Domov se na mapě značí tečkou podle polohy nastavené v Home Assistantu (Nastavení → Systém → Obecné).</span>
       </div>
     </div>`;
   },
@@ -2624,32 +2675,30 @@ export const devicesMixin = {
   _renderTemplateSetupGuide(template) {
     const recipe = this._templateSetupRecipe(template);
 
-    const integrations = (recipe.integrations || []).map((item) => {
-      const states = this._hass?.states || {};
-      const normalize = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-      const friendlyNames = new Set((item.entityFriendlyNames || []).map(normalize));
-      const foundByPrefix = Array.isArray(item.entityPrefixes) && item.entityPrefixes.length
-        && Object.keys(states).some((entityId) => item.entityPrefixes.some((prefix) => entityId.startsWith(prefix)));
-      const foundByName = friendlyNames.size > 0 && Object.values(states).some((state) => friendlyNames.has(normalize(state?.attributes?.friendly_name)));
-      const found = item.internal || ((item.entityPrefixes || []).length || friendlyNames.size
-        ? foundByPrefix || foundByName
-        : this._hasEntityDomain(item.domain));
-      const documentationUrl = item.url || (item.core && !item.helper ? `https://www.home-assistant.io/integrations/${item.domain}/` : "");
-      const link = documentationUrl
-        ? `<a href="${this._escape(documentationUrl)}" target="_blank" rel="noopener noreferrer" class="template-setup-doc-link"><ha-icon icon="mdi:open-in-new"></ha-icon>${this._escape(item.linkLabel || "Dokumentace")}</a>`
-        : "";
-      return `<li class="template-guide-integration-card ${found ? "is-found" : "is-missing"}">
+    const integrations = this._templateIntegrationGroups(recipe).map((group) => {
+      const docLink = (option) => (option.documentationUrl
+        ? `<a href="${this._escape(option.documentationUrl)}" target="_blank" rel="noopener noreferrer" class="template-setup-doc-link"><ha-icon icon="mdi:open-in-new"></ha-icon>${this._escape(option.linkLabel)}</a>`
+        : "");
+      const body = group.choice
+        ? `<p class="template-guide-integration-why">Stačí jedna z těchto možností:</p>
+        <ul class="template-guide-integration-options">${group.options.map((option) => `<li>
+          <strong>${this._escape(option.name)}</strong>
+          <small>${this._escape(option.why)}</small>
+          ${docLink(option)}
+        </li>`).join("")}</ul>`
+        : `<p class="template-guide-integration-why">${this._escape(group.options[0].why)}</p>`;
+      return `<li class="template-guide-integration-card ${group.found ? "is-found" : "is-missing"}">
         <div class="template-guide-integration-top">
-          <strong>${this._escape(item.name)}</strong>
-          <span class="template-setup-status-badge ${found ? "is-found" : "is-missing"}">
-            <ha-icon icon="mdi:${found ? "check-circle" : "alert-circle-outline"}"></ha-icon>
-            ${found ? "Nalezeno" : "Chybí"}
+          <strong>${this._escape(group.label)}</strong>
+          <span class="template-setup-status-badge ${group.found ? "is-found" : "is-missing"}">
+            <ha-icon icon="mdi:${group.found ? "check-circle" : "alert-circle-outline"}"></ha-icon>
+            ${group.found ? "Nalezeno" : "Chybí"}
           </span>
         </div>
-        <p class="template-guide-integration-why">${this._escape(item.why)}</p>
+        ${body}
         <div class="template-guide-integration-footer">
-          <span>${found ? `Připraveno (${this._escape(item.domain)}.*)` : `Doporučeno (${this._escape(item.domain)}.*)`}</span>
-          ${link}
+          <span>${group.found ? `Připraveno (${this._escape(group.domain)}.*)` : `Zatím žádná (${this._escape(group.domain)}.*)`}</span>
+          ${group.choice ? "" : docLink(group.options[0])}
         </div>
       </li>`;
     }).join("");
@@ -2716,7 +2765,7 @@ export const devicesMixin = {
     }
     this._toggleModalScrollLock(true);
     const isRadarTemplate = activeTemplate?.id === "radar" || activeTemplate?.category === "radar" || String(activeTemplate?.id || "").includes("radar");
-    const selectedCountry = this._meteoradarCountry || this._displayTemplateConfig?.meteoradar_country || "cz";
+    const selectedCountry = this._activeMeteoradarCountry();
     const mapWidget = isRadarTemplate ? this._renderInteractiveCountryMap(selectedCountry, this._selectedDeviceAddress) : "";
     const isCustomImageTemplate = activeTemplate?.id === "custom_image";
     const isTransitTemplate = activeTemplate?.id === "transport";
@@ -3114,8 +3163,7 @@ export const devicesMixin = {
         variants: activeVariants,
       }, device);
     if (targetCustomImage) this._customImageDataUrl = targetCustomImage;
-    const previousRenderingDevice = this._renderingDeviceAddress;
-    this._renderingDeviceAddress = device?.address || null;
+    const renderingScope = this._pushRenderingDevice(device?.address);
     try {
       // Template blocks draw themselves as SVG, which has to be decoded into an
       // image before the painter - which is synchronous - can put it on the
@@ -3130,7 +3178,7 @@ export const devicesMixin = {
         overlays.length ? (context, width, height) => this._paintTemplateOverlays(context, overlays, width, height) : null,
       );
     } finally {
-      this._renderingDeviceAddress = previousRenderingDevice;
+      this._popRenderingDevice(renderingScope);
       this._customImageDataUrl = previousCustomImage;
     }
   },
@@ -3780,8 +3828,7 @@ export const devicesMixin = {
   },
 
   async _preparedTemplateEntityBindings(device, width, height) {
-    const previousRenderingDevice = this._renderingDeviceAddress;
-    this._renderingDeviceAddress = device?.address || null;
+    const renderingScope = this._pushRenderingDevice(device?.address);
     try {
       const request = this._currentDisplayTemplateSvgRequest(device);
     if (!request?.templates?.length || typeof DOMParser === "undefined") return { bindings: [], svgTemplate: "" };
@@ -3951,7 +3998,7 @@ export const devicesMixin = {
       if (part === "sidebar") {
         binding.radar_part = "sidebar";
       } else {
-        binding.country = this._meteoradarCountry || this._displayTemplateConfig?.meteoradar_country || "cz";
+        binding.country = this._activeMeteoradarCountry();
         binding.show_precipitation = this._displayTemplateConfig?.meteoradar_show_precipitation !== false;
         binding.show_wind = this._displayTemplateConfig?.meteoradar_show_wind === true;
       }
@@ -3966,7 +4013,7 @@ export const devicesMixin = {
     const cleanBackground = await this._blankedDisplayTemplateBackground(currentDocument, bindings, width, height);
     return { bindings, svgTemplate, cleanBackground };
     } finally {
-      this._renderingDeviceAddress = previousRenderingDevice;
+      this._popRenderingDevice(renderingScope);
     }
   },
 
@@ -4441,8 +4488,7 @@ export const devicesMixin = {
 
   _renderTemplatePhysicalDevicePreview(device, templates, orientation, layout, autoFit = false) {
     const address = String(device.address || "").toUpperCase();
-    const prevAddr = this._renderingDeviceAddress;
-    this._renderingDeviceAddress = address;
+    const renderingScope = this._pushRenderingDevice(address);
     try {
       const base = this._baseDisplaySize(device);
       const sourceWidth = orientation === "portrait" ? Math.min(base.width, base.height) : Math.max(base.width, base.height);
@@ -4501,7 +4547,7 @@ export const devicesMixin = {
       </div>
     </div>`;
     } finally {
-      this._renderingDeviceAddress = prevAddr;
+      this._popRenderingDevice(renderingScope);
     }
   },
 
@@ -6744,10 +6790,8 @@ export const devicesMixin = {
     // is drawn edge to edge and offers neither the drag handle nor the outline.
     const fullBleed = fillDisplay && !autoFit;
     const placeable = !autoFit && !fullBleed;
-    const configStatus = this._templateBindingStatus(template);
-    const hasConfigWarning = configStatus.state !== "complete";
     return `<div class="template-display-slot" data-template-display-slot="${slot}">
-      <div class="display-template-surface template-canvas-item size-${templateSize === "large" ? "large" : "small"} format-${format === "wide" ? "wide" : "narrow"} is-${orientation} ${selected ? "is-selected" : ""} ${autoFit ? "is-auto-fit" : ""} ${fullBleed ? "is-full-bleed" : ""} ${hasConfigWarning ? "has-config-warning" : ""}" data-preview-template="${template.id}" data-template-canvas-slot="${slot}" ${placeable ? `tabindex="0" role="button" aria-label="Šablona ${this._escape(template.title)}. Kliknutím vyberte a tažením přesuňte."` : ""} style="--template-item-x:${placementX}%;--template-item-y:${placementY}%">
+      <div class="display-template-surface template-canvas-item size-${templateSize === "large" ? "large" : "small"} format-${format === "wide" ? "wide" : "narrow"} is-${orientation} ${selected ? "is-selected" : ""} ${autoFit ? "is-auto-fit" : ""} ${fullBleed ? "is-full-bleed" : ""}" data-preview-template="${template.id}" data-template-canvas-slot="${slot}" ${placeable ? `tabindex="0" role="button" aria-label="Šablona ${this._escape(template.title)}. Kliknutím vyberte a tažením přesuňte."` : ""} style="--template-item-x:${placementX}%;--template-item-y:${placementY}%">
         <svg class="template-responsive-preview" viewBox="0 0 ${templateWidth} ${templateHeight}" preserveAspectRatio="${fillDisplay ? "none" : "xMidYMid meet"}" aria-hidden="true">
           <foreignObject x="0" y="0" width="${templateWidth}" height="${templateHeight}">
             <div xmlns="http://www.w3.org/1999/xhtml" class="template-responsive-preview-body">${this._templateSvgPreviewBody(template, templateWidth, templateHeight)}</div>
@@ -6755,7 +6799,6 @@ export const devicesMixin = {
         </svg>
         ${primary && (!autoFit || template.user_created) ? this._renderTemplateEditorOverlays(template, orientation, templateWidth / Math.max(1, templateHeight), templateWidth, templateHeight) : ""}
         ${placeable ? `<span class="template-canvas-selection-label">${this._escape(template.title)}</span>` : ""}
-        ${this._renderTemplateConfigurationWarning(template, configStatus)}
       </div>
     </div>`;
   },

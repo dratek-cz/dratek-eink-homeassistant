@@ -1,28 +1,28 @@
-import { storageMixin } from "./panel/panel-storage.mixin.js";
-import { queueMixin } from "./panel/panel-queue.mixin.js?v=live-log-update-1";
+import { storageMixin } from "./panel/panel-storage.mixin.js?v=per-display-isolation-1";
+import { queueMixin } from "./panel/panel-queue.mixin.js?v=waiting-for-display-1";
 import { automationsMixin } from "./panel/panel-automations.mixin.js?v=queued-write-cancel-1";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=system-alerts-1";
 import { webSerialMixin } from "./panel/panel-webserial.mixin.js?v=browser-flash-1";
-import { devicesMixin } from "./panel/panel-devices.mixin.js?v=display-identify-1";
-import { projectsMixin } from "./panel/panel-projects.mixin.js?v=interval-only-default-1";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=per-display-isolation-1";
+import { projectsMixin } from "./panel/panel-projects.mixin.js?v=per-display-isolation-1";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
 import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-3";
 import { templatesMixin } from "./panel/panel-templates.mixin.js?v=radar-direct-dither-1";
 import { variablesMixin } from "./panel/panel-variables.mixin.js?v=readable-chart-type-2";
 import { previewMixin } from "./panel/panel-preview.mixin.js?v=device-preview-quality-1";
 import { renderUiMixin } from "./panel/panel-render-ui.mixin.js?v=gateway-replaces-bluetooth-1";
-import { i18nMixin } from "./panel/panel-i18n.mixin.js?v=display-identify-1";
-import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=display-identify-1";
+import { i18nMixin } from "./panel/panel-i18n.mixin.js?v=per-display-isolation-1";
+import { inspectorMixin } from "./panel/panel-inspector.mixin.js?v=per-display-isolation-1";
 import { drawBasicMixin } from "./panel/panel-draw-basic.mixin.js?v=templates-4c-1";
 import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-chart-type-3";
-import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=bar-label-spacing-1";
+import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=radar-cache-per-display-1";
 import { templateBlocksMixin } from "./panel/panel-template-blocks.mixin.js?v=template-blocks-2";
 import { templateComponentsMixin } from "./panel/panel-template-components.mixin.js?v=component-parts-2";
 // INTERNAL - remove with the rest of the brand-logo feature before the retail
 // release (PRIVATE-NOTES.md).
-import { brandLogoMixin } from "./panel/panel-brand-logo.mixin.js?v=logo-tonal-7";
+import { brandLogoMixin } from "./panel/panel-brand-logo.mixin.js?v=logo-tonal-8";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.358";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.360";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -35,11 +35,6 @@ class DratekEinkPanel extends HTMLElement {
     this._result = this._loadCachedScanResult();
     this._error = "";
     this._sendResult = null;
-    this._ledSending = false;
-    this._ledResult = null;
-    this._identifySending = false;
-    this._identifyResult = null;
-    this._rgbLed = { mode: "off", color: "#00a2a5", flashTime: 10 };
     this._selectedDeviceAddress = "";
     this._displaySettingsView = "templates";
     this._displayTemplateSearchQuery = "";

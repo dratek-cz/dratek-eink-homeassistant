@@ -15,6 +15,7 @@ from .automation import get_entity_auto_update_manager
 from .const import (
     DISCOVERY_CACHE_KEY,
     DISCOVERY_GRACE_SECONDS,
+    DISCOVERY_UNSEEN_GRACE_SECONDS,
     LOCAL_ROUTE_ID,
     PARTIAL_UPDATE_CONFIRMED_SDK_TYPES,
 )
@@ -35,96 +36,6 @@ from .ws_shared import (
     _project_store,
     _save_gateway_preferences,
 )
-
-
-@websocket_api.require_admin
-@websocket_api.websocket_command(
-    {
-        "type": "dratek_eink/set_rgb_led",
-        "address": str,
-        "mode": vol.All(int, vol.Range(min=0, max=2)),
-        "flash_time": vol.All(int, vol.Range(min=0, max=255)),
-        "red": vol.All(int, vol.Range(min=0, max=255)),
-        "green": vol.All(int, vol.Range(min=0, max=255)),
-        "blue": vol.All(int, vol.Range(min=0, max=255)),
-    }
-)
-@websocket_api.async_response
-async def websocket_set_rgb_led(
-    hass: HomeAssistant,
-    connection: websocket_api.ActiveConnection,
-    msg: dict[str, Any],
-) -> None:
-    """Control the RGB indicator LED over the display's local BLE connection."""
-    address = msg["address"]
-
-    async def run_transfer(add_log) -> dict[str, Any]:
-        transfer = DratekTransfer(log=add_log, hass=hass)
-        await transfer.set_rgb_led(
-            address,
-            msg["mode"],
-            msg["flash_time"],
-            msg["red"],
-            msg["green"],
-            msg["blue"],
-        )
-        return {"ok": True, "address": address, "log": []}
-
-    try:
-        result = await get_transfer_queue(hass).async_submit(
-            resource="local",
-            transport_type="local",
-            transport_name="Home Assistant Bluetooth",
-            address=address,
-            operation="rgb_led",
-            runner=run_transfer,
-        )
-    except Exception as exc:  # BLE stack can raise platform-specific exceptions
-        connection.send_result(
-            msg["id"],
-            {"ok": False, "address": address, "error": str(exc), "log": []},
-        )
-        return
-    connection.send_result(msg["id"], result)
-
-
-@websocket_api.require_admin
-@websocket_api.websocket_command(
-    {
-        "type": "dratek_eink/flash_identify",
-        "address": str,
-    }
-)
-@websocket_api.async_response
-async def websocket_flash_identify(
-    hass: HomeAssistant,
-    connection: websocket_api.ActiveConnection,
-    msg: dict[str, Any],
-) -> None:
-    """Blink the display's indicator once so it can be located ("find me")."""
-    address = msg["address"]
-
-    async def run_transfer(add_log) -> dict[str, Any]:
-        transfer = DratekTransfer(log=add_log, hass=hass)
-        await transfer.flash_identify(address)
-        return {"ok": True, "address": address, "log": []}
-
-    try:
-        result = await get_transfer_queue(hass).async_submit(
-            resource="local",
-            transport_type="local",
-            transport_name="Home Assistant Bluetooth",
-            address=address,
-            operation="flash_identify",
-            runner=run_transfer,
-        )
-    except Exception as exc:  # BLE stack can raise platform-specific exceptions
-        connection.send_result(
-            msg["id"],
-            {"ok": False, "address": address, "error": str(exc), "log": []},
-        )
-        return
-    connection.send_result(msg["id"], result)
 
 
 @websocket_api.require_admin
@@ -263,7 +174,15 @@ async def websocket_scan(
         for gateway in gateways:
             scanned_gateways.append(gateway)
             try:
-                gateway_results.append(await async_scan_gateway(hass, gateway["id"], 5))
+                # The scan behind the Obnovit button is the one a person is
+                # waiting on, and the thing it is looking for advertises every
+                # few seconds at best. Five seconds per gateway missed displays
+                # often enough to be reported as them going inactive; eight is
+                # still under the HTTP timeout and roughly halves the chance of
+                # a window falling between two advertisements. The background
+                # route scan stays short (GATEWAY_ROUTE_SCAN_SECONDS) - it runs
+                # unattended and has the discovery cache to fall back on.
+                gateway_results.append(await async_scan_gateway(hass, gateway["id"], 8))
             except Exception as exc:  # one unreachable gateway must not hide the rest
                 gateway_results.append(exc)
 
@@ -355,21 +274,47 @@ async def websocket_scan(
             )
             if path_seen_at and now - path_seen_at <= DISCOVERY_GRACE_SECONDS:
                 retained_path = dict(cached_path)
+                # Still true, and still what routing sorts on: this route was
+                # not heard in this pass. How long it has been silent is a
+                # separate question, and the one the UI should be asking.
                 retained_path["temporarily_unseen"] = True
+                retained_path["unseen_for"] = max(0, now - path_seen_at)
+                retained_path["out_of_range"] = (
+                    now - path_seen_at > DISCOVERY_UNSEEN_GRACE_SECONDS
+                )
                 device.setdefault("paths", []).append(retained_path)
                 current_path_keys.add(path_key)
         device["last_seen_at"] = now
         device["temporarily_unseen"] = False
+        device["unseen_for"] = 0
+        device["out_of_range"] = False
+        # A manual upload held for this display has been waiting for exactly
+        # this moment. Waking it here means it goes out within a second of the
+        # display coming back, instead of on the waiting job's own poll tick.
+        get_transfer_queue(hass).async_notify_display_seen(address)
         discovery_cache[address] = dict(device)
     for address, cached_device in list(discovery_cache.items()):
         if address in devices_by_address:
             continue
         last_seen_at = int(cached_device.get("last_seen_at") or 0)
         if last_seen_at and now - last_seen_at <= DISCOVERY_GRACE_SECONDS:
+            unseen_for = max(0, now - last_seen_at)
+            # A display that was heard a minute ago has not gone anywhere - it
+            # simply did not advertise inside this scan's window. Only once it
+            # has been silent for longer than the settle window is it worth
+            # telling the user it is out of range.
+            out_of_range = unseen_for > DISCOVERY_UNSEEN_GRACE_SECONDS
             retained = dict(cached_device)
             retained["temporarily_unseen"] = True
+            retained["unseen_for"] = unseen_for
+            retained["out_of_range"] = out_of_range
             retained["paths"] = [
-                {**path, "temporarily_unseen": True}
+                {
+                    **path,
+                    "temporarily_unseen": True,
+                    "unseen_for": unseen_for,
+                    "out_of_range": out_of_range,
+                }
                 for path in retained.get("paths", [])
                 if isinstance(path, dict)
             ]
@@ -380,9 +325,6 @@ async def websocket_scan(
     devices = list(devices_by_address.values())
     project_data = await _load_project_data(hass)
     device_names = project_data.get("device_names", {})
-    without_indicator = {
-        str(item).upper() for item in project_data.get("displays_without_indicator") or []
-    }
     gateway_preferences = project_data.get("device_gateway_preferences", {})
     for device in devices:
         device["paths"].sort(
@@ -484,10 +426,6 @@ async def websocket_scan(
                 }
         device["rssi"] = device["preferred_path"].get("rssi")
         device["display_name"] = str(device_names.get(address, ""))
-        # False only once a display has actually been asked and refused - see
-        # async_remember_display_without_indicator. Unknown displays stay True
-        # so the control is offered until the hardware says otherwise.
-        device["has_indicator"] = address not in without_indicator
 
     entry_id = integration_entry_id(hass)
     if entry_id:

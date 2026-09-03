@@ -220,5 +220,85 @@ class LayoutMirrorTests(unittest.TestCase):
         self.assertIn("target_height=height", call)
 
 
+class SidebarLegibilityTests(unittest.TestCase):
+    """The vertical sidebar is a list, and has to read as one.
+
+    It used to centre the hour and the temperature inside the column left of
+    the icon, so every row began at a different x - "9°C" and "-11°C" are three
+    glyphs apart - and the hours read as scattered digits. The current reading
+    was a larger unlabelled number floating above them with nothing to say it
+    was "now" rather than another forecast row.
+    """
+
+    def _text_calls(self, width: int, height: int, forecast: dict) -> list[tuple]:
+        """Every line the sidebar draws, as (text, anchor_x, align).
+
+        Recorded rather than measured off the bitmap: the property under test
+        is where each line is anchored, and reading that back out of pixels
+        means first guessing where the icon column ends - which changes with
+        the row height and made the check pass or fail on the entry count
+        rather than on the alignment.
+        """
+        calls: list[tuple] = []
+        original = render._draw_centered_text
+
+        def spy(draw, text, center_x, center_y, max_w, max_h, size, **kwargs):
+            calls.append((text, round(center_x), kwargs.get("align", "center")))
+            return original(draw, text, center_x, center_y, max_w, max_h, size, **kwargs)
+
+        render._draw_centered_text = spy
+        try:
+            render._draw_radar_sidebar(width, height, forecast, False)
+        finally:
+            render._draw_centered_text = original
+        return calls
+
+    def test_hour_and_temperature_share_one_left_edge(self) -> None:
+        forecast = _forecast(6)
+        # Widths that differ by three glyphs: centring moves the left edge,
+        # left alignment does not.
+        forecast["entries"][0]["temperature"] = "9°C"
+        forecast["entries"][1]["temperature"] = "-11°C"
+        calls = self._text_calls(192, 480, forecast)
+        rows = [call for call in calls if call[0] not in ("TEĎ", forecast["temperature"])]
+        self.assertTrue(rows)
+        self.assertEqual({call[2] for call in rows}, {"left"})
+        self.assertEqual(len({call[1] for call in rows}), 1)
+
+    def test_the_current_reading_is_anchored_with_the_hours(self) -> None:
+        forecast = _forecast(6)
+        calls = self._text_calls(192, 480, forecast)
+        anchors = {call[1] for call in calls}
+        self.assertEqual(len(anchors), 2, f"expected one label edge and one row edge, got {anchors}")
+        self.assertEqual({call[2] for call in calls}, {"left"})
+
+    def test_the_current_reading_is_labelled_and_ruled_off(self) -> None:
+        source = (COMPONENT / "render.py").read_text(encoding="utf-8")
+        sidebar = source[source.index("def _draw_radar_sidebar(") :]
+        sidebar = sidebar[: sidebar.index("def _draw_radar_footer(")]
+        self.assertIn('"TEĎ"', sidebar)
+        self.assertIn("draw.rectangle([x0, y, x1 - 1, y]", sidebar)
+
+    def test_the_rows_fill_the_column_rather_than_truncating_it(self) -> None:
+        # The label and rule above cost just enough height that a fixed row
+        # height dropped the last hour that would still have fitted and left
+        # the remainder as dead space along the bottom edge.
+        image = render._draw_radar_sidebar(192, 480, _forecast(), False)
+        pixels = image.convert("L").load()
+        width, height = image.size
+        last_ink = max(
+            (y for y in range(height) if any(pixels[x, y] < 128 for x in range(width))),
+            default=0,
+        )
+        row_h = max(22, min(64, round((width - 2 * max(3, round(width * 0.07))) * 0.55)))
+        self.assertLess(height - last_ink, row_h)
+
+    def test_a_taller_sidebar_never_shows_fewer_hours(self) -> None:
+        short = _rows_drawn(192, 300, _forecast())
+        for height in (360, 420, 480, 600):
+            with self.subTest(height=height):
+                self.assertGreaterEqual(_rows_drawn(192, height, _forecast()), short)
+
+
 if __name__ == "__main__":
     unittest.main()

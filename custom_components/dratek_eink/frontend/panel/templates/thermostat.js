@@ -36,8 +36,8 @@ export const template = {
   setup: {
     summary: "Aktuální teplota velkým číslem na půlkruhovém budíku, pod ním křivka posledních dvanácti hodin a cílová teplota s výkonem topení.",
     integrations: [
-      { name: "Integrace vašeho termostatu", domain: "climate", core: true, why: "Tado, Netatmo, Zigbee hlavice (Danfoss, Eurotronic) a další dodají jednu entitu climate.* se vším potřebným - aktuální i cílovou teplotou, rozsahem i stavem topení." },
-      { name: "Generic thermostat", domain: "climate", core: true, why: "Termostat složený z libovolného teploměru a spínače topení přímo v Home Assistantu, pokud vaše topení chytrou integraci nemá." },
+      { name: "Integrace vašeho termostatu", oneOf: "Zdroj termostatu", domain: "climate", core: true, why: "Tado, Netatmo, Zigbee hlavice (Danfoss, Eurotronic) a další dodají jednu entitu climate.* se vším potřebným - aktuální i cílovou teplotou, rozsahem i stavem topení." },
+      { name: "Generic thermostat", oneOf: "Zdroj termostatu", domain: "climate", core: true, why: "Termostat složený z libovolného teploměru a spínače topení přímo v Home Assistantu, pokud vaše topení chytrou integraci nemá." },
       { name: "Recorder", domain: "recorder", core: true, why: "Vestavěná databáze historie Home Assistantu. Bez ní se nakreslí ukázková křivka - budík i všechna čísla fungují dál." },
     ],
     steps: [

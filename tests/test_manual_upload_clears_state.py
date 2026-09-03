@@ -16,9 +16,8 @@ import unittest
 
 COMPONENT = Path(__file__).resolve().parents[1] / "custom_components" / "dratek_eink"
 
-# Queue operations that put a new picture on the panel. rgb_led and flash_identify
-# only blink the indicator, so they leave any scheduled refresh alone, and
-# entity_update *is* the scheduled refresh.
+# Queue operations that put a new picture on the panel. entity_update *is* the
+# scheduled refresh.
 IMAGE_WRITE_OPERATIONS = {"design", "partial_design", "text", "service_text"}
 
 # Either the shared helper or the manager call it wraps counts as clearing.
@@ -105,18 +104,6 @@ class ManualUploadClearsStateTests(unittest.TestCase):
                     "display's scheduled entity refresh, so an automatic update "
                     "can overwrite what was just uploaded.",
                 )
-
-    def test_indicator_only_commands_do_not_touch_automation(self):
-        # Blinking the LED is not an upload; it must not disable a user's
-        # configured automatic refresh as a side effect.
-        tree = ast.parse((COMPONENT / "ws_devices.py").read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
-                continue
-            if not (_submitted_operations(node) & {"rgb_led", "flash_identify"}):
-                continue
-            with self.subTest(handler=node.name):
-                self.assertFalse(_called_names(node) & CLEARING_CALLS)
 
     def test_panel_forgets_cached_images_of_the_replaced_design(self):
         source = (

@@ -348,6 +348,33 @@ class ComposeCountryRadarImageTests(unittest.TestCase):
         self.assertEqual(windy.getpixel((0, 0)), (255, 255, 255))
         self.assertEqual(windy.getpixel((windy.width - 1, 0)), (255, 255, 255))
 
+    def test_a_faster_wind_draws_a_heavier_arrow(self) -> None:
+        # Speed used to move only the length, over a 0.72-1.42 range, so a
+        # breeze and a gale differed by about a third of an arrow - nothing
+        # anyone reads off a panel. It now moves the stroke weight too.
+        def ink(speed: float) -> int:
+            image = self._compose(
+                (0, 0, 0, 0), show_wind=True,
+                wind_samples=((0.0, 0.0, 270.0, speed),),
+            )
+            return sum(pixel == meteoradar.BORDER_COLOR for pixel in image.getdata())
+
+        self.assertGreater(ink(55.0), ink(5.0))
+
+    def test_arrows_are_placed_whole_rather_than_masked_into_stumps(self) -> None:
+        # Drawing at full length and then intersecting with the country cut
+        # every arrow that reached a border into an amputated shaft or a
+        # floating head. Arrows are now probed for clearance and shortened
+        # before they are given up on - with the old behaviour kept only as a
+        # whole-map fallback, so a crop too small for any arrow still shows
+        # its wind.
+        source = (COMPONENT / "meteoradar.py").read_text(encoding="utf-8")
+        vectors = source[source.index("def _draw_wind_vectors(") :]
+        vectors = vectors[: vectors.index("def _stitch_tiles(")]
+        self.assertIn("arrows = _collect(require_clearance=True)", vectors)
+        self.assertIn("arrows = _collect(require_clearance=False)", vectors)
+        self.assertIn("for scale in (1.0, 0.78, 0.6, 0.45):", vectors)
+
     def test_no_fake_arrows_are_drawn_without_live_wind_samples(self) -> None:
         plain = self._compose((0, 0, 0, 0), show_wind=False)
         unavailable = self._compose((0, 0, 0, 0), show_wind=True)

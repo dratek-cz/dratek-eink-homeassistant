@@ -176,13 +176,6 @@ export const projectsMixin = {
     this._variables = structuredClone(source.variables);
     this._meteoradarCountry = source.template_config?.meteoradar_country || "cz";
     this._restoreDisplayTemplateConfig?.(source.template_config);
-    const led = source.rgb_led || {};
-    this._rgbLed = {
-      mode: ["off", "on", "flash"].includes(led.mode) ? led.mode : "off",
-      color: /^#[0-9a-f]{6}$/i.test(led.color || "") ? led.color.toLowerCase() : "#00a2a5",
-      flashTime: Math.max(1, Math.min(255, Number(led.flash_time) || 10)),
-    };
-    this._ledResult = null;
     this._selectedIds = [];
     this._selectedProjectId = source.id || "";
     this._projectName = source.name || (device ? `Navrh ${this._deviceTitle(device)}` : "Novy navrh");
@@ -298,7 +291,7 @@ export const projectsMixin = {
   _scheduleDraftSave() {
     if (this._restoringDraft || !this._hass || !this._selectedDeviceAddress) return;
     if (!this._draftIsLoadedForSelectedDevice()) return;
-    const device = this._device();
+    const device = this._selectedDevice();
     if (device) this._deviceDrafts[String(device.address).toUpperCase()] = structuredClone(this._projectPayload(device));
     window.clearTimeout(this._draftSaveTimer);
     this._draftSaveTimer = window.setTimeout(() => this._saveCurrentDeviceDraft(), 700);
@@ -307,6 +300,18 @@ export const projectsMixin = {
   _queueDeviceDraftSave(device, payload = this._projectPayload(device)) {
     if (!device || !this._hass) return Promise.resolve(false);
     const address = String(device.address || "").toUpperCase();
+    // A draft carries the state of whichever display is open, so it may only
+    // ever be written under that display's own address. Everything upstream
+    // resolves the device through _selectedDevice() now, but this is the check
+    // that makes "editing one display can never change another" a property of
+    // the code rather than of every caller remembering to.
+    const loaded = String(this._loadedDraftAddress || "").toUpperCase();
+    if (loaded && address !== loaded) {
+      console.warn(
+        `DRATEK eInk: refusing to save the draft of ${loaded} under ${address}.`,
+      );
+      return Promise.resolve(false);
+    }
     const snapshot = structuredClone(payload);
     const revision = Number(this._draftSaveRevision || 0) + 1;
     this._draftSaveRevision = revision;
@@ -338,7 +343,7 @@ export const projectsMixin = {
     if (!this._draftIsLoadedForSelectedDevice()) return;
     window.clearTimeout(this._draftSaveTimer);
     this._draftSaveTimer = null;
-    const device = this._device();
+    const device = this._selectedDevice();
     if (!device) return;
     try {
       await this._queueDeviceDraftSave(device, this._projectPayload(device));
@@ -381,7 +386,7 @@ export const projectsMixin = {
     this._scheduleDraftSave();
   },
 
-  _projectPayload(device = this._device()) {
+  _projectPayload(device = this._selectedDevice()) {
     const size = this._displaySize(device);
     return {
       id: this._selectedProjectId || undefined,
@@ -399,11 +404,6 @@ export const projectsMixin = {
       width: size.width,
       height: size.height,
       variables: this._variables,
-      rgb_led: {
-        mode: this._rgbLed.mode,
-        color: this._rgbLed.color,
-        flash_time: this._rgbLed.flashTime,
-      },
       objects: this._objects.map(({ _img, ...object }) => object),
       template_config: this._displayTemplateDraftPayload?.(device),
     };

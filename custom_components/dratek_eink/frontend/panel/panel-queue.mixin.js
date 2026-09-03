@@ -389,8 +389,26 @@ export const queueMixin = {
     return name && name !== address ? `${name} · ${address}` : address;
   },
 
+  // A held upload is still "queued" - which is what keeps its cancel button
+  // working - but "Ve frontě" says nothing about why it is not moving. It is
+  // waiting for a display that is not answering, and that is the one thing
+  // worth telling the user, together with how long it will keep trying.
+  _queueJobIsWaitingForDisplay(job) {
+    return String(job?.status || "") === "queued" && job?.waiting_for_display === true;
+  },
+
+  _queueWaitingNote(job) {
+    if (!this._queueJobIsWaitingForDisplay(job)) return "";
+    const until = Number(job.waiting_until || 0);
+    if (!until) return "Displej se neozývá. Nahrání čeká ve frontě a odešle se, jakmile bude displej zase dostupný.";
+    const remaining = Math.max(0, until - Math.round(Date.now() / 1000));
+    return `Displej se neozývá. Nahrání čeká ve frontě a odešle se, jakmile bude displej zase dostupný (nejdéle ${this._formatUnseenFor(remaining)}).`;
+  },
+
   _renderQueueJob(job) {
     const status = String(job.status || "");
+    const waitingForDisplay = this._queueJobIsWaitingForDisplay(job);
+    const waitingNote = this._queueWaitingNote(job);
     const address = String(job.address || "").toUpperCase();
     const device = (this._result?.devices || []).find((item) => String(item.address || "").toUpperCase() === address);
     const operation = OPERATION_LABELS[job.operation] || job.operation;
@@ -398,7 +416,7 @@ export const queueMixin = {
     const logLines = Array.isArray(job.log) ? job.log : [];
     const logText = logLines.length ? logLines.slice(-3).join(" | ") : "";
     return `<article class="queue-row ${this._escape(status)}" data-queue-job="${this._escape(job.id || "")}">
-      <span class="queue-icon"><ha-icon icon="${STATUS_ICONS[status] || "mdi:help"}"></ha-icon></span>
+      <span class="queue-icon"><ha-icon icon="${waitingForDisplay ? "mdi:bluetooth-off" : STATUS_ICONS[status] || "mdi:help"}"></ha-icon></span>
       <div class="queue-main">
         <strong>${this._escape(device ? this._deviceTitle(device) : address)}</strong>
         <small>${this._escape(address)} · ${this._escape(operation)}</small>
@@ -412,10 +430,10 @@ export const queueMixin = {
         ${job.finished_at ? `<small class="queue-duration"><ha-icon icon="mdi:timer-outline"></ha-icon>${this._formatDuration(job.started_at, job.finished_at)}</small>` : ""}
       </div>
       <div class="queue-row-end">
-        <span class="pill ${STATUS_PILLS[status] || "muted"}">${STATUS_LABELS[status] || this._escape(status)}</span>
-        ${status === "queued" ? `<button type="button" class="tile-icon-btn queue-cancel-btn" data-cancel-queue-job="${this._escape(job.id || "")}" title="Zrušit frontu"><ha-icon icon="mdi:close-circle-outline"></ha-icon></button>` : ""}
+        <span class="pill ${waitingForDisplay ? "warn" : STATUS_PILLS[status] || "muted"}">${waitingForDisplay ? "Čeká na displej" : STATUS_LABELS[status] || this._escape(status)}</span>
+        ${status === "queued" ? `<button type="button" class="tile-icon-btn queue-cancel-btn" data-cancel-queue-job="${this._escape(job.id || "")}" title="${waitingForDisplay ? "Zrušit čekající nahrání" : "Zrušit frontu"}"><ha-icon icon="mdi:close-circle-outline"></ha-icon></button>` : ""}
       </div>
-      <div class="queue-row-log" data-queue-live-summary ${job.error || logText ? "" : "hidden"}>${this._escape(job.error || logText)}</div>
+      <div class="queue-row-log" data-queue-live-summary ${waitingNote || job.error || logText ? "" : "hidden"}>${this._escape(waitingNote || job.error || logText)}</div>
       <details class="queue-row-details" data-queue-log="${this._escape(job.id || "")}" ${logLines.length ? "" : "hidden"}>
         <summary><ha-icon icon="mdi:text-box-search-outline"></ha-icon>Zobrazit celý protokol (<span data-queue-log-count>${logLines.length}</span> řádků)</summary>
         <pre data-queue-log-lines>${this._escape(logLines.join("\n"))}</pre>

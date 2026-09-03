@@ -24,12 +24,10 @@ from .ws_automations import (
     websocket_update_automation_trigger_mode,
 )
 from .ws_devices import (
-    websocket_flash_identify,
     websocket_render_preview,
     websocket_scan,
     websocket_set_device_gateway,
     websocket_set_device_name,
-    websocket_set_rgb_led,
 )
 from .ws_meteoradar import websocket_render_meteoradar
 from .ws_transit import websocket_transit_departures, websocket_transit_search_stops
@@ -68,7 +66,6 @@ from .ws_projects import (
 from .ws_queue import websocket_cancel_queue_job, websocket_clear_queue, websocket_transfer_queue
 from .ws_sending import (
     websocket_commit_design_upload,
-    websocket_identify,
     websocket_send_design,
     websocket_send_partial_design,
     websocket_send_text,
@@ -92,9 +89,6 @@ COMMANDS = (
     websocket_delete_automation,
     websocket_scan,
     websocket_render_preview,
-    websocket_set_rgb_led,
-    websocket_flash_identify,
-    websocket_identify,
     websocket_send_text,
     websocket_send_design,
     websocket_send_partial_design,

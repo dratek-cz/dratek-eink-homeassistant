@@ -149,8 +149,6 @@ async def _request_entity_automation_refresh(
             manager._last_refresh_at[normalized] = time.monotonic()
 
 
-
-
 def _battery_payload(device: Any) -> dict[str, Any]:
     """Expose raw voltage data and the CR2450 capacity estimate."""
     return {
@@ -169,10 +167,6 @@ def _project_store(hass: HomeAssistant) -> Store:
         store = Store(hass, PROJECT_STORE_VERSION, PROJECT_STORE_KEY)
         domain_data[PROJECT_STORE_DATA_KEY] = store
     return store
-
-
-def _normalize_gateway_preferences(value: Any) -> dict[str, str]:
-    return normalize_gateway_preferences(value)
 
 
 async def _save_gateway_preferences(
@@ -197,33 +191,6 @@ async def _load_project_data(hass: HomeAssistant) -> dict[str, Any]:
         )
     domain_data[PROJECT_DATA_CACHE_KEY] = normalized
     return normalized
-
-
-async def async_displays_without_indicator(hass: HomeAssistant) -> set[str]:
-    """Addresses known to have no indicator to light."""
-    data = await _load_project_data(hass)
-    return {str(a).upper() for a in data.get("displays_without_indicator") or []}
-
-
-async def async_remember_display_without_indicator(
-    hass: HomeAssistant, address: str, *, missing: bool = True
-) -> None:
-    """Record - or clear - that a display refuses the indicator command.
-
-    Clearing matters as much as recording: a display can come back with newer
-    firmware, and a user who reflashes one should not have to know that Home
-    Assistant is still holding a "no" from before.
-    """
-    normalized = str(address or "").strip().upper()
-    if not normalized:
-        return
-    data = await _load_project_data(hass)
-    known = {str(a).upper() for a in data.get("displays_without_indicator") or []}
-    updated = known | {normalized} if missing else known - {normalized}
-    if updated == known:
-        return
-    data["displays_without_indicator"] = sorted(updated)
-    await _project_store(hass).async_save(data)
 
 
 def _normalize_address(address: str) -> str:

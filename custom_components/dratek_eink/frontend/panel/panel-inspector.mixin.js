@@ -49,7 +49,12 @@ export const inspectorMixin = {
     if (String(this._selectedDeviceAddress || "").toUpperCase() !== String(address || "").toUpperCase()) return;
     this._displaySettingsView = "templates";
     this._activeTab = "display-settings";
-    const openedDevice = this._device();
+    // _selectedDevice(), not _device(): opening a display is not a drawing
+    // pass, and _device() answers for whatever render scope happens to be open
+    // - a device card's preview, say, which the list renders for several
+    // displays at once. Reading it here would take the orientation from a
+    // display the user did not click.
+    const openedDevice = this._selectedDevice();
     if (openedDevice) {
       this._displayTemplateOrientation = this._deviceFrameGeometry(openedDevice).portraitLayout ? "portrait" : "landscape";
     }
@@ -349,10 +354,6 @@ export const inspectorMixin = {
     });
     // The whole tile is a button that opens the display's settings, so the
     // tools inside its header have to keep their clicks to themselves.
-    this.shadowRoot.querySelectorAll("[data-device-identify]").forEach((button) => button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      this._toggleDisplayIdentify(button.dataset.deviceIdentify, button.dataset.deviceIdentifyOn === "1");
-    }));
     this.shadowRoot.querySelectorAll("[data-device-rename]").forEach((button) => button.addEventListener("click", () => {
       const device = (this._result?.devices || []).find((item) => item.address === button.dataset.deviceRename);
       if (!device) return;
@@ -2125,35 +2126,6 @@ export const inspectorMixin = {
         });
       }
     });
-    this.shadowRoot.querySelectorAll("#applyRgbLed").forEach((button) => button.addEventListener("click", () => this._applyRgbLed()));
-    this.shadowRoot.querySelectorAll("[data-led-mode]").forEach((button) => button.addEventListener("click", () => {
-      this._rgbLed.mode = button.dataset.ledMode;
-      this._ledResult = null;
-      this._scheduleDraftSave();
-      this._render();
-      this._paint();
-    }));
-    this.shadowRoot.querySelectorAll("[data-led-color]").forEach((button) => button.addEventListener("click", () => {
-      this._rgbLed.color = button.dataset.ledColor;
-      this._ledResult = null;
-      this._scheduleDraftSave();
-      this._render();
-      this._paint();
-    }));
-    this.shadowRoot.querySelectorAll("#rgbLedColor").forEach((input) => input.addEventListener("input", (event) => {
-      this._rgbLed.color = event.target.value;
-      this._ledResult = null;
-      this._scheduleDraftSave();
-      const icon = event.target.closest(".rgb-led-card, .rgb-led-compact")?.querySelector(".rgb-led-icon");
-      if (icon) icon.style.setProperty("--led-color", this._rgbLed.color);
-    }));
-    this.shadowRoot.querySelectorAll("#rgbLedFlashTime").forEach((input) => input.addEventListener("input", (event) => {
-      this._rgbLed.flashTime = Math.max(1, Math.min(255, Number(event.target.value) || 10));
-      this._ledResult = null;
-      this._scheduleDraftSave();
-      const value = event.target.closest(".field")?.querySelector("label strong");
-      if (value) value.textContent = String(this._rgbLed.flashTime);
-    }));
     this.shadowRoot.querySelector("#fileMenuToggle")?.addEventListener("click", () => { this._fileMenuOpen = !this._fileMenuOpen; this._viewMenuOpen = false; this._toolsMenuOpen = false; this._layoutMenuOpen = false; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#fileMenuClose")?.addEventListener("click", () => { this._fileMenuOpen = false; this._render(); this._paint(); });
     this.shadowRoot.querySelector("#viewMenuToggle")?.addEventListener("click", () => { this._viewMenuOpen = !this._viewMenuOpen; this._fileMenuOpen = false; this._toolsMenuOpen = false; this._layoutMenuOpen = false; this._render(); this._paint(); });

@@ -21,9 +21,9 @@ export const template = {
   setup: {
     summary: "Aktuální teplota, stav počasí a vícedenní předpověď (počet dnů se přizpůsobí velikosti displeje) - vše z jedné entity weather.*, žádné ruční napojování jednotlivých údajů. Na dostatečně širokém displeji navíc přibude vlhkost, vítr a tlak.",
     integrations: [
-      { name: "Met.no", domain: "weather", core: true, why: "Dodá entitu weather.* s předpovědí zdarma a bez API klíče. V Home Assistantu bývá už po instalaci - je to výchozí zdroj předpovědi pro nově založenou lokaci." },
-      { name: "OpenWeatherMap", domain: "weather", core: true, why: "Alternativa, pokud chcete jiný zdroj předpovědi nebo přesnější lokální data; vyžaduje zdarma dostupný API klíč od OpenWeatherMap." },
-      { name: "AccuWeather", domain: "weather", core: true, why: "Další alternativa s vlastním API klíčem, obvykle přesnější pro delší předpověď." },
+      { name: "Met.no", oneOf: "Zdroj předpovědi počasí", domain: "weather", core: true, why: "Dodá entitu weather.* s předpovědí zdarma a bez API klíče. V Home Assistantu bývá už po instalaci - je to výchozí zdroj předpovědi pro nově založenou lokaci." },
+      { name: "OpenWeatherMap", oneOf: "Zdroj předpovědi počasí", domain: "weather", core: true, why: "Alternativa, pokud chcete jiný zdroj předpovědi nebo přesnější lokální data; vyžaduje zdarma dostupný API klíč od OpenWeatherMap." },
+      { name: "AccuWeather", oneOf: "Zdroj předpovědi počasí", domain: "weather", core: true, why: "Další alternativa s vlastním API klíčem, obvykle přesnější pro delší předpověď." },
     ],
     steps: [
       "Zkontrolujte, že v Nastavení → Zařízení a služby máte nějakou integraci počasí (Met.no je tam u čerstvé instalace Home Assistantu skoro vždy).",

@@ -261,16 +261,16 @@ class ConnectionSiteWiringTests(unittest.TestCase):
         # A direct `async with BleakClient(...)` bypasses the shielded disconnect
         # and reintroduces the leaked-connection-slot bug for that operation.
         self.assertEqual(source.count("async with BleakClient("), 0)
-        # Counted as a ratio rather than a fixed number: the RGB LED and find-me
-        # paths used to open the client through two near-identical copies of the
-        # same method and now share _control_command_once, so pinning "3 sites"
-        # was pinning the duplication rather than the safety property. What has
-        # to hold is that every client this module opens is opened as a shielded
-        # context manager, and that the image transfer is not the only one.
+        # Counted as a ratio rather than a fixed number: pinning a site count
+        # pins whatever operations happen to exist, not the safety property.
+        # The RGB LED and find-me paths were the second opener; both are gone
+        # with the indicator feature, leaving the image transfer as the only
+        # one. What still has to hold is that every client this module opens is
+        # opened as a shielded context manager - none may be opened bare.
         opened = source.count("self._connected_client(connection_target, address)")
         shielded = source.count("async with self._connected_client(connection_target, address)")
         self.assertEqual(opened, shielded)
-        self.assertGreaterEqual(opened, 2)
+        self.assertGreaterEqual(opened, 1)
 
     def test_local_transfer_does_not_use_retry_connector_write_acquisition(self) -> None:
         source = (COMPONENT / "transfer.py").read_text(encoding="utf-8")

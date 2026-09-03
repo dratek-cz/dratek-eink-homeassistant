@@ -211,7 +211,3 @@ def parse_dratek_manufacturer_data(
         hw=data[3],
         model=model,
     )
-
-
-def is_supported_sdk_type(sdk_type: int) -> bool:
-    return sdk_type in DEVICE_SIZES

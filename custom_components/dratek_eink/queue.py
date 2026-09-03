@@ -38,18 +38,39 @@ RETRYABLE_BLUETOOTH_ERROR_MARKERS = (
     "temporarily unavailable",
     "le-connection-abort",
 )
+# How long a manual upload may sit in the queue waiting for a display that is
+# not answering. A display can be out of range, asleep behind a closed door, or
+# simply between advertisements for a long time, and the useful behaviour is
+# the one a print queue has: hold the job, write it when the device comes back,
+# and let the user cancel it in the meantime. A day is long enough to cover an
+# overnight or a weekend away and short enough that a job for a display that
+# was taken down for good does not sit in the queue forever.
+DISPLAY_WAIT_MAX_SECONDS = 24 * 60 * 60
+# How often a waiting job re-attempts on its own. Discovery wakes it the moment
+# the display is heard (async_notify_display_seen), so this is only the floor
+# for the case where nothing is scanning - an automatic refresh may not be
+# configured for this display at all.
+DISPLAY_WAIT_POLL_SECONDS = 60
+# Errors that mean the transfer never reached the display, so nothing was
+# half-written and re-attempting later is safe. Deliberately narrow: an error
+# raised part way through a stream means the display *was* there and something
+# else went wrong, and quietly re-queueing that would hide a real fault.
+DISPLAY_UNREACHABLE_ERROR_MARKERS = (
+    "could not connect to the display",
+    "never seen by any scanner",
+    "device with address",
+    "was not found",
+    "not advertising",
+    "out of bluetooth range",
+)
+# The gateway reports every BLE failure as ble_transfer_failed. Its own log
+# says whether a connection was ever established, and only the failure to
+# connect at all qualifies as "the display is not there".
+GATEWAY_CONNECT_FAILURE_MARKER = "BLE connection failed after retries."
 
 TransferRunner = Callable[[Callable[[str], None]], Awaitable[dict[str, Any]]]
 GatewayRunnerFactory = Callable[[dict[str, Any]], TransferRunner]
 GATEWAY_FALLBACK_MIN_RSSI_DBM = -80.0
-# Operations that light the indicator rather than repaint the panel.
-#
-# The cooldown below exists to wait out a physical e-ink refresh, and these
-# never start one - so they neither have to sit through it nor arm it for the
-# job after them. A queue log showed "Waiting 6.0s for physical e-ink screen
-# refresh to complete" in front of an LED command that touches no pixels, and
-# every failed indicator attempt then made the next real write wait too.
-INDICATOR_OPERATIONS = frozenset({"rgb_led", "flash_identify"})
 
 
 def gateway_resource(route: dict[str, Any]) -> str:
@@ -96,6 +117,11 @@ class TransferQueue:
         # cannot start transfers is a property of that gateway, and every
         # display it serves would otherwise be punished for it individually.
         self._gateway_failure_at: dict[str, float] = {}
+        # One event per display, set by discovery when that display is actually
+        # heard. A manual upload held for an unreachable display waits on it,
+        # so it goes out as soon as the display is back instead of on the next
+        # poll tick.
+        self._display_seen_events: dict[str, asyncio.Event] = {}
         self._load_lock = asyncio.Lock()
 
         self._save_lock = asyncio.Lock()
@@ -188,8 +214,48 @@ class TransferQueue:
             if current_task is not None:
                 self._automatic_tasks[normalized_address] = (job["id"], current_task)
         async def process_job() -> dict[str, Any]:
+            # A manual upload to a display that is simply not answering is held
+            # rather than failed: the queue keeps it, re-attempts it when the
+            # display is heard again (or once a minute regardless), and the
+            # user can drop it with the queue's own cancel button the whole
+            # time it is waiting. Only the manual path does this - an automatic
+            # refresh that missed its display has its own next tick, and piling
+            # held jobs up for it would put an hour-old image on the panel.
+            #
+            # The wait sits out here rather than inside _execute on purpose:
+            # _run holds this display's device lock and _execute wraps each
+            # attempt in the 600s transfer timeout, and a job waiting for a
+            # display must hold neither.
+            # Never for a caller that is waiting on the result: the websocket
+            # "send text" command awaits its job, and holding that for a day
+            # would hang the call rather than queue anything. The uploads this
+            # is for - a design sent to a display - are all submitted with
+            # wait_for_completion=False and report back through the queue tab.
+            may_wait = manual and not wait_for_completion
+            deadline = time.time() + DISPLAY_WAIT_MAX_SECONDS if may_wait else 0.0
             try:
-                return await self._run(job, runner)
+                while True:
+                    result = await self._run(job, runner)
+                    if job.get("status") != "failed" or not may_wait:
+                        self._clear_waiting_state(job)
+                        return result
+                    if not self._is_display_unreachable_result(job, result):
+                        self._clear_waiting_state(job)
+                        return result
+                    if not await self._wait_for_display(job, deadline):
+                        job["status"] = "failed"
+                        job["error"] = (
+                            "Displej se neozval, dokud úloha čekala ve frontě."
+                        )
+                        job["finished_at"] = int(time.time())
+                        self._clear_waiting_state(job)
+                        await self._save_history()
+                        return result
+                    job["log"].append(
+                        "Display is not answering; the upload stays in the queue "
+                        "and will be written as soon as it is back."
+                    )
+                    job["log"] = job["log"][-80:]
             except asyncio.CancelledError:
                 if not manual and job["id"] in self._preempted_jobs:
                     return await self._skip_automatic_update(
@@ -197,15 +263,20 @@ class TransferQueue:
                         "Automatic update cancelled because a manual upload took priority.",
                     )
                 if job.get("status") == "queued":
-                    # Nothing physical happened yet (_execute never ran), so a
-                    # user-initiated cancel (async_cancel_job) can finish this
-                    # job cleanly instead of leaving it stuck as "queued"
-                    # forever. A job already "writing" never reaches here -
-                    # async_cancel_job refuses those, matching the same rule
+                    # Nothing physical happened yet (_execute never ran, or the
+                    # job was waiting for its display), so a user-initiated
+                    # cancel (async_cancel_job) can finish this job cleanly
+                    # instead of leaving it stuck as "queued" forever. A job
+                    # already "writing" never reaches here - async_cancel_job
+                    # refuses those, matching the same rule
                     # _preempt_automatic_update follows for the same reason.
+                    waiting = bool(job.get("waiting_for_display"))
+                    self._clear_waiting_state(job)
                     return await self._skip_automatic_update(
                         job,
-                        "Transfer cancelled by user before it started.",
+                        "Upload waiting for the display cancelled by user."
+                        if waiting
+                        else "Transfer cancelled by user before it started.",
                     )
                 raise
             finally:
@@ -420,8 +491,7 @@ class TransferQueue:
                     return await runner(log_line)
 
         normalized_address = job["address"].upper()
-        repaints = job.get("operation") not in INDICATOR_OPERATIONS
-        last_finish = self._last_finish_at.get(normalized_address) if repaints else None
+        last_finish = self._last_finish_at.get(normalized_address)
         if last_finish is not None:
             cooldown = 15.0 if int(job.get("sdk_type") or 0) in {75, 264, 267, 270} or int(job.get("payload_size") or 0) >= 20000 else 6.0
             elapsed = time.monotonic() - last_finish
@@ -494,7 +564,19 @@ class TransferQueue:
             # complete" above). A skipped job never wrote anything, so arming
             # it there made the next real transfer sit out six to fifteen
             # seconds for a refresh that never happened.
-            if job.get("status") != "skipped" and repaints:
+            # The same reasoning covers a transfer that never reached the
+            # display at all: no controller was woken, so there is no refresh
+            # to sit out, and arming it made the retry that follows - a held
+            # upload going out the moment the display is heard again - pause
+            # six to fifteen seconds for nothing.
+            # Judged from the job alone: `result` is not bound on every path
+            # out of the try above (a cancellation can land before it is
+            # assigned), and reading it here would mask the original error
+            # with a NameError.
+            never_reached_display = job.get("status") == "failed" and (
+                self._is_display_unreachable_result(job, {})
+            )
+            if job.get("status") != "skipped" and not never_reached_display:
                 self._last_finish_at[normalized_address] = time.monotonic()
             if job.get("status") == "failed" and job.get("error") != "Transfer cancelled.":
                 if gateway_side_failure:
@@ -559,6 +641,80 @@ class TransferQueue:
             job["status"] = "writing"
             add_log("Retrying automatic update after the Bluetooth cooldown.")
             return await runner(add_log)
+
+    # ------------------------------------------------ waiting for a display ---
+
+    def _is_display_unreachable_result(self, job: dict[str, Any], result: dict[str, Any]) -> bool:
+        """True when the transfer failed because the display never answered.
+
+        Narrow on purpose. A job is only held for later if nothing was written:
+        the local path never got a connection, or the gateway said so in its
+        own log. Anything that failed part way through a stream is a real
+        failure and is reported as one.
+        """
+        if job.get("error") == "Transfer cancelled.":
+            return False
+        error = str(result.get("error") or job.get("error") or "").lower()
+        if not error:
+            return False
+        if result.get("gateway_side"):
+            # The gateway itself is what failed - out of heap, restarted, lost
+            # the upload. The display was never involved, and ws_sending.py
+            # already falls back to another route for this. Not our case.
+            return False
+        if any(marker in error for marker in DISPLAY_UNREACHABLE_ERROR_MARKERS):
+            return True
+        log = " ".join(str(line) for line in job.get("log", []))
+        return GATEWAY_CONNECT_FAILURE_MARKER in log
+
+    def _display_seen_event(self, address: str) -> asyncio.Event:
+        return self._display_seen_events.setdefault(address.upper(), asyncio.Event())
+
+    def async_notify_display_seen(self, address: str) -> None:
+        """Wake any job waiting for this display.
+
+        Called by discovery whenever a display is actually heard, so a held job
+        goes out within a second of the display coming back rather than on the
+        next poll tick.
+        """
+        event = self._display_seen_events.get(str(address or "").upper())
+        if event is not None:
+            event.set()
+
+    async def _wait_for_display(self, job: dict[str, Any], deadline: float) -> bool:
+        """Hold a job until the display is heard again, or the deadline passes.
+
+        Returns False when the job should be failed for good. The job goes back
+        to "queued" while it waits, which is what makes it show in the queue as
+        pending work and what keeps async_cancel_job able to drop it - the
+        cancellation lands in the sleep below and process_job finalises it.
+        """
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            return False
+        address = str(job.get("address") or "").upper()
+        event = self._display_seen_event(address)
+        event.clear()
+        job["status"] = "queued"
+        job["waiting_for_display"] = True
+        job["waiting_since"] = job.get("waiting_since") or int(time.time())
+        job["waiting_until"] = int(deadline)
+        job["finished_at"] = None
+        job["error"] = ""
+        try:
+            await asyncio.wait_for(
+                event.wait(),
+                timeout=min(DISPLAY_WAIT_POLL_SECONDS, remaining),
+            )
+        except TimeoutError:
+            pass
+        return time.time() < deadline
+
+    @staticmethod
+    def _clear_waiting_state(job: dict[str, Any]) -> None:
+        job.pop("waiting_for_display", None)
+        job.pop("waiting_since", None)
+        job.pop("waiting_until", None)
 
     @staticmethod
     def _is_retryable_automatic_bluetooth_error(job: dict[str, Any], exc: Exception) -> bool:

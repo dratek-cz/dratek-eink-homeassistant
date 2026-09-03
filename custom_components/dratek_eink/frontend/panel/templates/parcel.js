@@ -16,8 +16,8 @@ export const template = {
   setup: {
     summary: "Přepravní štítek se stavem zásilky, svislou cestou balíku a samostatným doručovacím oknem.",
     integrations: [
-      { name: "17TRACK", domain: "sensor", core: true, why: "Součást Home Assistantu - sleduje zásilky napříč desítkami dopravců podle sledovacího čísla, dodá senzor se stavem (Připraveno k odeslání, Na cestě, Doručeno, ...)." },
-      { name: "Vlastní REST senzor u dopravce", domain: "sensor", why: "Pokud váš dopravce (např. Zásilkovna, PPL, DPD) 17TRACK nepodporuje, lze stav parsovat z jeho veřejného API vlastním REST senzorem." },
+      { name: "17TRACK", oneOf: "Sledování zásilky", domain: "sensor", core: true, why: "Součást Home Assistantu - sleduje zásilky napříč desítkami dopravců podle sledovacího čísla, dodá senzor se stavem (Připraveno k odeslání, Na cestě, Doručeno, ...)." },
+      { name: "Vlastní REST senzor u dopravce", oneOf: "Sledování zásilky", domain: "sensor", why: "Pokud váš dopravce (např. Zásilkovna, PPL, DPD) 17TRACK nepodporuje, lze stav parsovat z jeho veřejného API vlastním REST senzorem." },
     ],
     steps: [
       "Přidejte integraci 17TRACK v Nastavení → Zařízení a služby a zadejte sledovací číslo zásilky.",

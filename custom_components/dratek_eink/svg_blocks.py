@@ -300,14 +300,14 @@ def _weather_condition_parts(condition: str, night: bool = False) -> list[tuple[
     """
     parts: list[tuple[str, str, float]] = []
     if condition == "sunny":
-        parts.append((_WEATHER_SUN_D, WEATHER_SUN_COLOR, 1.5))
+        parts.append((_WEATHER_SUN_D, WEATHER_SUN_COLOR, 1.0))
     elif condition == "clear-night":
-        parts.append((_WEATHER_MOON_D, WEATHER_MOON_COLOR, 1.5))
+        parts.append((_WEATHER_MOON_D, WEATHER_MOON_COLOR, 1.0))
     elif condition == "partlycloudy":
-        parts.append((_WEATHER_PARTLY_DISC_D, WEATHER_MOON_COLOR if night else WEATHER_SUN_COLOR, 1.5))
+        parts.append((_WEATHER_PARTLY_DISC_D, WEATHER_MOON_COLOR if night else WEATHER_SUN_COLOR, 1.0))
     if condition in _WEATHER_CLOUDY_STATES:
-        parts.append((_WEATHER_CLOUD_BACK_D, WEATHER_CLOUD_BACK_COLOR, 1.5))
-        parts.append((_WEATHER_CLOUD_FRONT_D, WEATHER_CLOUD_FRONT_COLOR, 1.1))
+        parts.append((_WEATHER_CLOUD_BACK_D, WEATHER_CLOUD_BACK_COLOR, 1.0))
+        parts.append((_WEATHER_CLOUD_FRONT_D, WEATHER_CLOUD_FRONT_COLOR, 1.0))
     # Drawn in black, not Home Assistant's own #30b3ff blue: quantize_bwr_
     # dithered's nearest-colour search only ever considers black/white for
     # an achromatic source pixel or ink/white for a warm one (see its
@@ -315,16 +315,46 @@ def _weather_condition_parts(condition: str, night: bool = False) -> list[tuple[
     # belongs to neither family, and the rain drops are small, already
     # legible marks with nothing that needs shading anyway.
     if condition in _WEATHER_RAIN_STATES:
-        parts.extend((d, BLACK, 0.85) for d in _WEATHER_RAIN_D)
+        parts.extend((d, BLACK, 0.7) for d in _WEATHER_RAIN_D)
     if condition == "pouring":
-        parts.extend((d, BLACK, 0.85) for d in _WEATHER_POURING_EXTRA_D)
+        parts.extend((d, BLACK, 0.7) for d in _WEATHER_POURING_EXTRA_D)
     if condition in _WEATHER_WINDY_STATES:
-        parts.extend((d, WEATHER_CLOUD_BACK_COLOR, 0.85) for d in _WEATHER_WIND_D)
+        parts.extend((d, WEATHER_CLOUD_BACK_COLOR, 0.7) for d in _WEATHER_WIND_D)
     if condition in _WEATHER_SNOWY_STATES:
-        parts.extend((d, WEATHER_SNOW_FILL, 0.85) for d in _WEATHER_SNOW_D)
+        parts.extend((d, WEATHER_SNOW_FILL, 0.7) for d in _WEATHER_SNOW_D)
     if condition in _WEATHER_LIGHTNING_STATES:
-        parts.append((_WEATHER_LIGHTNING_D, WEATHER_SUN_COLOR, 0.85))
+        parts.append((_WEATHER_LIGHTNING_D, WEATHER_SUN_COLOR, 0.7))
     return parts
+
+
+# The outline exists so a dithered fill does not dissolve into the white
+# around it, so it is wanted at every size - but at a *constant width in
+# pixels*, not as a constant fraction of the glyph.
+#
+# It used to be given in viewBox units, which meant it scaled with the icon:
+# 1.5 units on a 17-unit canvas is roughly 9% of the width, so a large icon
+# came out with a four-pixel black rim that swallowed the drawing inside it
+# while a small one turned to mush. The parts also carried three different
+# weights (1.5, 1.1, 0.85), so the outer cloud was rimmed more heavily than
+# the inner one and the two read as separate drawings rather than one glyph.
+_WEATHER_OUTLINE_PX = 2.4
+_WEATHER_VIEWBOX = 17.0
+# Under this the shaded cloud is drawn flat white instead (see below).
+_WEATHER_TONE_MIN_PX = 30.0
+
+
+def _weather_outline_units(size: float) -> float:
+    """Stroke width, in viewBox units, that renders ~1.45 px at `size`."""
+    units = _WEATHER_OUTLINE_PX * _WEATHER_VIEWBOX / max(1.0, size)
+    # Clamped at both ends: an icon small enough to need a stroke wider than
+    # this would be outline and nothing else, and a very large one still wants
+    # a rim thick enough to survive the dither.
+    #
+    # The target is not a hairline. Everything here is dithered to pure black
+    # and white afterwards, and a stroke under about two pixels rasterises
+    # mostly to antialiased grey, which error diffusion then breaks into a
+    # dotted line - a thin outline does not read as thin, it reads as broken.
+    return max(0.6, min(2.0, units))
 
 
 def _weather_icon_svg_source(condition: str, night: bool, size: float) -> str | None:
@@ -334,10 +364,19 @@ def _weather_icon_svg_source(condition: str, night: bool, size: float) -> str | 
     parts = _weather_condition_parts(condition, night)
     if not parts:
         return None
+    outline = _weather_outline_units(size)
+    # Below this the halftone stops being a tone and becomes speckle: the
+    # back cloud's #d4d4d4 needs roughly every sixth pixel, and on a glyph
+    # this small the dots are far enough apart to read as dirt inside the
+    # outline rather than as a shaded cloud. The small sizes drop to clean
+    # line art instead - the two clouds still tell each other apart by their
+    # outlines, which is all the shape needs at this size.
+    tone_fill = size >= _WEATHER_TONE_MIN_PX
     shapes = "".join(
-        f'<path d="{d}" fill="{fill}" stroke="{BLACK}" stroke-width="{stroke_width}"'
+        f'<path d="{d}" fill="{fill if tone_fill or fill != WEATHER_CLOUD_BACK_COLOR else "#ffffff"}"'
+        f' stroke="{BLACK}" stroke-width="{outline * weight:.3f}"'
         f' paint-order="stroke"></path>'
-        for d, fill, stroke_width in parts
+        for d, fill, weight in parts
     )
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{size:.0f}" height="{size:.0f}"'

@@ -66,8 +66,6 @@ DEBOUNCE_SECONDS = 0.15
 DEFAULT_REFRESH_INTERVAL_SECONDS = 600
 MIN_REFRESH_INTERVAL_SECONDS = 30
 MAX_REFRESH_INTERVAL_SECONDS = 86400
-BATTERY_SAVER_THRESHOLD_PERCENT = 15
-BATTERY_SAVER_MIN_INTERVAL_SECONDS = 3600
 GATEWAY_ROUTE_SCAN_SECONDS = 3
 GATEWAY_ROUTE_CACHE_SECONDS = 30
 # Backstop for _async_gateway_routes's lock-held section (see the comment at
@@ -104,8 +102,6 @@ REFRESH_TICK_SECONDS = MIN_REFRESH_INTERVAL_SECONDS
 VALID_REFRESH_TRIGGER_MODES = {"both", "change_only", "interval_only"}
 DEFAULT_REFRESH_TRIGGER_MODE = "both"
 ALL_ATTRIBUTES_SOURCE = "__dratek_all_attributes__"
-
-
 
 
 def _binding_sources(binding: dict[str, Any]) -> set[tuple[str, str]]:

@@ -91,7 +91,7 @@ export const storageMixin = {
     return `dratek-eink-gateway_${stamp}`;
   },
 
-  _emptyDeviceDraft(device = this._device()) {
+  _emptyDeviceDraft(device = this._selectedDevice()) {
     const size = this._displaySize(device);
     const code = device && device.physical_code ? device.physical_code : "novy-displej";
     return {
@@ -108,7 +108,6 @@ export const storageMixin = {
       width: size.width,
       height: size.height,
       variables: {},
-      rgb_led: { mode: "off", color: "#00a2a5", flash_time: 10 },
       objects: [],
     };
   },

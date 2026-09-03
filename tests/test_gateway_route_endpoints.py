@@ -93,34 +93,5 @@ class RouteEndpointTests(unittest.TestCase):
             source = (COMPONENT / name).read_text(encoding="utf-8")
             with self.subTest(module=name):
                 self.assertIn("await async_gateway_route(", source)
-
-
-class IndicatorCooldownTests(unittest.TestCase):
-    """An indicator command must not sit out an e-ink refresh.
-
-    The queue waits out a physical screen refresh before writing to a display
-    again, and arms that wait when a job finishes. An RGB LED command repaints
-    nothing, so a queue log showed "Waiting 6.0s for physical e-ink screen
-    refresh to complete" in front of one - and every failed indicator attempt
-    then made the next real write wait too.
-    """
-
-    def test_indicator_operations_skip_the_refresh_cooldown(self) -> None:
-        source = QUEUE.read_text(encoding="utf-8")
-        self.assertIn('INDICATOR_OPERATIONS = frozenset({"rgb_led", "flash_identify"})', source)
-        self.assertIn(
-            'repaints = job.get("operation") not in INDICATOR_OPERATIONS', source
-        )
-        # Neither waited for...
-        self.assertIn(
-            "last_finish = self._last_finish_at.get(normalized_address) if repaints else None",
-            source,
-        )
-        # ...nor armed for the job after it.
-        self.assertIn(
-            'if job.get("status") != "skipped" and repaints:', source
-        )
-
-
 if __name__ == "__main__":
     unittest.main()

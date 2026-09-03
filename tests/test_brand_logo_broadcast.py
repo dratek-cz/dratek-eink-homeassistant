@@ -231,7 +231,14 @@ class BrandLogoBroadcastTests(unittest.TestCase):
         self.assertIn("Logo odesláno na ${sent} z ${targets.length} displejů.", self.mixin)
 
     def test_each_display_is_rendered_at_its_own_size_and_palette(self) -> None:
-        self.assertIn("this._renderingDeviceAddress = device?.address || null;", self.mixin)
+        # A broadcast renders every display in turn, so these scopes overlap.
+        # Save-and-restore could not survive that (see _pushRenderingDevice):
+        # the scope has to be pushed and popped by identity, or one display's
+        # address stays pinned after the broadcast and every later palette
+        # lookup - and every draft save - answers for the wrong display.
+        self.assertIn("this._pushRenderingDevice(device?.address)", self.mixin)
+        self.assertIn("this._popRenderingDevice(renderingScope)", self.mixin)
+        self.assertNotIn("this._renderingDeviceAddress =", self.mixin)
         self.assertIn("_brandLogoSendGeometry(device)", self.mixin)
 
 

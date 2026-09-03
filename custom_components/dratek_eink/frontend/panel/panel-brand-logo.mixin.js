@@ -369,15 +369,16 @@ export const brandLogoMixin = {
 
   async _brandLogoRenderFor(device, template) {
     const { width, height } = this._brandLogoSendGeometry(device);
-    const previousRenderingDevice = this._renderingDeviceAddress;
     // Scopes every palette lookup inside the renderer to this display, so a
     // three-colour panel is not drawn with the four-colour decisions of
-    // whichever display happens to be selected in the UI.
-    this._renderingDeviceAddress = device?.address || null;
+    // whichever display happens to be selected in the UI. A broadcast renders
+    // every display in turn, so these scopes overlap - see _pushRenderingDevice
+    // for why that rules out save-and-restore.
+    const renderingScope = this._pushRenderingDevice(device?.address);
     try {
       return await this._rasterizeDisplayTemplateSvg([template], width, height, "single", null);
     } finally {
-      this._renderingDeviceAddress = previousRenderingDevice;
+      this._popRenderingDevice(renderingScope);
     }
   },
 

@@ -242,8 +242,15 @@ def _draw_centered_text(
     bold: bool = True,
     fill: tuple[int, int, int, int] = (0, 0, 0, 255),
     minimum_size: int = 6,
+    align: str = "center",
 ) -> int:
-    """Draw one readable line inside a strict box without covering nearby graphics."""
+    """Draw one readable line inside a strict box without covering nearby graphics.
+
+    ``align`` reinterprets ``center_x``: the box's centre by default, its left
+    edge with "left", its right edge with "right". Shared rather than a second
+    copy of the shrink-to-fit loop, which is the part that has to stay
+    identical everywhere text is placed on a panel.
+    """
     font_size = max(minimum_size, int(requested_size))
     while font_size > minimum_size:
         font = load_font(font_size, bold)
@@ -255,8 +262,14 @@ def _draw_centered_text(
     box = draw.textbbox((0, 0), text or " ", font=font)
     text_width = box[2] - box[0]
     text_height = box[3] - box[1]
+    if align == "left":
+        origin_x = center_x
+    elif align == "right":
+        origin_x = center_x - text_width
+    else:
+        origin_x = center_x - text_width / 2
     draw.text(
-        (round(center_x - text_width / 2 - box[0]), round(center_y - text_height / 2 - box[1])),
+        (round(origin_x - box[0]), round(center_y - text_height / 2 - box[1])),
         text,
         fill=fill,
         font=font,
@@ -1989,28 +2002,43 @@ def _draw_radar_sidebar(
     if not forecast:
         return canvas
 
+    # The current reading is the one number read first, so it is labelled and
+    # ruled off rather than left to float above the hours as a larger
+    # unexplained figure - it used to be indistinguishable from a forecast row
+    # that happened to be drawn bigger.
     if forecast.get("temperature"):
-        temp_h = max(14, min(round(height * 0.11), round(inner_w * 0.55)))
+        label_h = max(8, min(round(height * 0.035), round(inner_w * 0.16)))
         _draw_centered_text(
-            draw, forecast["temperature"], x0 + inner_w / 2, y + temp_h / 2,
-            inner_w, temp_h, round(temp_h * 0.85),
+            draw, "TEĎ", x0, y + label_h / 2,
+            inner_w, label_h, round(label_h * 0.95), align="left",
         )
-        y += temp_h + max(2, round(height * 0.012))
+        y += label_h + max(1, round(height * 0.006))
+
+        temp_h = max(14, min(round(height * 0.105), round(inner_w * 0.52)))
+        _draw_centered_text(
+            draw, forecast["temperature"], x0, y + temp_h / 2,
+            inner_w, temp_h, round(temp_h * 0.92), align="left",
+        )
+        y += temp_h + max(3, round(height * 0.016))
+
+        # A rule, not a gap: whitespace alone did not separate "now" from the
+        # hours, so the column read as one undifferentiated stack of numbers.
+        draw.rectangle([x0, y, x1 - 1, y], fill=(0, 0, 0))
+        y += max(3, round(height * 0.018))
 
     entries = forecast.get("entries") or []
     if not entries:
         return canvas
 
     available_h = max(0, (height - pad) - y)
-    row_h = max(22, min(64, round(inner_w * 0.55)))
-    # On small portrait displays the forecast block is narrow and the width-
-    # based row height can leave room for only one otherwise valid entry.
-    # Prefer two compact, complete rows when the block can still keep the
-    # minimum readable row height.
-    preferred_rows = min(2, len(entries))
-    if preferred_rows > 1 and available_h >= preferred_rows * 22:
-        row_h = min(row_h, available_h // preferred_rows)
-    visible = _radar_forecast_rows(available_h, row_h, len(entries))
+    # Fit as many hours as the minimum readable row height allows, then grow
+    # the rows back into whatever is left over. A fixed row height divided into
+    # the column instead, which both dropped the last hour that would have fit
+    # and left the remainder as dead space at the bottom - the label and rule
+    # above cost exactly enough height to lose an hour that way.
+    max_row_h = max(22, min(64, round(inner_w * 0.55)))
+    visible = _radar_forecast_rows(available_h, 22, len(entries))
+    row_h = min(max_row_h, available_h // visible) if visible else max_row_h
     for entry in entries[:visible]:
         icon_size = max(12, round(row_h * 0.82))
         icon = _weather_condition_icon_image(
@@ -2025,15 +2053,22 @@ def _draw_radar_sidebar(
         label = entry.get("label") or ""
         if entry.get("time"):
             label = f"{label} · {entry['time']}" if label else entry["time"]
-        line_h = max(7, round(row_h * 0.46))
+        # Both lines share one left edge. Centring them inside the column meant
+        # every row started at a different x - "9°C" and "-11°C" are three
+        # glyphs apart - so nothing lined up down the sidebar and the hours
+        # read as scattered digits rather than a list.
+        line_h = max(7, round(row_h * 0.42))
+        temp_h = max(8, round(row_h * 0.50))
         _draw_centered_text(
-            draw, label, text_x + text_w / 2, y + row_h * 0.28,
-            text_w, line_h, round(line_h * 0.82), bold=False,
+            draw, label, text_x, y + row_h * 0.26,
+            text_w, line_h, round(line_h * 0.78), bold=False, align="left",
         )
         if entry.get("temperature"):
+            # The temperature is what the column is scanned for, so it carries
+            # the weight; the hour is the label beside it, not its equal.
             _draw_centered_text(
-                draw, entry["temperature"], text_x + text_w / 2, y + row_h * 0.72,
-                text_w, line_h, round(line_h * 0.95),
+                draw, entry["temperature"], text_x, y + row_h * 0.70,
+                text_w, temp_h, round(temp_h * 0.95), align="left",
             )
         y += row_h
 

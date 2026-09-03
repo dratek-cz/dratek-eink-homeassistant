@@ -15,8 +15,8 @@ export const template = {
   setup: {
     summary: "Ovládací panel pračky s programem, dominantním zbývajícím časem a svislým přehledem cyklu.",
     integrations: [
-      { name: "Home Connect", domain: "sensor", core: true, why: "Pro pračky a sušičky Bosch a Siemens. Dodá program, stav a zbývající čas přímo - nejjednodušší cesta, pokud vaše pračka Home Connect podporuje." },
-      { name: "Senzor spotřeby + šablonový senzor", domain: "sensor", why: "U pračky bez chytrého připojení se běh pozná podle příkonu chytré zásuvky (typicky nad ~5 W = pere) - šablonový senzor v Home Assistantu z toho odvodí stav a odhadem i zbývající čas." },
+      { name: "Home Connect", oneOf: "Zdroj stavu pračky", domain: "sensor", core: true, why: "Pro pračky a sušičky Bosch a Siemens. Dodá program, stav a zbývající čas přímo - nejjednodušší cesta, pokud vaše pračka Home Connect podporuje." },
+      { name: "Senzor spotřeby + šablonový senzor", oneOf: "Zdroj stavu pračky", domain: "sensor", why: "U pračky bez chytrého připojení se běh pozná podle příkonu chytré zásuvky (typicky nad ~5 W = pere) - šablonový senzor v Home Assistantu z toho odvodí stav a odhadem i zbývající čas." },
     ],
     steps: [
       "Připojte pračku přes Home Connect, pokud to jde, nebo ji zapojte přes chytrou zásuvku sledující příkon.",

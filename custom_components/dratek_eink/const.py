@@ -2,11 +2,8 @@ DOMAIN = "dratek_eink"
 
 DRATEK_COMPANY_ID = 0x5053
 
-PANEL_TITLE = "DRATEK eInk"
-PANEL_ICON = "mdi:view-dashboard-outline"
-PANEL_URL = "dratek-eink"
-PANEL_VERSION = "0.1.358"
-GATEWAY_FIRMWARE_VERSION = "0.1.64-gateway"
+PANEL_VERSION = "0.1.360"
+GATEWAY_FIRMWARE_VERSION = "0.1.65-gateway"
 
 CONTROL_CHARS = {
     "0000fef1-0000-1000-8000-00805f9b34fb",
@@ -160,3 +157,13 @@ DISCOVERY_CACHE_KEY = "dratek_eink.discovery_cache"
 # inherently lossy; keep the last observation long enough to bridge missed or
 # deliberately skipped scans and show it as temporarily unseen instead.
 DISCOVERY_GRACE_SECONDS = 30 * 60
+# How long a display may go unheard before the UI is allowed to call it out of
+# range.  A display advertises intermittently to save battery, and an on-demand
+# gateway scan is a window of a few seconds - so missing one pass says almost
+# nothing about whether the display is there.  Flagging it immediately meant a
+# perfectly reachable display, one that went on accepting writes, was drawn as
+# "Čekám na signál" the moment a single scan window fell between two
+# advertisements.  Routing still de-prioritises a route it did not just hear
+# (see temporarily_unseen in ws_devices.py); this threshold governs only what
+# the panel and the overview card tell the user.
+DISCOVERY_UNSEEN_GRACE_SECONDS = 3 * 60

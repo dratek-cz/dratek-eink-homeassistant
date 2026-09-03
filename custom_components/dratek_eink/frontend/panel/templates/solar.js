@@ -20,8 +20,8 @@ export const template = {
   setup: {
     summary: "Solární energetický tok s živým výkonovým kruhem a dlaždicemi výroby za den, měsíc a celkem.",
     integrations: [
-      { name: "Integrace vašeho střídače", domain: "sensor", core: true, why: "Fronius, GoodWe, SolarEdge, SolaX, Huawei Solar a další jsou součástí Home Assistantu a po přidání dodají senzory výkonu i výroby přímo." },
-      { name: "Envertech / SMA / jiný výrobce", domain: "sensor", why: "Řada dalších výrobců má vlastní nebo HACS integraci - hledejte podle značky střídače." },
+      { name: "Integrace vašeho střídače", oneOf: "Integrace střídače", domain: "sensor", core: true, why: "Fronius, GoodWe, SolarEdge, SolaX, Huawei Solar a další jsou součástí Home Assistantu a po přidání dodají senzory výkonu i výroby přímo." },
+      { name: "Envertech / SMA / jiný výrobce", oneOf: "Integrace střídače", domain: "sensor", why: "Řada dalších výrobců má vlastní nebo HACS integraci - hledejte podle značky střídače." },
     ],
     steps: [
       "Přidejte integraci střídače v Nastavení → Zařízení a služby (podle výrobce vašeho střídače).",

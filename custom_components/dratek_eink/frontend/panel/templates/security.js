@@ -16,8 +16,8 @@ export const template = {
   setup: {
     summary: "Výrazný stav alarmu a samostatné zónové karty pro dveře, okna a pohyb.",
     integrations: [
-      { name: "Manual Alarm Control Panel", domain: "alarm_control_panel", core: true, why: "Alarm přímo v Home Assistantu bez fyzické ústředny, konfiguruje se v configuration.yaml. Vhodné pro vyzkoušení nebo když jinou ústřednu nemáte." },
-      { name: "Integrace vaší ústředny", domain: "alarm_control_panel", why: "Jablotron, Alarmo, Konnected, Verisure a další - každá dodá vlastní entitu alarm_control_panel.*." },
+      { name: "Manual Alarm Control Panel", oneOf: "Ústředna alarmu", domain: "alarm_control_panel", core: true, why: "Alarm přímo v Home Assistantu bez fyzické ústředny, konfiguruje se v configuration.yaml. Vhodné pro vyzkoušení nebo když jinou ústřednu nemáte." },
+      { name: "Integrace vaší ústředny", oneOf: "Ústředna alarmu", domain: "alarm_control_panel", why: "Jablotron, Alarmo, Konnected, Verisure a další - každá dodá vlastní entitu alarm_control_panel.*." },
       { name: "Kontakty dveří a oken, detektor pohybu", domain: "binary_sensor", why: "Jakékoli Zigbee/Z-Wave/Wi-Fi čidlo s device_class door, window nebo motion." },
     ],
     steps: [

@@ -20,8 +20,8 @@ export const template = {
   setup: {
     summary: "Zahradnická karta záhonu: půdní vlhkost, sedmidenní trend a venkovní podmínky v jedné scéně.",
     integrations: [
-      { name: "Xiaomi BLE (Mi Flora)", domain: "sensor", core: true, why: "Čidla Mi Flora / Mi Plant Sensor měří vlhkost i vodivost půdy přes Bluetooth bez hubu - stačí je mít v dosahu Home Assistantu." },
-      { name: "ESPHome", domain: "sensor", core: true, why: "Vlastní čidlo vlhkosti půdy (kapacitní nebo odporové) postavené na ESP, pokud Mi Flora nechcete kupovat." },
+      { name: "Xiaomi BLE (Mi Flora)", oneOf: "Čidlo vlhkosti půdy", domain: "sensor", core: true, why: "Čidla Mi Flora / Mi Plant Sensor měří vlhkost i vodivost půdy přes Bluetooth bez hubu - stačí je mít v dosahu Home Assistantu." },
+      { name: "ESPHome", oneOf: "Čidlo vlhkosti půdy", domain: "sensor", core: true, why: "Vlastní čidlo vlhkosti půdy (kapacitní nebo odporové) postavené na ESP, pokud Mi Flora nechcete kupovat." },
       { name: "Zavlažovací automatizace / harmonogram", domain: "input_datetime", why: "Vítr obvykle poskytuje meteostanice, ne půdní čidlo - a Další zálivka potřebuje vlastní časovač nebo automatizaci, žádné čidlo čas příští zálivky samo nezná." },
     ],
     steps: [

@@ -16,7 +16,7 @@
 // are identical by construction.
 
 import qrcode from "../qrcode-generator.js";
-import { DISPLAY_TEMPLATES } from "./templates/index.js?v=release-0.1.358";
+import { DISPLAY_TEMPLATES } from "./templates/index.js?v=release-0.1.360";
 import { TRANSIT_KIND_ICONS } from "./templates/shared.js?v=transit-two-line-1";
 
 const RED = "#e31b1b";
@@ -60,6 +60,11 @@ const RADAR_FOOTER_FRACTION = 0.28;
 // flag to get stuck on, which is why a manual send always renders correctly
 // even when the preview is stuck.
 const METEORADAR_REQUEST_TIMEOUT_MS = 20 * 1000;
+// How many rendered radar frames are kept at once. One per display's
+// (country x geometry x overlay switches) combination, so a house full of
+// displays each set to its own country can be flipped through without any of
+// them refetching - and without any of them ever seeing another's frame.
+const METEORADAR_CACHE_ENTRIES = 8;
 // transit.py caches a stop's board for 45 s, so asking more often than this
 // only spends round trips on the same four rows. The departures print as
 // "za 3 min" - relative to the moment they were fetched - so the panel must
@@ -454,19 +459,56 @@ export const templateSvgMixin = {
   // no hint that anything had actually gone wrong. Failures retry sooner than a
   // successful fetch's own cache lifetime, so the map appears on its own shortly
   // after the underlying cause (usually that restart) is resolved.
-  async _ensureTemplateRadarImage(width, height) {
-    const country = this._meteoradarCountry || this._displayTemplateConfig?.meteoradar_country || "cz";
+  // The country and the two overlay switches are per-display settings, so the
+  // key a frame is stored under has to carry them alongside the geometry.
+  // Everything that draws or waits on a radar frame derives its key here, so a
+  // frame fetched for one display can never be matched by another's render.
+  _meteoradarRequestSpec(width, height) {
+    const country = this._activeMeteoradarCountry();
     const showPrecipitation = this._displayTemplateConfig?.meteoradar_show_precipitation !== false;
     const showWind = this._displayTemplateConfig?.meteoradar_show_wind === true;
     const preserveYellow = this._displaySupportsYellow?.() === true;
     const layout = this._radarBlockLayout(width, height);
     const { mapW, mapH, forecastW, forecastH } = layout;
-
     const key = `${layout.portrait ? "portrait" : "landscape"}_${mapW}x${mapH}_${forecastW}x${forecastH}_${country}_p${showPrecipitation}_w${showWind}_y${preserveYellow}`;
-    const cached = this._meteoradarImageCache;
+    return { country, showPrecipitation, showWind, preserveYellow, layout, key };
+  },
+
+  // One entry per key rather than one slot for the whole panel. A single slot
+  // meant the display opened second evicted the frame belonging to the first,
+  // and _blockRadarMap - which cannot wait for a fetch - then drew whatever
+  // happened to be in that slot: display A, set to Czechia, previewed display
+  // B's Europe map for as long as A's refetch took, while still sending
+  // Czechia. Keyed storage also survives switching back and forth, so
+  // returning to a display repaints from cache instead of refetching.
+  _meteoradarCacheEntry(key) {
+    return this._meteoradarImageCache instanceof Map ? this._meteoradarImageCache.get(key) || null : null;
+  },
+
+  _rememberMeteoradarFrame(key, entry) {
+    if (!(this._meteoradarImageCache instanceof Map)) this._meteoradarImageCache = new Map();
+    this._meteoradarImageCache.delete(key);
+    this._meteoradarImageCache.set(key, entry);
+    if (this._meteoradarImageCache.size > METEORADAR_CACHE_ENTRIES) {
+      this._meteoradarImageCache.delete(this._meteoradarImageCache.keys().next().value);
+    }
+  },
+
+  // True once a usable frame for exactly this display's settings and geometry
+  // is in hand - the condition a catalog tile has to meet before its markup may
+  // be memoised.
+  _meteoradarFrameReady(width, height) {
+    return !!this._meteoradarCacheEntry(this._meteoradarRequestSpec(width, height).key)?.dataUrl;
+  },
+
+  async _ensureTemplateRadarImage(width, height) {
+    const { country, showPrecipitation, showWind, preserveYellow, layout, key } = this._meteoradarRequestSpec(width, height);
+    const { mapW, mapH, forecastW, forecastH } = layout;
+
+    const cached = this._meteoradarCacheEntry(key);
     const age = cached ? Date.now() - cached.fetchedAt : Infinity;
     const ttl = cached?.dataUrl ? METEORADAR_CACHE_MS : METEORADAR_RETRY_MS;
-    if (cached && cached.key === key && age < ttl) return false;
+    if (cached && age < ttl) return false;
     if (!this._hass?.callWS) return false;
     try {
       const result = await this._hass.callWS({
@@ -481,15 +523,15 @@ export const templateSvgMixin = {
         preserve_yellow: preserveYellow,
       });
       if (!result?.ok || !result?.image) {
-        this._meteoradarImageCache = { key, dataUrl: "", sidebarDataUrl: "", fetchedAt: Date.now(), error: "Server nevrátil obrázek." };
+        this._rememberMeteoradarFrame(key, { key, dataUrl: "", sidebarDataUrl: "", fetchedAt: Date.now(), error: "Server nevrátil obrázek." });
         return true;
       }
-      this._meteoradarImageCache = {
+      this._rememberMeteoradarFrame(key, {
         key, dataUrl: result.image, sidebarDataUrl: result.sidebar_image || "", fetchedAt: Date.now(), error: "",
-      };
+      });
       return true;
     } catch (error) {
-      this._meteoradarImageCache = { key, dataUrl: "", sidebarDataUrl: "", fetchedAt: Date.now(), error: this._message?.(error) || String(error?.message || error) };
+      this._rememberMeteoradarFrame(key, { key, dataUrl: "", sidebarDataUrl: "", fetchedAt: Date.now(), error: this._message?.(error) || String(error?.message || error) });
       return true;
     }
   },
@@ -850,8 +892,31 @@ export const templateSvgMixin = {
 
   // The catalog tile is a fixed box, so the panel letterboxes inside it rather
   // than stretching to fill it. A blank template stays blank here as well.
+  // Everything a tile draws that belongs to one display rather than to the
+  // template itself, folded into one short string. Without it the memoised
+  // markup is shared across displays: the Meteoradar tile kept whichever
+  // country was picked first and showed it on every display of that size for
+  // the rest of the session, and changing the country on the display you were
+  // looking at did not repaint its own tile either.
+  _perDisplayTemplateFingerprint() {
+    const parts = JSON.stringify([
+      String(this._selectedDeviceAddress || "").toUpperCase(),
+      this._displayTemplateConfig || null,
+      this._displayTemplateOptions || null,
+      this._displayTemplateBindings || null,
+    ]);
+    // FNV-1a: the payload is only ever compared for equality, so a short hash
+    // beats carrying kilobytes of bindings around in every Map key.
+    let hash = 0x811c9dc5;
+    for (let index = 0; index < parts.length; index++) {
+      hash ^= parts.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash.toString(36);
+  },
+
   _templateSvgThumbnail(template, width, height) {
-    const cacheKey = `${template?.id || "blank"}:${Math.round(width)}x${Math.round(height)}:${this._displayPaletteKey?.() || "bwr"}`;
+    const cacheKey = `${template?.id || "blank"}:${Math.round(width)}x${Math.round(height)}:${this._displayPaletteKey?.() || "bwr"}:${this._perDisplayTemplateFingerprint()}`;
     this._templateThumbnailMarkupCache ||= new Map();
     const cached = this._templateThumbnailMarkupCache.get(cacheKey);
     if (cached) return cached;
@@ -872,7 +937,7 @@ export const templateSvgMixin = {
       // the placeholder for the rest of the session - the map only ever
       // appeared if something else happened to evict the entry. Keep
       // re-rendering until the map is actually in hand.
-      && !(this._templateNeedsRadarImage(rows) && !this._meteoradarImageCache?.dataUrl)
+      && !(this._templateNeedsRadarImage(rows) && !this._meteoradarFrameReady(width, height))
       // The brand logo falls into exactly the same trap: its bitmap is dithered
       // asynchronously, so the first pass draws a blank panel, and caching that
       // would freeze the catalog tile empty for the rest of the session.
@@ -2742,8 +2807,14 @@ if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, scaleY, sca
   _blockRadarMap(row, box) {
     const x = row.bleed ? box.fullX : box.x;
     const w = row.bleed ? box.fullW : box.w;
-    const cached = this._meteoradarImageCache;
-    const layout = this._radarBlockLayout(w, box.h);
+    // Keyed lookup, never "whatever was fetched last": the key carries this
+    // display's own country and overlay switches as well as the block's
+    // geometry, so a frame belonging to a different display cannot be drawn
+    // here. A miss draws the placeholder below and repaints when this
+    // display's own fetch lands.
+    const spec = this._meteoradarRequestSpec(w, box.h);
+    const cached = this._meteoradarCacheEntry(spec.key);
+    const layout = spec.layout;
     if (cached?.dataUrl) {
       if (layout.portrait) {
         const forecastY = box.y + layout.mapH;

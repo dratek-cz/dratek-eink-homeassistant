@@ -1,4 +1,7 @@
-const DRATEK_EINK_OVERVIEW_VERSION = "0.1.358";
+const DRATEK_EINK_OVERVIEW_VERSION = "0.1.360";
+// Mirrors DISCOVERY_UNSEEN_GRACE_SECONDS in const.py; only a fallback for a
+// backend payload that predates out_of_range.
+const OVERVIEW_UNSEEN_GRACE_SECONDS = 3 * 60;
 const DRATEK_EINK_PANEL_PATH = "/dratek-eink";
 const overviewStore = {
   devices: [],
@@ -348,7 +351,15 @@ class DratekEinkOverviewCard extends HTMLElement {
   }
 
   _renderDevice(device) {
-    const unseen = device?.temporarily_unseen === true;
+    // Same rule as the panel's display tiles: one missed scan window is not
+    // "out of range" for something that only advertises every few seconds.
+    // The backend reports out_of_range against its own settle window
+    // (DISCOVERY_UNSEEN_GRACE_SECONDS); temporarily_unseen alone is just
+    // "not heard in the last pass" and must not reach the user.
+    const unseen = typeof device?.out_of_range === "boolean"
+      ? device.out_of_range
+      : device?.temporarily_unseen === true
+        && Number(device?.unseen_for || 0) > OVERVIEW_UNSEEN_GRACE_SECONDS;
     const address = device?.address || "";
     const route = device?.preferred_path?.type === "gateway"
       ? device.preferred_path.name || this._t.gatewayRoute
