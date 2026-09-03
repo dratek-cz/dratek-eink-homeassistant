@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.362] - 2026-09-03
+
+### Opraveno
+- **Náhledy displejů v seznamu ukazovaly cizí displej a po chvíli se přeblikly zpátky.** Panel má jedno sdílené pole „pro který displej se právě kreslí" a všechny výpočty velikosti a palety se ptají přes něj. To funguje, dokud běží jedno vykreslování. Seznam displejů ale spouští náhled všech karet naráz, takže jich bylo rozpracovaných několik zároveň – každé si vložilo svůj displej, počkalo na složení SVG a probudilo se do stavu, kdy tam mezitím jiné vykreslování vložilo svůj. Změřeno na šesti displejích: **všech šest náhledů se vykreslilo pro jediný displej** – ten, který se vložil jako poslední. Až pozdější překreslení, které náhodou běželo samo, to spravilo, a proto se karty po chvilce přeblikly.
+- **Tříbarevný displej proto ukazoval čtyřbarevný náhled.** Je to důsledek téhož: paleta se zjišťuje stejnou cestou, a když tím posledním displejem byl čtyřbarevný panel (SDK 46), vykreslily se s jeho paletou i tříbarevné. Žlutá se pak na BWR panelu tiskne jako špinavá šeď.
+- Asynchronní vykreslování se nově řadí za sebe, takže v jednu chvíli je otevřený vždy nejvýš jeden rozsah – to je přesně předpoklad, se kterým to sdílené pole pracuje. Týká se náhledu šablony displeje, zachycení vazeb pro automatický zápis i hromadného odeslání loga. Karty tím nic neztratí: stejně všechny čekají na tentýž vykreslovač. Synchronní vykreslení karty zůstává beze změny – nemá kde být přerušeno.
+- Verze 0.1.360 opravila, že se to sdílené pole po vykreslení nikdy neuklidilo. To byla jiná polovina téhož problému: uklízení řeší zásobník, souběh řeší až tohle.
+
 ## [0.1.361] - 2026-09-03
 
 ### Opraveno

@@ -3,7 +3,7 @@ import { queueMixin } from "./panel/panel-queue.mixin.js?v=waiting-for-display-1
 import { automationsMixin } from "./panel/panel-automations.mixin.js?v=queued-write-cancel-1";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=system-alerts-1";
 import { webSerialMixin } from "./panel/panel-webserial.mixin.js?v=browser-flash-1";
-import { devicesMixin } from "./panel/panel-devices.mixin.js?v=per-slot-text-bindings-1";
+import { devicesMixin } from "./panel/panel-devices.mixin.js?v=one-rendering-device-1";
 import { projectsMixin } from "./panel/panel-projects.mixin.js?v=per-display-isolation-1";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
 import { historyMixin } from "./panel/panel-history.mixin.js?v=template-history-3";
@@ -20,9 +20,9 @@ import { templateBlocksMixin } from "./panel/panel-template-blocks.mixin.js?v=te
 import { templateComponentsMixin } from "./panel/panel-template-components.mixin.js?v=component-parts-2";
 // INTERNAL - remove with the rest of the brand-logo feature before the retail
 // release (PRIVATE-NOTES.md).
-import { brandLogoMixin } from "./panel/panel-brand-logo.mixin.js?v=logo-tonal-8";
+import { brandLogoMixin } from "./panel/panel-brand-logo.mixin.js?v=logo-tonal-9";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.361";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=0.1.362";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {

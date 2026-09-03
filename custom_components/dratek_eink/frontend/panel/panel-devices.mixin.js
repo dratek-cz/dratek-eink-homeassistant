@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.361";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.362";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG, DISPLAY_TEMPLATES_BY_ID } from "./templates/index.js?v=thermostat-live-dial-1";
 
 // Generation of the graphic-row capture written into every series()/ratio()/
@@ -176,6 +176,39 @@ export const devicesMixin = {
     (this._renderingDeviceStack ||= []).push(token);
     this._renderingDeviceAddress = token.address;
     return token;
+  },
+
+  // One rendering device at a time.
+  //
+  // The stack below keeps the ambient address unwinding correctly, but it
+  // cannot make it *right* while two renders are in flight: the top of the
+  // stack is whichever scope was pushed last, so a render that pushes its own
+  // display, awaits an SVG build, and resumes after a second render pushed
+  // its display reads _device() and gets the other one. The device list starts
+  // every card's preview at once, so that is the normal case, not a rare race:
+  // cards came back drawn with a neighbour's size and palette - a
+  // three-colour panel showing a four-colour preview - and corrected
+  // themselves only on a later repaint that happened to run alone.
+  //
+  // Serialising the async renders is what actually makes the ambient field
+  // safe, because it enforces the invariant the field assumes. Card previews
+  // lose nothing by queueing: they all contend for the same rasteriser
+  // anyway. Only the async scopes take this gate - the synchronous one
+  // (_renderTemplatePhysicalDevicePreview) has no await to be interleaved at,
+  // and none of the gated functions calls another, so there is nothing to
+  // deadlock on.
+  async _withRenderingDevice(address, run) {
+    const previous = this._renderingDeviceGate || Promise.resolve();
+    let release = () => {};
+    this._renderingDeviceGate = new Promise((resolve) => { release = resolve; });
+    await previous.catch(() => {});
+    const scope = this._pushRenderingDevice(address);
+    try {
+      return await run();
+    } finally {
+      this._popRenderingDevice(scope);
+      release();
+    }
   },
 
   _popRenderingDevice(token) {
@@ -3163,7 +3196,7 @@ export const devicesMixin = {
         variants: activeVariants,
       }, device);
     if (targetCustomImage) this._customImageDataUrl = targetCustomImage;
-    const renderingScope = this._pushRenderingDevice(device?.address);
+    return this._withRenderingDevice(device?.address, async () => {
     try {
       // Template blocks draw themselves as SVG, which has to be decoded into an
       // image before the painter - which is synchronous - can put it on the
@@ -3178,9 +3211,9 @@ export const devicesMixin = {
         overlays.length ? (context, width, height) => this._paintTemplateOverlays(context, overlays, width, height) : null,
       );
     } finally {
-      this._popRenderingDevice(renderingScope);
       this._customImageDataUrl = previousCustomImage;
     }
+    });
   },
 
   // Which elements a slot's template carries. Exactly the resolution
@@ -3831,8 +3864,7 @@ export const devicesMixin = {
   },
 
   async _preparedTemplateEntityBindings(device, width, height) {
-    const renderingScope = this._pushRenderingDevice(device?.address);
-    try {
+    return this._withRenderingDevice(device?.address, async () => {
       const request = this._currentDisplayTemplateSvgRequest(device);
     if (!request?.templates?.length || typeof DOMParser === "undefined") return { bindings: [], svgTemplate: "" };
     const currentSvg = await this._buildDisplayTemplateSvg(request.templates, width, height, request.layout);
@@ -4030,9 +4062,7 @@ export const devicesMixin = {
     const svgTemplate = bindings.length ? currentDocument.documentElement.outerHTML : "";
     const cleanBackground = await this._blankedDisplayTemplateBackground(currentDocument, bindings, width, height);
     return { bindings, svgTemplate, cleanBackground };
-    } finally {
-      this._popRenderingDevice(renderingScope);
-    }
+    });
   },
 
   // Builds the true, value-free background an automatic refresh composites

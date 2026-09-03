@@ -374,12 +374,8 @@ export const brandLogoMixin = {
     // whichever display happens to be selected in the UI. A broadcast renders
     // every display in turn, so these scopes overlap - see _pushRenderingDevice
     // for why that rules out save-and-restore.
-    const renderingScope = this._pushRenderingDevice(device?.address);
-    try {
-      return await this._rasterizeDisplayTemplateSvg([template], width, height, "single", null);
-    } finally {
-      this._popRenderingDevice(renderingScope);
-    }
+    return this._withRenderingDevice(device?.address, () =>
+      this._rasterizeDisplayTemplateSvg([template], width, height, "single", null));
   },
 
   async _brandLogoSendTo(device, template) {

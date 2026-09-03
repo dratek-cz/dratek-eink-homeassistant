@@ -236,8 +236,13 @@ class BrandLogoBroadcastTests(unittest.TestCase):
         # the scope has to be pushed and popped by identity, or one display's
         # address stays pinned after the broadcast and every later palette
         # lookup - and every draft save - answers for the wrong display.
-        self.assertIn("this._pushRenderingDevice(device?.address)", self.mixin)
-        self.assertIn("this._popRenderingDevice(renderingScope)", self.mixin)
+        # A broadcast renders every display in turn, and the device list
+        # renders all of their cards at once, so these scopes both nest and
+        # overlap. The ambient rendering device only survives that if the
+        # async renders are serialised - see _withRenderingDevice and
+        # test_rendering_device_scope.py.
+        self.assertIn("this._withRenderingDevice(device?.address", self.mixin)
+        self.assertNotIn("this._pushRenderingDevice(", self.mixin)
         self.assertNotIn("this._renderingDeviceAddress =", self.mixin)
         self.assertIn("_brandLogoSendGeometry(device)", self.mixin)
 
