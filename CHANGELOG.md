@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.364] - 2026-09-03
+
+### Opraveno
+- **Meteoradar zase kreslí skutečné srážky.** Demo režim z předběžného vydání 0.1.363, který nad Českem vykresloval vymyšlené srážkové pole kvůli produktovým fotkám, je vypnutý. Mapa se opět skládá z dlaždic RainVieweru. Pokud jste 0.1.363 nainstalovali, aktualizujte na tuhle verzi – jinak displeje ukazují déšť, který neprší.
+- Generátor demo pole zůstal v kódu vypnutý za konstantou `DEMO_PRECIPITATION`, aby se příště nemusel psát znovu. Test `tests/test_demo_precipitation.py` drží tu konstantu a poznámky k vydání v souladu, takže se zapnutá nemůže dostat do vydání, jehož popis mluví o normálním chování.
+
 ## [0.1.363] - 2026-09-03 — DEMO BUILD, NEINSTALOVAT BĚŽNĚ
 
 > **Tohle vydání kreslí vymyšlené srážky.** Existuje jen kvůli produktovým fotkám: displeje ukážou déšť nad Českem i za sucha. Je označené jako předběžné, takže ho HACS ve stabilním kanálu nenabídne. Neinstalujte ho na displeje, podle kterých se někdo řídí — mapa neodpovídá skutečnému počasí. Návrat na normální chování je vydání 0.1.364.

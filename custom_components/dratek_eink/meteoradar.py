@@ -134,7 +134,7 @@ MAX_NATIVE_DIMENSION = 800
 # switch in the UI is something a user can leave on by accident, and a display
 # quietly showing invented rain is worse than no radar at all. Flipping this
 # back to False is the whole revert.
-DEMO_PRECIPITATION = True
+DEMO_PRECIPITATION = False
 DEMO_PRECIPITATION_COUNTRY = "cz"
 
 # Czech Republic border as (lon, lat) pairs, closed (first point repeats last).
