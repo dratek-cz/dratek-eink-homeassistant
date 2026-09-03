@@ -56,6 +56,55 @@ class MultiTemplateBindingSlotTests(unittest.TestCase):
         self.assertIsNotNone(match, "graphic binding id assignment not found")
         self.assertIn("slotIndex", match.group(1), "the slot must be part of the binding id")
 
+    # --- the same rules, for the text runs ---------------------------------
+    #
+    # The graphic rows above were fixed first; the value text captured for every
+    # <text> run was left on the whole document. Placing one template in two
+    # slots of a grid therefore produced one set of ids for both, and a
+    # duplicate id means the backend substitutes only the first - the second
+    # slot went out with none of its values, which on a dashboard tile reads as
+    # an empty tile with only the layout's divider lines in it.
+
+    def test_text_runs_are_captured_per_slot(self) -> None:
+        self.assertIn("const textsInSlot = (documentNode, slotIndex) => {", self.devices)
+        self.assertIn(
+            'documentNode.querySelector(`[data-template-slot="${slotIndex}"]`)',
+            self.devices,
+        )
+        # Both sides of the comparison have to be scoped, or the alignment
+        # still runs against every run on the panel.
+        self.assertIn("const currentTexts = textsInSlot(currentDocument, slotIndex);", self.devices)
+        self.assertIn("const markedTexts = textsInSlot(markedDocument, slotIndex);", self.devices)
+        for whole_document in (
+            'const currentTexts = [...currentDocument.querySelectorAll("text")];',
+            'const markedTexts = [...markedDocument.querySelectorAll("text")];',
+        ):
+            self.assertNotIn(whole_document, self.devices)
+
+    def test_the_text_loop_knows_which_slot_it_is_in(self) -> None:
+        # `for (const template of request.templates)` cannot tell two slots
+        # holding the same template apart - it has no index to scope by.
+        self.assertNotIn("for (const template of request.templates) {", self.devices)
+        self.assertIn(
+            "for (let slotIndex = 0; slotIndex < request.templates.length; slotIndex += 1) {",
+            self.devices,
+        )
+
+    def test_text_binding_ids_stay_unique_across_slots(self) -> None:
+        line = next(
+            line for line in self.devices.splitlines()
+            if "const bindingId = `template-" in line
+        )
+        # Everything after ${meta.key} is what separates one slot's id from
+        # another's; without the slot in there the same template placed twice
+        # repeats an id.
+        tail = line.split("${meta.key}")[1]
+        self.assertIn("slotIndex", tail, "the slot must be part of the binding id")
+        self.assertTrue(
+            line.strip().startswith("const bindingId = `template-"),
+            "the id must keep its template- prefix for automation.py",
+        )
+
     def test_the_backend_can_still_read_the_template_id_from_the_id(self) -> None:
         # automation.py's _is_split_or_multi_template_config splits on "-" and
         # reads parts[1] as the template id, so the prefix must stay

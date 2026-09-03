@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.361] - 2026-09-03
+
+### Opraveno
+- **Stejná šablona ve dvou polích mřížky: druhé pole odešlo bez hodnot.** Automatický zápis si při zachycení hledal textové běhy přes celý panel a id vazby neneslo číslo pole – bylo v něm jen `šablona-proměnná-pořadí`. Dvě pole se stejnou šablonou proto dostala jedno a totéž id, a duplicitní id znamená, že backend při dosazování čerstvých hodnot najde jen to první. Druhé pole se pak vykreslilo se statickou kresbou, ale bez jediné hodnoty – na dlaždici dashboardu, kde jsou hodnoty prakticky celý obsah, to vypadá jako prázdná dlaždice s pouhými čarami rozložení. Ruční odeslání tím netrpělo, protože se posílá hotový obrázek z prohlížeče a žádné dosazování po id neprobíhá.
+- Zachycení textů je nově scopované po polích stejně jako grafické řádky (grafy, budíky, předpovědní pásy), kde tahle chyba opravená už byla. Id nese číslo pole, takže se dvě pole nemůžou přebít. Vedlejší přínos: porovnávání textových běhů běží uvnitř jednoho pole místo přes celý panel, takže vykreslení jednoho pole nemůže rozhodit párování v jiném. Ověřeno na rozloženích `mixed-5`, `grid-4`, `grid-6` i na jednom poli.
+
 ## [0.1.360] - 2026-09-03
 
 ### Opraveno

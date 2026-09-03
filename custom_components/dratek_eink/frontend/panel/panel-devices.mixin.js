@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.360";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.361";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG, DISPLAY_TEMPLATES_BY_ID } from "./templates/index.js?v=thermostat-live-dial-1";
 
 // Generation of the graphic-row capture written into every series()/ratio()/
@@ -3636,7 +3636,7 @@ export const devicesMixin = {
     return null;
   },
 
-  _templateAutomationTextBinding(documentNode, textNode, entityId, meta, occurrence, width, height, valuePrefix = "", valueSuffix = "") {
+  _templateAutomationTextBinding(documentNode, textNode, entityId, meta, occurrence, width, height, valuePrefix = "", valueSuffix = "", slotIndex = 0) {
     const offset = this._templateAutomationNodeOffset(textNode);
     const centerX = offset.x + Number(textNode.getAttribute("x") || 0);
     const centerY = offset.y + Number(textNode.getAttribute("y") || 0);
@@ -3713,7 +3713,10 @@ export const devicesMixin = {
     // value through svg_text.py is a no-op fit and stays byte-identical, while a
     // future longer value is still clamped instead of overflowing.
     const svgMaxWidth = Math.max(maxWidth, currentTextWidth + 1);
-    const bindingId = `template-${String(meta.templateId || "slot")}-${meta.key}-${occurrence}`;
+    // The slot belongs in the id, exactly as it does for the graphic rows: the
+    // same template in two slots would otherwise be tagged with one id twice,
+    // and a duplicate id leaves the second slot unbound.
+    const bindingId = `template-${String(meta.templateId || "slot")}-${meta.key}-s${slotIndex}-${occurrence}`;
     // Stamped onto the live node so the caller's captured svg_template can be
     // searched for this exact element later - the backend replaces it by this
     // id when an automatic refresh substitutes a fresh value.
@@ -3834,12 +3837,25 @@ export const devicesMixin = {
     if (!request?.templates?.length || typeof DOMParser === "undefined") return { bindings: [], svgTemplate: "" };
     const currentSvg = await this._buildDisplayTemplateSvg(request.templates, width, height, request.layout);
     const currentDocument = new DOMParser().parseFromString(currentSvg, "image/svg+xml");
-    const currentTexts = [...currentDocument.querySelectorAll("text")];
+    // Scoped per slot, the same way the graphic rows below are and for the same
+    // reason. The whole-document list made two problems. A template placed in
+    // two slots produced one set of ids for both - a duplicate id means the
+    // backend's substitution only ever finds the first, so the second slot went
+    // out with none of its values, which on a dashboard tile is the whole tile.
+    // And the run alignment compared every run on the panel at once, so
+    // injecting a marker into one slot could shift how another slot's runs
+    // paired up.
+    const textsInSlot = (documentNode, slotIndex) => {
+      const root = documentNode.querySelector(`[data-template-slot="${slotIndex}"]`);
+      return [...(root || documentNode).querySelectorAll("text")];
+    };
     const bindings = [];
     this._templateAutomationBindingOverrides ||= {};
 
-    for (const template of request.templates) {
+    for (let slotIndex = 0; slotIndex < request.templates.length; slotIndex += 1) {
+      const template = request.templates[slotIndex];
       if (!template) continue;
+      const currentTexts = textsInSlot(currentDocument, slotIndex);
       // A ratio()-driven dial/ring/meter row is fully redrawn by its own
       // "ratio" binding below (fill, label AND the value text together, the
       // same way _blockDial/_blockRing/_blockMeters draw it as one shape) -
@@ -3866,7 +3882,9 @@ export const devicesMixin = {
           delete this._templateAutomationBindingOverrides[bindingKey];
         }
         const markedDocument = new DOMParser().parseFromString(markedSvg, "image/svg+xml");
-        const markedTexts = [...markedDocument.querySelectorAll("text")];
+        // The marker override is keyed by template id, so it lands in every
+        // slot holding that template; only this slot's copy is looked at here.
+        const markedTexts = textsInSlot(markedDocument, slotIndex);
         let occurrence = 0;
         for (const { marked: markedNode, current: currentText } of this._alignTemplateTextRuns(markedTexts, currentTexts)) {
           const markedText = String(markedNode?.textContent || "");
@@ -3905,7 +3923,7 @@ export const devicesMixin = {
             valueSuffix = markedText.slice(markerIndex + marker.length);
           }
           bindings.push(this._templateAutomationTextBinding(
-            currentDocument, currentText, entityId, meta, occurrence++, width, height, valuePrefix, valueSuffix
+            currentDocument, currentText, entityId, meta, occurrence++, width, height, valuePrefix, valueSuffix, slotIndex
           ));
         }
       }
