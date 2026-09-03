@@ -1,4 +1,4 @@
-const DRATEK_EINK_OVERVIEW_VERSION = "0.1.362";
+const DRATEK_EINK_OVERVIEW_VERSION = "0.1.363";
 // Mirrors DISCOVERY_UNSEEN_GRACE_SECONDS in const.py; only a fallback for a
 // backend payload that predates out_of_range.
 const OVERVIEW_UNSEEN_GRACE_SECONDS = 3 * 60;

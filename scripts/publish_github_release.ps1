@@ -16,7 +16,11 @@ param(
   [Parameter(Mandatory = $true)][string] $Version,
   [string] $TokenFile = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "github\accesstoken.txt"),
   [string] $Repo = "dratek-cz/dratek-eink-homeassistant",
-  [string] $ZipPath = "dratek_eink.zip"
+  [string] $ZipPath = "dratek_eink.zip",
+  # A build nobody should be updated onto by accident - a demo build with
+  # invented data, say. HACS offers prereleases only to users who have turned
+  # beta versions on for this repository, so the stable channel never sees it.
+  [switch] $Prerelease
 )
 
 $ErrorActionPreference = "Stop"
@@ -53,8 +57,9 @@ sys.stdout.write(match.group(0).strip() if match else '')
 "@ $Version
 $notes = [string]::Join("`n", $notesLines)
 
+if ($Prerelease) { Write-Host "Marking $tag as a PRERELEASE - HACS stable will not offer it." }
 Write-Host "Creating release $tag on $Repo ..."
-$body = @{ tag_name = $tag; name = $tag; body = $notes; draft = $false; prerelease = $false } | ConvertTo-Json -Depth 3
+$body = @{ tag_name = $tag; name = $tag; body = $notes; draft = $false; prerelease = [bool]$Prerelease } | ConvertTo-Json -Depth 3
 try {
   $release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$Repo/releases" `
     -Headers $headers -Body ([Text.Encoding]::UTF8.GetBytes($body)) -ContentType "application/json"

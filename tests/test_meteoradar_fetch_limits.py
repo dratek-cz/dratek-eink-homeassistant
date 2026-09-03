@@ -164,6 +164,10 @@ class ComposeRefusesAForeignHostTests(unittest.TestCase):
 
     def setUp(self) -> None:
         meteoradar._cache.clear()
+        # This pins the real fetch path, so the demo build's short circuit must
+        # be out of the way - with it on there is no fetch to validate at all.
+        self._demo = meteoradar.DEMO_PRECIPITATION
+        meteoradar.DEMO_PRECIPITATION = False
         self._fetch_json = meteoradar._async_fetch_json
         self._fetch_tile = meteoradar._async_fetch_tile
         self.requested: list[str] = []
@@ -175,6 +179,7 @@ class ComposeRefusesAForeignHostTests(unittest.TestCase):
         meteoradar._async_fetch_tile = fake_tile
 
     def tearDown(self) -> None:
+        meteoradar.DEMO_PRECIPITATION = self._demo
         meteoradar._async_fetch_json = self._fetch_json
         meteoradar._async_fetch_tile = self._fetch_tile
         meteoradar._cache.clear()

@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel-constants.js?v=0.1.362";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel-constants.js?v=0.1.363";
 
 export const renderUiMixin = {
 

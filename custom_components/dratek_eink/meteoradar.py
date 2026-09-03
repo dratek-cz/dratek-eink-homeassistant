@@ -121,6 +121,22 @@ WIND_RECHECK_INTERVAL_SECONDS = 15 * 60
 # had a turn at it.
 MAX_NATIVE_DIMENSION = 800
 
+# ---------------------------------------------------------------------------
+# DEMO BUILD ONLY - MUST BE False IN EVERY PUBLIC RELEASE.
+#
+# With this on, the Czech map is composed from a made-up precipitation field
+# instead of RainViewer's real one, so a shelf of displays can be photographed
+# showing rain on a dry day. Nothing else changes: the field is fed into the
+# very same compose_country_radar_image the real tiles go through, so the
+# picture on the panel is a real render, just of invented weather.
+#
+# Deliberately a module constant and one branch rather than a setting: a
+# switch in the UI is something a user can leave on by accident, and a display
+# quietly showing invented rain is worse than no radar at all. Flipping this
+# back to False is the whole revert.
+DEMO_PRECIPITATION = True
+DEMO_PRECIPITATION_COUNTRY = "cz"
+
 # Czech Republic border as (lon, lat) pairs, closed (first point repeats last).
 # Sourced from the Czech Office for Surveying, Mapping and Cadastre (ČÚZK) via
 # geoBoundaries (CC BY 4.0, https://www.geoboundaries.org, dataset CZE-ADM0),
@@ -955,6 +971,103 @@ def _draw_wind_vectors(
     image.paste(Image.new("RGB", image.size, BORDER_COLOR), mask=clipped_arrows)
 
 
+def _demo_noise(seed: int, cells: int):
+    """A coarse random grid with smoothstep interpolation - cloud-shaped blobs."""
+    import random
+
+    rng = random.Random(seed)
+    grid = [[rng.random() for _ in range(cells + 1)] for _ in range(cells + 1)]
+
+    def sample(u: float, v: float) -> float:
+        u = min(0.9999, max(0.0, u)) * cells
+        v = min(0.9999, max(0.0, v)) * cells
+        x0, y0 = int(u), int(v)
+        tx, ty = u - x0, v - y0
+        tx = tx * tx * (3 - 2 * tx)
+        ty = ty * ty * (3 - 2 * ty)
+        top = grid[y0][x0] * (1 - tx) + grid[y0][x0 + 1] * tx
+        bottom = grid[y0 + 1][x0] * (1 - tx) + grid[y0 + 1][x0 + 1] * tx
+        return top * (1 - ty) + bottom * ty
+
+    return sample
+
+
+def _demo_rainviewer_colour(strength: float) -> tuple[int, int, int, int]:
+    """RainViewer's Universal Blue ramp: blue -> cyan -> green -> yellow -> red.
+
+    The ramp matters as much as the shape: _paint_precipitation reads alpha and
+    the red/green growth within this ramp to decide its pigment, so a field
+    coloured any other way would dither unlike the real thing.
+    """
+    stops = (
+        (0.00, (0, 0, 120)),
+        (0.20, (0, 90, 220)),
+        (0.40, (0, 200, 230)),
+        (0.60, (30, 200, 60)),
+        (0.78, (240, 230, 40)),
+        (1.00, (230, 40, 30)),
+    )
+    rgb = stops[-1][1]
+    for (a_pos, a_rgb), (b_pos, b_rgb) in zip(stops, stops[1:]):
+        if strength <= b_pos:
+            t = (strength - a_pos) / max(1e-6, b_pos - a_pos)
+            rgb = tuple(round(a + (b - a) * t) for a, b in zip(a_rgb, b_rgb))
+            break
+    return (*rgb, round(60 + 195 * min(1.0, strength / 0.9)))
+
+
+def demo_precipitation_tiles(
+    x_min: int, y_min: int, x_max: int, y_max: int, tile_size: int = TILE_SIZE
+) -> dict[tuple[int, int], Image.Image]:
+    """A made-up frontal band, in the tile format the real fetch produces.
+
+    DEMO BUILD ONLY - see DEMO_PRECIPITATION. Three octaves of value noise give
+    the ragged edges a real echo has, the diagonal band keeps the rain on one
+    front instead of spread evenly, and the threshold leaves most of the map
+    dry: a radar picture where everything is raining does not photograph as
+    weather.
+
+    Synchronous and CPU-bound (a few hundred thousand pixel writes), so callers
+    run it in an executor like every other compose step here.
+    """
+    span_x = (x_max - x_min + 1) * tile_size
+    span_y = (y_max - y_min + 1) * tile_size
+    octaves = ((_demo_noise(11, 6), 0.55), (_demo_noise(29, 14), 0.30), (_demo_noise(47, 30), 0.15))
+    cores = ((0.30, 0.60, 0.085, 1.00), (0.52, 0.44, 0.060, 0.80), (0.70, 0.33, 0.045, 0.62))
+    aspect = span_x / max(1, span_y)
+    tiles: dict[tuple[int, int], Image.Image] = {}
+    for tile_x in range(x_min, x_max + 1):
+        for tile_y in range(y_min, y_max + 1):
+            tile = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))
+            pixels = tile.load()
+            base_x = (tile_x - x_min) * tile_size
+            base_y = (tile_y - y_min) * tile_size
+            # Two-pixel steps: the composite is downscaled to the panel long
+            # before it is seen, and this halves the generation time.
+            for py in range(0, tile_size, 2):
+                v = (base_y + py) / span_y
+                for px in range(0, tile_size, 2):
+                    u = (base_x + px) / span_x
+                    band = 1 - abs((u * 0.62 + v * 0.78) - 0.66) / 0.20
+                    if band <= 0:
+                        continue
+                    noise = sum(sample(u, v) * weight for sample, weight in octaves)
+                    strength = (noise * 0.85 + band * 0.35) * (0.35 + 0.65 * band)
+                    for core_u, core_v, radius, peak in cores:
+                        distance = math.hypot((u - core_u) * aspect, v - core_v)
+                        if distance < radius:
+                            strength = max(strength, peak * (1 - distance / radius) ** 1.2)
+                    if strength <= 0.52:
+                        continue
+                    colour = _demo_rainviewer_colour(min(1.0, (strength - 0.52) / 0.48))
+                    for dy in range(2):
+                        for dx in range(2):
+                            if px + dx < tile_size and py + dy < tile_size:
+                                pixels[px + dx, py + dy] = colour
+            tiles[(tile_x, tile_y)] = tile
+    return tiles
+
+
 def _stitch_tiles(
     tiles: dict[tuple[int, int], Image.Image],
     x_min: int,
@@ -1424,26 +1537,36 @@ async def _async_composed_base_image_uncached(
         if is_europe
         else COUNTRY_BORDERS.get(country_key, CZECH_BORDER)
     )
+    # DEMO BUILD ONLY - see DEMO_PRECIPITATION. Only the one country, and never
+    # the Europe overview: the point is one photogenic map, not a rewrite of
+    # every render path.
+    demo = DEMO_PRECIPITATION and not is_europe and country_key == DEMO_PRECIPITATION_COUNTRY
     now = time.monotonic()
     cached = _cache.get(key)
     if cached and cached.get("composed") is not None and now - float(cached.get("checked_at", 0)) < INDEX_RECHECK_INTERVAL_SECONDS:
         return cached["composed"]  # type: ignore[return-value]
 
-    try:
-        index = await _async_fetch_json(hass, RAINVIEWER_INDEX_URL)
-        if not isinstance(index, dict):
-            raise TypeError("RainViewer index is not an object")
-        frames = (index.get("radar") or {}).get("past") or []
-        if not frames:
+    if demo:
+        # No network at all: a photo session should not fail because
+        # RainViewer is slow, and the frame key is fixed so the composed map
+        # stays identical between shots.
+        host, path, frame_key = "", "", "demo-precipitation"
+    else:
+        try:
+            index = await _async_fetch_json(hass, RAINVIEWER_INDEX_URL)
+            if not isinstance(index, dict):
+                raise TypeError("RainViewer index is not an object")
+            frames = (index.get("radar") or {}).get("past") or []
+            if not frames:
+                return cached.get("composed") if cached else None  # type: ignore[return-value]
+            validated = _validated_tile_base(index.get("host"), frames[-1].get("path"))
+        except Exception:
             return cached.get("composed") if cached else None  # type: ignore[return-value]
-        validated = _validated_tile_base(index.get("host"), frames[-1].get("path"))
-    except Exception:
-        return cached.get("composed") if cached else None  # type: ignore[return-value]
 
-    if validated is None:
-        return cached.get("composed") if cached else None  # type: ignore[return-value]
-    host, path = validated
-    frame_key = f"{host}{path}"
+        if validated is None:
+            return cached.get("composed") if cached else None  # type: ignore[return-value]
+        host, path = validated
+        frame_key = f"{host}{path}"
     if show_wind:
         wind_samples, wind_key = await _async_current_wind_samples(hass, country_key)
     else:
@@ -1463,17 +1586,22 @@ async def _async_composed_base_image_uncached(
         target_aspect=target_aspect,
         margin=12,
     )
-    tile_urls = {
-        (tile_x, tile_y): (
-            f"{host}{path}/{TILE_SIZE}/{ZOOM}/{tile_x}/{tile_y}/{COLOR_SCHEME}/{SMOOTH}_{SNOW}.png"
+    if demo:
+        tiles = await hass.async_add_executor_job(
+            functools.partial(demo_precipitation_tiles, x_min, y_min, x_max, y_max, TILE_SIZE)
         )
-        for tile_x in range(x_min, x_max + 1)
-        for tile_y in range(y_min, y_max + 1)
-    }
-    fetched = await asyncio.gather(
-        *(_async_fetch_tile(hass, url) for url in tile_urls.values())
-    )
-    tiles = {k: image for k, image in zip(tile_urls.keys(), fetched) if image is not None}
+    else:
+        tile_urls = {
+            (tile_x, tile_y): (
+                f"{host}{path}/{TILE_SIZE}/{ZOOM}/{tile_x}/{tile_y}/{COLOR_SCHEME}/{SMOOTH}_{SNOW}.png"
+            )
+            for tile_x in range(x_min, x_max + 1)
+            for tile_y in range(y_min, y_max + 1)
+        }
+        fetched = await asyncio.gather(
+            *(_async_fetch_tile(hass, url) for url in tile_urls.values())
+        )
+        tiles = {k: image for k, image in zip(tile_urls.keys(), fetched) if image is not None}
     if not tiles:
         return cached.get("composed") if cached else None  # type: ignore[return-value]
 

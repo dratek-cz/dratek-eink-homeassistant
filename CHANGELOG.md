@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [0.1.363] - 2026-09-03 — DEMO BUILD, NEINSTALOVAT BĚŽNĚ
+
+> **Tohle vydání kreslí vymyšlené srážky.** Existuje jen kvůli produktovým fotkám: displeje ukážou déšť nad Českem i za sucha. Je označené jako předběžné, takže ho HACS ve stabilním kanálu nenabídne. Neinstalujte ho na displeje, podle kterých se někdo řídí — mapa neodpovídá skutečnému počasí. Návrat na normální chování je vydání 0.1.364.
+
+### Přidáno
+- **Demo režim meteoradaru pro Česko.** Srážkové pole se neskládá z dlaždic RainVieweru, ale generuje se: tři oktávy šumu maskované diagonálním čelem, dvě silnější jádra a práh, který nechá většinu mapy suchou. Barví se RainVieweruvou rampou Universal Blue, protože podle ní se rozhoduje, co se na displeji vytiskne červeně a co černě — jinak obarvené pole by se ditherovalo jinak než skutečné.
+- Pole jde do stejného `compose_country_radar_image` jako opravdové dlaždice, takže obrys státu, ořez, značka domova i převod do palety displeje jsou beze změny. Obrázek na panelu je skutečné vykreslení, jen vymyšleného počasí.
+- Demo se v tomhle režimu vůbec nedotkne sítě — fotografování nespadne kvůli tomu, že je RainViewer pomalý, a mapa zůstane mezi snímky identická.
+- Týká se **jen Česka**; Slovensko, Německo, Rakousko, Polsko i přehled Střední Evropy kreslí dál skutečná data.
+
 ## [0.1.362] - 2026-09-03
 
 ### Opraveno
