@@ -73,7 +73,6 @@ SINGLE_ROW_TEMPLATES = {
     # INTERNAL (PRIVATE-NOTES.md): the logo template is the lockup and nothing
     # else - a heading or a footer over the brand mark would be exactly the
     # thing it exists not to have.
-    "dratek_logo",
 }
 
 

@@ -135,7 +135,6 @@ class DraftWritesStayOnTheOpenDisplayTests(unittest.TestCase):
         self.devices = DEVICES_MIXIN.read_text(encoding="utf-8")
         self.projects = (PANEL / "panel-projects.mixin.js").read_text(encoding="utf-8")
         self.storage = (PANEL / "panel-storage.mixin.js").read_text(encoding="utf-8")
-        self.brand_logo = (PANEL / "panel-brand-logo.mixin.js").read_text(encoding="utf-8")
 
     def test_there_is_a_reader_that_ignores_the_render_scope(self) -> None:
         body = _method_body(self.devices, "_selectedDevice() {")
@@ -189,7 +188,6 @@ class DraftWritesStayOnTheOpenDisplayTests(unittest.TestCase):
     def test_no_scope_saves_and_restores_the_address_by_hand(self) -> None:
         for name, source in (
             ("devices", self.devices),
-            ("brand-logo", self.brand_logo),
         ):
             writes = [
                 line.strip()

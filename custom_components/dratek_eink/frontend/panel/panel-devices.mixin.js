@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=1.0.0-rc.1";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=1.0.0";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG, DISPLAY_TEMPLATES_BY_ID } from "./templates/index.js?v=thermostat-live-dial-1";
 
 // Generation of the graphic-row capture written into every series()/ratio()/
@@ -1611,31 +1611,6 @@ export const devicesMixin = {
                 </div>
                 <div class="display-template-tile-actions">
                   <button type="button" class="display-template-card-action is-blank-action-btn" data-display-template-open="blank"><ha-icon icon="mdi:palette-outline"></ha-icon> Otevřít prázdný Designer</button>
-                </div>
-              </article>`;
-            }
-            // INTERNAL - remove with the rest of the brand-logo feature before
-            // the retail release (PRIVATE-NOTES.md).
-            //
-            // A broadcast template gets its own card: none of the ordinary
-            // furniture applies to it. It is not dragged onto a slot, it has no
-            // variables to bind and no designer to open - the tile is a button
-            // that resets every display, so it says so instead of showing a
-            // "Nenastaveno" badge it can never leave.
-            if (template.broadcast) {
-              return `<article class="display-template-card display-template-broadcast-card" aria-label="${this._escape(template.title)}. Odešle se na všechny displeje.">
-                <header class="display-template-tile-header">
-                  <span class="display-template-kind-icon is-broadcast-icon"><ha-icon icon="mdi:broadcast"></ha-icon></span>
-                  <span class="display-template-tile-identity"><strong>${this._escape(template.title)}</strong><small>Firemní šablona</small></span>
-                </header>
-                <div class="display-template-tile-preview is-${orientation}" data-display-template-select="${template.id}" role="button" tabindex="0" aria-label="Odeslat ${this._escape(template.title)} na všechny displeje">
-                  <span class="display-template-preview" style="aspect-ratio:${previewAspect};min-height:0">${this._renderDisplayTemplateCatalogPreviewSlot(template, orientation, size)}</span>
-                </div>
-                <div class="display-template-tile-meta">
-                  <span class="display-template-broadcast-warning"><ha-icon icon="mdi:alert-outline"></ha-icon>Zruší automatizace i frontu na všech displejích.</span>
-                </div>
-                <div class="display-template-tile-actions">
-                  <button type="button" class="display-template-card-action is-broadcast-action" data-display-template-select="${template.id}" ${this._brandLogoBroadcasting ? "disabled" : ""}><ha-icon icon="mdi:${this._brandLogoBroadcasting ? "loading" : "broadcast"}"></ha-icon>${this._brandLogoBroadcasting ? "Odesílám…" : "Odeslat na všechny displeje"}</button>
                 </div>
               </article>`;
             }

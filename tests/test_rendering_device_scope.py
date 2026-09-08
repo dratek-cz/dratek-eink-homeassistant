@@ -30,7 +30,6 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PANEL = ROOT / "custom_components" / "dratek_eink" / "frontend" / "panel"
 DEVICES = PANEL / "panel-devices.mixin.js"
-BRAND_LOGO = PANEL / "panel-brand-logo.mixin.js"
 
 
 def _method_body(source: str, signature: str) -> str:
@@ -42,7 +41,6 @@ def _method_body(source: str, signature: str) -> str:
 class RenderingDeviceGateTests(unittest.TestCase):
     def setUp(self) -> None:
         self.devices = DEVICES.read_text(encoding="utf-8")
-        self.brand_logo = BRAND_LOGO.read_text(encoding="utf-8")
 
     def test_the_gate_serialises_rather_than_merely_scoping(self) -> None:
         body = _method_body(self.devices, "async _withRenderingDevice(address, run) {")
@@ -65,21 +63,12 @@ class RenderingDeviceGateTests(unittest.TestCase):
         self.assertRegex(body, r"await previous\.catch\(")
 
     def test_every_async_render_scope_goes_through_the_gate(self) -> None:
-        for name, source in (("devices", self.devices), ("brand-logo", self.brand_logo)):
-            with self.subTest(module=name):
-                # Bare push/pop is for the synchronous scope only. An async one
-                # using it directly is the bug this module exists to prevent.
-                bare = re.findall(r"_pushRenderingDevice\(", source)
-                gated = re.findall(r"_withRenderingDevice\(", source)
-                if name == "brand-logo":
-                    self.assertEqual(bare, [], "brand logo must use the gate")
-                    self.assertTrue(gated)
-                else:
-                    # panel-devices holds the definition plus the synchronous
-                    # preview scope, and the gate's own push.
-                    self.assertLessEqual(
-                        len(bare), 3, "an async scope is pushing without the gate"
-                    )
+        # Bare push/pop is for the synchronous scope only. An async one using
+        # it directly is the bug this module exists to prevent. panel-devices
+        # holds the definition plus the synchronous preview scope, and the
+        # gate's own push.
+        bare = re.findall(r"_pushRenderingDevice\(", self.devices)
+        self.assertLessEqual(len(bare), 3, "an async scope is pushing without the gate")
 
     def test_the_three_async_renders_are_the_gated_ones(self) -> None:
         for signature in (
@@ -89,7 +78,6 @@ class RenderingDeviceGateTests(unittest.TestCase):
             with self.subTest(method=signature):
                 body = _method_body(self.devices, signature)
                 self.assertIn("this._withRenderingDevice(device?.address", body)
-        self.assertIn("this._withRenderingDevice(device?.address", self.brand_logo)
 
     def test_the_synchronous_preview_scope_keeps_the_plain_stack(self) -> None:
         # It has no await to be interleaved at, and it runs inside the render
@@ -107,7 +95,6 @@ class RenderingDeviceGateTests(unittest.TestCase):
         gated = (
             "_renderCurrentDisplayTemplateImage",
             "_preparedTemplateEntityBindings",
-            "_brandLogoRenderFor",
         )
         bodies = {
             "_renderCurrentDisplayTemplateImage": _method_body(
@@ -115,9 +102,6 @@ class RenderingDeviceGateTests(unittest.TestCase):
             ),
             "_preparedTemplateEntityBindings": _method_body(
                 self.devices, "async _preparedTemplateEntityBindings("
-            ),
-            "_brandLogoRenderFor": _method_body(
-                self.brand_logo, "async _brandLogoRenderFor("
             ),
         }
         for owner, body in bodies.items():

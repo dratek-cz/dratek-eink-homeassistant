@@ -1,51 +1,45 @@
 # Interní poznámky – co odstranit před finálním prodejním vydáním
 
 Tento soubor je pracovní poznámka pro nás, ne dokumentace pro uživatele.
-Repozitář je zatím pracovní; až se bude připravovat **finální vydání pro prodej
-displejů**, musí z něj následující věci zmizet.
+Vede se v něm, co nesmí být ve **vydání pro prodej displejů**.
+
+Verze **1.0.0** je první takové vydání a je čistá — sekce 1 je odbytá. Nové
+interní věci přidávejte níž stejným způsobem: komentář `INTERNAL` v kódu
+plus řádek v tabulce, a najdete je pak i grepem.
 
 ---
 
-## 1. Šablona „Logo Drátek“ (hromadné odeslání na všechny displeje)
+## 1. Šablona „Logo Drátek“ — ODSTRANĚNO ve verzi 1.0.0
 
-Firemní šablona pro showroom: jedním kliknutím zruší u každého známého displeje
-automatickou aktualizaci, vyprázdní jeho čekající frontu a pošle na něj logo
-Drátek přes celý panel. Logo vzniká deteringem skutečné ikony integrace, zvlášť
-pro tříbarevný a zvlášť pro čtyřbarevný displej. Zákazník tuhle funkci nemá
-dostat.
+Hotovo. Firemní showroomová šablona (hromadné odeslání loga na všechny displeje
+s předchozím zrušením automatizací a fronty) byla z `main` odstraněna při vydání
+**1.0.0**, které je první prodejní verzí.
 
-**Odstranit:**
+**Kde je, když ji budete potřebovat:** poslední build, který ji obsahuje, je tag
+`v1.0.0-rc.1`. Vrátit se k ní jde třeba takhle:
 
-| Soubor | Co s ním |
+```bash
+git checkout v1.0.0-rc.1 -- custom_components/dratek_eink/frontend/panel/templates/dratek_logo.js
+git checkout v1.0.0-rc.1 -- custom_components/dratek_eink/frontend/panel/panel-brand-logo.mixin.js
+git checkout v1.0.0-rc.1 -- tests/test_brand_logo_broadcast.py
+```
+
+Zapojení (import mixinu, položka v katalogu, `_blockBrandLogo`, větve `broadcast`,
+CSS a překlady) je v diffu commitu, který ji odebral — `git log --oneline -S brandLogo`.
+
+**Pozor, tabulka v původním checklistu byla neúplná.** Kromě vyjmenovaných souborů
+na mixin odkazovaly ještě dva testy, které v ní chyběly a shodily celou sadu:
+
+| Soubor | Co v něm bylo |
 | --- | --- |
-| `custom_components/dratek_eink/frontend/panel/templates/dratek_logo.js` | smazat celý soubor |
-| `custom_components/dratek_eink/frontend/panel/panel-brand-logo.mixin.js` | smazat celý soubor |
-| `custom_components/dratek_eink/frontend/panel/templates/index.js` | odebrat `import … dratek_logo.js` a položku `dratekLogo` z `DISPLAY_TEMPLATES` |
-| `custom_components/dratek_eink/frontend/dratek-eink-panel.js` | odebrat `import { brandLogoMixin }` a `brandLogoMixin` z `Object.assign` |
-| `custom_components/dratek_eink/frontend/panel/panel-template-svg.mixin.js` | odebrat `_blockBrandLogo`, řádek `if (row.brandLogo) …` v `_renderTemplateBlock`, `\|\| rows[0]?.brandLogo` v `_layoutTemplateSvg`, řádek `await this._preloadBrandLogoDither…` v `_buildDisplayTemplateSvg` a podmínku `rows.some((row) => row?.brandLogo)` v `_templateSvgThumbnail` |
-| `custom_components/dratek_eink/frontend/panel/panel-devices.mixin.js` | odebrat větev `if (template.broadcast) { … }` v katalogové kartě |
-| `custom_components/dratek_eink/frontend/panel/panel-inspector.mixin.js` | odebrat obě větve `broadcast` (v `openDisplayTemplate` a v obsluze kliknutí na dlaždici) |
-| `custom_components/dratek_eink/frontend/panel/panel-render-ui.mixin.js` | odebrat blok CSS `.display-template-broadcast-*` / `.is-broadcast-*` |
-| `custom_components/dratek_eink/frontend/panel/panel-i18n.mixin.js` | odebrat překlady označené komentářem „INTERNAL“ |
-| `tests/test_brand_logo_broadcast.py` | smazat celý soubor |
-| `tests/test_display_template_shapes.py` | odebrat `"dratek_logo"` ze `SINGLE_ROW_TEMPLATES` |
-| `tests/test_frontend_tool_library.py` | vrátit počet `number: "` z 25 zpět na 24 |
+| `tests/test_rendering_device_scope.py` | konstanta `BRAND_LOGO`, `_brandLogoRenderFor` v seznamu bran a modul v křížové kontrole `_pushRenderingDevice` |
+| `tests/test_meteoradar_per_display_isolation.py` | `self.brand_logo` a modul v kontrole ručních zápisů `_renderingDeviceAddress` |
 
-> Obrázky `frontend/dratek-eink-logo.png` a `frontend/dratek-eink-header.png`
-> **nemazat** – šablona z nich jen čte, používá je i hlavička panelu.
+Kdyby se interní funkce někdy vracela, počítejte s tím, že ji tyhle dvě křížové
+kontroly budou chtít zpátky ve svém seznamu modulů.
 
-Všechna místa v kódu jsou označená komentářem `INTERNAL` a odkazem na tento
-soubor, takže je najdete i grepem:
-
-```bash
-grep -rn "PRIVATE-NOTES" custom_components tests
-```
-
-Po odstranění musí projít celá sada testů:
-
-```bash
-python -m unittest discover -s tests -p "test_*.py"
-```
+Obrázky `frontend/dratek-eink-logo.png` a `frontend/dratek-eink-header.png`
+zůstaly — používá je hlavička panelu.
 
 ---
 

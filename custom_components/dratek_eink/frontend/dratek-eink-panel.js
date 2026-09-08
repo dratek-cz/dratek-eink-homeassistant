@@ -18,11 +18,8 @@ import { drawChartsMixin } from "./panel/panel-draw-charts.mixin.js?v=readable-c
 import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=radar-cache-per-display-1";
 import { templateBlocksMixin } from "./panel/panel-template-blocks.mixin.js?v=template-blocks-2";
 import { templateComponentsMixin } from "./panel/panel-template-components.mixin.js?v=component-parts-2";
-// INTERNAL - remove with the rest of the brand-logo feature before the retail
-// release (PRIVATE-NOTES.md).
-import { brandLogoMixin } from "./panel/panel-brand-logo.mixin.js?v=logo-wordmark-10";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=1.0.0-rc.1";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=1.0.0";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {
@@ -470,8 +467,7 @@ Object.assign(
   drawChartsMixin,
   templateSvgMixin,
   templateBlocksMixin,
-  templateComponentsMixin,
-  brandLogoMixin
+  templateComponentsMixin
 );
 
 if (!customElements.get("dratek-eink-panel")) {

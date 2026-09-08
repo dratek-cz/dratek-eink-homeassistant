@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel-constants.js?v=1.0.0-rc.1";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel-constants.js?v=1.0.0";
 
 export const renderUiMixin = {
 
@@ -635,14 +635,6 @@ export const renderUiMixin = {
         .display-template-tile-preview.is-landscape{min-height:190px}.display-template-tile-preview.is-landscape .display-template-preview{width:min(296px,100%);min-height:150px;aspect-ratio:296/150}
         .display-template-library .display-template-card.is-on-display{border-color:#16803c;background:linear-gradient(145deg,rgba(104,211,145,.3),rgba(225,250,234,.72) 58%,var(--card-background-color));box-shadow:0 0 0 2px rgba(22,128,60,.17),0 14px 36px rgba(22,128,60,.15)}
         .display-template-card.is-config-empty{border-top:3px solid #d95700}.display-template-card.is-config-partial{border-top:3px solid #e0a300}.display-template-card.is-config-complete{border-top:3px solid #16803c}
-        /* INTERNAL - remove with the brand-logo feature (PRIVATE-NOTES.md). */
-        .display-template-broadcast-card{border-color:rgba(220,38,38,.45)!important;box-shadow:0 0 0 1px rgba(220,38,38,.12),0 8px 28px rgba(15,23,42,.08)!important}
-        .display-template-broadcast-card .display-template-kind-icon.is-broadcast-icon{background:rgba(220,38,38,.12);color:var(--dratek-ink-danger,#dc2626)}
-        .display-template-broadcast-warning{display:flex;align-items:center;gap:6px;color:var(--dratek-ink-danger,#dc2626);font-size:10px;font-weight:800;line-height:1.35}
-        .display-template-broadcast-warning ha-icon{--mdc-icon-size:15px;flex:0 0 auto}
-        .display-template-card-action.is-broadcast-action{border-color:#dc2626!important;background:rgba(220,38,38,.08);color:var(--dratek-ink-danger,#dc2626);font-weight:850}
-        .display-template-card-action.is-broadcast-action:hover:not([disabled]){background:#dc2626;color:#fff}
-        .display-template-card-action.is-broadcast-action[disabled]{opacity:.6;cursor:progress}
         .display-template-config-status{flex:0 0 88px;width:88px;height:22px;min-height:22px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:0 6px;border:0;border-radius:999px;background:rgba(127,127,127,.14);color:var(--primary-text-color);font-size:7px;line-height:1;font-weight:900;text-transform:uppercase;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;transition:filter .12s ease}.display-template-config-status:hover,.display-template-config-status:focus-visible{filter:brightness(0.93);outline:0}.display-template-config-status ha-icon{--mdc-icon-size:12px}.display-template-config-status.is-complete{background:rgba(22,128,60,.15);color:var(--dratek-ink-ok,#16803c)}.display-template-config-status.is-partial{background:rgba(224,163,0,.18);color:#8a5700}.display-template-config-status.is-empty{background:rgba(217,87,0,.15);color:#d95700}
         .display-template-library .display-template-card.is-on-display:hover{border-color:#16803c;background:linear-gradient(145deg,rgba(104,211,145,.38),rgba(225,250,234,.82) 58%,var(--card-background-color));box-shadow:0 0 0 3px rgba(22,128,60,.2),0 16px 40px rgba(22,128,60,.18)}
         .display-template-library .display-template-card.is-on-display .display-template-tile-preview{background:rgba(22,128,60,.08)}

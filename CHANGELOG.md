@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.0] - 2026-09-08 — PRVNÍ PRODEJNÍ VYDÁNÍ
+
+První verze určená pro prodej displejů. Obsahově je to 1.0.0-rc.1 bez interních firemních nástrojů — žádná funkce, kterou zákazník používá, se nemění.
+
+### Odebráno
+- **Interní šablona „Logo Drátek".** Hromadné odeslání loga na všechny displeje najednou, které u každého předtím zrušilo automatickou aktualizaci a vyprázdnilo frontu. Showroomový nástroj, ne funkce pro zákazníka. Katalog šablon má nově 24 položek místo 25.
+- S ní i její vykreslovací blok, ditherovací mixin, CSS, překlady a testy. Obrázky `dratek-eink-logo.png` a `dratek-eink-header.png` zůstávají — používá je hlavička panelu.
+
+### Poznámka k číslování
+- Skok z 0.1.365 na 1.0.0 neznamená přepis integrace. Znamená, že tohle je první vydání, které jde ven k zákazníkům, a od téhle chvíle platí sémantické verzování: 1.0.x opravy, 1.x.0 nové funkce.
+
 ## [1.0.0-rc.1] - 2026-09-08 — INTERNÍ / SHOWROOM BUILD
 
 > **Kandidát na 1.0.0 s interní firemní šablonou uvnitř.** Obsahuje šablonu „Logo Drátek" — hromadné odeslání loga na všechny displeje najednou, které u každého předtím zruší automatickou aktualizaci a vyprázdní frontu. To je nástroj pro showroom, ne pro zákazníka. Vydáno jako předběžná verze, takže ji HACS ve stabilním kanálu nenabídne. Prodejní verze bez interních věcí je **1.0.0**.

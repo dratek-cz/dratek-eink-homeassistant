@@ -1,14 +1,4 @@
 const EN_EXACT = new Map(Object.entries({
-  // INTERNAL - remove with the brand-logo feature (PRIVATE-NOTES.md).
-  "Logo Drátek": "Drátek logo",
-  "Firemní šablona": "Company template",
-  "Odeslat na všechny displeje": "Send to every display",
-  "Odesílám…": "Sending…",
-  "Zruší automatizace i frontu na všech displejích.": "Cancels automations and the queue on every display.",
-  "Není známý žádný displej, kam logo poslat.": "No display is known to send the logo to.",
-  "Tuto akci nelze vzít zpět.": "This action cannot be undone.",
-  "U každého displeje se nejdřív zruší automatická aktualizace a zruší se jeho čekající úlohy ve frontě.":
-    "Each display's automatic update is cancelled first, together with its waiting queue jobs.",
   // Header and primary navigation.
   "Editor šablon": "Template editor",
   "BLE diagnostika · správa displejů": "BLE diagnostics · display management",
