@@ -19,7 +19,7 @@ import { templateSvgMixin } from "./panel/panel-template-svg.mixin.js?v=radar-ca
 import { templateBlocksMixin } from "./panel/panel-template-blocks.mixin.js?v=template-blocks-2";
 import { templateComponentsMixin } from "./panel/panel-template-components.mixin.js?v=component-parts-2";
 
-import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=1.0.0";
+import { DRATEK_EINK_VERSION, CURRENT_GATEWAY_FIRMWARES } from "./panel/panel-constants.js?v=1.0.1";
 
 class DratekEinkPanel extends HTMLElement {
   constructor() {

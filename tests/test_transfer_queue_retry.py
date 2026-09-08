@@ -738,8 +738,11 @@ class CancelledJobDoesNotWedgeAutomationTests(unittest.IsolatedAsyncioTestCase):
         }]
         self.assertEqual("", queue._automatic_skip_reason(self.ADDRESS))
 
-        # A transfer that started just now is of course still active.
-        queue._jobs[0]["started_at"] = int(time.time())
+        # A transfer that started just now is of course still active. Stamped
+        # on transfer_started_at: a job that has not reached its transport yet
+        # is judged by whether its task is alive, not by the clock, so that a
+        # long queue cannot age a perfectly valid job out.
+        queue._jobs[0]["transfer_started_at"] = int(time.time())
         self.assertIn("active transfer", queue._automatic_skip_reason(self.ADDRESS))
 
     async def test_failed_automatic_update_triggers_backoff(self):

@@ -32,6 +32,8 @@ OFFLINE_BACKOFF_SECONDS = 60  # 60s backoff for unreachable/failed displays
 # because an out-of-heap ESP32 needs more than one cycle to recover.
 GATEWAY_BACKOFF_SECONDS = 180
 LEGACY_COMPLETION_TIMEOUT_MARKER = "waiting for the display to confirm the completed refresh"
+# What both transports log when the controller acknowledges the whole image.
+DISPLAY_RECEIPT_CONFIRMED_MARKER = "Display confirmed that the complete image was received."
 RETRYABLE_BLUETOOTH_ERROR_MARKERS = (
     "available connection slot",
     "no backend with an available",
@@ -188,6 +190,7 @@ class TransferQueue:
             "status": "queued",
             "created_at": int(time.time()),
             "started_at": None,
+            "transfer_started_at": None,
             "finished_at": None,
             "error": "",
             "log": [],
@@ -475,20 +478,55 @@ class TransferQueue:
             are otherwise independent.
             """
             nonlocal skipped
+            waiting_since = time.monotonic()
             async with resource_lock:
+                queued_for = time.monotonic() - waiting_since
                 job["status"] = "writing"
                 if self._should_skip_automatic_update(job):
                     skipped = await self._skip_automatic_update(job)
                     return skipped
+                # A shelf-wide send puts every display on one gateway at once,
+                # and that gateway writes them one at a time. Saying so turns
+                # "nothing happened for ten minutes" into a queue position.
+                if queued_for >= 5:
+                    log_line(
+                        f"Waited {queued_for:.0f}s for {job.get('resource') or 'the transport'} "
+                        "to finish the display in front of this one."
+                    )
+                # The safety timeout starts HERE, not when the job was picked
+                # up. It exists to cut a transfer that has hung mid-stream - but
+                # it used to wrap the wait for this lock as well, so a job that
+                # was merely queued behind others spent its whole budget
+                # standing still and was failed without one write attempted.
+                # Sending to a hundred displays through a single gateway, which
+                # needs ten to twenty seconds each, therefore killed everything
+                # past the first ten minutes of the queue: 43 of 100 in the run
+                # that found this, all failing at exactly 600s after creation
+                # with nothing in their log but the routing line.
+                #
+                # Each attempt gets its own budget for the same reason: a retry
+                # is a fresh transfer, not the tail of the one that timed out.
+                #
+                # Nothing bounds the wait above, deliberately. A queued job is
+                # not stuck, it is Nth in line behind a radio that can only do
+                # one display at a time, and the honest answer is to wait.
+                job["started_at"] = int(time.time())
+                job["transfer_started_at"] = job["started_at"]
                 # Each ESP32 gateway owns its own BLE adapter and its resource
                 # lock already guarantees one display per gateway.  Only the
                 # local Home Assistant adapter needs the process-wide radio
                 # slot; serialising independent gateways here prevented the
                 # parallel transfers the gateway pool is meant to provide.
                 if job.get("transport_type") == "gateway":
-                    return await runner(log_line)
+                    async with asyncio.timeout(TRANSFER_JOB_TIMEOUT_SECONDS):
+                        return await runner(log_line)
                 async with async_radio_slot(self.hass):
-                    return await runner(log_line)
+                    # Re-stamped: the radio slot is another queue, and waiting
+                    # in it is not transfer time either.
+                    job["started_at"] = int(time.time())
+                    job["transfer_started_at"] = job["started_at"]
+                    async with asyncio.timeout(TRANSFER_JOB_TIMEOUT_SECONDS):
+                        return await runner(log_line)
 
         normalized_address = job["address"].upper()
         last_finish = self._last_finish_at.get(normalized_address)
@@ -501,8 +539,7 @@ class TransferQueue:
                 await asyncio.sleep(wait_time)
 
         try:
-            async with asyncio.timeout(TRANSFER_JOB_TIMEOUT_SECONDS):
-                result = await self._run_with_automatic_bluetooth_retry(job, run_attempt, add_log)
+            result = await self._run_with_automatic_bluetooth_retry(job, run_attempt, add_log)
             if skipped is not None:
                 # _skip_automatic_update already finalised the job and saved it.
                 return skipped
@@ -515,6 +552,7 @@ class TransferQueue:
                 gateway_side_failure = bool(result.get("gateway_side"))
             else:
                 job["status"] = "succeeded"
+                job["confirmed"] = self._display_confirmed_receipt(job)
         except asyncio.CancelledError:
             # CancelledError derives from BaseException, not Exception, so it
             # used to sail straight past the handler below with the job still
@@ -613,6 +651,7 @@ class TransferQueue:
             "operation": job.get("operation"),
             "transport_name": job.get("transport_name"),
             "error": job.get("error") or "",
+            "confirmed": job.get("confirmed"),
         }
         return result
 
@@ -732,7 +771,27 @@ class TransferQueue:
         )
 
     @staticmethod
-    def _is_active_job(job: dict[str, Any]) -> bool:
+    def _display_confirmed_receipt(job: dict[str, Any]) -> bool:
+        """Did the display itself say it got the whole image?
+
+        "Succeeded" used to mean two different things depending on which radio
+        carried the job. A gateway transfer waits for the controller's 05 08
+        packet and reports what it heard. The local Home Assistant adapter
+        hands its blocks to the OS stack, which reports them written whether or
+        not the display took them, and the optional confirmation is treated as
+        accepted when it never arrives - correct for the transfer, but not
+        something to present as proof the panel was painted.
+
+        In the shelf-wide send that exposed this, 43 of 43 gateway transfers
+        confirmed and 0 of 13 local ones did, while the queue drew all 56
+        identically. That is the whole of "the queue says it went out and the
+        display is blank", so the answer travels with the job instead of being
+        recoverable only by reading the log by eye.
+        """
+        log = " ".join(str(line) for line in job.get("log") or [])
+        return DISPLAY_RECEIPT_CONFIRMED_MARKER in log
+
+    def _is_active_job(self, job: dict[str, Any]) -> bool:
         """True while a job can still be doing something physical.
 
         A job whose task died without finalising it would otherwise stay
@@ -744,8 +803,23 @@ class TransferQueue:
         """
         if job.get("status") not in {"queued", "writing"}:
             return False
-        started = job.get("started_at") or job.get("created_at") or 0
-        return time.time() - float(started) <= TRANSFER_JOB_TIMEOUT_SECONDS + 60
+        started = job.get("transfer_started_at")
+        if started:
+            return time.time() - float(started) <= TRANSFER_JOB_TIMEOUT_SECONDS + 60
+        # No transfer yet: the job is waiting for its transport. That is not a
+        # stall, it is standing in line behind a radio that writes one display
+        # at a time - and on a shelf-wide send that line is long. Timing the
+        # wait out declared every job past ten minutes of backlog dead, which
+        # is exactly backwards: the ones furthest back have waited longest and
+        # are the most valid.
+        #
+        # So the yardstick here is whether the job is still being worked on at
+        # all. A live task means a real place in the queue; no task means the
+        # runner died some other way, or the job was restored from history
+        # after a restart - the zombie this backstop exists for, which would
+        # otherwise wedge its display for the whole session.
+        task = self._job_tasks.get(str(job.get("id")))
+        return task is not None and not task.done()
 
     def _is_local_device_in_range(self, address: str) -> bool:
         """Return True if HA's Bluetooth scanner has recently seen this address."""

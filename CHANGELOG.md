@@ -2,6 +2,17 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.1] - 2026-09-08
+
+### Opraveno
+- **Hromadné odeslání na velký počet displejů většinu z nich tiše zahodilo.** Změřeno na reálné dávce: ze 100 displejů jich 43 skončilo chybou „Transfer exceeded the 600s safety timeout" přesně 600 sekund po zařazení do fronty — a v logu neměly nic než řádek o směrování. **Nikdy se o ně nikdo nepokusil.**
+- Příčina: bezpečnostní limit úlohy začínal běžet už ve chvíli, kdy si ji fronta převzala, a obaloval i čekání na bránu. Jedna brána zapisuje displej po displeji, každý deset až dvacet sekund. Všechno, co se nedostalo na řadu do deseti minut, tedy umřelo tím, že stálo ve frontě. Limit teď měří jenom samotný přenos a začíná až v okamžiku, kdy má úloha bránu pro sebe — čekání ve frontě je čekání, ne selhání.
+- Fronta o čekání nově píše: úloha, která stála víc než pět sekund, si do logu zapíše, jak dlouho čekala a na co. „Deset minut se nic nedělo" tak přestává být záhada a je z toho pozice ve frontě.
+- **„Odesláno" znamenalo na každé cestě něco jiného.** Přenos přes bránu čeká na potvrzení `05 08` od řadiče displeje; místní Bluetooth v Home Assistantu předá bloky operačnímu systému a chybějící potvrzení bere jako přijaté. Ve zmíněné dávce potvrdilo příjem 43 ze 43 přenosů přes bránu a **0 ze 13** přes místní Bluetooth — a fronta všech 56 vykreslila stejně. Úloha si teď nese příznak `confirmed`, takže zápis bez potvrzení od displeje už nevypadá jako doručený.
+
+### Poznámka k provozu
+- Jedna brána zvládne displej po displeji. Dávka 100 displejů reálně trvá půl hodiny až hodinu — nově ale doběhne celá, místo aby se po deseti minutách začala sypat.
+
 ## [1.0.0] - 2026-09-08 — PRVNÍ PRODEJNÍ VYDÁNÍ
 
 První verze určená pro prodej displejů. Obsahově je to 1.0.0-rc.1 bez interních firemních nástrojů — žádná funkce, kterou zákazník používá, se nemění.
