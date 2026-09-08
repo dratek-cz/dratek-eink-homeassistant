@@ -30,7 +30,7 @@ import { template as garden } from "./garden.js?v=compact-landscape-content-6";
 import { template as price } from "./price.js?v=pricetag-barcode-rework-1";
 // INTERNAL - remove with the rest of the brand-logo feature before the retail
 // release (PRIVATE-NOTES.md). Imported last so it also sits last in the grid.
-import { template as dratekLogo } from "./dratek_logo.js?v=logo-dither-1";
+import { template as dratekLogo } from "./dratek_logo.js?v=logo-wordmark-2";
 
 export const DISPLAY_TEMPLATES = [
   customImage,

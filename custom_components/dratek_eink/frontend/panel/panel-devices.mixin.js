@@ -1,4 +1,4 @@
-import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=0.1.364";
+import { DRATEK_EINK_VERSION } from "./panel-constants.js?v=1.0.0-rc.1";
 import { DISPLAY_TEMPLATES, DISPLAY_TEMPLATE_CATALOG, DISPLAY_TEMPLATES_BY_ID } from "./templates/index.js?v=thermostat-live-dial-1";
 
 // Generation of the graphic-row capture written into every series()/ratio()/
@@ -4030,6 +4030,16 @@ export const devicesMixin = {
       radarImage.setAttribute("id", radarId);
       const radarWidth = Math.round(Number(radarImage.getAttribute("width")) || width);
       const radarHeight = Math.round(Number(radarImage.getAttribute("height")) || height);
+      // The <image>'s own x/y are relative to its slot: every layout cell is
+      // wrapped in <g data-template-slot transform="translate(slot.x,slot.y)">
+      // (_buildDisplayTemplateSvg), so a radar placed anywhere but the first
+      // cell records x/y near zero. The clean_background tier pastes the fresh
+      // frame at exactly these coordinates, which sent a radar in the bottom
+      // row of a 2+3 layout back up to the top of the panel on every automatic
+      // refresh, while a manual send - which never reads this binding - stayed
+      // correct. Resolved to panel coordinates the same way a text run's box
+      // is, by walking the ancestor translates.
+      const radarOffset = this._templateAutomationNodeOffset(radarImage);
       const binding = {
         id: radarId,
         type: "camera",
@@ -4040,8 +4050,8 @@ export const devicesMixin = {
         // frame at the exact spot the <image> occupied - the other
         // (SVG-substitution) tier does not need these, it just swaps the
         // href of the very same element and keeps its original geometry.
-        x: Math.round(Number(radarImage.getAttribute("x")) || 0),
-        y: Math.round(Number(radarImage.getAttribute("y")) || 0),
+        x: Math.round(radarOffset.x + (Number(radarImage.getAttribute("x")) || 0)),
+        y: Math.round(radarOffset.y + (Number(radarImage.getAttribute("y")) || 0)),
         w: radarWidth,
         h: radarHeight,
       };

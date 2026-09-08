@@ -111,7 +111,8 @@ class BrandLogoTemplateTests(unittest.TestCase):
         """
         mixin = MIXIN.read_text(encoding="utf-8")
         self.assertNotIn("logo-flat-6", mixin)
-        self.assertIn("logo-tonal-7", mixin)
+        self.assertNotIn("logo-tonal-7", mixin)
+        self.assertIn("logo-wordmark-8", mixin)
 
     def test_the_outline_reads_the_module_rectangle(self) -> None:
         """One definition of where the module is.
@@ -123,6 +124,52 @@ class BrandLogoTemplateTests(unittest.TestCase):
         mixin = MIXIN.read_text(encoding="utf-8")
         self.assertIn("_brandLogoModuleRect(width, height, sourceWidth, sourceHeight) {", mixin)
         self.assertEqual(1, mixin.count("this._brandLogoModuleRect("))
+
+    def test_a_small_tag_prints_the_wordmark_without_the_eink_module(self) -> None:
+        """A tag in the customer's hand must not show a picture of a tag.
+
+        Both shipped lockups pair the wordmark with a drawing of the product.
+        The wide file - the one a small landscape panel gets - sets the two
+        side by side, so the wordmark comes out of the real artwork by a crop
+        rather than by redrawing it, which is the rule the whole block keeps.
+        """
+        mixin = MIXIN.read_text(encoding="utf-8")
+        self.assertIn("_brandLogoWordmarkCrop(sourceWidth, sourceHeight) {", mixin)
+        # The square lockup stacks its module under the wordmark, with no
+        # rectangle between them, and a tall panel has room for both.
+        self.assertIn("if (sourceWidth === sourceHeight) return null;", mixin)
+        self.assertIn("const crop = this._brandLogoWordmarkCrop(sourceWidth, sourceHeight);", mixin)
+        # Nothing left to frame once the module is cropped away, and the
+        # rectangle would land on the type instead.
+        self.assertIn(
+            "if (!crop) this._outlineBrandLogoModule(pixels, width, height, sourceWidth, sourceHeight);",
+            mixin,
+        )
+
+    def test_the_crop_box_matches_the_shipped_wide_artwork(self) -> None:
+        """The box is measured in pixels of one specific file.
+
+        Re-exporting dratek-eink-header.png at another size, or moving the
+        wordmark inside it, silently crops the logo to the wrong thing - so
+        the artwork itself is what this asserts, not the constant.
+        """
+        from PIL import Image
+
+        mixin = MIXIN.read_text(encoding="utf-8")
+        box = re.search(
+            r"const box = \{ x: (\d+), y: (\d+), right: (\d+), bottom: (\d+) \};", mixin
+        )
+        self.assertIsNotNone(box)
+        left, top, right, bottom = (int(value) for value in box.groups())
+        artwork = Image.open(COMPONENT / "frontend" / "dratek-eink-header.png").convert("RGBA")
+        self.assertEqual((1700, 500), artwork.size)
+        # The crop keeps every pixel of the wordmark, with the artwork's own
+        # 26px optical margin left standing on all four sides.
+        wordmark = artwork.crop((left, top, right, bottom))
+        self.assertEqual((26, 26, 953, 252), wordmark.getbbox())
+        self.assertEqual((26, 26), (right - 953, bottom - top - 252))
+        # ...and none of the module, whose own ink starts well to the right.
+        self.assertLess(right, 1005)
 
     def test_wordmark_and_eink_dot_have_semantic_colours(self) -> None:
         mixin = MIXIN.read_text(encoding="utf-8")
@@ -154,7 +201,7 @@ class BrandLogoTemplateTests(unittest.TestCase):
     def test_the_logo_is_letterboxed_and_never_cropped(self) -> None:
         mixin = MIXIN.read_text(encoding="utf-8")
         self.assertNotIn('"cover"', mixin)
-        self.assertIn('_drawCustomImageFitted(context, this._brandLogoPrepareSource(image), width, height, "contain")', mixin)
+        self.assertIn('_drawCustomImageFitted(context, this._brandLogoPrepareSource(image, crop), width, height, "contain")', mixin)
 
     def test_the_catalog_tile_is_not_cached_before_the_bitmap_lands(self) -> None:
         # The thumbnail cache keeps whatever the first pass drew, and the first

@@ -47,6 +47,32 @@ export const brandLogoMixin = {
     return this._frontendAssetUrl(stacked ? "dratek-eink-logo.png" : "dratek-eink-header.png");
   },
 
+  // A small tag prints the wordmark alone - no picture of an eInk module.
+  //
+  // Both shipped lockups pair the DRÁTEK.CZ wordmark with a drawing of the
+  // product, right for a header on a screen and wrong on the product: the tag
+  // in the customer's hand ends up showing a picture of a tag. The wide file is
+  // the one a small landscape panel gets, and its two halves sit side by side,
+  // so the wordmark is recoverable by cropping the artwork rather than by
+  // redrawing it - which is still the rule this whole block is built on.
+  //
+  // The box is the wordmark's own ink in the shipped 1700x500 header, padded by
+  // the 26px optical margin the artwork already carries down its left edge, so
+  // the type is not flush against the edge of a full-bleed panel. Returns null
+  // for the square lockup: it stacks the module *under* the wordmark, where no
+  // rectangle separates the two, and a tall panel has the room to carry both.
+  _brandLogoWordmarkCrop(sourceWidth, sourceHeight) {
+    if (sourceWidth === sourceHeight) return null;
+    const box = { x: 0, y: 70, right: 979, bottom: 348 };
+    const right = Math.min(sourceWidth, box.right);
+    const bottom = Math.min(sourceHeight, box.bottom);
+    const y = Math.min(box.y, bottom);
+    // A source that is not the artwork this box was measured in would be
+    // cropped to nonsense; drawn whole instead, exactly as before.
+    if (right <= box.x || bottom <= y) return null;
+    return { x: box.x, y, width: right - box.x, height: bottom - y };
+  },
+
   // The dither is per palette as well as per size: a three-colour panel and a
   // four-colour one need different error diffusion over the same pixels, and
   // handing a BWR panel the BWRY bitmap prints the yellow as a dirty grey.
@@ -55,7 +81,7 @@ export const brandLogoMixin = {
     const h = Math.max(1, Math.round(height));
     const source = this._brandLogoAsset(stacked);
     const paletteKey = this._displayPaletteKey?.(device) || "bwr";
-    return { source, w, h, paletteKey, cacheKey: `${source}:${w}x${h}:${paletteKey}:logo-tonal-7` };
+    return { source, w, h, paletteKey, cacheKey: `${source}:${w}x${h}:${paletteKey}:logo-wordmark-8` };
   },
 
   // One cell for every panel. 8x8 is the smallest matrix that can place a light
@@ -70,12 +96,14 @@ export const brandLogoMixin = {
     ];
   },
 
-  _brandLogoPrepareSource(image) {
+  _brandLogoPrepareSource(image, crop = null) {
     const canvas = document.createElement("canvas");
-    canvas.width = image.naturalWidth || image.width;
-    canvas.height = image.naturalHeight || image.height;
+    canvas.width = crop ? crop.width : (image.naturalWidth || image.width);
+    canvas.height = crop ? crop.height : (image.naturalHeight || image.height);
     const context = canvas.getContext("2d", { willReadFrequently: true });
-    context.drawImage(image, 0, 0);
+    // Shifted rather than clipped: the region outside the crop lands off the
+    // canvas, so what remains is exactly the box and nothing is resampled.
+    context.drawImage(image, crop ? -crop.x : 0, crop ? -crop.y : 0);
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
     for (let offset = 0; offset < pixels.data.length; offset += 4) {
       const r = pixels.data[offset];
@@ -165,25 +193,25 @@ export const brandLogoMixin = {
     }
   },
 
-  // Bounds of the real Eink module in the two supplied source lockups, mapped
-  // into the target pixels the panel is actually printed in. The outline is
-  // drawn from it after the dither, so the module keeps a continuous, sharp
-  // edge around a screen that is a tone rather than a solid.
+  // Bounds of the real Eink module in the square lockup, mapped into the target
+  // pixels the panel is actually printed in. The outline is drawn from it after
+  // the dither, so the module keeps a continuous, sharp edge around a screen
+  // that is a tone rather than a solid.
+  //
+  // Only the square lockup has a module in the bitmap at all now: the wide one
+  // is cropped down to its wordmark before it is drawn, so the bounds it used
+  // to need here are gone rather than left standing unreachable.
   _brandLogoModuleRect(width, height, sourceWidth, sourceHeight) {
-    const stacked = sourceWidth === sourceHeight;
-    const bounds = stacked
-      ? { x: 83, y: 488, right: 979, bottom: 883 }
-      : { x: 1005, y: 103, right: 1665, bottom: 395 };
+    const bounds = { x: 83, y: 488, right: 979, bottom: 883 };
     const scale = Math.min(width / sourceWidth, height / sourceHeight);
     const offsetX = (width - sourceWidth * scale) / 2;
     const offsetY = (height - sourceHeight * scale) / 2;
     return {
-      stacked,
       left: Math.max(0, Math.round(offsetX + bounds.x * scale)),
       top: Math.max(0, Math.round(offsetY + bounds.y * scale)),
       right: Math.min(width - 1, Math.round(offsetX + (bounds.right + 1) * scale) - 1),
       bottom: Math.min(height - 1, Math.round(offsetY + (bounds.bottom + 1) * scale) - 1),
-      radius: Math.max(2, Math.round((stacked ? 28 : 19) * scale)),
+      radius: Math.max(2, Math.round(28 * scale)),
     };
   },
 
@@ -237,12 +265,15 @@ export const brandLogoMixin = {
         context.clearRect(0, 0, width, height);
         context.imageSmoothingEnabled = true;
         context.imageSmoothingQuality = "high";
-        this._drawCustomImageFitted(context, this._brandLogoPrepareSource(image), width, height, "contain");
         const sourceWidth = image.naturalWidth || image.width;
         const sourceHeight = image.naturalHeight || image.height;
+        const crop = this._brandLogoWordmarkCrop(sourceWidth, sourceHeight);
+        this._drawCustomImageFitted(context, this._brandLogoPrepareSource(image, crop), width, height, "contain");
         const pixels = context.getImageData(0, 0, width, height);
         this._ditherBrandLogoImageData(pixels, width, height, paletteKey);
-        this._outlineBrandLogoModule(pixels, width, height, sourceWidth, sourceHeight);
+        // The cropped lockup is the wordmark alone - there is no module left in
+        // it to frame, and the rectangle would land on the type.
+        if (!crop) this._outlineBrandLogoModule(pixels, width, height, sourceWidth, sourceHeight);
         context.putImageData(pixels, 0, 0);
         resolve(canvas.toDataURL("image/png"));
       };

@@ -2,6 +2,19 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.0-rc.1] - 2026-09-08 — INTERNÍ / SHOWROOM BUILD
+
+> **Kandidát na 1.0.0 s interní firemní šablonou uvnitř.** Obsahuje šablonu „Logo Drátek" — hromadné odeslání loga na všechny displeje najednou, které u každého předtím zruší automatickou aktualizaci a vyprázdní frontu. To je nástroj pro showroom, ne pro zákazníka. Vydáno jako předběžná verze, takže ji HACS ve stabilním kanálu nenabídne. Prodejní verze bez interních věcí je **1.0.0**.
+
+### Opraveno
+- **Meteoradar ve spodní řadě velkého displeje po automatické aktualizaci vyskočil nahoru.** Týkalo se to rozložení „2 nahoře, 3 dole" a stejně tak každého jiného rozložení, kde meteoradar neseděl v levé horní pozici. Ruční odeslání bylo pokaždé v pořádku, obrázek se posunul až při automatickém zápisu — a pak zůstal celý přesunutý do horní části panelu.
+- Příčina: každá pozice rozložení je v SVG zabalená do vlastní posunuté skupiny, takže souřadnice mapy radaru platí uvnitř té pozice, ne na celém panelu. Panel si je ale ukládal, jako by platily na celém panelu. Ruční odeslání tenhle údaj vůbec nečte (kreslí celý panel najednou), zatímco automatická aktualizace podle něj čerstvý snímek radaru vlepuje — pro spodní řadu tedy o třetinu panelu výš, než měla.
+- Panel nově souřadnice převede na souřadnice panelu úplně stejně, jako to už dělal u textových hodnot. Automatizace uložené dřív se opraví samy: integrace si správné umístění dopočítá ze zachycené šablony, takže není potřeba každou automatizaci znovu otevírat a ukládat.
+
+### Změněno
+- **Šablona „Logo Drátek" tiskne na malých displejích jen nápis DRÁTEK.CZ.** Doteď se na cenovku vedle nápisu vytiskl i obrázek eInk displeje — malý displej v ruce zákazníka tak ukazoval obrázek malého displeje. Nápis se z původní grafiky ořízne, nekreslí se znovu, takže písmo i barvy zůstávají přesně ty firemní. Vedlejší efekt: nápis je na cenovce zhruba 1,8× větší a čitelnější.
+- Velké displeje se nemění — na výšku i na velký panel jde dál celá skládaná varianta loga i s modulem, na ni je tam místa dost.
+
 ## [0.1.364] - 2026-09-03
 
 ### Opraveno

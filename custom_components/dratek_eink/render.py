@@ -1828,6 +1828,89 @@ def _replace_svg_image_href_by_id(document: str, element_id: str, data_url: str)
     return tag_pattern.sub(_swap, document, count=1)
 
 
+_SVG_TRANSLATE = re.compile(r"translate\(\s*(-?[\d.]+)(?:[ ,]+(-?[\d.]+))?\s*\)")
+
+
+def _svg_element_position(document: str, element_id: str) -> tuple[float, float] | None:
+    """Where one tagged element really sits on the panel, in panel coordinates.
+
+    Its own x/y are relative to whatever groups wrap it, and on a large display
+    every layout cell is one: _buildDisplayTemplateSvg wraps each slot in
+    <g data-template-slot transform="translate(slot.x,slot.y)">. So the ancestor
+    translates have to be added back, exactly as the panel's own
+    _templateAutomationNodeOffset does for a text run. Only translate() is
+    read - the panel's helper reads no other transform either, and the slot
+    wrapper never carries one.
+
+    Returns None when the element cannot be found or carries no x/y, so the
+    caller keeps whatever geometry the binding already had.
+    """
+    target = re.search(r'<[a-zA-Z][^>]*\bid="' + re.escape(element_id) + r'"[^>]*>', document)
+    if target is None:
+        return None
+    offset_x = 0.0
+    offset_y = 0.0
+    # Every <g> still open at the element's position contributes its translate.
+    open_groups: list[tuple[float, float]] = []
+    for tag in re.finditer(r"<g\b[^>]*>|</g\s*>", document[: target.start()]):
+        token = tag.group(0)
+        if token.startswith("</"):
+            if open_groups:
+                open_groups.pop()
+            continue
+        # A self-closing <g/> opens and closes in the same tag, so it must not
+        # push a level - the same trap _replace_svg_group_by_id documents.
+        if token.endswith("/>"):
+            continue
+        translate = _SVG_TRANSLATE.search(token)
+        open_groups.append(
+            (float(translate.group(1)), float(translate.group(2) or 0)) if translate else (0.0, 0.0)
+        )
+    for group_x, group_y in open_groups:
+        offset_x += group_x
+        offset_y += group_y
+    element = target.group(0)
+    own_x = re.search(r'\bx="(-?[\d.]+)"', element)
+    own_y = re.search(r'\by="(-?[\d.]+)"', element)
+    if own_x is None or own_y is None:
+        return None
+    return offset_x + float(own_x.group(1)), offset_y + float(own_y.group(1))
+
+
+def _bindings_with_resolved_camera_geometry(
+    bindings: list[dict[str, Any]], svg_template: str
+) -> list[dict[str, Any]]:
+    """Re-derive every camera binding's paste position from the captured SVG.
+
+    Up to 0.1.364 the panel recorded the Meteoradar <image>'s raw x/y, which
+    are relative to its layout slot, as though they were panel coordinates.
+    The clean-background tier pastes the fresh frame at exactly those numbers,
+    so a radar sitting in the bottom row of a 2+3 layout was thrown back to the
+    top of the panel on every automatic refresh - while a manual send, which
+    never reads this binding, kept showing it in the right place.
+
+    The panel now resolves them itself, but automations saved before that still
+    carry the slot-relative pair. The captured template says where the element
+    truly is, so it is read back from there rather than making the user open
+    and save every one of those automations again. A binding whose geometry was
+    already right resolves to the same numbers, so this is a no-op for them.
+    """
+    if not svg_template:
+        return bindings
+    resolved: list[dict[str, Any]] = []
+    for binding in bindings:
+        if not (isinstance(binding, dict) and binding.get("type") == "camera"):
+            resolved.append(binding)
+            continue
+        element_id = str(binding.get("id") or "")
+        position = _svg_element_position(svg_template, element_id) if element_id else None
+        if position is None:
+            resolved.append(binding)
+            continue
+        resolved.append({**binding, "x": round(position[0]), "y": round(position[1])})
+    return resolved
+
+
 _RADAR_SIDEBAR_MIN = 88
 _RADAR_SIDEBAR_MAX = 200
 _RADAR_SIDEBAR_FRACTION = 0.24
@@ -2524,6 +2607,10 @@ def render_automatic_refresh_image(
         and not (binding.get("w") and binding.get("h"))
         for binding in bindings
     )
+    # A camera's recorded x/y used to be its slot-relative pair rather than its
+    # place on the panel, which the clean-background tier pastes straight into.
+    # The captured template still knows where the element really is.
+    bindings = _bindings_with_resolved_camera_geometry(bindings, svg_template)
     # The same reasoning for a graphic row captured before its box was measured
     # in the layout it is drawn in. The SVG-substitution tier replaces the whole
     # tagged group rather than clearing a rectangle and drawing into it, so it

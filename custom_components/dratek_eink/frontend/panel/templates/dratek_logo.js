@@ -42,6 +42,11 @@ export const template = {
   // leave the wordmark tiny between two bands of white, and the stacked one on
   // large panels and on anything portrait, where the wide lockup would be a
   // thin strip across the middle of an empty page.
+  //
+  // The wide one is printed as the DRÁTEK.CZ wordmark alone - the drawing of an
+  // eInk module beside it in the source file is cropped away, because a small
+  // tag showing a picture of a small tag is the one thing the shelf does not
+  // need. See _brandLogoWordmarkCrop in panel-brand-logo.mixin.js.
   design: ({ width, height }) => {
     const w = width || 296;
     const h = height || 128;
