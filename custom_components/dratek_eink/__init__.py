@@ -21,6 +21,7 @@ from .queue import get_transfer_queue
 from .transfer import DratekTransfer
 
 _LOGGER = logging.getLogger(__name__)
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 # The Meteoradar template needs a live, always-current radar snapshot. A plain
 # fetch buried in the render path would be invisible to the rest of Home
 # Assistant, so it is a real camera entity instead - inspectable in Developer

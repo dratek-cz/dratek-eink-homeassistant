@@ -24,16 +24,28 @@
   },
   "config_subentries": {
     "ui": {
-      "entry_type": "Rozhraní integrace"
+      "entry_type": "Rozhraní integrace",
+      "initiate_flow": {
+        "user": "Přidat rozhraní integrace"
+      }
     },
     "scheduler": {
-      "entry_type": "Plánování automatických zápisů"
+      "entry_type": "Plánování automatických zápisů",
+      "initiate_flow": {
+        "user": "Přidat plánování automatických zápisů"
+      }
     },
     "transfer": {
-      "entry_type": "Přenos obrazu do zařízení"
+      "entry_type": "Přenos obrazu do zařízení",
+      "initiate_flow": {
+        "user": "Přidat přenos obrazu do zařízení"
+      }
     },
     "meteoradar": {
-      "entry_type": "Obrazová služba meteoradaru"
+      "entry_type": "Obrazová služba meteoradaru",
+      "initiate_flow": {
+        "user": "Přidat obrazovou službu meteoradaru"
+      }
     }
   }
 }
