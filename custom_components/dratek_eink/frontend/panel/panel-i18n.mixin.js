@@ -10,6 +10,10 @@ const EN_EXACT = new Map(Object.entries({
   "Tuto akci nelze vzít zpět.": "This action cannot be undone.",
   "U každého displeje se nejdřív zruší automatická aktualizace a zruší se jeho čekající úlohy ve frontě.":
     "Each display's automatic update is cancelled first, together with its waiting queue jobs.",
+  "Automatické aktualizace i dřívější čekající úlohy byly zrušeny.":
+    "Automatic updates and any earlier waiting jobs have been cancelled.",
+  "Zápisy probíhají postupně přes dostupné gateway - průběh sledujte na kartě Fronta zápisu.":
+    "The writes run one after another through the available gateways - follow their progress on the Write queue tab.",
   // Header and primary navigation.
   "Editor šablon": "Template editor",
   "BLE diagnostika · správa displejů": "BLE diagnostics · display management",

@@ -107,33 +107,31 @@ async def _async_submit_routed_transfer(
         route = await async_gateway_route(hass, manual_route) or {
             "id": manual_route, "name": "DRATEK eInk gateway", "rssi": None,
         }
-        resource = gateway_resource(route)
-        if not (wait_for_completion and queue._is_gateway_backing_off(resource)):
-            result = await queue.async_submit(
-                resource=resource,
-                transport_type="gateway",
-                transport_name=str(route["name"]),
-                address=address,
-                operation=operation,
-                runner=gateway_runner_factory(route),
-                wait_for_completion=wait_for_completion,
-            )
-            if result and result.get("ok") is not False:
-                return result
-            _LOGGER.warning(
-                "[%s] Pinned gateway %s failed or is offline (%s); falling back to other active gateways / local Bluetooth.",
-                address, manual_route, result.get("error") if result else "unreachable"
-            )
+        # A pinned gateway is used even while it is in its recovery backoff.
+        # Skipping it here sent the display to Home Assistant's own adapter
+        # instead - which on an installation whose displays are only reachable
+        # through ESP32 gateways is not a fallback, it is a guaranteed failure.
+        # Whether a backing-off gateway is still the best radio for a display is
+        # decided in one place, TransferQueue._select_gateway_route, which knows
+        # what the alternatives are; and a gateway that really is dead still
+        # falls through below on its own failed result.
+        result = await queue.async_submit(
+            resource=gateway_resource(route),
+            transport_type="gateway",
+            transport_name=str(route["name"]),
+            address=address,
+            operation=operation,
+            runner=gateway_runner_factory(route),
+            wait_for_completion=wait_for_completion,
+        )
+        if result and result.get("ok") is not False:
+            return result
+        _LOGGER.warning(
+            "[%s] Pinned gateway %s failed or is offline (%s); falling back to other active gateways / local Bluetooth.",
+            address, manual_route, result.get("error") if result else "unreachable"
+        )
 
     routes = await manager._async_gateway_routes(address)
-    if routes and wait_for_completion:
-        # A completed shelf-write attempt can mark a dead gateway immediately.
-        # Do not submit the next display to that same endpoint during its
-        # recovery backoff; allow the routed fallback below to use local BLE.
-        routes = [
-            route for route in routes
-            if not queue._is_gateway_backing_off(gateway_resource(route))
-        ]
     if routes:
         result = await queue.async_submit_gateway_routes(
             routes=routes,

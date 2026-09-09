@@ -85,6 +85,14 @@ class FakeHass:
         return asyncio.create_task(coro, name=name)
 
 
+def _busy_job(job_id: str, resource: str) -> dict:
+    """A job the queue counts as active: it is holding, or waiting for, a radio."""
+    job = _job(job_id, resource, "gateway")
+    job["status"] = "writing"
+    job["transfer_started_at"] = time.time()
+    return job
+
+
 def _make_queue():
     queue = queue_module.TransferQueue(FakeHass())
     queue._loaded = True
@@ -218,6 +226,42 @@ class GatewayRouteSelectionTests(unittest.IsolatedAsyncioTestCase):
         routes = [{"id": "a", "rssi": -70}, {"id": "b", "rssi": -40}]
 
         self.assertEqual(queue._select_gateway_route(routes)["id"], "b")
+
+    def test_a_backlog_is_spread_instead_of_piling_onto_the_strongest(self):
+        # A hundred-display broadcast submits its jobs faster than any of them
+        # can be written, so every route is busy by the third one. Falling
+        # through to the strongest gateway then put the whole shelf on one
+        # ESP32 while the second sat idle: the queue depth was never asked.
+        queue = _make_queue()
+        routes = [{"id": "strong", "rssi": -40}, {"id": "weak", "rssi": -70}]
+
+        for index in range(4):
+            route = queue._select_gateway_route(routes)
+            queue._jobs.append(
+                _busy_job(f"job{index}", queue_module.gateway_resource(route))
+            )
+
+        self.assertEqual(
+            [job["resource"] for job in queue._jobs],
+            [
+                "gateway:strong",
+                "gateway:weak",
+                # Both busy and equally deep, so preference order breaks the tie.
+                "gateway:strong",
+                "gateway:weak",
+            ],
+        )
+
+    def test_a_busy_healthy_gateway_still_beats_a_busy_backed_off_one(self):
+        queue = _make_queue()
+        queue._gateway_failure_at["gateway:sick"] = time.monotonic()
+        routes = [{"id": "sick", "rssi": -40}, {"id": "healthy", "rssi": -70}]
+        # Deeper queue on the healthy one - health outranks depth anyway.
+        queue._jobs.append(_busy_job("a", "gateway:healthy"))
+        queue._jobs.append(_busy_job("b", "gateway:healthy"))
+        queue._jobs.append(_busy_job("c", "gateway:sick"))
+
+        self.assertEqual(queue._select_gateway_route(routes)["id"], "healthy")
 
 
 if __name__ == "__main__":

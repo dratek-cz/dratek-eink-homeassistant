@@ -446,10 +446,19 @@ export const brandLogoMixin = {
       orientation: portrait ? "portrait" : "landscape",
       transform,
       template_ids: [BRAND_LOGO_TEMPLATE_ID],
-      // A shelf-wide reset must learn the result before choosing a route for
-      // the next display. Returning after queue insertion flooded a dead
-      // gateway with dozens of jobs before its first failure was known.
-      wait_for_completion: true,
+      // Queue insertion, not the finished write. The broadcast's job is to put
+      // one entry per display into the transfer queue and let the backend write
+      // them one at a time; awaiting each transfer instead meant a shelf of a
+      // hundred displays only ever had as many queue entries as there are
+      // radios, the other ninety-odd existed nowhere but this loop, and closing
+      // the panel threw them away. It also silently disabled two things the
+      // queue does for exactly this case: holding a job for a display that is
+      // out of range (queue.py's may_wait), and keeping gateway routes in play
+      // (the backoff filter in _async_submit_routed_transfer only fires when a
+      // caller is waiting, so one gateway hiccup pushed the whole shelf onto
+      // Home Assistant's own adapter). Flooding a dead gateway is a routing
+      // problem and is solved where routing happens - see _select_gateway_route.
+      wait_for_completion: false,
       // No `automation` key at all, which is what makes the send itself clear
       // whatever automatic update the display had (see
       // _clear_previous_entity_automation in ws_sending.py). The explicit
@@ -494,16 +503,16 @@ export const brandLogoMixin = {
       + "Tuto akci nelze vzít zpět.";
   },
 
-  _brandLogoParallelTransfers() {
-    // Each online gateway owns an independent BLE radio. Home Assistant's
-    // local adapter is one more transport. This is a concurrency count, never
-    // a limit on how many displays the broadcast reaches.
-    const onlineGateways = (this._gateways || []).filter((gateway) => gateway?.status?.ok).length;
-    return Math.max(1, onlineGateways + 1);
-  },
-
-  // The whole reset. One worker per available radio keeps every gateway busy,
-  // while the backend queue still serialises transfers within each radio.
+  // The whole reset. Every display gets its queue entry here, as fast as the
+  // panel can render and upload them; the writing itself belongs to the backend
+  // queue, which serialises one display at a time per radio and spreads the
+  // backlog across every gateway that hears them.
+  //
+  // Sequential on purpose. The render is serialised anyway (_withRenderingDevice
+  // holds a gate so one display's palette scope cannot overlap another's), so
+  // parallel workers would only interleave the chunk uploads, and they cost the
+  // one thing that matters here: submitting in list order means the queue is
+  // written in list order.
   async _broadcastBrandLogoToAllDisplays() {
     if (this._brandLogoBroadcasting || !this._hass) return;
     const template = this._brandLogoTemplateCard();
@@ -529,28 +538,19 @@ export const brandLogoMixin = {
       for (const device of targets) {
         await this._brandLogoDeleteAutomation(device.address);
       }
-      let nextIndex = 0;
-      let completed = 0;
-      const workerCount = Math.min(targets.length, this._brandLogoParallelTransfers());
-      const worker = async () => {
-        while (nextIndex < targets.length) {
-          const device = targets[nextIndex];
-          nextIndex += 1;
-          try {
-            await this._brandLogoSendTo(device, template);
-            sent += 1;
-          } catch (error) {
-            failures.push(`${this._deviceTitle?.(device) || device.address}: ${this._message?.(error) || error}`);
-          }
-          completed += 1;
-          this._templateSendResult = {
-            ok: true,
-            message: `Logo Drátek: dokončeno ${completed}/${targets.length}, souběžné přenosy ${workerCount}.`,
-          };
-          this._render();
+      for (const [index, device] of targets.entries()) {
+        this._templateSendResult = {
+          ok: true,
+          message: `Logo Drátek: zařazuji displej ${index + 1}/${targets.length} do fronty zápisu…`,
+        };
+        this._render();
+        try {
+          await this._brandLogoSendTo(device, template);
+          sent += 1;
+        } catch (error) {
+          failures.push(`${this._deviceTitle?.(device) || device.address}: ${this._message?.(error) || error}`);
         }
-      };
-      await Promise.all(Array.from({ length: workerCount }, () => worker()));
+      }
     } finally {
       this._brandLogoBroadcasting = false;
       await this._loadQueue?.(true);
@@ -559,11 +559,13 @@ export const brandLogoMixin = {
       this._templateSendResult = failures.length
         ? {
           ok: false,
-          message: `Logo odesláno na ${sent} z ${targets.length} displejů. Nepovedlo se: ${failures.join("; ")}`,
+          message: `Logo zařazeno pro ${sent} z ${targets.length} displejů. Nepovedlo se zařadit: ${failures.join("; ")}`,
         }
         : {
           ok: true,
-          message: `Logo Drátek bylo odesláno na všech ${sent} displejů. Automatické aktualizace i čekající fronta byly zrušeny.`,
+          message: `Logo Drátek bylo zařazeno do fronty pro všech ${sent} displejů. `
+            + "Automatické aktualizace i dřívější čekající úlohy byly zrušeny. "
+            + "Zápisy probíhají postupně přes dostupné gateway - průběh sledujte na kartě Fronta zápisu.",
         };
       this._render();
       this._paint();

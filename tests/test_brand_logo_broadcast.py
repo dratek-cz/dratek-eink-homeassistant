@@ -267,22 +267,29 @@ class BrandLogoBroadcastTests(unittest.TestCase):
         send = send[: send.index("\n  },")]
         self.assertNotIn("payload.automation =", send)
 
-    def test_one_worker_is_used_for_each_independent_radio(self) -> None:
-        self.assertIn("_brandLogoParallelTransfers() {", self.mixin)
-        self.assertIn("onlineGateways + 1", self.mixin)
-        self.assertIn("Math.min(targets.length, this._brandLogoParallelTransfers())", self.mixin)
-        self.assertIn("await Promise.all(Array.from({ length: workerCount }", self.mixin)
-
-    def test_one_display_finishes_before_the_next_is_queued(self) -> None:
+    def test_every_display_gets_its_queue_entry_before_any_of_them_is_written(self) -> None:
+        # The broadcast submits, it does not write. Awaiting each transfer left
+        # a hundred-display shelf with only as many queue entries as there are
+        # radios - the rest lived in this loop and died with the panel - and it
+        # switched off both the queue's hold-for-an-unreachable-display path and
+        # the gateway routing that the same flag guards in ws_sending.py.
         send = self.mixin[self.mixin.index("async _brandLogoSendTo("):]
         send = send[: send.index("\n  },")]
-        self.assertIn("wait_for_completion: true", send)
+        self.assertIn("wait_for_completion: false", send)
         self.assertIn("await this._sendLocalDisplayDesignChunked(payload)", send)
         self.assertNotIn("dratek_eink/gateways/send_design", send)
 
+    def test_the_displays_are_submitted_in_list_order(self) -> None:
+        # Serialised, not fanned out: the render is gated anyway, and submitting
+        # in order is what makes the queue read in order.
+        body = self.mixin[self.mixin.index("async _broadcastBrandLogoToAllDisplays()"):]
+        self.assertIn("for (const [index, device] of targets.entries()) {", body)
+        self.assertNotIn("Promise.all(", body)
+        self.assertNotIn("_brandLogoParallelTransfers", self.mixin)
+
     def test_one_display_failing_does_not_abandon_the_rest(self) -> None:
         self.assertIn("failures.push(", self.mixin)
-        self.assertIn("Logo odesláno na ${sent} z ${targets.length} displejů.", self.mixin)
+        self.assertIn("Logo zařazeno pro ${sent} z ${targets.length} displejů.", self.mixin)
 
     def test_each_display_is_rendered_at_its_own_size_and_palette(self) -> None:
         # A broadcast renders every display in turn, so these scopes overlap.

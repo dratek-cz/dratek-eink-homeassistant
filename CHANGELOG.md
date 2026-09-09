@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.13] - 2026-09-09
+
+### Opraveno
+- Hromadná šablona **Logo Drátek** opět zařadí do fronty zápisu úlohu pro **každý** displej hned na začátku. Verze 1.0.9 čekala na dokončení každého přenosu, takže na regálu se stovkou displejů existovaly ve frontě jen dvě až tři úlohy a zbytek žil pouze v otevřeném panelu - po jeho zavření se ztratil.
+- Tím se vrátily i dvě věci, které čekání na dokončení mlčky vypínalo: fronta znovu podrží úlohu pro displej mimo dosah a zapíše ji, jakmile se ohlásí, a hromadné odesílání znovu využívá gatewaye. Jediné zaškobrtnutí gatewaye dříve na tři minuty přesměrovalo celý regál na místní Bluetooth Home Assistantu.
+- Fronta rozděluje čekající úlohy mezi všechny gatewaye, které displej slyší. Když jsou všechny obsazené, rozhoduje délka jejich fronty, ne pouze síla signálu - stovka displejů tak neskončí na jediné ESP32, zatímco druhá stojí vedle nečinně.
+- Připnutá gateway se používá i během své ochranné prodlevy. Její přeskočení posílalo zápis na místní Bluetooth, což je na instalaci s displeji dosažitelnými jen přes gatewaye zaručené selhání.
+
 ## [1.0.12] - 2026-09-09
 
 ### Kritická oprava

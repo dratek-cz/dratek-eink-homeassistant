@@ -388,6 +388,34 @@ class TransferQueue:
                     for job in self._jobs
                 ):
                     return route
+        # Every acceptable gateway is already busy, so this job is going to
+        # wait whatever we choose - but not on the same gateway as everything
+        # else. Falling through to the strongest route put a hundred-display
+        # broadcast entirely onto one ESP32 while the second sat idle beside it:
+        # each submit asked the same question a moment apart, saw the same
+        # strongest gateway, and queue depth was never part of the answer.
+        # Shortest line first, and the preference order above breaks the ties,
+        # so two equally loaded gateways still resolve to the stronger one.
+        depth: dict[str, int] = {}
+        for job in self._jobs:
+            if self._is_active_job(job):
+                resource = str(job.get("resource") or "")
+                depth[resource] = depth.get(resource, 0) + 1
+        for allow_backed_off in (False, True):
+            candidates = [
+                route
+                for route in ranked
+                if self._route_rssi(route) >= GATEWAY_FALLBACK_MIN_RSSI_DBM
+                and (
+                    allow_backed_off
+                    or not self._is_gateway_backing_off(gateway_resource(route))
+                )
+            ]
+            # min() is stable, so an untouched gateway keeps its ranked place.
+            if candidates:
+                return min(
+                    candidates, key=lambda route: depth.get(gateway_resource(route), 0)
+                )
         return ranked[0]
 
     def _is_gateway_backing_off(self, resource: str) -> bool:
