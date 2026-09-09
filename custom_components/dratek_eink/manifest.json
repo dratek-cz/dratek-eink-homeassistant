@@ -1,6 +1,12 @@
 {
   "domain": "dratek_eink",
   "name": "DRATEK eInk",
+  "bluetooth": [
+    {
+      "manufacturer_id": 20563,
+      "connectable": true
+    }
+  ],
   "codeowners": [
     "@dratek-cz"
   ],
@@ -13,17 +19,8 @@
     "panel_custom"
   ],
   "documentation": "https://github.com/dratek-cz/dratek-eink-homeassistant",
-  "issue_tracker": "https://github.com/dratek-cz/dratek-eink-homeassistant/issues",
   "iot_class": "local_push",
-  "bluetooth": [
-    {
-      "manufacturer_id": 20563,
-      "connectable": true
-    }
-  ],
-  "zeroconf": [
-    "_dratek-eink-gateway._tcp.local."
-  ],
+  "issue_tracker": "https://github.com/dratek-cz/dratek-eink-homeassistant/issues",
   "requirements": [
     "bleak>=0.21.1",
     "Pillow>=10.0.0",
@@ -32,5 +29,8 @@
     "esptool>=5.0.0",
     "resvg-py>=0.3.4"
   ],
-  "version": "1.0.4"
+  "version": "1.0.4",
+  "zeroconf": [
+    "_dratek-eink-gateway._tcp.local."
+  ]
 }
