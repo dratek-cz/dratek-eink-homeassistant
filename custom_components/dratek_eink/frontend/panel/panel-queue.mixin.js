@@ -70,8 +70,21 @@ export const queueMixin = {
     });
   },
 
+  // A fingerprint, not a copy. This ran JSON.stringify over every log line of
+  // every job to answer one yes/no question - has anything been appended - and
+  // it ran twice per poll, once a second. A hundred jobs carrying eighty lines
+  // each is around 140 kB serialised, so answering "did a log change" cost more
+  // than fetching the logs did, on the same thread that rasterises displays.
+  // Length plus the last line catches an append, which is the only way a job's
+  // log ever changes.
   _queueLogSignature(queue = this._queue) {
-    return JSON.stringify((queue?.jobs || []).map((job) => ({ id: job.id, log: job.log })));
+    return (queue?.jobs || [])
+      .map((job) => {
+        const lines = Array.isArray(job.log) ? job.log : [];
+        const count = lines.length || Number(job.log_lines || 0);
+        return `${job.id}:${count}:${lines.length ? lines[lines.length - 1] : ""}`;
+      })
+      .join("|");
   },
 
   async _loadQueue(render = true, onlyWhenChanged = false) {
@@ -85,7 +98,13 @@ export const queueMixin = {
         .map((job) => job.id)
     );
     try {
-      this._queue = await this._hass.callWS({ type: "dratek_eink/queue/list" });
+      // Logs are only ever drawn on the queue tab, and they are most of the
+      // payload. Every other tab polls the same list once a second purely to
+      // keep its badge counts right, and used to carry every log line with it.
+      this._queue = await this._hass.callWS({
+        type: "dratek_eink/queue/list",
+        include_logs: this._activeTab === "queue",
+      });
       const completedWrite = (this._queue?.jobs || []).some((job) =>
         previousActive.has(job.id) && job.status === "succeeded"
       );
@@ -346,8 +365,22 @@ export const queueMixin = {
     </div>`;
   },
 
-  _exportQueueLog() {
-    const jobs = this._queue?.jobs || [];
+  // Asks for a full snapshot of its own rather than dumping whatever the last
+  // poll happened to carry: background polls deliberately leave the log lines
+  // behind, and a dump of a hundred jobs with no logs in it is worth nothing to
+  // whoever asked for it.
+  async _exportQueueLog() {
+    let snapshot = this._queue;
+    try {
+      snapshot = await this._hass.callWS({
+        type: "dratek_eink/queue/list",
+        include_logs: true,
+      });
+      this._queue = snapshot;
+    } catch (_err) {
+      // Fall back to what is in hand; an export is better than an error.
+    }
+    const jobs = snapshot?.jobs || [];
     if (!jobs.length) {
       alert("Fronta je prázdná.");
       return;
@@ -355,7 +388,7 @@ export const queueMixin = {
     const lines = [
       "=== DRATEK eInk Transfer Queue Log Dump ===",
       `Exported: ${new Date().toLocaleString()}`,
-      `Backend Version: v${this._queue?.backend_version || "unknown"}`,
+      `Backend Version: v${snapshot?.backend_version || "unknown"}`,
       `Total Jobs: ${jobs.length}`,
       "===========================================\n",
     ];

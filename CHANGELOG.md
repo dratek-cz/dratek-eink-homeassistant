@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.16] - 2026-09-09
+
+### Výkon při stovce displejů
+- Fronta zápisu se na pozadí dotazuje **bez řádků logu**. Jeden dotaz se stovkou úloh měl 296 kB, protože nesl každý řádek logu každé úlohy – i na záložky, které žádný log nezobrazují. Teď má 30 kB, tedy desetkrát méně; při dotazu jednou za sekundu je to rozdíl mezi 17 MB a 1,8 MB za minutu. Záložka *Fronta zápisu* i export logu si logy vyžádají celé, takže se nic neztratilo.
+- Historie fronty se zapisuje na disk **jednou za dávku, ne po každé úloze**. Každá dokončená úloha dosud přepsala celý soubor historie – těch samých 296 kB – takže jedno hromadné odeslání znamenalo sto úplných zápisů, každý větší než předchozí.
+- Panel přestal při každém dotazu serializovat všechny logy jen kvůli zjištění, zda se něco změnilo. Dělal to dvakrát za sekundu na stejném vlákně, na kterém se vykresluje další displej.
+
 ## [1.0.15] - 2026-09-09
 
 ### Přidáno

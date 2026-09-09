@@ -11,14 +11,28 @@ from homeassistant.core import HomeAssistant
 from .queue import get_transfer_queue
 
 @websocket_api.require_admin
-@websocket_api.websocket_command({"type": "dratek_eink/queue/list"})
+@websocket_api.websocket_command(
+    {
+        "type": "dratek_eink/queue/list",
+        # Background polls leave this out and get the jobs without their log
+        # lines, which is most of the payload once a shelf of a hundred
+        # displays is in the queue. The queue tab and the log export ask for
+        # the logs explicitly.
+        vol.Optional("include_logs", default=True): bool,
+    }
+)
 @websocket_api.async_response
 async def websocket_transfer_queue(
     hass: HomeAssistant,
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    connection.send_result(msg["id"], await get_transfer_queue(hass).async_snapshot())
+    connection.send_result(
+        msg["id"],
+        await get_transfer_queue(hass).async_snapshot(
+            include_logs=bool(msg.get("include_logs", True))
+        ),
+    )
 
 
 @websocket_api.require_admin

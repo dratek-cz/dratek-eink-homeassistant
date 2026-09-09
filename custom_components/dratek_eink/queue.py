@@ -53,6 +53,15 @@ DISPLAY_WAIT_MAX_SECONDS = 24 * 60 * 60
 # for the case where nothing is scanning - an automatic refresh may not be
 # configured for this display at all.
 DISPLAY_WAIT_POLL_SECONDS = 60
+# How long finished jobs may wait before the history file is rewritten.
+#
+# The store is the whole history with every log line in it - about 140 kB once a
+# shelf of a hundred displays has been through it - and it used to be rewritten
+# in full as each individual job finished. A shelf-wide send finishes a job
+# every few seconds, so that was a hundred full serialise-and-write cycles for
+# one run, each one bigger than the last. The file only has to end up correct,
+# not be correct after every single job.
+HISTORY_SAVE_DEBOUNCE_SECONDS = 3
 # Errors that mean the transfer never reached the display, so nothing was
 # half-written and re-attempting later is safe. Deliberately narrow: an error
 # raised part way through a stream means the display *was* there and something
@@ -131,6 +140,8 @@ class TransferQueue:
         self._load_lock = asyncio.Lock()
 
         self._save_lock = asyncio.Lock()
+        # The pending coalesced history write, if one is already scheduled.
+        self._save_pending: asyncio.Task[None] | None = None
         self._loaded = False
         # Last finished job's outcome, surfaced by sensor.py's transfer device.
         self.last_transfer_diagnostic: dict[str, Any] | None = None
@@ -714,7 +725,9 @@ class TransferQueue:
         result["queue_job_id"] = job["id"]
         result["queue_status"] = job["status"]
         self._prune()
-        await self._save_history()
+        # Coalesced: a hundred displays finishing in one run must not mean a
+        # hundred full rewrites of the history file. See _save_history_soon.
+        self._save_history_soon()
         # Live visibility into the transfer block specifically, separate from
         # the scheduler-side diagnostics in automation.py - lets "the schedule
         # fired but nothing reached the display" and "nothing ever got
@@ -1012,6 +1025,31 @@ class TransferQueue:
             if key in retained_resources
         }
 
+    def _save_history_soon(self) -> None:
+        """Ask for a history write, without paying for one per caller.
+
+        Callers that must land now (a restart repair, an explicit clear) still
+        use _save_history directly; this is for the finish-a-job path, which on
+        a shelf-wide send runs a hundred times in a few minutes.
+        """
+        pending = self._save_pending
+        if pending is not None and not pending.done():
+            return
+
+        async def flush() -> None:
+            try:
+                await asyncio.sleep(HISTORY_SAVE_DEBOUNCE_SECONDS)
+            except asyncio.CancelledError:
+                # Shutting down mid-wait: write what we have rather than lose it.
+                await self._save_history()
+                raise
+            await self._save_history()
+
+        task = self.hass.async_create_task(flush(), f"{DOMAIN} queue history save")
+        self._save_pending = task
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
     async def _save_history(self) -> None:
         async with self._save_lock:
             completed = [job for job in self._jobs if job.get("status") not in {"queued", "writing"}]
@@ -1043,10 +1081,27 @@ class TransferQueue:
         self._jobs = [job for job in self._jobs if job.get("status") in {"queued", "writing"}]
         await self._save_history()
 
-    async def async_snapshot(self) -> dict[str, Any]:
+    async def async_snapshot(self, include_logs: bool = True) -> dict[str, Any]:
+        """The queue as the panel shows it.
+
+        ``include_logs`` exists because the log lines are almost all of the
+        weight: a hundred jobs carrying up to eighty lines each is around 140 kB
+        of JSON, and the panel polls this once a second while anything is
+        running - from whichever tab it is on, including tabs that cannot show a
+        log. Those polls ask for the jobs without them and get a tenth of the
+        payload; the queue tab, and the log export, still ask for everything.
+        """
         await self._ensure_loaded()
         jobs = sorted(self._jobs, key=lambda job: job.get("created_at", 0), reverse=True)
-        skipped_jobs = [job for job in jobs if job.get("status") == "skipped"]
+        if not include_logs:
+            # log_lines keeps the count visible, so the panel can still show
+            # that there is a log to open without carrying its text around.
+            jobs = [
+                {**job, "log": [], "log_lines": len(job.get("log") or [])}
+                for job in jobs
+            ]
+        # From self._jobs, not from the possibly log-stripped copy above.
+        skipped_jobs = [job for job in self._jobs if job.get("status") == "skipped"]
         skipped_reasons = list({job["log"][0] for job in skipped_jobs if job.get("log")})
         skipped_devices = list({job.get("address", "") for job in skipped_jobs if job.get("address")})
         return {
