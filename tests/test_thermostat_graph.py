@@ -58,7 +58,7 @@ class AutomationDeclarationsReachTheBindingTests(unittest.TestCase):
         # comment above the lookup stops being true.
         index = (PANEL / "templates" / "index.js").read_text(encoding="utf-8")
         self.assertIn(
-            "export const DISPLAY_TEMPLATE_CATALOG = DISPLAY_TEMPLATES.map((entry) => entry.catalog);",
+            "export const DISPLAY_TEMPLATE_CATALOG = DISPLAY_TEMPLATES.filter((entry) => !entry.catalog.internal).map((entry) => entry.catalog);",
             index,
         )
         thermostat = TEMPLATE.read_text(encoding="utf-8")

@@ -717,7 +717,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         # internal brand-logo card (PRIVATE-NOTES.md), which drops back to 24
         # when that is removed for the retail release. Hardware colour
         # calibration targets must not leak into the user catalog.
-        self.assertEqual(self.source.count('number: "'), 24)
+        self.assertEqual(self.source.count('number: "'), 25)  # Includes the import-only logo action.
 
         self.assertIn("variables: [", self.source)
         # A promotion is a decision rather than a reading, so a price tag carries a
