@@ -15,7 +15,7 @@
 #include <HWCDC.h>
 #endif
 
-static const char* FIRMWARE_VERSION = "0.1.67-gateway";
+static const char* FIRMWARE_VERSION = "0.1.68-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 static const size_t INITIAL_UPLOAD_RESERVE_BYTES = 128UL * 1024UL;
@@ -250,7 +250,7 @@ void handleStatus() {
   doc["ip"] = WiFi.localIP().toString();
   doc["mac"] = WiFi.macAddress();
   doc["wifi_rssi"] = WiFi.RSSI();
-  doc["wifi_power_save"] = false;
+  doc["wifi_power_save"] = true;
   doc["wifi_disconnect_count"] = wifiDisconnectCount;
   doc["last_wifi_disconnect_ms"] = lastWifiDisconnectAtMs;
   doc["uptime_ms"] = millis();
@@ -1609,7 +1609,7 @@ void printSerialStatus(Stream& channel) {
   doc["wifi_connected"] = WiFi.status() == WL_CONNECTED;
   doc["ip"] = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "";
   doc["wifi_rssi"] = WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0;
-  doc["wifi_power_save"] = false;
+  doc["wifi_power_save"] = true;
   doc["wifi_disconnect_count"] = wifiDisconnectCount;
   doc["last_wifi_disconnect_ms"] = lastWifiDisconnectAtMs;
   doc["mac"] = WiFi.macAddress();
@@ -1757,11 +1757,10 @@ void connectWifi() {
   }
 
   WiFi.mode(WIFI_STA);
-  // A gateway is USB powered and must keep its HTTP control channel available
-  // while the ESP32 radio is also carrying a sustained BLE transfer. Wi-Fi
-  // power saving adds long receive gaps to that coexistence schedule and can
-  // make port 80 disappear long enough for Home Assistant to reject a job.
-  WiFi.setSleep(false);
+  // ESP-IDF requires modem sleep while Wi-Fi and Bluetooth coexist on the
+  // shared 2.4 GHz radio. Disabling it aborts during Wi-Fi startup on both
+  // ESP32 and ESP32-S3 and causes a permanent reboot loop.
+  WiFi.setSleep(true);
   WiFi.setAutoReconnect(true);
   WiFi.persistent(false);
   WiFi.setHostname(hostname.c_str());

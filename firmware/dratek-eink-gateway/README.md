@@ -36,7 +36,7 @@ Home Assistant panel tuto konfiguraci posila automaticky po uspesnem flashi.
 
 V panelu vyberte **Nová gateway**, připojte desku přímo k zařízení s Home Assistantem,
 vyberte správný port a typ ESP32 / ESP32-S3 a vyplňte Wi-Fi. Nahrávání přes
-prohlížeč počítače bylo odstraněno. Firmware 0.1.67-gateway obsluhuje u S3
+prohlížeč počítače bylo odstraněno. Firmware 0.1.68-gateway obsluhuje u S3
 UART i nativní USB; klasická ESP32 používá UART.
 
 Pokud je firmware nahraný, ale Wi-Fi nebyla potvrzena, nestartujte nový flash.

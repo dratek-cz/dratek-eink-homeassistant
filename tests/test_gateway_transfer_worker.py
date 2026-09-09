@@ -122,9 +122,10 @@ class GatewayWifiCoexistenceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.source = FIRMWARE.read_text(encoding="utf-8")
 
-    def test_usb_powered_gateway_disables_wifi_power_saving(self) -> None:
-        self.assertIn("WiFi.setSleep(false);", self.source)
-        self.assertNotIn("WiFi.setSleep(true);", self.source)
+    def test_wifi_and_bluetooth_coexistence_keeps_required_modem_sleep(self) -> None:
+        self.assertIn("WiFi.setSleep(true);", self.source)
+        self.assertNotIn("WiFi.setSleep(false);", self.source)
+        self.assertIn('doc["wifi_power_save"] = true;', self.source)
 
     def test_status_reports_wifi_disconnect_diagnostics(self) -> None:
         self.assertIn('doc["wifi_disconnect_count"] = wifiDisconnectCount;', self.source)

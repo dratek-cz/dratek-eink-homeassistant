@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.12] - 2026-09-09
+
+### Kritická oprava
+- Firmware gatewaye **0.1.68-gateway** obnovuje modem sleep, který ESP-IDF vyžaduje pro souběh Wi-Fi a Bluetooth na sdíleném rádiu. Verze 0.1.67 mohla po startu Wi-Fi opakovaně restartovat ESP32 i ESP32-S3.
+- Diagnostické počítadlo odpojení Wi-Fi zůstává zachované. Dočasná nedostupnost gatewaye se řeší směrováním a opakováním přenosu, nikoli zakázáním povinného režimu souběhu rádií.
+
 ## [1.0.11] - 2026-09-09
 
 ### Opraveno

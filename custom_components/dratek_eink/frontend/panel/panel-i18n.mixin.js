@@ -622,6 +622,9 @@ const EN_EXACT = new Map(Object.entries({
   "Vybráno": "Selected",
   "Vyhledávám…": "Searching…",
   "Vývojová deska 2,4GHz Wi-Fi + Bluetooth s anténou": "Development board, 2.4 GHz Wi-Fi + Bluetooth with an antenna",
+  "Výpadky Wi-Fi": "Wi-Fi disconnects",
+  "Nalezena jsou pouze chráněná zařízení, která nesmí být přepsána. Připojte ESP32-S3 a načtěte porty znovu.": "Only protected devices that must not be overwritten were found. Connect the ESP32-S3 and load the ports again.",
+  "— BLOKOVÁNO": "— BLOCKED",
   "Wi-Fi údaje vyplněny": "Wi-Fi details filled in",
   "Zatím nemáte žádnou gateway": "You do not have any gateway yet",
   "Zatím není dostupný žádný displej.": "No display is available yet.",
@@ -1630,6 +1633,7 @@ const EN_PATTERNS = [
   [/^(\d+) uložený obrázek$/, "$1 saved image"],
   [/^(\d+) uložených obrázků$/, "$1 saved images"],
   [/^(\d+) uložené obrázky$/, "$1 saved images"],
+  [/(.+) — BLOKOVÁNO$/, "$1 — BLOCKED"],
 ];
 
 export const i18nMixin = {
