@@ -2229,3 +2229,13 @@ Integrace je zatím experimentální. Aktuální verze řeší instalaci přes H
 ## Aktualizace
 
 Od verze `0.0.6` budou změny vydávané jako verzované GitHub releases, aby HACS uměl nabídnout standardní aktualizaci.
+
+
+## Instalace přes HACS a ikony
+
+[Přidat DRATEK eInk do HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=dratek-cz&repository=dratek-eink-homeassistant&category=integration)
+
+Do schválení ve výchozím katalogu přidejte repozitář jako vlastní integraci.
+Ikony světlého i tmavého motivu jsou přímo v `custom_components/dratek_eink/brand/`
+a v instalačním ZIPu. Home Assistant od verze 2026.3 načítá tyto ikony vlastní
+službou Brands; není potřeba samostatná instalace obrázků.

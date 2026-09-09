@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.4] - 2026-09-09
+
+### Připraveno pro HACS
+- Doplněn správce integrace, popis a témata GitHub repozitáře a veřejné validace HACS a Hassfest.
+- Dokumentace obsahuje přímý odkaz pro přidání do HACS. Ikony jsou součástí instalačního balíčku pro nativní službu Brands v Home Assistantu 2026.3 a novějším.
+
 ## [1.0.3] - 2026-09-09
 
 ### Přidáno
