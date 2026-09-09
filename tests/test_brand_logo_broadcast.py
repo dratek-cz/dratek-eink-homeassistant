@@ -244,6 +244,10 @@ class BrandLogoBroadcastTests(unittest.TestCase):
         # reports in; nothing is silently skipped.
         self.assertIn("_brandLogoTargets() {", self.mixin)
         self.assertIn("this._result?.devices || []", self.mixin)
+        targets = self.mixin[
+            self.mixin.index("_brandLogoTargets() {") : self.mixin.index("_brandLogoSendGeometry(")
+        ]
+        self.assertNotIn(".slice(", targets)
 
     def test_the_automation_and_the_queue_are_cleared_before_the_send(self) -> None:
         body = self.mixin[self.mixin.index("async _broadcastBrandLogoToAllDisplays()"):]
@@ -263,11 +267,11 @@ class BrandLogoBroadcastTests(unittest.TestCase):
         send = send[: send.index("\n  },")]
         self.assertNotIn("payload.automation =", send)
 
-    def test_one_display_at_a_time(self) -> None:
-        # The transfers share one radio; firing them together only produces
-        # contention errors the queue then has to retry through.
-        self.assertIn("for (const [index, device] of targets.entries()) {", self.mixin)
-        self.assertNotIn("Promise.all(targets", self.mixin)
+    def test_one_worker_is_used_for_each_independent_radio(self) -> None:
+        self.assertIn("_brandLogoParallelTransfers() {", self.mixin)
+        self.assertIn("onlineGateways + 1", self.mixin)
+        self.assertIn("Math.min(targets.length, this._brandLogoParallelTransfers())", self.mixin)
+        self.assertIn("await Promise.all(Array.from({ length: workerCount }", self.mixin)
 
     def test_one_display_finishes_before_the_next_is_queued(self) -> None:
         send = self.mixin[self.mixin.index("async _brandLogoSendTo("):]

@@ -494,9 +494,16 @@ export const brandLogoMixin = {
       + "Tuto akci nelze vzít zpět.";
   },
 
-  // The whole reset. Sequential rather than parallel on purpose: the transfers
-  // share one Bluetooth radio (or one gateway), and firing them all at once
-  // only produces contention errors the queue would then have to retry through.
+  _brandLogoParallelTransfers() {
+    // Each online gateway owns an independent BLE radio. Home Assistant's
+    // local adapter is one more transport. This is a concurrency count, never
+    // a limit on how many displays the broadcast reaches.
+    const onlineGateways = (this._gateways || []).filter((gateway) => gateway?.status?.ok).length;
+    return Math.max(1, onlineGateways + 1);
+  },
+
+  // The whole reset. One worker per available radio keeps every gateway busy,
+  // while the backend queue still serialises transfers within each radio.
   async _broadcastBrandLogoToAllDisplays() {
     if (this._brandLogoBroadcasting || !this._hass) return;
     const template = this._brandLogoTemplateCard();
@@ -522,19 +529,28 @@ export const brandLogoMixin = {
       for (const device of targets) {
         await this._brandLogoDeleteAutomation(device.address);
       }
-      for (const [index, device] of targets.entries()) {
-        this._templateSendResult = {
-          ok: true,
-          message: `Logo Drátek: ${index + 1}/${targets.length} – ${this._deviceTitle?.(device) || device.address}…`,
-        };
-        this._render();
-        try {
-          await this._brandLogoSendTo(device, template);
-          sent += 1;
-        } catch (error) {
-          failures.push(`${this._deviceTitle?.(device) || device.address}: ${this._message?.(error) || error}`);
+      let nextIndex = 0;
+      let completed = 0;
+      const workerCount = Math.min(targets.length, this._brandLogoParallelTransfers());
+      const worker = async () => {
+        while (nextIndex < targets.length) {
+          const device = targets[nextIndex];
+          nextIndex += 1;
+          try {
+            await this._brandLogoSendTo(device, template);
+            sent += 1;
+          } catch (error) {
+            failures.push(`${this._deviceTitle?.(device) || device.address}: ${this._message?.(error) || error}`);
+          }
+          completed += 1;
+          this._templateSendResult = {
+            ok: true,
+            message: `Logo Drátek: dokončeno ${completed}/${targets.length}, souběžné přenosy ${workerCount}.`,
+          };
+          this._render();
         }
-      }
+      };
+      await Promise.all(Array.from({ length: workerCount }, () => worker()));
     } finally {
       this._brandLogoBroadcasting = false;
       await this._loadQueue?.(true);

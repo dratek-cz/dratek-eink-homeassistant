@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.11] - 2026-09-09
+
+### Opraveno
+- Hromadná šablona **Logo Drátek** používá současně místní Bluetooth Home Assistantu a všechny online gatewaye. Každé rádio zapisuje postupně, jednotlivá rádia však pracují souběžně.
+- Počet cílových displejů není omezen. Zobrazený počet souběžných přenosů vyjadřuje počet dostupných rádií, nikoli maximální počet displejů.
+
 ## [1.0.10] - 2026-09-09
 
 ### Opraveno
