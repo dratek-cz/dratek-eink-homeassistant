@@ -11,8 +11,11 @@
 #include <esp_partition.h>
 #include <esp_system.h>
 #include <vector>
+#if CONFIG_IDF_TARGET_ESP32S3
+#include <HWCDC.h>
+#endif
 
-static const char* FIRMWARE_VERSION = "0.1.65-gateway";
+static const char* FIRMWARE_VERSION = "0.1.66-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 static const size_t INITIAL_UPLOAD_RESERVE_BYTES = 128UL * 1024UL;
@@ -60,6 +63,9 @@ Preferences prefs;
 String gatewayId;
 String hostname;
 String serialLine;
+#if CONFIG_IDF_TARGET_ESP32S3
+String usbSerialLine;
+#endif
 std::vector<String> lastScanDevices;
 std::vector<std::vector<uint8_t>> notifications;
 
@@ -1579,7 +1585,7 @@ bool saveWifiConfig(const char* ssid, const char* password, const char* nextHost
   return true;
 }
 
-void printSerialStatus() {
+void printSerialStatus(Stream& channel) {
   prefs.begin("dratek", true);
   String ssid = prefs.getString("ssid", "");
   String storedHostname = prefs.getString("hostname", hostname);
@@ -1600,44 +1606,61 @@ void printSerialStatus() {
   doc["wifi_rssi"] = WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0;
   doc["mac"] = WiFi.macAddress();
   doc["uptime_ms"] = millis();
-  serializeJson(doc, Serial);
-  Serial.println();
+  serializeJson(doc, channel);
+  channel.println();
 }
 
-bool readSerialConfigLine(const String& line) {
+bool readSerialConfigLine(const String& line, Stream& channel) {
   JsonDocument doc;
   DeserializationError error = deserializeJson(doc, line);
   if (error) return false;
   const char* cmd = doc["cmd"] | "";
   if (strcmp(cmd, "status") == 0) {
-    printSerialStatus();
+    printSerialStatus(channel);
     return true;
   }
   const char* ssid = doc["ssid"] | "";
   const char* password = doc["password"] | "";
   const char* nextHostname = doc["hostname"] | hostname.c_str();
-  if (!saveWifiConfig(ssid, password, nextHostname)) return false;
-  Serial.println("{\"ok\":true,\"message\":\"wifi_config_saved\"}");
+  if (strcmp(cmd, "wifi") != 0 && strlen(cmd) != 0) return false;
+  if (strlen(ssid) == 0 || strlen(ssid) > 32 || strlen(password) > 64) return false;
+  // A lost acknowledgement must not turn retries into a reboot loop.
+  prefs.begin("dratek", true);
+  bool unchanged = prefs.getString("ssid", "") == ssid
+      && prefs.getString("password", "") == password
+      && prefs.getString("hostname", "") == nextHostname;
+  prefs.end();
+  if (!unchanged && !saveWifiConfig(ssid, password, nextHostname)) return false;
+  channel.println("{\"ok\":true,\"message\":\"wifi_config_saved\"}");
+  channel.flush();
+  if (unchanged) return true;
   delay(500);
   ESP.restart();
   return true;
 }
 
-void handleSerialConfig() {
-  while (Serial.available()) {
-    char c = static_cast<char>(Serial.read());
+void handleSerialChannel(Stream& channel, String& buffer) {
+  while (channel.available()) {
+    char c = static_cast<char>(channel.read());
     if (c == '\n') {
-      serialLine.trim();
-      if (serialLine.length()) {
-        if (!readSerialConfigLine(serialLine)) {
-          Serial.println("{\"ok\":false,\"error\":\"invalid_wifi_config\"}");
+      buffer.trim();
+      if (buffer.length()) {
+        if (!readSerialConfigLine(buffer, channel)) {
+          channel.println("{\"ok\":false,\"error\":\"invalid_wifi_config\"}");
         }
       }
-      serialLine = "";
+      buffer = "";
       continue;
     }
-    if (serialLine.length() < 512) serialLine += c;
+    if (buffer.length() < 1024) buffer += c;
   }
+}
+
+void handleSerialConfig() {
+  handleSerialChannel(Serial, serialLine);
+#if CONFIG_IDF_TARGET_ESP32S3
+  handleSerialChannel(USBSerial, usbSerialLine);
+#endif
 }
 
 void startMdns() {
@@ -1772,6 +1795,10 @@ void setup() {
   esp_ota_mark_app_valid_cancel_rollback();
 
   Serial.begin(115200);
+#if CONFIG_IDF_TARGET_ESP32S3
+  USBSerial.setRxBufferSize(1024);
+  USBSerial.begin(115200);
+#endif
   delay(300);
   gatewayId = "dratek-eink-gateway-" + macId();
   hostname = gatewayId;

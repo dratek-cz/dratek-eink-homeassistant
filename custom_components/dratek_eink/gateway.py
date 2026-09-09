@@ -3,6 +3,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import functools
+import queue
+import tempfile
+import threading
 from pathlib import Path
 import re
 import socket
@@ -32,11 +36,7 @@ FIRMWARE_DIR = Path(__file__).parent / "firmware"
 FLASH_JOBS_KEY = "dratek_eink_flash_jobs"
 OTA_JOBS_KEY = "dratek_eink_ota_jobs"
 ESPTOOL_FLASH_BAUD = "115200"
-# NVS plus the OTA boot selector. Wiping it is what makes a reflash behave like
-# a first boot instead of inheriting the previous gateway's stored Wi-Fi and
-# OTA slot. The host route erases it with esptool; the browser route has no
-# erase-region command and writes 0xFF across the same span instead, so both
-# have to agree on where it is.
+# Clear NVS and OTA metadata in the same write operation as the firmware.
 NVS_ERASE_OFFSET = 0x9000
 NVS_ERASE_SIZE = 0x7000
 FLASH_PART_ORDER = ("bootloader", "partitions", "app")
@@ -1210,62 +1210,6 @@ async def async_list_serial_ports(hass: HomeAssistant) -> list[dict[str, Any]]:
     return await hass.async_add_executor_job(_list_serial_ports_sync)
 
 
-def gateway_firmware_part_path(chip: str, part: str) -> Path | None:
-    """The bundled image for one flash part, or None when it is not a real one.
-
-    Both arguments arrive from an HTTP request, so nothing is ever joined onto
-    a path: they only ever select an entry that FLASH_PROFILES already spells
-    out, which is what keeps a crafted chip/part pair inside the firmware
-    directory.
-    """
-    profile = FLASH_PROFILES.get(str(chip or "").strip().lower())
-    if not profile:
-        return None
-    entry = profile["files"].get(str(part or "").strip().lower())
-    return entry[1] if entry else None
-
-
-def _flash_manifest_sync() -> dict[str, Any]:
-    """What the browser needs to flash a board itself, per supported chip.
-
-    The host route hands esptool a list of paths; a browser cannot be given
-    paths, so it gets offsets, sizes and digests here and fetches the bytes
-    from GatewayFirmwareView afterwards. Both routes read the same
-    FLASH_PROFILES, so neither can drift onto a different image or offset.
-    """
-    chips: dict[str, Any] = {}
-    for chip, profile in FLASH_PROFILES.items():
-        parts: list[dict[str, Any]] = []
-        missing: list[str] = []
-        for part in FLASH_PART_ORDER:
-            offset, path = profile["files"][part]
-            if not path.exists():
-                missing.append(path.name)
-                continue
-            data = path.read_bytes()
-            parts.append(
-                {
-                    "part": part,
-                    "offset": offset,
-                    "size": len(data),
-                    "md5": hashlib.md5(data, usedforsecurity=False).hexdigest(),
-                    "filename": path.name,
-                }
-            )
-        chips[chip] = {
-            "chip": chip,
-            "label": profile["label"],
-            "parts": parts,
-            "missing": missing,
-            "erase": {"offset": NVS_ERASE_OFFSET, "size": NVS_ERASE_SIZE},
-        }
-    return chips
-
-
-async def async_gateway_flash_manifest(hass: HomeAssistant) -> dict[str, Any]:
-    return await hass.async_add_executor_job(_flash_manifest_sync)
-
-
 def _safe_log_line(line: str, password: str) -> str:
     return line.replace(password, "********") if password else line
 
@@ -1337,16 +1281,28 @@ def _open_serial_without_reset(serial_module: Any, port: str, timeout: float = 0
     return ser
 
 
-def _pulse_esp_reset_into_app(ser: Any) -> None:
-    """Ensure ESP32 boots into user application mode by toggling RTS/DTR lines."""
-    try:
-        ser.dtr = False  # IO0 = High (Normal execution, not bootloader)
-        ser.rts = True   # EN = Low (Reset)
-        time.sleep(0.12)
-        ser.rts = False  # EN = High (Run)
-        time.sleep(0.35)
-    except Exception:
-        pass
+# Physical aliases (/dev/serial/by-id and /dev/ttyUSB) share one lock.
+_SERIAL_LOCKS: dict[str, Any] = {}
+_SERIAL_LOCKS_GUARD = threading.Lock()
+
+
+def _exclusive_serial(operation):
+    @functools.wraps(operation)
+    def wrapped(port, *args, **kwargs):
+        key = str(Path(port).resolve()).casefold()
+        with _SERIAL_LOCKS_GUARD:
+            lock = _SERIAL_LOCKS.setdefault(key, threading.Lock())
+        if not lock.acquire(blocking=False):
+            result = {"ok": False, "error": "USB port is busy with another operation.", "log": []}
+            job = kwargs.get("job") or (args[4] if len(args) > 4 else None)
+            if job is not None:
+                job.update(result, status="failed")
+            return result
+        try:
+            return operation(port, *args, **kwargs)
+        finally:
+            lock.release()
+    return wrapped
 
 
 def _provision_wifi_over_serial(
@@ -1355,68 +1311,78 @@ def _provision_wifi_over_serial(
     password: str,
     hostname: str,
     add_log: Any,
-    timeout_seconds: int = 35,
+    timeout_seconds: int = 60,
 ) -> bool:
-    """Wait for the freshly flashed firmware and retry provisioning until acknowledged."""
+    """Retry opens and commands after reboot, without resetting the application."""
     import serial
 
-    payload = json.dumps(
-        {
-            "cmd": "wifi",
-            "ssid": ssid,
-            "password": password,
-            "hostname": _safe_network_hostname(hostname),
-        }
-    )
-    # esptool just released this port (its own reset sequence can still be
-    # settling on the OS/driver side, especially on Windows), so the very
-    # first reopen attempt can transiently fail even though the flash itself
-    # succeeded. Retry the open for a few seconds instead of giving up on one
-    # shot - previously a single failed open here silently skipped Wi-Fi
-    # provisioning entirely, forcing a manual "Wi-Fi only" resend afterward.
-    open_deadline = time.monotonic() + 5
-    ser = None
-    last_open_error: Exception | None = None
-    while ser is None and time.monotonic() < open_deadline:
-        try:
-            ser = _open_serial_without_reset(serial, port)
-        except Exception as exc:  # port not released by esptool/OS yet
-            last_open_error = exc
-            time.sleep(0.3)
-    if ser is None:
-        add_log(f"Could not reopen the serial port for Wi-Fi provisioning: {last_open_error}")
-        return False
-
+    payload = json.dumps({"cmd": "wifi", "ssid": ssid, "password": password,
+                          "hostname": _safe_network_hostname(hostname)},
+                         ensure_ascii=False, separators=(",", ":")) + "\n"
     deadline = time.monotonic() + timeout_seconds
     attempts = 0
-    next_send_at = time.monotonic() + 1.2
-    with ser:
-        _pulse_esp_reset_into_app(ser)
-        while time.monotonic() < deadline:
-            now = time.monotonic()
-            if now >= next_send_at:
-                attempts += 1
-                if attempts == 4:
-                    _pulse_esp_reset_into_app(ser)
-                add_log(f"Sending Wi-Fi configuration (attempt {attempts}).")
-                ser.write((payload + "\n").encode())
-                ser.flush()
-                next_send_at = now + 2.5
-
-            line = ser.readline().decode(errors="ignore").strip()
-            if not line:
-                continue
-            add_log(line)
-            response = _extract_json_object(line)
-            if "wifi_config_saved" in line or (
-                response is not None
-                and response.get("ok")
-                and response.get("message") == "wifi_config_saved"
-            ):
-                return True
+    while time.monotonic() < deadline:
+        try:
+            with _open_serial_without_reset(serial, port) as ser:
+                next_send_at = time.monotonic() + 1
+                pending = ""
+                while time.monotonic() < deadline:
+                    now = time.monotonic()
+                    if now >= next_send_at:
+                        attempts += 1
+                        add_log(f"Sending Wi-Fi configuration (attempt {attempts}).")
+                        ser.write(payload.encode("utf-8"))
+                        ser.flush()
+                        next_send_at = now + 4
+                    pending += ser.readline().decode(errors="replace")
+                    while "\n" in pending:
+                        line, pending = pending.split("\n", 1)
+                        add_log(_safe_log_line(line.strip(), password))
+                        response = _extract_json_object(line)
+                        if response and response.get("ok") is True and response.get("message") == "wifi_config_saved":
+                            return True
+                    pending = pending[-8192:]
+        except (OSError, serial.SerialException) as exc:
+            add_log(_safe_log_line(f"Waiting for USB after reboot: {exc}", password))
+            time.sleep(0.5)
     return False
 
 
+def _run_esptool(command: list[str], add_log: Any, timeout: float = 300) -> int:
+    """Drain output on a reader thread so a silent child cannot defeat the timeout."""
+    with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          text=True, encoding="utf-8", errors="replace", bufsize=1) as proc:
+        lines: queue.Queue = queue.Queue()
+        def read_output():
+            try:
+                for line in proc.stdout:
+                    lines.put(line)
+            finally:
+                lines.put(None)
+        reader = threading.Thread(target=read_output, daemon=True)
+        reader.start()
+        deadline = time.monotonic() + timeout
+        try:
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("Firmware upload timed out. Check the USB connection.")
+                try:
+                    line = lines.get(timeout=min(0.25, remaining))
+                except queue.Empty:
+                    continue
+                if line is None:
+                    return proc.wait(timeout=max(0.01, deadline - time.monotonic()))
+                if line.strip():
+                    add_log(line.strip())
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+            proc.wait()
+            reader.join(timeout=2)
+
+
+@_exclusive_serial
 def _flash_gateway_sync(
     port: str,
     ssid: str,
@@ -1435,7 +1401,12 @@ def _flash_gateway_sync(
     if job is not None:
         job["status"] = "running"
         job["ok"] = None
-    profile = FLASH_PROFILES.get(chip) or FLASH_PROFILES["esp32"]
+    profile = FLASH_PROFILES.get(chip)
+    if profile is None or not ssid or len(ssid.encode("utf-8")) > 32 or len(password.encode("utf-8")) > 64:
+        error = "Select a supported ESP board and enter valid Wi-Fi credentials (SSID up to 32 bytes, password up to 64 bytes)."
+        if job is not None:
+            job.update(status="failed", ok=False, error=error)
+        return {"ok": False, "error": error, "log": log}
     if not _is_flashable_serial_device(port):
         error = (
             f"Port {port or '(none)'} is not a USB serial device suitable for flashing. "
@@ -1465,102 +1436,39 @@ def _flash_gateway_sync(
             ],
         }
 
-    esptool_cmd = [
-        sys.executable,
-        "-m",
-        "esptool",
-        "--chip",
-        profile["chip"],
-        "--port",
-        port,
-        "--baud",
-        ESPTOOL_FLASH_BAUD,
-        "--after",
-        "hard-reset",
-        "write-flash",
-        "-z",
-    ]
-    for key in FLASH_PART_ORDER:
-        offset, path = files[key]
-        esptool_cmd.extend([hex(offset), str(path)])
-    add_log(f"Flashing {profile['label']} firmware...")
+    add_log(f"Flashing {profile['label']} firmware and clearing old Wi-Fi/OTA settings in one session...")
     try:
-        erase_cmd = [
-            sys.executable,
-            "-m",
-            "esptool",
-            "--chip",
-            profile["chip"],
-            "--port",
-            port,
-            "--baud",
-            ESPTOOL_FLASH_BAUD,
-            "erase-region",
-            hex(NVS_ERASE_OFFSET),
-            hex(NVS_ERASE_SIZE),
-        ]
-        add_log("Resetting NVS partition and OTA boot metadata for clean initialization.")
-        erase_proc = subprocess.run(
-            erase_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=45,
-            check=False,
-        )
-        for line in erase_proc.stdout.splitlines():
-            if line.strip():
-                add_log(line.strip())
-        if erase_proc.returncode != 0:
-            erase_output = erase_proc.stdout.lower()
-            if "failed to connect" in erase_output or "no serial data received" in erase_output:
-                raise RuntimeError(
-                    f"{profile['label']} did not respond on {port}. Verify the USB port and cable. "
-                    "If the board has no automatic boot circuit, hold BOOT, press and release RESET, "
-                    "then release BOOT and start flashing again."
-                )
-            raise RuntimeError(f"OTA metadata erase failed with exit code {erase_proc.returncode}")
-
-        # Popen as a context manager: it closes the pipe and reaps the child on
-        # the way out, including down the timeout path where the kill() below
-        # otherwise left a zombie and a leaked descriptor behind.
-        with subprocess.Popen(
-            esptool_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        ) as proc:
-            started = time.time()
-            if proc.stdout is None:  # cannot happen with PIPE; -O drops asserts
-                proc.kill()
-                raise RuntimeError("esptool produced no output pipe.")
-            while True:
-                line = proc.stdout.readline()
-                if line:
-                    add_log(line.strip())
-                if proc.poll() is not None:
-                    break
-                if time.time() - started > 180:
-                    proc.kill()
-                    raise TimeoutError("esptool timed out")
-            for line in proc.stdout.read().splitlines():
-                if line.strip():
-                    add_log(line.strip())
+        with tempfile.TemporaryDirectory(prefix="dratek-flash-") as directory:
+            erased = Path(directory) / "reset-settings.bin"
+            erased.write_bytes(b"\xff" * NVS_ERASE_SIZE)
+            command = [sys.executable, "-u", "-m", "esptool", "--chip", profile["chip"],
+                       "--port", port, "--baud", ESPTOOL_FLASH_BAUD,
+                       "--after", "hard-reset", "write-flash", "-z"]
+            parts = [files[key] for key in FLASH_PART_ORDER] + [(NVS_ERASE_OFFSET, erased)]
+            for offset, path in sorted(parts):
+                command.extend([hex(offset), str(path)])
+            code = _run_esptool(command, add_log)
+            output = "\n".join(log).lower()
+            if code != 0 and any(reason in output for reason in (
+                "write timeout", "packet content transfer stopped", "serial exception", "invalid head of packet",
+            )):
+                add_log("USB transfer interrupted. Retrying once at 57600 baud using the ROM loader.")
+                command[command.index("--baud") + 1] = "57600"
+                command.insert(command.index("write-flash"), "--no-stub")
+                time.sleep(1)
+                code = _run_esptool(command, add_log, timeout=480)
+            if code != 0:
+                detail = next((line for line in reversed(log) if any(word in line.lower()
+                              for word in ("fatal", "error", "failed", "wrong chip"))), "See USB upload log.")
+                raise RuntimeError(f"esptool ({code}): {detail}")
     except Exception as exc:
+        error = _safe_log_line(str(exc), password)
         if job is not None:
-            job["status"] = "failed"
-            job["ok"] = False
-            job["error"] = str(exc)
-        return {"ok": False, "error": str(exc), "log": log}
+            job.update(status="failed", ok=False, error=error)
+        return {"ok": False, "error": error, "log": log}
 
-    if proc.returncode != 0:
-        if job is not None:
-            job["status"] = "failed"
-            job["ok"] = False
-            job["error"] = f"esptool exited with {proc.returncode}"
-        return {"ok": False, "error": f"esptool exited with {proc.returncode}", "log": log}
-
+    if job is not None:
+        job.update(status="provisioning", firmware_flashed=True)
     add_log("Firmware flashed. Sending Wi-Fi configuration over serial...")
     try:
         if _provision_wifi_over_serial(port, ssid, password, hostname, add_log):
@@ -1568,23 +1476,23 @@ def _flash_gateway_sync(
                 job["status"] = "done"
                 job["ok"] = True
                 job["completed_at"] = int(time.time())
-            return {"ok": True, "log": log}
+            return {"ok": True, "firmware_flashed": True, "log": log}
     except Exception as exc:
         if job is not None:
             job["status"] = "failed"
             job["ok"] = False
-            job["error"] = f"Wi-Fi provisioning failed: {exc}"
-        return {"ok": False, "error": f"Wi-Fi provisioning failed: {exc}", "log": log}
+            job["error"] = _safe_log_line(f"Wi-Fi provisioning failed: {exc}", password)
+        return {"ok": False, "firmware_flashed": True, "error": _safe_log_line(f"Wi-Fi provisioning failed: {exc}", password), "log": log}
 
     error = (
         "Firmware was flashed successfully, but the ESP32 did not acknowledge "
-        "the Wi-Fi configuration over serial."
+        "the Wi-Fi configuration over serial. Press RESET once (without BOOT), then use Wi-Fi only; no reflash is needed."
     )
     if job is not None:
         job["status"] = "failed"
         job["ok"] = False
         job["error"] = error
-    return {"ok": False, "error": error, "log": log}
+    return {"ok": False, "firmware_flashed": True, "error": error, "log": log}
 
 
 async def async_flash_gateway(
@@ -1630,6 +1538,7 @@ def async_get_flash_job(hass: HomeAssistant, job_id: str) -> dict[str, Any] | No
     return hass.data.setdefault(FLASH_JOBS_KEY, {}).get(job_id)
 
 
+@_exclusive_serial
 def _serial_gateway_command_sync(
     port: str,
     command: dict[str, Any],
@@ -1686,9 +1595,15 @@ async def async_serial_gateway_wifi(
     hostname: str,
 ) -> dict[str, Any]:
     return await hass.async_add_executor_job(
-        _serial_gateway_command_sync,
-        port,
-        {"cmd": "wifi", "ssid": ssid, "password": password, "hostname": _safe_network_hostname(hostname)},
-        password,
-        12,
+        _serial_wifi_sync, port, ssid, password, hostname,
     )
+
+
+@_exclusive_serial
+def _serial_wifi_sync(port: str, ssid: str, password: str, hostname: str) -> dict[str, Any]:
+    log: list[str] = []
+    try:
+        ok = _provision_wifi_over_serial(port, ssid, password, hostname, log.append)
+        return {"ok": ok, "log": log, "error": "" if ok else "ESP did not acknowledge Wi-Fi settings. Press RESET without BOOT and retry Wi-Fi only."}
+    except Exception as exc:
+        return {"ok": False, "log": log, "error": _safe_log_line(str(exc), password)}

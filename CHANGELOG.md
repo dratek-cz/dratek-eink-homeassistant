@@ -2,6 +2,20 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.2] - 2026-09-09
+
+### Opraveno
+- Flashování gatewayí je dostupné pouze přes USB zařízení s Home Assistantem. Odstraněna cesta přes prohlížeč počítače.
+- Vymazání starých Wi-Fi údajů a OTA metadat probíhá společně se zápisem firmwaru, bez mezilehlého restartu a druhého spojování s bootloaderem.
+- Při přerušení sériového přenosu se zápis jednou zopakuje přes ROM loader nižší rychlostí. Chyba obsahuje příčinu z esptoolu místo samotného návratového kódu.
+- Předání Wi-Fi čeká na návrat USB a potvrzení z firmwaru, zvládá přerušené spojení i rozdělenou odpověď a neopakuje reset desky. Port nelze souběžně používat pro další flashování nebo diagnostiku.
+- Nahraný firmware a neúspěšné nastavení Wi-Fi se zobrazují odděleně; nastavení lze zopakovat tlačítkem **Jen Wi-Fi**.
+- Firmware **0.1.66-gateway** pro ESP32-S3 přijímá nastavení a diagnostiku na UART i nativním USB. Opakované stejné Wi-Fi nastavení potvrdí bez dalšího restartu. Klasická ESP32 zachovává UART.
+
+### Ověření
+- Obě varianty firmwaru sestaveny v PlatformIO; reálné USB ověření proběhlo na ESP32-D0WD-V3 s CH9102.
+- ESP32-S3 ověřeno sestavením, nikoli na fyzické desce. Uložení testovacích Wi-Fi údajů není testem připojení ke skutečné síti.
+
 ## [1.0.1] - 2026-09-08
 
 ### Opraveno

@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import types
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -126,12 +127,72 @@ class GatewayFlashTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertIn("not a USB serial device", result["error"])
 
-    def test_esptool_uses_current_hyphenated_commands(self):
-        source = (COMPONENT / "gateway.py").read_text(encoding="utf-8")
-        self.assertIn('"erase-region"', source)
-        self.assertIn('"write-flash"', source)
-        self.assertNotIn('"erase_region"', source)
-        self.assertNotIn('"write_flash"', source)
+    def test_single_write_clears_settings_and_includes_all_images_for_both_chips(self):
+        for chip in ("esp32", "esp32s3"):
+            commands = []
+            def run(command, add_log):
+                commands.append(command)
+                self.assertIn("write-flash", command)
+                self.assertNotIn("erase-region", command)
+                start = command.index("-z") + 1
+                images = dict(zip(command[start::2], command[start + 1::2]))
+                self.assertEqual(b"\xff" * 0x7000, Path(images["0x9000"]).read_bytes())
+                for offset, path in gateway.FLASH_PROFILES[chip]["files"].values():
+                    self.assertEqual(str(path), images[hex(offset)])
+                return 0
+            with patch.object(gateway, "_run_esptool", side_effect=run), patch.object(gateway, "_provision_wifi_over_serial", return_value=True):
+                result = gateway._flash_gateway_sync("COM9", "wifi", "secret", "test", chip)
+            self.assertTrue(result["ok"])
+            self.assertEqual(1, len(commands))
+
+    def test_failed_upload_reports_cause_and_never_sends_wifi(self):
+        def failed(command, log):
+            log("A fatal error occurred: Failed to connect to ESP32")
+            return 2
+        with patch.object(gateway, "_run_esptool", side_effect=failed), patch.object(gateway, "_provision_wifi_over_serial") as provision:
+            result = gateway._flash_gateway_sync("COM9", "wifi", "secret", "test", "esp32")
+        self.assertFalse(result["ok"])
+        self.assertIn("Failed to connect", result["error"])
+        provision.assert_not_called()
+
+    def test_transport_failure_retries_once_with_rom_loader(self):
+        commands = []
+        def run(command, log, **kwargs):
+            commands.append(list(command))
+            if len(commands) == 1:
+                log("A serial exception error occurred: Write timeout")
+                return 1
+            return 0
+        with patch.object(gateway, "_run_esptool", side_effect=run), patch.object(gateway.time, "sleep"), patch.object(gateway, "_provision_wifi_over_serial", return_value=True):
+            result = gateway._flash_gateway_sync("COM9", "wifi", "secret", "test", "esp32")
+        self.assertTrue(result["ok"])
+        self.assertEqual(2, len(commands))
+        self.assertIn("--no-stub", commands[1])
+        self.assertEqual("57600", commands[1][commands[1].index("--baud") + 1])
+
+    def test_wifi_failure_preserves_successful_firmware_state(self):
+        job = {"log": []}
+        with patch.object(gateway, "_run_esptool", return_value=0), patch.object(gateway, "_provision_wifi_over_serial", return_value=False):
+            result = gateway._flash_gateway_sync("COM9", "wifi", "secret", "test", "esp32", job)
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["firmware_flashed"])
+        self.assertTrue(job["firmware_flashed"])
+        self.assertEqual("failed", job["status"])
+
+    def test_second_operation_on_same_port_is_rejected_and_job_finishes(self):
+        nested_job = {"log": []}
+        def run(command, log):
+            nested = gateway._flash_gateway_sync("COM9", "wifi", "secret", "test", "esp32", nested_job)
+            self.assertFalse(nested["ok"])
+            self.assertIn("busy", nested["error"])
+            return 0
+        with patch.object(gateway, "_run_esptool", side_effect=run), patch.object(gateway, "_provision_wifi_over_serial", return_value=True):
+            self.assertTrue(gateway._flash_gateway_sync("COM9", "wifi", "secret", "test", "esp32")["ok"])
+        self.assertEqual("failed", nested_job["status"])
+
+    def test_silent_subprocess_is_killed_on_timeout(self):
+        with self.assertRaises(TimeoutError):
+            gateway._run_esptool([sys.executable, "-c", "import time; time.sleep(30)"], lambda _: None, timeout=0.15)
 
     def test_wifi_provisioning_retries_until_firmware_acknowledges(self):
         writes = []
@@ -207,6 +268,55 @@ class GatewayFlashTests(unittest.TestCase):
         self.assertFalse(fake_serial_instance.rts)
         self.assertTrue(fake_serial_instance.opened)
         self.assertTrue(any("attempt 2" in line for line in log))
+
+
+class ProvisioningRecoveryTests(unittest.TestCase):
+    def provision(self, responses, open_failures=0):
+        clock = [0.0]
+        writes = []
+        resets = []
+        opens = [0]
+        class Serial:
+            def open(self):
+                opens[0] += 1
+                if opens[0] <= open_failures:
+                    raise OSError("port returning after reboot")
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def __setattr__(self, name, value):
+                if name in ("dtr", "rts") and value:
+                    resets.append((name, value))
+                object.__setattr__(self, name, value)
+            def write(self, value): writes.append(value)
+            def flush(self): pass
+            def readline(self):
+                clock[0] += 0.5
+                if not writes: return b""
+                value = responses.pop(0) if responses else b""
+                if isinstance(value, Exception): raise value
+                return value
+        def sleep(seconds): clock[0] += seconds
+        log = []
+        fake = types.SimpleNamespace(Serial=Serial, SerialException=OSError)
+        with patch.dict(sys.modules, {"serial": fake}), patch.object(gateway.time, "monotonic", side_effect=lambda: clock[0]), patch.object(gateway.time, "sleep", side_effect=sleep):
+            ok = gateway._provision_wifi_over_serial("COM9", "dílna", "secret", "test", log.append, 15)
+        self.assertEqual([], resets)
+        return ok, writes, log
+
+    def test_reopens_after_disconnect_and_accepts_fragmented_ack(self):
+        ok, writes, log = self.provision([OSError("USB reboot"), b'{"ok":true,"message":', b'"wifi_config_saved"}\n'], open_failures=2)
+        self.assertTrue(ok)
+        self.assertGreaterEqual(len(writes), 1)
+        self.assertEqual("dílna", json.loads(writes[-1])["ssid"])
+
+    def test_boot_log_or_negative_ack_is_not_success(self):
+        ok, _, _ = self.provision([b'wifi_config_saved not received\n', b'{"ok":false,"message":"wifi_config_saved"}\n'])
+        self.assertFalse(ok)
+
+    def test_wifi_password_is_redacted_from_device_log(self):
+        ok, _, log = self.provision([b'secret\n', b'{"ok":true,"message":"wifi_config_saved"}\n'])
+        self.assertTrue(ok)
+        self.assertNotIn("secret", "\n".join(log))
 
 
 class GatewayAvailabilityTests(unittest.IsolatedAsyncioTestCase):

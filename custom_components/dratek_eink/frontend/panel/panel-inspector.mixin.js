@@ -181,15 +181,6 @@ export const inspectorMixin = {
       if (flashButton) flashButton.disabled = this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid;
       if (statusButton) statusButton.disabled = this._gatewayBusy || !this._flashForm.port;
       if (wifiButton) wifiButton.disabled = this._gatewayBusy || !this._flashForm.port || !this._flashForm.ssid;
-      // Prohlizecova cesta ma svoje tlacitka a misto portu ze serveru se ridi
-      // deskou, kterou uzivatel povolil v prohlizeci.
-      const browserPortReady = Boolean(this._browserSerial?.port);
-      const browserFlash = this.shadowRoot.querySelector("#browserFlashGateway");
-      const browserStatus = this.shadowRoot.querySelector("#browserSerialStatus");
-      const browserWifi = this.shadowRoot.querySelector("#browserSerialWifi");
-      if (browserFlash) browserFlash.disabled = this._gatewayBusy || !browserPortReady || !this._flashForm.ssid;
-      if (browserStatus) browserStatus.disabled = this._gatewayBusy || !browserPortReady;
-      if (browserWifi) browserWifi.disabled = this._gatewayBusy || !browserPortReady || !this._flashForm.ssid;
     };
     this.shadowRoot.querySelector("#refreshSerialPorts")?.addEventListener("click", async () => { await this._loadSerialPorts(); this._render(); this._paint(); });
     this.shadowRoot.querySelector("#flashPort")?.addEventListener("change", (event) => {
@@ -221,12 +212,6 @@ export const inspectorMixin = {
     this.shadowRoot.querySelector("#flashGateway")?.addEventListener("click", () => this._flashGateway());
     this.shadowRoot.querySelector("#serialStatus")?.addEventListener("click", () => this._serialGatewayStatus());
     this.shadowRoot.querySelector("#serialWifi")?.addEventListener("click", () => this._serialGatewayWifi());
-    this.shadowRoot.querySelectorAll("[data-flash-route]").forEach((card) => card.addEventListener("click", () => this._setGatewayFlashRoute(card.dataset.flashRoute)));
-    this.shadowRoot.querySelector("#pickBrowserPort")?.addEventListener("click", () => this._pickBrowserSerialPort());
-    this.shadowRoot.querySelector("#forgetBrowserPort")?.addEventListener("click", () => this._forgetBrowserSerialPort());
-    this.shadowRoot.querySelector("#browserFlashGateway")?.addEventListener("click", () => this._flashGatewayFromBrowser());
-    this.shadowRoot.querySelector("#browserSerialStatus")?.addEventListener("click", () => this._browserSerialDiagnostics());
-    this.shadowRoot.querySelector("#browserSerialWifi")?.addEventListener("click", () => this._browserSerialWifiOnly());
     const openGatewayWeb = (card) => {
       const url = card.dataset.gatewayOpen;
       if (url) window.open(url, "_blank", "noopener,noreferrer");

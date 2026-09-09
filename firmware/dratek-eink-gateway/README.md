@@ -30,3 +30,16 @@ Home Assistant panel tuto konfiguraci posila automaticky po uspesnem flashi.
 
 - `esp32dev` pro klasicke ESP32 / ESP32-WROOM
 - `esp32-s3-devkitc-1` pro ESP32-S3
+
+
+## USB instalace od integrace 1.0.2
+
+V panelu vyberte **Nová gateway**, připojte desku přímo k zařízení s Home Assistantem,
+vyberte správný port a typ ESP32 / ESP32-S3 a vyplňte Wi-Fi. Nahrávání přes
+prohlížeč počítače bylo odstraněno. Firmware 0.1.66-gateway obsluhuje u S3
+UART i nativní USB; klasická ESP32 používá UART.
+
+Pokud je firmware nahraný, ale Wi-Fi nebyla potvrzena, nestartujte nový flash.
+Stiskněte RESET bez BOOT a použijte **Jen Wi-Fi**. **Ověřit USB** vrátí verzi,
+uložené SSID a stav připojení. Potvrzené uložení hesla samo o sobě nepotvrzuje
+úspěšné přihlášení k přístupovému bodu.

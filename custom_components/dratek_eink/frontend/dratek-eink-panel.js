@@ -2,7 +2,6 @@ import { storageMixin } from "./panel/panel-storage.mixin.js?v=per-display-isola
 import { queueMixin } from "./panel/panel-queue.mixin.js?v=waiting-for-display-1";
 import { automationsMixin } from "./panel/panel-automations.mixin.js?v=queued-write-cancel-1";
 import { gatewayMixin } from "./panel/panel-gateway.mixin.js?v=system-alerts-1";
-import { webSerialMixin } from "./panel/panel-webserial.mixin.js?v=browser-flash-1";
 import { devicesMixin } from "./panel/panel-devices.mixin.js?v=radar-slot-geometry-1";
 import { projectsMixin } from "./panel/panel-projects.mixin.js?v=per-display-isolation-1";
 import { canvasInteractionMixin } from "./panel/panel-canvas-interaction.mixin.js";
@@ -163,13 +162,6 @@ class DratekEinkPanel extends HTMLElement {
     this._serialPortsLoaded = false;
     this._gatewayForm = { name: "DRATEK eInk gateway", host: "dratek-eink-gateway.local" };
     this._flashForm = { port: "", ssid: "", password: "", hostname: this._defaultGatewayName(), chip: "esp32s3" };
-    // "host" flashne desku zapojenou do stroje s Home Assistantem pres esptool,
-    // "browser" ji flashne z tohoto pocitace pres Web Serial. Port z Web Serial
-    // je zive spojeni na zarizeni, ne text, takze se drzi mimo _flashForm - ten
-    // se serializuje do ulozeneho stavu panelu.
-    this._flashRoute = "host";
-    this._browserSerial = { port: null, label: "" };
-    this._browserFlashRenderAt = 0;
     this._flashResult = null;
     this._flashJobId = "";
     this._flashPollTimer = null;
@@ -452,7 +444,6 @@ Object.assign(
   queueMixin,
   automationsMixin,
   gatewayMixin,
-  webSerialMixin,
   devicesMixin,
   projectsMixin,
   canvasInteractionMixin,
