@@ -15,9 +15,15 @@
 #include <HWCDC.h>
 #endif
 
-static const char* FIRMWARE_VERSION = "0.1.69-gateway";
+static const char* FIRMWARE_VERSION = "0.1.70-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
+// The chip id the second-stage bootloader expects to find in an application
+// image built for this board (bytes 12-13 of the extended header). An image
+// carrying any other id is for a different CPU architecture: it will be written
+// and verified happily, and then the chip will not start, and the only way back
+// is a cable. See handleOtaUploadChunk.
+static const uint16_t EXPECTED_IMAGE_CHIP_ID = 0x0009;
 static const size_t INITIAL_UPLOAD_RESERVE_BYTES = 128UL * 1024UL;
 // Above this the payload goes to flash instead of the heap (see
 // beginFlashPayload). Kept at the old RAM ceiling so every transfer that
@@ -25,6 +31,7 @@ static const size_t INITIAL_UPLOAD_RESERVE_BYTES = 128UL * 1024UL;
 static const size_t RAM_PAYLOAD_LIMIT_BYTES = 128UL * 1024UL;
 #else
 static const char* CHIP_FAMILY = "esp32";
+static const uint16_t EXPECTED_IMAGE_CHIP_ID = 0x0000;
 static const size_t INITIAL_UPLOAD_RESERVE_BYTES = 64UL * 1024UL;
 static const size_t RAM_PAYLOAD_LIMIT_BYTES = 64UL * 1024UL;
 #endif
@@ -155,6 +162,12 @@ String otaStatus = "idle";
 String otaError;
 size_t otaBytesWritten = 0;
 size_t otaExpectedSize = 0;
+// The first bytes of the incoming image, held back until there are enough of
+// them to read the header. Nothing is written to flash before it checks out.
+static const size_t OTA_HEADER_BYTES = 16;
+uint8_t otaHeader[OTA_HEADER_BYTES];
+size_t otaHeaderSeen = 0;
+bool otaHeaderChecked = false;
 uint32_t otaRestartAtMs = 0;
 
 class TransferLogSink {
@@ -869,6 +882,8 @@ void handleOtaUploadChunk() {
   if (upload.status == UPLOAD_FILE_START) {
     otaError = "";
     otaBytesWritten = 0;
+    otaHeaderSeen = 0;
+    otaHeaderChecked = false;
     otaExpectedSize = strtoul(server.arg("size").c_str(), nullptr, 10);
     String expectedMd5 = server.arg("md5");
 
@@ -898,6 +913,33 @@ void handleOtaUploadChunk() {
 
   if (upload.status == UPLOAD_FILE_WRITE) {
     if (!otaInProgress || otaError.length()) return;
+    // Refuse an image built for another chip before a byte of it is written.
+    //
+    // Update.setMD5 only proves the bytes arrived intact - it says nothing
+    // about what they are, so an ESP32 image sent to an ESP32-S3 verifies,
+    // switches the boot partition and leaves a board that cannot start. The
+    // sender is supposed to pick the right file; this is what makes getting it
+    // wrong a failed update instead of a trip with a USB cable.
+    if (!otaHeaderChecked) {
+      size_t take = min(OTA_HEADER_BYTES - otaHeaderSeen, (size_t)upload.currentSize);
+      memcpy(otaHeader + otaHeaderSeen, upload.buf, take);
+      otaHeaderSeen += take;
+      if (otaHeaderSeen >= OTA_HEADER_BYTES) {
+        uint16_t imageChipId = (uint16_t)otaHeader[12] | ((uint16_t)otaHeader[13] << 8);
+        if (otaHeader[0] != 0xE9) {
+          failOta("ota_not_an_application_image");
+          return;
+        }
+        if (imageChipId != EXPECTED_IMAGE_CHIP_ID) {
+          failOta(
+            String("ota_wrong_chip: image is for chip id 0x") + String(imageChipId, HEX) +
+            ", this gateway is " + String(CHIP_FAMILY) + " (0x" + String(EXPECTED_IMAGE_CHIP_ID, HEX) + ")"
+          );
+          return;
+        }
+        otaHeaderChecked = true;
+      }
+    }
     size_t written = Update.write(upload.buf, upload.currentSize);
     otaBytesWritten += written;
     if (written != upload.currentSize) {
@@ -910,6 +952,12 @@ void handleOtaUploadChunk() {
     if (!otaInProgress || otaError.length()) return;
     if (otaBytesWritten != otaExpectedSize) {
       failOta("ota_size_mismatch");
+      return;
+    }
+    // A file too short to hold a header never reached the check above, and
+    // must not reach esp_ota_set_boot_partition either.
+    if (!otaHeaderChecked) {
+      failOta("ota_header_never_verified");
       return;
     }
     if (!Update.end()) {

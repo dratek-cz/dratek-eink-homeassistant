@@ -62,6 +62,35 @@ FLASH_PROFILES = {
 }
 
 
+# The chip an ESP32 application image was built for, as the second-stage
+# bootloader reads it: byte 0 is the 0xE9 magic and bytes 12-13 are the chip id
+# in the extended header. Writing an image with the wrong id into an OTA slot
+# and then booting it is not a failed update - it is a chip that cannot start,
+# and the only way back is a cable.
+ESP_IMAGE_MAGIC = 0xE9
+ESP_IMAGE_CHIP_IDS = {
+    "esp32": 0x0000,
+    "esp32s2": 0x0002,
+    "esp32c3": 0x0005,
+    "esp32s3": 0x0009,
+}
+
+
+def esp_image_chip(image: bytes) -> str:
+    """Which chip this application image is for, read from the image itself.
+
+    Empty for anything that is not a recognisable ESP32 application image, so
+    callers can refuse rather than guess.
+    """
+    if len(image) < 14 or image[0] != ESP_IMAGE_MAGIC:
+        return ""
+    chip_id = int.from_bytes(image[12:14], "little")
+    for name, value in ESP_IMAGE_CHIP_IDS.items():
+        if value == chip_id:
+            return name
+    return ""
+
+
 def _gateway_store(hass: HomeAssistant) -> Store:
     return Store(hass, GATEWAY_STORE_VERSION, GATEWAY_STORE_KEY)
 
@@ -374,9 +403,17 @@ async def async_rename_gateway(hass: HomeAssistant, gateway_id: str, name: str) 
         return None
 
 
-async def async_gateway_status(hass: HomeAssistant, gateway: dict[str, Any]) -> dict[str, Any]:
+async def _async_probe_gateway_url(hass: HomeAssistant, base_url: str) -> dict[str, Any]:
+    """Ask one exact address what it is.
+
+    Split out of async_gateway_status so a caller that is about to write to a
+    specific URL can confirm what is listening *there*, rather than trust a
+    status read from whichever address the stored record happened to resolve
+    to. The OTA update needs that: reading the chip family from one box and
+    writing an application image into another is a gateway that no longer boots.
+    """
     session = async_get_clientsession(hass)
-    url = f"{_gateway_base_url(gateway)}/api/status"
+    url = f"{base_url}/api/status"
     try:
         async with session.get(url, timeout=DEFAULT_TIMEOUT) as response:
             payload = await response.json(content_type=None)
@@ -432,6 +469,10 @@ async def async_gateway_status(hass: HomeAssistant, gateway: dict[str, Any]) -> 
         "running_partition_size": payload.get("running_partition_size"),
         "update_partition_size": payload.get("update_partition_size"),
     }
+
+
+async def async_gateway_status(hass: HomeAssistant, gateway: dict[str, Any]) -> dict[str, Any]:
+    return await _async_probe_gateway_url(hass, _gateway_base_url(gateway))
 
 
 def _remember_gateway_status(gateway: dict[str, Any], status: dict[str, Any]) -> bool:
@@ -631,6 +672,29 @@ async def async_start_gateway_ota(
             status = await async_gateway_status(hass, gateway)
             if not status.get("ok"):
                 raise RuntimeError(status.get("message") or "Gateway is offline.")
+
+            # One address for the whole update, and it is the address the bytes
+            # will actually go to.
+            #
+            # The status probe resolved the stored host and the upload resolved
+            # gateway_send_endpoint, which deliberately prefers a freshly probed
+            # IP over that host - the two disagree exactly when an mDNS name and
+            # a DHCP lease have drifted apart, which is the case this whole
+            # module already carries a long comment about for transfers. For a
+            # transfer that misroutes an image. Here it reads the chip family
+            # from one box and writes an application image into another, and on
+            # a mixed ESP32 / ESP32-S3 shelf that is a chip that no longer
+            # boots. So the endpoint is resolved once, before anything is read.
+            gateway_with_status = dict(gateway)
+            gateway_with_status["status"] = status
+            base_url = _gateway_send_base_url(gateway_with_status)
+            confirm = await _async_probe_gateway_url(hass, base_url)
+            if not confirm.get("ok"):
+                raise RuntimeError(
+                    f"{base_url} did not answer the confirmation probe: "
+                    f"{confirm.get('message') or 'no response'}"
+                )
+            status = confirm
             if not status.get("ota_supported"):
                 raise RuntimeError("Gateway firmware does not support OTA yet. Flash version 0.1.38 once over USB.")
 
@@ -643,6 +707,15 @@ async def async_start_gateway_ota(
                 raise RuntimeError(f"Bundled OTA image is missing: {firmware_path.name}")
 
             firmware = await hass.async_add_executor_job(firmware_path.read_bytes)
+            # The image says which chip it is for; the gateway says which chip
+            # it is. They have to agree, and neither of them is the file name.
+            image_chip = esp_image_chip(firmware)
+            if image_chip != chip:
+                raise RuntimeError(
+                    f"{firmware_path.name} is an image for {image_chip or 'an unrecognised chip'}, "
+                    f"but {base_url} is {chip}. Refusing to write it - flashing the wrong "
+                    "architecture leaves a gateway that only a cable can recover."
+                )
             firmware_md5 = hashlib.md5(firmware, usedforsecurity=False).hexdigest()
             partition_size = int(status.get("update_partition_size") or 0)
             if partition_size and len(firmware) > partition_size:
@@ -658,9 +731,6 @@ async def async_start_gateway_ota(
                 f"Uploading {firmware_path.name} ({len(firmware)} bytes, MD5 {firmware_md5}).",
             )
 
-            gateway_with_status = dict(gateway)
-            gateway_with_status["status"] = status
-            base_url = _gateway_send_base_url(gateway_with_status)
             poll_gateway = dict(gateway)
             if status.get("ip"):
                 poll_gateway["host"] = status["ip"]
@@ -673,7 +743,12 @@ async def async_start_gateway_ota(
                 content_type="application/octet-stream",
             )
             upload_url = f"{base_url}/api/ota/upload?size={len(firmware)}&md5={firmware_md5}"
-            async with session.post(upload_url, data=form, timeout=120) as response:
+            # Was 120 s. An ESP32 erases its OTA slot as it writes, and 0.1.68
+            # restored Wi-Fi modem sleep, so a megabyte can take longer than
+            # that - and aiohttp's TimeoutError carries an empty message, which
+            # is why a failure here used to read "OTA update failed: " and say
+            # nothing at all.
+            async with session.post(upload_url, data=form, timeout=300) as response:
                 result = await response.json(content_type=None)
                 if response.status >= 400 or not result.get("ok"):
                     raise RuntimeError(result.get("error") or f"Gateway returned HTTP {response.status}.")
@@ -715,7 +790,11 @@ async def async_start_gateway_ota(
         except Exception as exc:
             job["ok"] = False
             job["error"] = str(exc)
-            update("failed", int(job.get("progress") or 0), f"OTA update failed: {exc}")
+            # str() on aiohttp's disconnect and timeout errors is empty, so
+            # the log said "OTA update failed:" and stopped. Name the class
+            # when the message is missing.
+            reason = str(exc).strip() or type(exc).__name__
+            update("failed", int(job.get("progress") or 0), f"OTA update failed: {reason}")
 
     hass.async_create_task(runner())
     return job

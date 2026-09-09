@@ -2,6 +2,15 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.18] - 2026-09-09
+
+### Kritická oprava OTA aktualizace
+- OTA aktualizace zjišťovala typ čipu na **jiné adrese, než na kterou pak firmware nahrála**. Stav se četl z uložené adresy hostitele, nahrávalo se na adresu podle probnuté IP – a ty se rozejdou přesně tehdy, když si mDNS jméno a DHCP zápůjčka přestanou odpovídat. Na regálu, kde jsou ESP32 i ESP32-S3 gatewaye, to znamenalo přečíst typ čipu z jedné krabičky a zapsat obraz aplikace do druhé. Výsledkem je deska, která se nerozeběhne a jde zachránit jen kabelem. Adresa se nyní určí jednou, potvrdí se dotazem přímo na ni a firmware jde tam a nikam jinam.
+- Před nahráním se **porovná čip v hlavičce obrazu s čipem, který cíl hlásí**. `Update.setMD5` doloží jen to, že bajty dorazily v pořádku – neříká nic o tom, pro který procesor jsou.
+- Firmware gatewaye **0.1.70-gateway** odmítne obraz pro cizí čip dřív, než zapíše jediný bajt do flash. Kontroluje magickou hodnotu 0xE9 a ID čipu v hlavičce. Tohle je pojistka, která z chybného odeslání dělá neúspěšnou aktualizaci místo cesty s USB kabelem.
+- Neúspěšná aktualizace konečně řekne, co se stalo. Hlásila `OTA update failed:` a nic dalšího, protože chyby aiohttpu `ServerDisconnectedError` a `TimeoutError` mají prázdný text; teď se vypíše aspoň jejich typ.
+- Časový limit nahrávání zvednut ze 120 na 300 sekund. ESP32 maže OTA oddíl průběžně při zápisu a verze 0.1.68 vrátila úsporný režim Wi-Fi, takže megabajt může trvat déle.
+
 ## [1.0.17] - 2026-09-09
 
 ### Rychlost zápisu na displeje
