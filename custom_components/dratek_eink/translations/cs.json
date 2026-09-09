@@ -27,24 +27,44 @@
       "entry_type": "Rozhraní integrace",
       "initiate_flow": {
         "user": "Přidat rozhraní integrace"
+      },
+      "step": {
+        "user": {
+          "title": "Přidat rozhraní integrace"
+        }
       }
     },
     "scheduler": {
       "entry_type": "Plánování automatických zápisů",
       "initiate_flow": {
         "user": "Přidat plánování automatických zápisů"
+      },
+      "step": {
+        "user": {
+          "title": "Přidat plánování automatických zápisů"
+        }
       }
     },
     "transfer": {
       "entry_type": "Přenos obrazu do zařízení",
       "initiate_flow": {
         "user": "Přidat přenos obrazu do zařízení"
+      },
+      "step": {
+        "user": {
+          "title": "Přidat přenos obrazu do zařízení"
+        }
       }
     },
     "meteoradar": {
       "entry_type": "Obrazová služba meteoradaru",
       "initiate_flow": {
         "user": "Přidat obrazovou službu meteoradaru"
+      },
+      "step": {
+        "user": {
+          "title": "Přidat obrazovou službu meteoradaru"
+        }
       }
     }
   }
