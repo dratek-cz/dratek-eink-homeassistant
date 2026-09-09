@@ -289,7 +289,39 @@ class BrandLogoBroadcastTests(unittest.TestCase):
 
     def test_one_display_failing_does_not_abandon_the_rest(self) -> None:
         self.assertIn("failures.push(", self.mixin)
-        self.assertIn("Logo zařazeno pro ${sent} z ${targets.length} displejů.", self.mixin)
+        self.assertIn("Logo zařazeno pro ${sent} z ${total} displejů.", self.mixin)
+
+    def test_the_progress_repaint_cannot_end_the_broadcast(self) -> None:
+        # It used to sit above the try, so a throw while *drawing* - not while
+        # sending - stopped the walk where it stood and the displays after it
+        # were never attempted.
+        body = self.mixin[self.mixin.index("for (const [index, device] of targets.entries()) {"):]
+        body = body[: body.index("reachedEveryDisplay = true;")]
+        self.assertLess(body.index("try {"), body.index("this._render();"))
+        self.assertLess(body.index("this._render();"), body.index("} catch (error) {"))
+
+    def test_a_broadcast_that_stopped_early_says_so(self) -> None:
+        # The old finally block saw an empty failure list and reported success:
+        # a run that died at display 47 of 100 read as "queued for all 47".
+        self.assertIn("let reachedEveryDisplay = false;", self.mixin)
+        outcome = self.mixin[self.mixin.index("_brandLogoBroadcastOutcome(sent, total, failures, reachedEveryDisplay) {"):]
+        outcome = outcome[: outcome.index("\n  },")]
+        self.assertIn("if (!reachedEveryDisplay) {", outcome)
+        self.assertIn("Hromadné odeslání se zastavilo po ${sent} z ${total} displejů.", outcome)
+        self.assertIn("ok: false", outcome)
+
+    def test_every_failure_reaches_the_console_and_the_summary_groups_them(self) -> None:
+        # Fifty identical errors joined by semicolons is readable by nobody, and
+        # the per-display detail a bug report needs has to survive somewhere.
+        self.assertIn("console.error(", self.mixin)
+        self.assertIn("_brandLogoFailureSummary(failures) {", self.mixin)
+        self.assertIn("byReason", self.mixin)
+
+    def test_the_queue_poll_backs_off_while_the_broadcast_runs(self) -> None:
+        # A hundred queued jobs with eighty log lines each, pulled and redrawn
+        # every second, competes with the broadcast for the same main thread.
+        queue_mixin = (PANEL / "panel-queue.mixin.js").read_text(encoding="utf-8")
+        self.assertIn("this._brandLogoBroadcasting ? 5000 : 1000", queue_mixin)
 
     def test_each_display_is_rendered_at_its_own_size_and_palette(self) -> None:
         # A broadcast renders every display in turn, so these scopes overlap.

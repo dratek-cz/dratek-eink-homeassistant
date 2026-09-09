@@ -503,6 +503,52 @@ export const brandLogoMixin = {
       + "Tuto akci nelze vzít zpět.";
   },
 
+  // Three outcomes that used to collapse into one cheerful sentence: everything
+  // queued, some displays refused, and the loop itself dying partway down the
+  // list. The last one is the one that mattered and the one that was invisible.
+  _brandLogoBroadcastOutcome(sent, total, failures, reachedEveryDisplay) {
+    if (!reachedEveryDisplay) {
+      return {
+        ok: false,
+        message: `Hromadné odeslání se zastavilo po ${sent} z ${total} displejů. `
+          + "Zbývající displeje nebyly vůbec zkoušeny. "
+          + "Chyba je vypsaná v konzoli prohlížeče (F12).",
+      };
+    }
+    if (!failures.length) {
+      return {
+        ok: true,
+        message: `Logo Drátek bylo zařazeno do fronty pro všech ${sent} displejů. `
+          + "Automatické aktualizace i dřívější čekající úlohy byly zrušeny. "
+          + "Zápisy probíhají postupně přes dostupné gateway - průběh sledujte na kartě Fronta zápisu.",
+      };
+    }
+    return {
+      ok: false,
+      message: `Logo zařazeno pro ${sent} z ${total} displejů. ${this._brandLogoFailureSummary(failures)}`,
+    };
+  },
+
+  // Fifty identical errors are one fact, not fifty. Grouping them is the whole
+  // difference between "the websocket dropped" and "these three displays have
+  // no route left", without anyone having to open the console first.
+  _brandLogoFailureSummary(failures) {
+    const byReason = new Map();
+    for (const failure of failures) {
+      byReason.set(failure.reason, [...(byReason.get(failure.reason) || []), failure.label]);
+    }
+    const ranked = [...byReason.entries()].sort((a, b) => b[1].length - a[1].length);
+    const shown = ranked.slice(0, 3).map(([reason, labels]) => {
+      const names = labels.slice(0, 3).join(", ");
+      const more = labels.length > 3 ? ` a ${labels.length - 3} dalších` : "";
+      return `${labels.length}x ${reason} (${names}${more})`;
+    });
+    const hiddenKinds = ranked.length - shown.length;
+    const tail = hiddenKinds > 0 ? `; a ${hiddenKinds} další druh chyby` : "";
+    return `Nepovedlo se zařadit - ${shown.join("; ")}${tail}. `
+      + "Úplný seznam po displejích je v konzoli prohlížeče (F12).";
+  },
+
   // The whole reset. Every display gets its queue entry here, as fast as the
   // panel can render and upload them; the writing itself belongs to the backend
   // queue, which serialises one display at a time per radio and spreads the
@@ -528,6 +574,12 @@ export const brandLogoMixin = {
     this._brandLogoBroadcasting = true;
     const failures = [];
     let sent = 0;
+    // Whether the list was walked to its end, as opposed to the loop dying in
+    // the middle of it. Without this the finally block below cannot tell the
+    // two apart, and it reported a broadcast that stopped at display 47 of 100
+    // as "queued for all 47 displays" - the other 53 were never tried, and
+    // nothing on screen said so.
+    let reachedEveryDisplay = false;
     try {
       this._templateSendResult = {
         ok: true,
@@ -539,34 +591,36 @@ export const brandLogoMixin = {
         await this._brandLogoDeleteAutomation(device.address);
       }
       for (const [index, device] of targets.entries()) {
-        this._templateSendResult = {
-          ok: true,
-          message: `Logo Drátek: zařazuji displej ${index + 1}/${targets.length} do fronty zápisu…`,
-        };
-        this._render();
+        // The progress repaint belongs INSIDE the guard. It used to sit above
+        // it, so anything the panel threw while redrawing - not while sending -
+        // ended the whole broadcast where it stood, and the displays after that
+        // one were never even attempted.
         try {
+          this._templateSendResult = {
+            ok: true,
+            message: `Logo Drátek: zařazuji displej ${index + 1}/${targets.length} do fronty zápisu…`,
+          };
+          this._render();
           await this._brandLogoSendTo(device, template);
           sent += 1;
         } catch (error) {
-          failures.push(`${this._deviceTitle?.(device) || device.address}: ${this._message?.(error) || error}`);
+          const label = this._deviceTitle?.(device) || device.address;
+          // The panel's own line can only carry a summary, and fifty of these
+          // joined by semicolons is readable by nobody. The console keeps the
+          // per-display truth, which is what a bug report actually needs.
+          console.error(`[dratek-eink] Logo Drátek: ${label} se nepodařilo zařadit do fronty:`, error);
+          failures.push({ label, reason: String(this._message?.(error) || error) });
         }
       }
+      reachedEveryDisplay = true;
     } finally {
       this._brandLogoBroadcasting = false;
       await this._loadQueue?.(true);
       await this._loadAutomations?.();
       this._saveCachedDeviceDrafts?.();
-      this._templateSendResult = failures.length
-        ? {
-          ok: false,
-          message: `Logo zařazeno pro ${sent} z ${targets.length} displejů. Nepovedlo se zařadit: ${failures.join("; ")}`,
-        }
-        : {
-          ok: true,
-          message: `Logo Drátek bylo zařazeno do fronty pro všech ${sent} displejů. `
-            + "Automatické aktualizace i dřívější čekající úlohy byly zrušeny. "
-            + "Zápisy probíhají postupně přes dostupné gateway - průběh sledujte na kartě Fronta zápisu.",
-        };
+      this._templateSendResult = this._brandLogoBroadcastOutcome(
+        sent, targets.length, failures, reachedEveryDisplay,
+      );
       this._render();
       this._paint();
     }

@@ -112,10 +112,16 @@ export const queueMixin = {
       this._updateQueueLiveDom();
     }
     if (Number(this._queue?.queued || 0) + Number(this._queue?.writing || 0) > 0 || this._activeTab === "automations") {
+      // A one-second poll was cheap while the queue held two or three jobs. A
+      // shelf-wide broadcast now fills it with a hundred at once, each carrying
+      // up to eighty log lines, and this snapshot pulls all of them and redraws
+      // the whole table - on the same main thread the broadcast needs to
+      // rasterise the next display. Back off while it runs; it ends with its
+      // own _loadQueue, so nothing is missed, only asked for less often.
       this._queuePollTimer = window.setTimeout(() => {
         const visible = ["queue", "devices", "topology", "gateways", "automations"].includes(this._activeTab);
         this._loadQueue(visible, true);
-      }, 1000);
+      }, this._brandLogoBroadcasting ? 5000 : 1000);
     }
   },
 

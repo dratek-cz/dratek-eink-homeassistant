@@ -14,6 +14,10 @@ const EN_EXACT = new Map(Object.entries({
     "Automatic updates and any earlier waiting jobs have been cancelled.",
   "Zápisy probíhají postupně přes dostupné gateway - průběh sledujte na kartě Fronta zápisu.":
     "The writes run one after another through the available gateways - follow their progress on the Write queue tab.",
+  "Zbývající displeje nebyly vůbec zkoušeny.": "The remaining displays were never attempted.",
+  "Chyba je vypsaná v konzoli prohlížeče (F12).": "The error is written to the browser console (F12).",
+  "Úplný seznam po displejích je v konzoli prohlížeče (F12).":
+    "The full per-display list is in the browser console (F12).",
   // Header and primary navigation.
   "Editor šablon": "Template editor",
   "BLE diagnostika · správa displejů": "BLE diagnostics · display management",

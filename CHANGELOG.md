@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.14] - 2026-09-09
+
+### Opraveno
+- Hromadné odeslání **Loga Drátek** se už nezastaví uprostřed seznamu kvůli chybě při překreslování. Překreslení průběhu bylo mimo ochranu chyb, takže cokoli, co panel vyhodil při *kreslení* - ne při odesílání - ukončilo celou akci tam, kde zrovna byla, a zbývající displeje se nikdy nezkusily.
+- Když se hromadná akce přesto zastaví, panel to napíše. Dřív viděl prázdný seznam chyb a hlásil úspěch: běh, který skončil u 47. displeje ze 100, se tvářil jako "zařazeno pro všech 47 displejů".
+- Chyby jednotlivých displejů se seskupují podle příčiny, takže padesát stejných hlášek je jeden řádek a ne nečitelná změť. Úplný výpis po displejích jde do konzole prohlížeče (F12).
+- Fronta zápisu se během hromadné akce dotazuje po pěti sekundách místo po jedné. Sto úloh s osmdesáti řádky logu, stahovaných a překreslovaných každou sekundu, soupeřilo o stejné vlákno, na kterém se vykresluje další displej.
+
 ## [1.0.13] - 2026-09-09
 
 ### Opraveno
