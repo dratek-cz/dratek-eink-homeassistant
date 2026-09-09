@@ -1382,6 +1382,20 @@ def _run_esptool(command: list[str], add_log: Any, timeout: float = 300) -> int:
             reader.join(timeout=2)
 
 
+def _is_esptool_transport_failure(output: str) -> bool:
+    """Return whether esptool failed because its serial transport was interrupted."""
+    normalized = output.lower()
+    return any(reason in normalized for reason in (
+        "write timeout",
+        "packet content transfer stopped",
+        "serial exception",
+        "invalid head of packet",
+        "no more data to read from the serial port",
+        "device disconnected",
+        "could not open port",
+    ))
+
+
 @_exclusive_serial
 def _flash_gateway_sync(
     port: str,
@@ -1448,10 +1462,8 @@ def _flash_gateway_sync(
             for offset, path in sorted(parts):
                 command.extend([hex(offset), str(path)])
             code = _run_esptool(command, add_log)
-            output = "\n".join(log).lower()
-            if code != 0 and any(reason in output for reason in (
-                "write timeout", "packet content transfer stopped", "serial exception", "invalid head of packet",
-            )):
+            output = "\n".join(log)
+            if code != 0 and _is_esptool_transport_failure(output):
                 add_log("USB transfer interrupted. Retrying once at 57600 baud using the ROM loader.")
                 command[command.index("--baud") + 1] = "57600"
                 command.insert(command.index("write-flash"), "--no-stub")

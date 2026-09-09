@@ -170,6 +170,26 @@ class GatewayFlashTests(unittest.TestCase):
         self.assertIn("--no-stub", commands[1])
         self.assertEqual("57600", commands[1][commands[1].index("--baud") + 1])
 
+    def test_no_more_serial_data_retries_once_with_rom_loader(self):
+        commands = []
+
+        def run(command, log, **kwargs):
+            commands.append(list(command))
+            if len(commands) == 1:
+                log("A fatal error occurred: No more data to read from the serial port.")
+                return 2
+            return 0
+
+        with patch.object(gateway, "_run_esptool", side_effect=run), patch.object(
+            gateway.time, "sleep"
+        ), patch.object(gateway, "_provision_wifi_over_serial", return_value=True):
+            result = gateway._flash_gateway_sync("COM9", "wifi", "secret", "test", "esp32")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(2, len(commands))
+        self.assertIn("--no-stub", commands[1])
+        self.assertEqual("57600", commands[1][commands[1].index("--baud") + 1])
+
     def test_wifi_failure_preserves_successful_firmware_state(self):
         job = {"log": []}
         with patch.object(gateway, "_run_esptool", return_value=0), patch.object(gateway, "_provision_wifi_over_serial", return_value=False):

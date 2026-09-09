@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.6] - 2026-09-09
+
+### Opraveno
+- Přerušení USB zápisu s chybou esptool `No more data to read from the serial port` se nově správně rozpozná. Flashování se automaticky jednou zopakuje přes ROM loader rychlostí 57600 Bd, stejně jako u ostatních chyb přerušeného sériového přenosu.
+- Rozpoznání zahrnuje také odpojené zařízení a dočasně nedostupný sériový port. Při neúspěchu zůstává v chybě zachována konkrétní příčina z esptoolu.
+
 ## [1.0.5] - 2026-09-09
 
 ### Dokumentace
