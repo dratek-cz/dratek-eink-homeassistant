@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.9] - 2026-09-09
+
+### Opraveno
+- Hromadná šablona **Logo Drátek** čeká na skutečné dokončení každého přenosu. Do fronty už během několika sekund nevloží desítky úloh, které by blokovaly další odesílání.
+- Před novým spuštěním jednorázově odstraní staré čekající úlohy všech cílových displejů. Rozpracovaný zápis bezpečně nechá dokončit.
+- Když gateway selže, aktuální displej zkusí jinou dostupnou trasu a následující displeje nefunkční gateway během její ochranné prodlevy vynechají. Platí to i pro ručně zvolenou gateway.
+- Průběh hromadné akce nyní odpovídá dokončeným přenosům místo pouhému zařazení do fronty.
+
 ## [1.0.8] - 2026-09-09
 
 ### Opraveno

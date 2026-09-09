@@ -4369,6 +4369,7 @@ export const devicesMixin = {
         transform: payload.transform,
         automation: payload.automation,
         template_ids: Array.isArray(payload.template_ids) ? payload.template_ids : [],
+        wait_for_completion: payload.wait_for_completion === true,
       });
     } catch (err) {
       throw new Error(`Home Assistant nezařadil přijatý obrázek do fronty: ${this._message(err)}`);

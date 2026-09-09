@@ -248,7 +248,7 @@ class BrandLogoBroadcastTests(unittest.TestCase):
     def test_the_automation_and_the_queue_are_cleared_before_the_send(self) -> None:
         body = self.mixin[self.mixin.index("async _broadcastBrandLogoToAllDisplays()"):]
         delete = body.index("await this._brandLogoDeleteAutomation(device.address);")
-        cancel = body.index("await this._brandLogoCancelQueuedJobs(device.address);")
+        cancel = body.index("await this._brandLogoCancelAllQueuedJobs(targets);")
         send = body.index("await this._brandLogoSendTo(device, template);")
         self.assertLess(delete, send)
         self.assertLess(cancel, send, "cancelling after the send would cancel our own job")
@@ -268,6 +268,13 @@ class BrandLogoBroadcastTests(unittest.TestCase):
         # contention errors the queue then has to retry through.
         self.assertIn("for (const [index, device] of targets.entries()) {", self.mixin)
         self.assertNotIn("Promise.all(targets", self.mixin)
+
+    def test_one_display_finishes_before_the_next_is_queued(self) -> None:
+        send = self.mixin[self.mixin.index("async _brandLogoSendTo("):]
+        send = send[: send.index("\n  },")]
+        self.assertIn("wait_for_completion: true", send)
+        self.assertIn("await this._sendLocalDisplayDesignChunked(payload)", send)
+        self.assertNotIn("dratek_eink/gateways/send_design", send)
 
     def test_one_display_failing_does_not_abandon_the_rest(self) -> None:
         self.assertIn("failures.push(", self.mixin)

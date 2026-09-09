@@ -111,6 +111,22 @@ class LargeDisplayUploadTests(unittest.TestCase):
                 self.assertIsInstance(wait_keywords[0].value, ast.Constant)
                 self.assertIs(wait_keywords[0].value.value, False)
 
+    def test_chunked_commit_can_wait_for_the_real_transfer_result(self) -> None:
+        backend = (COMPONENT / "ws_sending.py").read_text(encoding="utf-8")
+        handler_start = backend.index("async def websocket_commit_design_upload(")
+        handler = backend[handler_start:]
+
+        self.assertIn('vol.Optional("wait_for_completion", default=False): bool', backend)
+        self.assertIn(
+            'wait_for_completion=bool(msg.get("wait_for_completion", False))',
+            handler,
+        )
+        frontend = FRONTEND.read_text(encoding="utf-8")
+        self.assertIn(
+            "wait_for_completion: payload.wait_for_completion === true",
+            frontend,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

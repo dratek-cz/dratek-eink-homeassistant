@@ -386,6 +386,33 @@ export const brandLogoMixin = {
     return cancelled;
   },
 
+  async _brandLogoCancelAllQueuedJobs(devices) {
+    const targets = new Set(
+      (devices || []).map((device) => String(device?.address || "").toUpperCase()).filter(Boolean),
+    );
+    if (!targets.size) return 0;
+    let snapshot;
+    try {
+      snapshot = await this._hass.callWS({ type: "dratek_eink/queue/list" });
+    } catch (_error) {
+      return 0;
+    }
+    const pending = (snapshot?.jobs || []).filter((job) =>
+      targets.has(String(job?.address || "").toUpperCase())
+      && String(job?.status || "") === "queued"
+    );
+    let cancelled = 0;
+    for (const job of pending) {
+      try {
+        const result = await this._hass.callWS({ type: "dratek_eink/queue/cancel", job_id: job.id });
+        if (result?.ok) cancelled += 1;
+      } catch (_error) {
+        // The job may have started or finished between listing and cancelling.
+      }
+    }
+    return cancelled;
+  },
+
   async _brandLogoDeleteAutomation(address) {
     try {
       const result = await this._hass.callWS({ type: "dratek_eink/automations/delete", address });
@@ -419,18 +446,19 @@ export const brandLogoMixin = {
       orientation: portrait ? "portrait" : "landscape",
       transform,
       template_ids: [BRAND_LOGO_TEMPLATE_ID],
+      // A shelf-wide reset must learn the result before choosing a route for
+      // the next display. Returning after queue insertion flooded a dead
+      // gateway with dozens of jobs before its first failure was known.
+      wait_for_completion: true,
       // No `automation` key at all, which is what makes the send itself clear
       // whatever automatic update the display had (see
       // _clear_previous_entity_automation in ws_sending.py). The explicit
       // delete above is still worth doing: it takes the display off the
       // Automations tab immediately, and it holds even if this transfer fails.
     };
-    const gatewayId = device?.gateway_selection === "manual"
-      ? String(device?.selected_gateway_id || "")
-      : "";
-    const result = gatewayId
-      ? await this._hass.callWS({ type: "dratek_eink/gateways/send_design", gateway_id: gatewayId, ...payload })
-      : await this._sendLocalDisplayDesignChunked(payload);
+    // The routed chunked endpoint honours automatic and manually selected
+    // gateways and can fall back to another route when one fails.
+    const result = await this._sendLocalDisplayDesignChunked(payload);
     if (result?.ok === false) throw new Error(result.error || "Odeslání se nezdařilo.");
     this._rememberBrandLogoPreview(device, image, portrait);
     return result;
@@ -485,6 +513,15 @@ export const brandLogoMixin = {
     const failures = [];
     let sent = 0;
     try {
+      this._templateSendResult = {
+        ok: true,
+        message: `Připravuji hromadné odeslání a ruším čekající úlohy pro ${targets.length} displejů…`,
+      };
+      this._render();
+      await this._brandLogoCancelAllQueuedJobs(targets);
+      for (const device of targets) {
+        await this._brandLogoDeleteAutomation(device.address);
+      }
       for (const [index, device] of targets.entries()) {
         this._templateSendResult = {
           ok: true,
@@ -492,8 +529,6 @@ export const brandLogoMixin = {
         };
         this._render();
         try {
-          await this._brandLogoDeleteAutomation(device.address);
-          await this._brandLogoCancelQueuedJobs(device.address);
           await this._brandLogoSendTo(device, template);
           sent += 1;
         } catch (error) {
