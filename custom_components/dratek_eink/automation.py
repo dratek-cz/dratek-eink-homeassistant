@@ -66,7 +66,27 @@ DEBOUNCE_SECONDS = 0.15
 DEFAULT_REFRESH_INTERVAL_SECONDS = 600
 MIN_REFRESH_INTERVAL_SECONDS = 30
 MAX_REFRESH_INTERVAL_SECONDS = 86400
-GATEWAY_ROUTE_SCAN_SECONDS = 3
+# How long each gateway scans when the route map is rebuilt.
+#
+# Three seconds is enough to confirm one display and far too short to enumerate
+# a shelf. Displays advertise intermittently, so a three-second window catches a
+# fraction of what a gateway can actually reach - and everything it missed is
+# recorded as "no gateway hears this display" and routed to Home Assistant's own
+# adapter instead.
+#
+# Measured on a 101-display run: 20 of the transfers went to local Bluetooth,
+# and the weakest of the three gateways was offered a route for only 9 displays
+# in total. That is not what those radios can hear; it is what they happened to
+# hear inside one three-second window, decided in a single burst because a
+# shelf-wide send queues every display at once and this map is cached for 30 s.
+#
+# Six seconds, not more: the on-demand scan behind Obnovit is eight and has to
+# stay the longer of the two, because that is the one a user is standing in
+# front of waiting for (see test_scan_unseen_settle). This one has the discovery
+# cache to fall back on. Six still fits inside async_scan_gateway's own timeout
+# and inside GATEWAY_ROUTE_LOOKUP_TIMEOUT_SECONDS, and it doubles what a gateway
+# gets to hear before it is declared deaf to a display.
+GATEWAY_ROUTE_SCAN_SECONDS = 6
 GATEWAY_ROUTE_CACHE_SECONDS = 30
 # Backstop for _async_gateway_routes's lock-held section (see the comment at
 # its call site): comfortably above the ~8s each individual gateway scan is

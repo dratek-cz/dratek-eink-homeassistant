@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.17] - 2026-09-09
+
+### Rychlost zápisu na displeje
+- Firmware gatewaye **0.1.69-gateway** ukončí vyhledávací sken ve chvíli, kdy se hledaný displej ozve, místo aby vystál celé šestisekundové okno. Ze 101 přenosů jich 23 muselo na sken přejít a 19 z nich displej našlo – a pak čekalo do konce okna. Displej vysílající v běžném intervalu se ozve hluboko pod sekundou; zbytek toho okna byl vysílací čas ubraný přenosu, který měl právě začít, a všem ostatním rádiím v místnosti.
+- Sken, kterým se staví mapa tras, poslouchá **6 sekund místo 3**. Tři sekundy stačí na ověření jednoho displeje a zdaleka ne na zmapování regálu: displeje vysílají přerušovaně, takže vše, co gateway v tom okně neslyšela, se zapsalo jako „tenhle displej neslyší nikdo" a odeslalo přes Bluetooth Home Assistantu. V měřeném běhu takto skončilo 20 přenosů a nejslabší ze tří gatewayí dostala trasu jen k 9 displejům.
+
 ## [1.0.16] - 2026-09-09
 
 ### Výkon při stovce displejů
