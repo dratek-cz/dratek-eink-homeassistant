@@ -49,13 +49,14 @@ $headers = @{
 
 # The changelog section for this version becomes the release notes, so the
 # release page says the same thing CHANGELOG.md does.
-$notesLines = & python -c @"
-import re, sys
-text = open('CHANGELOG.md', encoding='utf-8').read()
-match = re.search(r'^## \[' + re.escape(sys.argv[1]) + r'\].*?(?=^## \[|\Z)', text, re.S | re.M)
-sys.stdout.write(match.group(0).strip() if match else '')
-"@ $Version
-$notes = [string]::Join("`n", $notesLines)
+# Read UTF-8 directly in .NET: piping Czech text from Python through Windows
+# PowerShell can decode it with a different console code page.
+$changelogPath = Join-Path (Split-Path $PSScriptRoot -Parent) "CHANGELOG.md"
+$changelog = [System.IO.File]::ReadAllText($changelogPath, [System.Text.Encoding]::UTF8)
+$notesPattern = '(?ms)^## \[' + [regex]::Escape($Version) + '\].*?(?=^## \[|\z)'
+$notesMatch = [regex]::Match($changelog, $notesPattern)
+if (-not $notesMatch.Success) { throw "No changelog section for version $Version" }
+$notes = $notesMatch.Value.Trim()
 
 if ($Prerelease) { Write-Host "Marking $tag as a PRERELEASE - HACS stable will not offer it." }
 Write-Host "Creating release $tag on $Repo ..."
@@ -67,7 +68,10 @@ try {
   # Already there (a re-run, or a release made in the web UI): reuse it rather
   # than failing, so the asset upload below can still complete.
   $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/tags/$tag" -Headers $headers
-  Write-Host "Release already existed; reusing it."
+  $notesBody = @{ body = $notes } | ConvertTo-Json
+  Invoke-RestMethod -Method Patch -Uri "https://api.github.com/repos/$Repo/releases/$($release.id)" `
+    -Headers $headers -Body ([Text.Encoding]::UTF8.GetBytes($notesBody)) -ContentType "application/json" | Out-Null
+  Write-Host "Release already existed; updated its notes."
 }
 
 # A half-uploaded asset from an interrupted run would shadow the good one.
