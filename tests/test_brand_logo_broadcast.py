@@ -93,7 +93,7 @@ class BrandLogoTemplateTests(unittest.TestCase):
             "const thresholdAt = (x, y) => (matrix[y % matrixSize][x % matrixSize] + 0.5) / levels;",
             mixin,
         )
-        self.assertIn("this._ditherBrandLogoImageData(pixels, width, height, paletteKey, ground);", mixin)
+        self.assertIn("this._ditherBrandLogoImageData(pixels, width, height);", mixin)
         # And still not the 4x4 cell, which is the one that actually meshed.
         self.assertNotIn("[0, 8, 2, 10]", mixin)
         self.assertIn("[0, 32, 8, 40, 2, 34, 10, 42]", mixin)
@@ -109,7 +109,8 @@ class BrandLogoTemplateTests(unittest.TestCase):
         self.assertNotIn("logo-flat-6", mixin)
         self.assertNotIn("logo-tonal-7", mixin)
         self.assertNotIn("logo-wordmark-8", mixin)
-        self.assertIn("logo-ground-9", mixin)
+        self.assertNotIn("logo-ground-9", mixin)
+        self.assertIn("logo-solid-10", mixin)
 
     def test_the_outline_reads_the_module_rectangle(self) -> None:
         """One definition of where the module is.
@@ -193,7 +194,7 @@ class BrandLogoTemplateTests(unittest.TestCase):
         # afterthought.
         mixin = MIXIN.read_text(encoding="utf-8")
         self.assertIn("this._displayPaletteKey?.(device)", mixin)
-        self.assertIn("`${source}:${w}x${h}:${paletteKey}:${field}:", mixin)
+        self.assertIn("`${source}:${w}x${h}:${paletteKey}:", mixin)
 
     def test_the_logo_is_letterboxed_and_never_cropped(self) -> None:
         mixin = MIXIN.read_text(encoding="utf-8")

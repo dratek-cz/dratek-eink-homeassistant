@@ -74,32 +74,32 @@ export const brandLogoMixin = {
   // The dither is per palette as well as per size: a three-colour panel and a
   // four-colour one need different error diffusion over the same pixels, and
   // handing a BWR panel the BWRY bitmap prints the yellow as a dirty grey.
-  _brandLogoDitherSpec(stacked, width, height, device = this._device?.(), ground = "white") {
+  _brandLogoDitherSpec(stacked, width, height, device = this._device?.()) {
     const w = Math.max(1, Math.round(width));
     const h = Math.max(1, Math.round(height));
     const source = this._brandLogoAsset(stacked);
     const paletteKey = this._displayPaletteKey?.(device) || "bwr";
-    const field = this._brandLogoGround(ground, paletteKey);
-    return {
-      source, w, h, paletteKey, ground: field,
-      cacheKey: `${source}:${w}x${h}:${paletteKey}:${field}:logo-ground-9`,
-    };
+    return { source, w, h, paletteKey, cacheKey: `${source}:${w}x${h}:${paletteKey}:logo-solid-10` };
   },
 
-  // The panel behind the wordmark. Yellow is a real pigment on a four-colour
-  // display and nothing at all on a three-colour one: asking a BWR panel for it
-  // would dither the whole field into a red-and-white mesh under the type,
-  // which reads worse than the white it already prints. So the fallback is not
-  // a degraded yellow, it is white - the same lockup, one colour poorer.
-  _brandLogoGround(ground, paletteKey) {
-    return ground === "yellow" && paletteKey === "bwry" ? "yellow" : "white";
-  },
-
-  // The flat colour a not-yet-dithered block should stand in with, so a yellow
-  // panel does not flash white for the length of one render pass.
-  _brandLogoGroundHex(ground, device = this._device?.()) {
-    const paletteKey = this._displayPaletteKey?.(device) || "bwr";
-    return this._brandLogoGround(ground, paletteKey) === "yellow" ? "#f4c400" : "#ffffff";
+  // The yellow band along the bottom edge, and how tall it is.
+  //
+  // Every other template in the catalog closes its page with a solid red
+  // footer. This one has no footer to write into - it is a single full-bleed
+  // block - so it takes the same bar as pure colour. Yellow rather than red
+  // because the wordmark above it is already red and black, and a red bar under
+  // red type reads as one shape.
+  //
+  // A three-colour panel has no yellow pigment, so it gets no band at all -
+  // not a red one, which would be a different design, and not a dithered
+  // pretend-yellow, which is the speckle this template exists to avoid.
+  _brandLogoBandHeight(row, height, device = this._device?.()) {
+    if (row?.brandLogo?.band !== "yellow") return 0;
+    if ((this._displayPaletteKey?.(device) || "bwr") !== "bwry") return 0;
+    // The same 0.16 of the panel the stacked layout gives a footer row, so the
+    // bar sits where every other template has already taught the eye to expect
+    // one.
+    return Math.max(4, Math.round(height * 0.16));
   },
 
   // One cell for every panel. 8x8 is the smallest matrix that can place a light
@@ -145,29 +145,14 @@ export const brandLogoMixin = {
     return canvas;
   },
 
-  _ditherBrandLogoImageData(pixels, width, height, paletteKey = "", ground = "white") {
-    const supportsYellow = paletteKey === "bwry";
+  _ditherBrandLogoImageData(pixels, width, height) {
     const red = [220, 20, 12];
-    const yellow = [244, 196, 0];
     const white = [255, 255, 255];
     const black = [0, 0, 0];
-    // What "not ink" prints as. Every light outcome below resolves to this and
-    // not to hard white, or the antialiased edge of every letter leaves a white
-    // fringe standing on the yellow field - the halo this dither exists to
-    // avoid, just in the other direction.
-    const field = ground === "yellow" ? yellow : white;
-    const warmPalette = supportsYellow
-      ? (field === yellow ? [yellow, red] : [field, red, yellow])
-      : [field, red];
     const matrix = this._brandLogoBayerMatrix();
     const matrixSize = matrix.length;
     const levels = matrixSize * matrixSize;
     const thresholdAt = (x, y) => (matrix[y % matrixSize][x % matrixSize] + 0.5) / levels;
-    const distance = (colour, target) => (
-      (colour[0] - target[0]) ** 2
-      + (colour[1] - target[1]) ** 2
-      + (colour[2] - target[2]) ** 2
-    );
     for (let y = 0; y < height; y += 1) {
       for (let x = 0; x < width; x += 1) {
         const offset = (y * width + x) * 4;
@@ -177,7 +162,7 @@ export const brandLogoMixin = {
         // Antialiasing is used only to locate the original contour. It must not
         // survive as a grey/dotted halo around letters on the physical panel.
         if (alpha < 0.5) {
-          ink = field;
+          ink = white;
         // Source-black shapes (wordmark, symbols, Eink letters and outlines)
         // get a hard one-pixel contour instead of a dithered soft edge.
         } else if (Math.max(...source) < 48) {
@@ -185,30 +170,20 @@ export const brandLogoMixin = {
         // Preserve the dot over i as real solid red, not a disappearing cluster.
         } else if (source[0] > 175 && source[1] < 75 && source[2] < 60) {
           ink = red;
+        // The orange .CZ and the accent over the A print as solid red, filled
+        // edge to edge. They used to be ordered between red and white (or, on a
+        // four-colour panel, red and yellow), which is the faithful way to show
+        // an orange the panel has no pigment for - and on the tag in a
+        // customer's hand it read as a speckled, half-erased word standing next
+        // to a solid black one. A logo may print in fewer colours than it was
+        // drawn in. It may not print as texture.
         } else if (source[0] > source[1] + 8 && source[1] > source[2] + 8) {
-          // Accent and .CZ: find the most faithful pair of warm inks and order
-          // their pixels. BWRY gets red+yellow orange; BWR gets red+white.
-          let best = null;
-          for (let a = 0; a < warmPalette.length; a += 1) {
-            for (let b = a + 1; b < warmPalette.length; b += 1) {
-              const first = warmPalette[a];
-              const second = warmPalette[b];
-              const direction = second.map((value, channel) => value - first[channel]);
-              const divisor = direction.reduce((sum, value) => sum + value * value, 0) || 1;
-              const amount = Math.max(0, Math.min(1,
-                source.reduce((sum, value, channel) => sum + (value - first[channel]) * direction[channel], 0) / divisor,
-              ));
-              const mixed = first.map((value, channel) => value + amount * direction[channel]);
-              const error = distance(mixed, source);
-              if (!best || error < best.error) best = { first, second, amount, error };
-            }
-          }
-          ink = best.amount > thresholdAt(x, y) ? best.second : best.first;
+          ink = red;
         } else {
           // Neutral parts of the module are strictly black/white. Red is not
           // eligible here, so it cannot leak into the corner underneath .CZ.
           const luminance = (0.2126 * source[0] + 0.7152 * source[1] + 0.0722 * source[2]) / 255;
-          ink = luminance > thresholdAt(x, y) ? field : black;
+          ink = luminance > thresholdAt(x, y) ? white : black;
         }
         pixels.data[offset] = ink[0];
         pixels.data[offset + 1] = ink[1];
@@ -279,7 +254,7 @@ export const brandLogoMixin = {
     }
   },
 
-  _renderBrandLogoBitmapAtSize(source, width, height, paletteKey, ground = "white") {
+  _renderBrandLogoBitmapAtSize(source, width, height) {
     return new Promise((resolve, reject) => {
       const image = new Image();
       image.onload = () => {
@@ -295,7 +270,7 @@ export const brandLogoMixin = {
         const crop = this._brandLogoWordmarkCrop(sourceWidth, sourceHeight);
         this._drawCustomImageFitted(context, this._brandLogoPrepareSource(image, crop), width, height, "contain");
         const pixels = context.getImageData(0, 0, width, height);
-        this._ditherBrandLogoImageData(pixels, width, height, paletteKey, ground);
+        this._ditherBrandLogoImageData(pixels, width, height);
         // The cropped lockup is the wordmark alone - there is no module left in
         // it to frame, and the rectangle would land on the type.
         if (!crop) this._outlineBrandLogoModule(pixels, width, height, sourceWidth, sourceHeight);
@@ -307,22 +282,22 @@ export const brandLogoMixin = {
     });
   },
 
-  _brandLogoDitherEntry(stacked, width, height, device = this._device?.(), ground = "white") {
-    const spec = this._brandLogoDitherSpec(stacked, width, height, device, ground);
+  _brandLogoDitherEntry(stacked, width, height, device = this._device?.()) {
+    const spec = this._brandLogoDitherSpec(stacked, width, height, device);
     return this._brandLogoDitherCache?.get(spec.cacheKey) || "";
   },
 
   // Non-blocking, for the interactive preview: the block that needs it is
   // synchronous, so the first pass draws blank and repaints when this lands.
-  _requestBrandLogoDither(stacked, width, height, device = this._device?.(), ground = "white") {
-    const spec = this._brandLogoDitherSpec(stacked, width, height, device, ground);
+  _requestBrandLogoDither(stacked, width, height, device = this._device?.()) {
+    const spec = this._brandLogoDitherSpec(stacked, width, height, device);
     this._brandLogoDitherCache ||= new Map();
     if (this._brandLogoDitherCache.has(spec.cacheKey)) return;
     this._brandLogoDitherPending ||= new Set();
     if (this._brandLogoDitherPending.has(spec.cacheKey)) return;
     this._brandLogoDitherPending.add(spec.cacheKey);
     // "contain": a logo may be letterboxed but never cropped.
-    this._renderBrandLogoBitmapAtSize(spec.source, spec.w, spec.h, spec.paletteKey, spec.ground)
+    this._renderBrandLogoBitmapAtSize(spec.source, spec.w, spec.h)
       .then((dataUrl) => {
         this._rememberBrandLogoDither(spec.cacheKey, dataUrl);
         this._scheduleTemplateIconRepaint?.();
@@ -344,13 +319,12 @@ export const brandLogoMixin = {
   async _preloadBrandLogoDither(rows, width, height, device = this._device?.()) {
     const row = (rows || []).find((entry) => entry?.brandLogo);
     if (!row) return;
-    const spec = this._brandLogoDitherSpec(
-      !!row.brandLogo.stacked, width, height, device, row.brandLogo.ground,
-    );
+    // The band is drawn by the block, not by the dither, so the artwork is
+    // rasterised into what is left of the panel above it.
+    const logoHeight = Math.max(1, height - this._brandLogoBandHeight(row, height, device));
+    const spec = this._brandLogoDitherSpec(!!row.brandLogo.stacked, width, logoHeight, device);
     if (this._brandLogoDitherCache?.has(spec.cacheKey)) return;
-    const dataUrl = await this._renderBrandLogoBitmapAtSize(
-      spec.source, spec.w, spec.h, spec.paletteKey, spec.ground,
-    );
+    const dataUrl = await this._renderBrandLogoBitmapAtSize(spec.source, spec.w, spec.h);
     this._rememberBrandLogoDither(spec.cacheKey, dataUrl);
   },
 

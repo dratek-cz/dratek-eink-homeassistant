@@ -2,6 +2,15 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.15] - 2026-09-09
+
+### Přidáno
+- Nová šablona **DRÁTEK.CZ**: firemní nápis přes celý displej, na rozdíl od dlaždice *Logo Drátek* se přiřazuje jednomu displeji a odesílá běžným tlačítkem. Čtyřbarevné displeje dostanou dole žlutý pruh na místě, kde mají ostatní šablony červenou patičku; tříbarevné vytisknou samotný nápis.
+
+### Opraveno
+- Oranžové **.CZ** a čárka nad Á se tisknou plnou červenou. Dosud se rastrovaly mezi červenou a bílou (na čtyřbarevných mezi červenou a žlutou), což je věrný způsob, jak zobrazit oranžovou, pro kterou displej nemá pigment – a na štítku v ruce to vypadalo jako tečkované, napůl smazané slovo vedle plného černého nápisu.
+- Úloha, která čeká na nedosažitelný displej, si před každým dalším pokusem znovu vyžádá trasu. Trasa se dosud vybrala jednou, při zařazení do fronty, z tříseknudového skenu – displej, který zrovna nevysílal, tak zůstal do konce dne přiřazený místnímu Bluetooth, i když se mezitím probudil metr od gatewaye.
+
 ## [1.0.14] - 2026-09-09
 
 ### Opraveno

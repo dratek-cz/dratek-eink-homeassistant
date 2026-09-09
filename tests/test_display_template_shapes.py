@@ -73,7 +73,7 @@ SINGLE_ROW_TEMPLATES = {
     "dratek_logo",
     # Same reason as dratek_logo: the wordmark on its yellow field is the whole
     # panel, and a heading over it would be the thing it exists not to have.
-    "dratek_yellow",
+    "dratek_wordmark",
     # The logo template is the lockup and nothing else - a heading or a footer
     # over the brand mark would be exactly the
     # thing it exists not to have.
@@ -86,10 +86,10 @@ ALLOWED_SHAPE_TWINS = {
     # Both print the brand lockup full bleed, and there is no second way to
     # arrange one block. What separates them is not layout: dratek_logo is the
     # broadcast tile that resets every display in the room and prints on white,
-    # dratek_yellow is an ordinary template assigned to one display and printed
-    # on the shop's yellow. Forcing a decorative difference between them would
-    # make one of the two a worse logo for no reason.
-    frozenset({"dratek_logo", "dratek_yellow"}),
+    # dratek_wordmark is an ordinary template assigned to one display and closed
+    # with the shop's yellow bar. Forcing a decorative difference between them
+    # would make one of the two a worse logo for no reason.
+    frozenset({"dratek_logo", "dratek_wordmark"}),
 }
 
 

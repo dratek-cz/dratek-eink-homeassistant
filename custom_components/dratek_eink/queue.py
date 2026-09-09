@@ -72,6 +72,10 @@ GATEWAY_CONNECT_FAILURE_MARKER = "BLE connection failed after retries."
 
 TransferRunner = Callable[[Callable[[str], None]], Awaitable[dict[str, Any]]]
 GatewayRunnerFactory = Callable[[dict[str, Any]], TransferRunner]
+# What a waiting job calls to ask for its transport again: returns
+# (resource, transport_type, transport_name, runner), or None to keep the
+# one it already has.
+RouteRebinder = Callable[[], Awaitable[tuple[str, str, str, TransferRunner] | None]]
 GATEWAY_FALLBACK_MIN_RSSI_DBM = -80.0
 
 
@@ -177,6 +181,7 @@ class TransferQueue:
         operation: str,
         runner: TransferRunner,
         wait_for_completion: bool = True,
+        rebind: RouteRebinder | None = None,
     ) -> dict[str, Any]:
         await self._ensure_loaded()
         normalized_address = address.upper()
@@ -234,6 +239,9 @@ class TransferQueue:
             # would hang the call rather than queue anything. The uploads this
             # is for - a design sent to a display - are all submitted with
             # wait_for_completion=False and report back through the queue tab.
+            # Rebound between attempts when this job waits for its display, so
+            # it is the enclosing name that has to change, not a local copy.
+            nonlocal runner
             may_wait = manual and not wait_for_completion
             deadline = time.time() + DISPLAY_WAIT_MAX_SECONDS if may_wait else 0.0
             try:
@@ -259,6 +267,14 @@ class TransferQueue:
                         "and will be written as soon as it is back."
                     )
                     job["log"] = job["log"][-80:]
+                    # The transport was chosen from a three-second scan taken
+                    # when this job was queued. A display that was asleep then
+                    # was pinned to whatever could be reached at that moment -
+                    # local Bluetooth, usually, because no gateway heard it -
+                    # and that pin is exactly the wrong answer when it wakes up
+                    # an hour later two metres from a gateway. A job that waits
+                    # for its display asks again before every attempt.
+                    runner = await self._rebind_route(job, rebind, runner)
             except asyncio.CancelledError:
                 if not manual and job["id"] in self._preempted_jobs:
                     return await self._skip_automatic_update(
@@ -323,6 +339,7 @@ class TransferQueue:
         operation: str,
         runner_factory: GatewayRunnerFactory,
         wait_for_completion: bool = True,
+        rebind: RouteRebinder | None = None,
     ) -> dict[str, Any]:
         """Choose a gateway atomically and submit one transfer through it.
 
@@ -356,7 +373,39 @@ class TransferQueue:
             operation=operation,
             runner=runner_factory(route),
             wait_for_completion=wait_for_completion,
+            rebind=rebind,
         )
+
+    async def _rebind_route(
+        self, job: dict[str, Any], rebind: "RouteRebinder | None", runner: TransferRunner
+    ) -> TransferRunner:
+        """Re-pick a held job's transport just before it tries again.
+
+        Returns the runner to use. A caller that supplied no rebinder, or a
+        lookup that fails, keeps the one the job already has: a stale route is
+        worse than a fresh one and better than none.
+        """
+        if rebind is None:
+            return runner
+        try:
+            bound = await rebind()
+        except Exception as exc:  # a scan can fail; the retry must not
+            job["log"].append(f"Could not re-check routing before the retry: {exc}")
+            job["log"] = job["log"][-80:]
+            return runner
+        if not bound:
+            return runner
+        resource, transport_type, transport_name, next_runner = bound
+        if resource != job.get("resource"):
+            job["log"].append(
+                f"Routing re-checked while waiting: {job.get('transport_name')} "
+                f"-> {transport_name}."
+            )
+            job["log"] = job["log"][-80:]
+        job["resource"] = resource
+        job["transport_type"] = transport_type
+        job["transport_name"] = transport_name
+        return next_runner
 
     def _select_gateway_route(
         self, routes: list[dict[str, Any]]

@@ -131,6 +131,28 @@ async def _async_submit_routed_transfer(
             address, manual_route, result.get("error") if result else "unreachable"
         )
 
+    async def rebind() -> tuple[str, str, str, Any] | None:
+        """Answer "which radio should write this display" again, later.
+
+        A queued job keeps the transport it was given at submit time, and that
+        answer came from a three-second BLE scan. Displays advertise
+        intermittently and a shelf-wide send queues a hundred of them at once,
+        so a display that happened to be quiet in that window is pinned to
+        local Bluetooth for the whole day it may then wait - even once it is
+        awake and shouting at a gateway. The queue calls this before each
+        attempt of a job that is waiting for its display.
+        """
+        fresh = await manager._async_gateway_routes(address)
+        route = queue._select_gateway_route(fresh) if fresh else None
+        if route is None:
+            return ("local", "local", "Home Assistant Bluetooth", local_runner)
+        return (
+            gateway_resource(route),
+            "gateway",
+            str(route.get("name") or route.get("host") or "DRATEK eInk gateway"),
+            gateway_runner_factory(route),
+        )
+
     routes = await manager._async_gateway_routes(address)
     if routes:
         result = await queue.async_submit_gateway_routes(
@@ -139,6 +161,7 @@ async def _async_submit_routed_transfer(
             operation=operation,
             runner_factory=gateway_runner_factory,
             wait_for_completion=wait_for_completion,
+            rebind=rebind,
         )
         if result and result.get("ok") is not False:
             return result
@@ -150,6 +173,7 @@ async def _async_submit_routed_transfer(
         operation=operation,
         runner=local_runner,
         wait_for_completion=wait_for_completion,
+        rebind=rebind,
     )
 
 
