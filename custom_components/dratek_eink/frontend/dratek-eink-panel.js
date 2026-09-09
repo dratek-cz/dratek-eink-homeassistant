@@ -1,3 +1,4 @@
+import { brandLogoMixin } from "./panel/panel-brand-logo.mixin.js";
 import { storageMixin } from "./panel/panel-storage.mixin.js?v=per-display-isolation-1";
 import { queueMixin } from "./panel/panel-queue.mixin.js?v=waiting-for-display-1";
 import { automationsMixin } from "./panel/panel-automations.mixin.js?v=queued-write-cancel-1";
@@ -458,7 +459,8 @@ Object.assign(
   drawChartsMixin,
   templateSvgMixin,
   templateBlocksMixin,
-  templateComponentsMixin
+  templateComponentsMixin,
+  brandLogoMixin
 );
 
 if (!customElements.get("dratek-eink-panel")) {

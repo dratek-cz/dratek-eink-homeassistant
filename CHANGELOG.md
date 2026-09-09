@@ -2,6 +2,15 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.3] - 2026-09-09
+
+### Přidáno
+- Importovatelná šablona **Drátek – hromadné odeslání loga**. Obnovuje původní showroomové odeslání na všechny známé displeje včetně zrušení jejich automatických aktualizací a čekajících úloh. Rozpracované přenosy neruší.
+- Funkce se zobrazí pouze po importu souboru `examples/dratek-hromadna.dratek-template.json`. Import nic neposílá; každé spuštění vyžaduje výslovné potvrzení. Malé displeje dostanou samotný nápis, velké a portrétní displeje celé logo.
+
+### Opraveno
+- Import a export uživatelských šablon zachovávají `editor_elements`, rozměry návrhu a podporovanou hromadnou akci. Starší soubory s polem `elements` se převádějí na pole používané editorem.
+
 ## [1.0.2] - 2026-09-09
 
 ### Opraveno

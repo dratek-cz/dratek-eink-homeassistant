@@ -1,0 +1,16 @@
+{
+  "type": "dratek_eink_template",
+  "version": 1,
+  "minimum_integration_version": "1.0.3",
+  "template": {
+    "id": "user-template-dratek-hromadne-logo",
+    "title": "Drátek – hromadné odeslání loga",
+    "category": "custom",
+    "action": "dratek_logo_broadcast",
+    "variables": [],
+    "editor_elements": [],
+    "elements": [],
+    "user_created": true
+  },
+  "description": "Po potvrzení odešle původní logo Drátek na všechny známé displeje. U každého zruší automatické aktualizace a čekající úlohy. Na malých displejích použije samotný nápis, na velkých celé logo."
+}

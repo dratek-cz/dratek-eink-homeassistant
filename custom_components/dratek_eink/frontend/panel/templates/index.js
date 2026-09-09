@@ -1,3 +1,4 @@
+import { template as dratekLogo } from "./dratek_logo.js";
 // One file per template (see ./weather.js, ./price.js, ...), each carrying
 // its catalog entry, Home Assistant setup guide and SVG design together.
 // This file just gathers them into the shapes the rest of the panel already
@@ -30,6 +31,7 @@ import { template as garden } from "./garden.js?v=compact-landscape-content-6";
 import { template as price } from "./price.js?v=pricetag-barcode-rework-1";
 
 export const DISPLAY_TEMPLATES = [
+  dratekLogo,
   customImage,
   weather,
   radar,
@@ -60,7 +62,7 @@ export const DISPLAY_TEMPLATES = [
   washer,
 ];
 
-export const DISPLAY_TEMPLATE_CATALOG = DISPLAY_TEMPLATES.map((entry) => entry.catalog);
+export const DISPLAY_TEMPLATE_CATALOG = DISPLAY_TEMPLATES.filter((entry) => !entry.catalog.internal).map((entry) => entry.catalog);
 
 export const DISPLAY_TEMPLATES_BY_ID = Object.fromEntries(
   DISPLAY_TEMPLATES.map((entry) => [entry.catalog.id, entry]),

@@ -938,6 +938,10 @@ export const templateSvgMixin = {
       // appeared if something else happened to evict the entry. Keep
       // re-rendering until the map is actually in hand.
       && !(this._templateNeedsRadarImage(rows) && !this._meteoradarFrameReady(width, height))
+      // The brand logo falls into exactly the same trap: its bitmap is dithered
+      // asynchronously, so the first pass draws a blank panel, and caching that
+      // would freeze the catalog tile empty for the rest of the session.
+      && !(rows.some((row) => row?.brandLogo) && !this._brandLogoDitherEntry?.(!!rows.find((row) => row?.brandLogo)?.brandLogo?.stacked, width, height))
     ) {
       this._templateThumbnailMarkupCache.set(cacheKey, thumbnail);
       if (this._templateThumbnailMarkupCache.size > 96) this._templateThumbnailMarkupCache.delete(this._templateThumbnailMarkupCache.keys().next().value);
@@ -1185,7 +1189,7 @@ export const templateSvgMixin = {
   _layoutTemplateSvg(rows, width, height, collector) {
     // Pixel-perfect full-panel blocks own their internal layout. Hand them the
     // display's exact rectangle: no page padding, footer band, or column split.
-    if (rows.length === 1 && (rows[0]?.dither || rows[0]?.customImage || rows[0]?.radarMap) && rows[0]?.pixelPerfect) {
+    if (rows.length === 1 && (rows[0]?.dither || rows[0]?.customImage || rows[0]?.brandLogo || rows[0]?.radarMap) && rows[0]?.pixelPerfect) {
       const box = { x: 0, y: 0, w: width, h: height, fullX: 0, fullW: width };
       if (collector && rows[0].__rowIndex !== undefined) collector.push({ rowIndex: rows[0].__rowIndex, box });
       return this._renderTemplateBlock(rows[0], box);
@@ -1381,6 +1385,7 @@ export const templateSvgMixin = {
     if (row.barcode) return this._blockBarcode(row, box);
     if (row.radarMap) return this._blockRadarMap(row, box);
     if (row.pricetag) return this._blockPriceTag(row, box);
+    if (row.brandLogo) return this._blockBrandLogo(row, box);
     if (row.text != null) return this._blockText(row, box);
     return "";
   },
@@ -2747,6 +2752,45 @@ if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, scaleY, sca
     return parts.join("");
   },
 
+  // ------------------------------------------------------------- branding ---
+
+  // INTERNAL / NOT FOR THE PUBLIC RELEASE - see PRIVATE-NOTES.md.
+  //
+  // The DRÁTEK.CZ lockup, drawn as a dithered copy of the integration's own
+  // artwork (frontend/dratek-eink-logo.png and its wide sibling) rather than as
+  // native SVG.
+  //
+  // This block used to redraw the mark from type and rectangles. That printed
+  // sharply, but an approximation of a logo is the one thing a logo may not be:
+  // the letterforms were Arial rather than the real face, and the Eink screen
+  // was a pair of stroked rectangles standing in for the actual artwork.
+  // Dithering the real file through the same Floyd-Steinberg pass an imported
+  // photo takes keeps the true shapes, and turns the teal and the orange into
+  // texture instead of letting a flat threshold reduce both to solid black.
+  //
+  // Everything here is the bitmap's placement only; the pixels are prepared by
+  // panel-brand-logo.mixin.js, which owns the palette and the cache. The
+  // request below is what starts that work - the same lazily-drawn arrangement
+  // _blockCustomImage uses, because this method is synchronous and the dither
+  // is not.
+  _blockBrandLogo(row, box) {
+    const stacked = !!row.brandLogo?.stacked;
+    const width = Math.max(1, Math.round(box.fullW ?? box.w));
+    const height = Math.max(1, Math.round(box.h));
+    const bitmap = this._brandLogoDitherEntry?.(stacked, width, height);
+    if (!bitmap) {
+      this._requestBrandLogoDither?.(stacked, width, height);
+      // Blank rather than a placeholder: this panel is about to show a logo,
+      // and a flash of "loading" art reads as the wrong content, not as a
+      // loading state.
+      return `<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>`;
+    }
+    // Already dithered at exactly this pixel size, so nothing here may resample
+    // it - "none" makes the placement a straight 1:1 blit.
+    return `<image x="0" y="0" width="${width}" height="${height}" href="${this._escape(bitmap)}"`
+      + ` preserveAspectRatio="none" image-rendering="auto"></image>`;
+  },
+
   // Two raster blocks in an otherwise all-vector renderer: landscape slots
   // place the forecast on the left; portrait slots place it below the map.
   // Both are
@@ -3258,6 +3302,7 @@ if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, scaleY, sca
       await this._preloadTemplateRadarImage(rows, slot.w, slot.h);
       await this._preloadTemplateTransitBoard(rows);
       await this._preloadCustomImageForSlot?.(rows, slot.w, slot.h);
+      await this._preloadBrandLogoDither?.(rows, slot.w, slot.h);
       const slotName = index === 0 ? "primary" : index === 1 ? "secondary" : `slot-${index + 1}`;
       const markup = this._applyTemplateAdjustmentsToSvgMarkup(this._layoutTemplateSvg(rows, slot.w, slot.h), template, slotName);
       // data-template-slot lets the automation capture find a block inside the

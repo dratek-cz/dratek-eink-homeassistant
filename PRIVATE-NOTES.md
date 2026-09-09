@@ -1,3 +1,10 @@
+# Změna 2026-09-09 — verze 1.0.3
+
+Na výslovnou žádost uživatele obnovena funkce původního hromadného odeslání
+včetně rušení automatizací a čekajících úloh. V běžném katalogu se nezobrazuje;
+aktivuje ji pouze import šablony s akcí `dratek_logo_broadcast`. Každé spuštění
+vyžaduje potvrzení. Následující poznámky popisují historické odstranění 1.0.0.
+
 # Interní poznámky – co odstranit před finálním prodejním vydáním
 
 Tento soubor je pracovní poznámka pro nás, ne dokumentace pro uživatele.

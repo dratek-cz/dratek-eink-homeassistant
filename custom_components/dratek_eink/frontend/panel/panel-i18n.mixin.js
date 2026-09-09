@@ -1,6 +1,16 @@
 const EN_EXACT = new Map(Object.entries({
   "Připojte ESP přes USB přímo k zařízení s Home Assistantem. Vyberte port, typ desky a Wi-Fi síť.": "Connect the ESP by USB directly to the Home Assistant device. Select the port, board type and Wi-Fi network.",
   "Firmware je nahraný. Nastavení Wi-Fi selhalo": "Firmware installed. Wi-Fi setup failed",
+  // INTERNAL - remove with the brand-logo feature (PRIVATE-NOTES.md).
+  "Logo Drátek": "Drátek logo",
+  "Firemní šablona": "Company template",
+  "Odeslat na všechny displeje": "Send to every display",
+  "Odesílám…": "Sending…",
+  "Zruší automatizace i frontu na všech displejích.": "Cancels automations and the queue on every display.",
+  "Není známý žádný displej, kam logo poslat.": "No display is known to send the logo to.",
+  "Tuto akci nelze vzít zpět.": "This action cannot be undone.",
+  "U každého displeje se nejdřív zruší automatická aktualizace a zruší se jeho čekající úlohy ve frontě.":
+    "Each display's automatic update is cancelled first, together with its waiting queue jobs.",
   // Header and primary navigation.
   "Editor šablon": "Template editor",
   "BLE diagnostika · správa displejů": "BLE diagnostics · display management",
