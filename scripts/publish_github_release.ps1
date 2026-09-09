@@ -2,11 +2,11 @@
 #
 # HACS is configured with "zip_release": true and "filename": "dratek_eink.zip"
 # (see hacs.json), so it looks for a *Release* carrying that asset. A pushed tag
-# on its own is invisible to it - which is exactly how v0.1.352 first went out.
+# on its own is invisible to it.
 #
 # Run from the repository root:
 #
-#   powershell -ExecutionPolicy Bypass -File scripts\publish_github_release.ps1 -Version 0.1.352
+#   powershell -ExecutionPolicy Bypass -File scripts\publish_github_release.ps1 -Version 1.0.5
 #
 # The token is read from a file and sent straight to GitHub; it is never echoed,
 # logged, or written anywhere by this script.
