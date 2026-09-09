@@ -1,4 +1,5 @@
 import { template as dratekLogo } from "./dratek_logo.js";
+import { template as dratekYellow } from "./dratek_yellow.js";
 // One file per template (see ./weather.js, ./price.js, ...), each carrying
 // its catalog entry, Home Assistant setup guide and SVG design together.
 // This file just gathers them into the shapes the rest of the panel already
@@ -32,6 +33,9 @@ import { template as price } from "./price.js?v=pricetag-barcode-rework-1";
 
 export const DISPLAY_TEMPLATES = [
   dratekLogo,
+  // Beside the broadcast tile: same artwork, but an ordinary template that is
+  // assigned to one display rather than fired at every display in the room.
+  dratekYellow,
   customImage,
   weather,
   radar,

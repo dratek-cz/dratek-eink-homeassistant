@@ -941,7 +941,7 @@ export const templateSvgMixin = {
       // The brand logo falls into exactly the same trap: its bitmap is dithered
       // asynchronously, so the first pass draws a blank panel, and caching that
       // would freeze the catalog tile empty for the rest of the session.
-      && !(rows.some((row) => row?.brandLogo) && !this._brandLogoDitherEntry?.(!!rows.find((row) => row?.brandLogo)?.brandLogo?.stacked, width, height))
+      && !(rows.some((row) => row?.brandLogo) && !this._brandLogoDitherEntry?.(!!rows.find((row) => row?.brandLogo)?.brandLogo?.stacked, width, height, undefined, rows.find((row) => row?.brandLogo)?.brandLogo?.ground))
     ) {
       this._templateThumbnailMarkupCache.set(cacheKey, thumbnail);
       if (this._templateThumbnailMarkupCache.size > 96) this._templateThumbnailMarkupCache.delete(this._templateThumbnailMarkupCache.keys().next().value);
@@ -2773,15 +2773,21 @@ if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, scaleY, sca
   // is not.
   _blockBrandLogo(row, box) {
     const stacked = !!row.brandLogo?.stacked;
+    // Which colour the wordmark is printed on. Carried all the way into the
+    // dither rather than painted behind the finished bitmap, because the letter
+    // edges have to be quantized against the field they actually sit on.
+    const ground = row.brandLogo?.ground;
     const width = Math.max(1, Math.round(box.fullW ?? box.w));
     const height = Math.max(1, Math.round(box.h));
-    const bitmap = this._brandLogoDitherEntry?.(stacked, width, height);
+    const bitmap = this._brandLogoDitherEntry?.(stacked, width, height, undefined, ground);
     if (!bitmap) {
-      this._requestBrandLogoDither?.(stacked, width, height);
+      this._requestBrandLogoDither?.(stacked, width, height, undefined, ground);
       // Blank rather than a placeholder: this panel is about to show a logo,
       // and a flash of "loading" art reads as the wrong content, not as a
-      // loading state.
-      return `<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>`;
+      // loading state. Blank means the finished panel's own ground, so a yellow
+      // one does not flash white on its way there.
+      const field = this._brandLogoGroundHex?.(ground) || "#ffffff";
+      return `<rect x="0" y="0" width="${width}" height="${height}" fill="${field}"></rect>`;
     }
     // Already dithered at exactly this pixel size, so nothing here may resample
     // it - "none" makes the placement a straight 1:1 blit.
