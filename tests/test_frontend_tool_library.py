@@ -713,11 +713,10 @@ class FrontendToolLibraryTests(unittest.TestCase):
         self.assertIn('${this._displaySettingsView === "templates" ? this._renderDisplayTemplatesSection(device) : ""}', self.source)
         self.assertNotIn('return this._renderDisplayTemplatesPage(device)', self.source)
         self.assertIn('class="display-template-grid"', self.source)
-        # 24 production templates including the custom photo card, plus the
-        # internal brand-logo card (PRIVATE-NOTES.md), which drops back to 24
-        # when that is removed for the retail release. Hardware colour
-        # calibration targets must not leak into the user catalog.
-        self.assertEqual(self.source.count('number: "'), 25)  # Includes the import-only logo action.
+        # 25 production templates including the custom photo card and the
+        # built-in brand-logo broadcast. Hardware colour calibration targets
+        # must not leak into the user catalog.
+        self.assertEqual(self.source.count('number: "'), 25)
 
         self.assertIn("variables: [", self.source)
         # A promotion is a decision rather than a reading, so a price tag carries a

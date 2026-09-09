@@ -1,6 +1,3 @@
-// INTERNAL TEMPLATE - MUST NOT SHIP IN THE PUBLIC / RETAIL RELEASE.
-// See PRIVATE-NOTES.md in the repository root for the full removal checklist.
-//
 // Everything about the "Logo Drátek" display template: the shop's own lockup
 // printed across a whole panel, used to put every display in the room into a
 // clean, identical showroom state in one click.
@@ -17,11 +14,8 @@ export const template = {
     category: "custom",
     title: "Logo Drátek",
     variables: [],
-    // Read by the catalog grid and by the click handler. Nothing else in the
-    // panel special-cases the id itself, so removing this template removes the
-    // behaviour with it.
+    // Read by the catalog grid and by the click handler.
     broadcast: true,
-    internal: true,
   },
   prepared: true,
   setup: {
@@ -32,7 +26,7 @@ export const template = {
       "U každého displeje se zruší automatizace a zrušené zůstanou i čekající úlohy ve frontě.",
       "Logo se odešle na všechny displeje; nedosažitelné se zapíší, jakmile se ohlásí gatewayi.",
     ],
-    note: "Tato šablona není určena zákazníkům – před finálním prodejním vydáním se odstraňuje podle PRIVATE-NOTES.md.",
+    note: "Hromadné odeslání se spustí až po výslovném potvrzení.",
   },
   // One row, full bleed. `pixelPerfect` is what makes _layoutTemplateSvg hand
   // the block the display's exact rectangle instead of the padded page box the

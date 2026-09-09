@@ -476,9 +476,6 @@ export const inspectorMixin = {
     const openDisplayTemplate = (templateId, replaceIndex = null, stayInCatalog = false, placement = null) => {
       const device = this._device();
       const template = this._displayTemplateCards().find((item) => item.id === templateId);
-      // INTERNAL - remove with the rest of the brand-logo feature before the
-      // retail release (PRIVATE-NOTES.md).
-      //
       // A broadcast template is not assigned to the open display at all: it
       // resets every display the panel knows about and sends itself to all of
       // them straight away. Intercepted here rather than only at the tile's
@@ -716,8 +713,8 @@ export const inspectorMixin = {
       tile.addEventListener("click", () => {
         const templateId = tile.dataset.displayTemplateSelect || "";
         if (!templateId) return;
-        // INTERNAL (PRIVATE-NOTES.md): a broadcast template never enters the
-        // assignment flow, so it can never collide with a layout slot either -
+        // A broadcast template never enters the assignment flow, so it can
+        // never collide with a layout slot either -
         // checked before hasTemplateSlotConflict, which would otherwise open a
         // "which slot?" dialog for a template that occupies no slot.
         if (this._displayTemplateCards().find((item) => item.id === templateId)?.broadcast) {

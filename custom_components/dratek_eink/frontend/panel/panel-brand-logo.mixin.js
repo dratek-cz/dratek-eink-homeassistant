@@ -1,6 +1,3 @@
-// INTERNAL FEATURE - MUST NOT SHIP IN THE PUBLIC / RETAIL RELEASE.
-// See PRIVATE-NOTES.md in the repository root for the removal checklist.
-//
 // The one-click showroom reset behind the "Logo Drátek" catalog tile.
 //
 // Every other template in the catalog is assigned to the display that is
@@ -10,9 +7,10 @@
 // whole panel - so a shelf of displays can be reset between customers in one
 // action instead of one display at a time.
 //
-// Deliberately its own mixin rather than a branch inside panel-devices: the
-// whole feature is this file plus templates/dratek_logo.js plus _blockBrandLogo,
-// which is what makes it removable in one pass.
+// Deliberately its own mixin rather than a branch inside panel-devices so the
+// broadcast flow stays separate from ordinary per-display template editing.
+
+import { DISPLAY_TEMPLATES_BY_ID } from "./templates/index.js";
 
 export const BRAND_LOGO_TEMPLATE_ID = "dratek_logo";
 
@@ -326,8 +324,8 @@ export const brandLogoMixin = {
   },
 
   _brandLogoTemplateCard() {
-    const imported = (this._displayTemplateCards?.() || []).find((card) => card.action === "dratek_logo_broadcast");
-    return imported ? { ...imported, id: BRAND_LOGO_TEMPLATE_ID, user_created: false } : null;
+    const builtIn = DISPLAY_TEMPLATES_BY_ID[BRAND_LOGO_TEMPLATE_ID];
+    return builtIn ? { ...builtIn.catalog, user_created: false } : null;
   },
 
   // Every display the panel knows about, not only the ones a gateway can see

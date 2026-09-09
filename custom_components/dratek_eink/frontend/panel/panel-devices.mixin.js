@@ -1211,7 +1211,9 @@ export const devicesMixin = {
 
   _displayTemplateCards() {
     const userTemplates = (this._userDisplayTemplates || [])
-      .filter((template) => template && String(template.id || "").startsWith("user-template-"))
+      .filter((template) => template
+        && String(template.id || "").startsWith("user-template-")
+        && template.action !== "dratek_logo_broadcast")
       .map((template) => ({
         ...structuredClone(template),
         broadcast: template.action === "dratek_logo_broadcast",
@@ -1615,9 +1617,6 @@ export const devicesMixin = {
                 </div>
               </article>`;
             }
-            // INTERNAL - remove with the rest of the brand-logo feature before
-            // the retail release (PRIVATE-NOTES.md).
-            //
             // A broadcast template gets its own card: none of the ordinary
             // furniture applies to it. It is not dragged onto a slot, it has no
             // variables to bind and no designer to open - the tile is a button

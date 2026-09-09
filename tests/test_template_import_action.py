@@ -27,13 +27,13 @@ await p._importDisplayTemplateFile({text:async()=>fs.readFileSync('examples/drat
 assert.equal(saved.action,'dratek_logo_broadcast');
 assert.equal(calls,0);
 assert.equal(p._brandLogoTemplateCard().id,'dratek_logo');
-assert.ok(!DISPLAY_TEMPLATE_CATALOG.some(t=>t.id==='dratek_logo'));
+assert.ok(DISPLAY_TEMPLATE_CATALOG.some(t=>t.id==='dratek_logo'));
 globalThis.confirm=()=>false;
 await p._broadcastBrandLogoToAllDisplays();
 assert.equal(calls,0);
 await p._importDisplayTemplateFile({text:async()=>JSON.stringify({title:'Legacy',elements:[{type:'text',text:'Test'}]})});
 assert.equal(saved.editor_elements[0].text,'Test');
-assert.equal(p._brandLogoTemplateCard(),null);
+assert.equal(p._brandLogoTemplateCard().id,'dratek_logo');
 '''
         result = subprocess.run([shutil.which("node"), "--input-type=module", "-e", script], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(0, result.returncode, result.stderr)

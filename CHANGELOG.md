@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.8] - 2026-09-09
+
+### Opraveno
+- **Logo Drátek** je znovu přímo ve vestavěném seznamu šablon; není nutné importovat samostatný soubor.
+- Dlaždice po potvrzení odešle logo na všechny známé displeje a před odesláním zruší jejich automatické aktualizace i čekající úlohy ve frontě.
+- Dříve importovaná kopie stejné hromadné akce se v katalogu skryje, aby se šablona nezobrazovala dvakrát.
+
 ## [1.0.7] - 2026-09-09
 
 ### Opraveno

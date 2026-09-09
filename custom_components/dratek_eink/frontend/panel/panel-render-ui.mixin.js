@@ -635,7 +635,6 @@ export const renderUiMixin = {
         .display-template-tile-preview.is-landscape{min-height:190px}.display-template-tile-preview.is-landscape .display-template-preview{width:min(296px,100%);min-height:150px;aspect-ratio:296/150}
         .display-template-library .display-template-card.is-on-display{border-color:#16803c;background:linear-gradient(145deg,rgba(104,211,145,.3),rgba(225,250,234,.72) 58%,var(--card-background-color));box-shadow:0 0 0 2px rgba(22,128,60,.17),0 14px 36px rgba(22,128,60,.15)}
         .display-template-card.is-config-empty{border-top:3px solid #d95700}.display-template-card.is-config-partial{border-top:3px solid #e0a300}.display-template-card.is-config-complete{border-top:3px solid #16803c}
-        /* INTERNAL - remove with the brand-logo feature (PRIVATE-NOTES.md). */
         .display-template-broadcast-card{border-color:rgba(220,38,38,.45)!important;box-shadow:0 0 0 1px rgba(220,38,38,.12),0 8px 28px rgba(15,23,42,.08)!important}
         .display-template-broadcast-card .display-template-kind-icon.is-broadcast-icon{background:rgba(220,38,38,.12);color:var(--dratek-ink-danger,#dc2626)}
         .display-template-broadcast-warning{display:flex;align-items:center;gap:6px;color:var(--dratek-ink-danger,#dc2626);font-size:10px;font-weight:800;line-height:1.35}

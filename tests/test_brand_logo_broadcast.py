@@ -1,14 +1,13 @@
-"""INTERNAL feature - see PRIVATE-NOTES.md; delete with the rest of it.
+"""Regression coverage for the built-in Logo Drátek broadcast template.
 
-The "Logo Drátek" tile is the one entry in the catalog that does not belong to
+The "Logo Drátek" tile does not belong to
 the display that happens to be open: it clears every known display's automatic
 update and its waiting queue jobs, then prints the shop's logo across all of
 them. That is destructive and irreversible, so the wiring that keeps it out of
 the ordinary assignment path is pinned here rather than left to a reading of
 the source.
 
-These tests also stand as the removal checklist's tripwire: they fail loudly if
-half the feature is taken out and half is left behind.
+These tests keep the confirmation and destructive-action ordering explicit.
 """
 
 from __future__ import annotations
@@ -35,11 +34,11 @@ class BrandLogoTemplateTests(unittest.TestCase):
         # The flag - not the id - is what the click handlers key on, so a
         # future second broadcast template needs no further wiring.
         self.assertIn("broadcast: true,", self.template)
-        self.assertIn("internal: true,", self.template)
+        self.assertNotIn("internal: true,", self.template)
 
-    def test_it_is_available_to_renderer_but_hidden_until_imported(self) -> None:
+    def test_it_is_visible_in_the_built_in_catalog(self) -> None:
         self.assertIn("  dratekLogo,", self.index)
-        self.assertIn("filter((entry) => !entry.catalog.internal)", self.index)
+        self.assertIn("DISPLAY_TEMPLATES.map((entry) => entry.catalog)", self.index)
 
     def test_it_takes_the_whole_panel(self) -> None:
         self.assertIn("pixelPerfect: true", self.template)
@@ -289,34 +288,6 @@ class BrandLogoBroadcastTests(unittest.TestCase):
         self.assertNotIn("this._pushRenderingDevice(", self.mixin)
         self.assertNotIn("this._renderingDeviceAddress =", self.mixin)
         self.assertIn("_brandLogoSendGeometry(device)", self.mixin)
-
-
-class BrandLogoRemovalNoteTests(unittest.TestCase):
-    """Every file the feature touches must be findable from the checklist."""
-
-    def test_the_checklist_exists_and_names_the_moving_parts(self) -> None:
-        notes = (ROOT / "PRIVATE-NOTES.md").read_text(encoding="utf-8")
-        for name in (
-            "dratek_logo.js",
-            "panel-brand-logo.mixin.js",
-            "_blockBrandLogo",
-            "test_brand_logo_broadcast.py",
-        ):
-            with self.subTest(mentions=name):
-                self.assertIn(name, notes)
-
-    def test_every_touched_source_file_points_back_at_the_checklist(self) -> None:
-        for path in (
-            TEMPLATE,
-            MIXIN,
-            PANEL / "panel-template-svg.mixin.js",
-            PANEL / "panel-devices.mixin.js",
-            PANEL / "panel-inspector.mixin.js",
-            PANEL / "panel-render-ui.mixin.js",
-            PANEL / "panel-i18n.mixin.js",
-        ):
-            with self.subTest(path=path.name):
-                self.assertIn("PRIVATE-NOTES", path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

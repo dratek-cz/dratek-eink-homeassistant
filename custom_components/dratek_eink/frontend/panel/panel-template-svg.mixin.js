@@ -2754,8 +2754,6 @@ if (dial.min != null) parts.push(this._svgText(dial.min, cx - outer, scaleY, sca
 
   // ------------------------------------------------------------- branding ---
 
-  // INTERNAL / NOT FOR THE PUBLIC RELEASE - see PRIVATE-NOTES.md.
-  //
   // The DRÁTEK.CZ lockup, drawn as a dithered copy of the integration's own
   // artwork (frontend/dratek-eink-logo.png and its wide sibling) rather than as
   // native SVG.

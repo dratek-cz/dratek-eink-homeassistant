@@ -1,7 +1,6 @@
 const EN_EXACT = new Map(Object.entries({
   "Připojte ESP přes USB přímo k zařízení s Home Assistantem. Vyberte port, typ desky a Wi-Fi síť.": "Connect the ESP by USB directly to the Home Assistant device. Select the port, board type and Wi-Fi network.",
   "Firmware je nahraný. Nastavení Wi-Fi selhalo": "Firmware installed. Wi-Fi setup failed",
-  // INTERNAL - remove with the brand-logo feature (PRIVATE-NOTES.md).
   "Logo Drátek": "Drátek logo",
   "Firemní šablona": "Company template",
   "Odeslat na všechny displeje": "Send to every display",

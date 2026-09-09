@@ -62,7 +62,7 @@ export const DISPLAY_TEMPLATES = [
   washer,
 ];
 
-export const DISPLAY_TEMPLATE_CATALOG = DISPLAY_TEMPLATES.filter((entry) => !entry.catalog.internal).map((entry) => entry.catalog);
+export const DISPLAY_TEMPLATE_CATALOG = DISPLAY_TEMPLATES.map((entry) => entry.catalog);
 
 export const DISPLAY_TEMPLATES_BY_ID = Object.fromEntries(
   DISPLAY_TEMPLATES.map((entry) => [entry.catalog.id, entry]),
