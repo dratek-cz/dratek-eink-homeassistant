@@ -15,7 +15,7 @@
 #include <HWCDC.h>
 #endif
 
-static const char* FIRMWARE_VERSION = "0.1.66-gateway";
+static const char* FIRMWARE_VERSION = "0.1.67-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 static const size_t INITIAL_UPLOAD_RESERVE_BYTES = 128UL * 1024UL;
@@ -148,6 +148,8 @@ bool wifiWasConnected = false;
 bool bleInitialized = false;
 uint32_t lastMdnsStartMs = 0;
 uint32_t lastWifiReconnectMs = 0;
+uint32_t wifiDisconnectCount = 0;
+uint32_t lastWifiDisconnectAtMs = 0;
 bool otaInProgress = false;
 String otaStatus = "idle";
 String otaError;
@@ -248,6 +250,9 @@ void handleStatus() {
   doc["ip"] = WiFi.localIP().toString();
   doc["mac"] = WiFi.macAddress();
   doc["wifi_rssi"] = WiFi.RSSI();
+  doc["wifi_power_save"] = false;
+  doc["wifi_disconnect_count"] = wifiDisconnectCount;
+  doc["last_wifi_disconnect_ms"] = lastWifiDisconnectAtMs;
   doc["uptime_ms"] = millis();
   doc["free_heap"] = ESP.getFreeHeap();
   doc["minimum_free_heap"] = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
@@ -1604,6 +1609,9 @@ void printSerialStatus(Stream& channel) {
   doc["wifi_connected"] = WiFi.status() == WL_CONNECTED;
   doc["ip"] = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "";
   doc["wifi_rssi"] = WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0;
+  doc["wifi_power_save"] = false;
+  doc["wifi_disconnect_count"] = wifiDisconnectCount;
+  doc["last_wifi_disconnect_ms"] = lastWifiDisconnectAtMs;
   doc["mac"] = WiFi.macAddress();
   doc["uptime_ms"] = millis();
   serializeJson(doc, channel);
@@ -1704,6 +1712,8 @@ void maintainNetworkServices() {
     Serial.println(WiFi.localIP());
     startMdns();
   } else if (!connected && wifiWasConnected) {
+    wifiDisconnectCount += 1;
+    lastWifiDisconnectAtMs = millis();
     Serial.println("Wi-Fi disconnected; waiting to restore mDNS.");
     if (mdnsStarted) MDNS.end();
     mdnsStarted = false;
@@ -1747,7 +1757,11 @@ void connectWifi() {
   }
 
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(true);
+  // A gateway is USB powered and must keep its HTTP control channel available
+  // while the ESP32 radio is also carrying a sustained BLE transfer. Wi-Fi
+  // power saving adds long receive gaps to that coexistence schedule and can
+  // make port 80 disappear long enough for Home Assistant to reject a job.
+  WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
   WiFi.persistent(false);
   WiFi.setHostname(hostname.c_str());

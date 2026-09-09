@@ -2,6 +2,12 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.10] - 2026-09-09
+
+### Opraveno
+- Firmware gatewaye **0.1.67-gateway** vypíná úsporný režim Wi-Fi. USB napájená ESP32 tak udržuje HTTP spojení s Home Assistantem i během intenzivního Bluetooth přenosu, kdy obě technologie sdílejí jedno 2,4GHz rádio.
+- Stav gatewaye nově uvádí počet zjištěných odpojení Wi-Fi a čas posledního odpojení. Diagnostika tak rozliší výpadek sítě od chyby Bluetooth spojení s displejem.
+
 ## [1.0.9] - 2026-09-09
 
 ### Opraveno

@@ -118,5 +118,21 @@ class GatewayFirmwareVersionTests(unittest.TestCase):
             self.assertIn(expected, data, f"{name} was not rebuilt for {expected.decode()}")
 
 
+class GatewayWifiCoexistenceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.source = FIRMWARE.read_text(encoding="utf-8")
+
+    def test_usb_powered_gateway_disables_wifi_power_saving(self) -> None:
+        self.assertIn("WiFi.setSleep(false);", self.source)
+        self.assertNotIn("WiFi.setSleep(true);", self.source)
+
+    def test_status_reports_wifi_disconnect_diagnostics(self) -> None:
+        self.assertIn('doc["wifi_disconnect_count"] = wifiDisconnectCount;', self.source)
+        self.assertIn('doc["last_wifi_disconnect_ms"] = lastWifiDisconnectAtMs;', self.source)
+        self.assertIn("wifiDisconnectCount += 1;", self.source)
+        backend = (ROOT / "custom_components" / "dratek_eink" / "gateway.py").read_text(encoding="utf-8")
+        self.assertIn('"wifi_disconnect_count": payload.get("wifi_disconnect_count")', backend)
+
+
 if __name__ == "__main__":
     unittest.main()
