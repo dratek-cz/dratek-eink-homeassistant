@@ -8,11 +8,6 @@ Integrace pro Home Assistant, která umí vyhledat dostupné BLE eInk cenovky DR
 
 Instalace je určena výhradně přes HACS. Není potřeba nic kopírovat ručně ani psát do `configuration.yaml`.
 
-## Aktuální vydání 1.0.5
-
-- Dokumentace a historie změn obsahují pouze podporovanou řadu 1.x.
-- Úplný přehled podporovaných vydání je v souboru [CHANGELOG.md](CHANGELOG.md).
-
 ## Instalace přes HACS
 
 1. V Home Assistantu otevři `HACS`.
