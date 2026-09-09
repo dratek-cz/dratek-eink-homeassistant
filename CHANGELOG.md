@@ -2,6 +2,13 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.7] - 2026-09-09
+
+### Opraveno
+- Sériový port zařízení **SMLIGHT SLZB-06** je v instalátoru označen jako blokovaný a nelze na něj omylem nahrát firmware DRATEK gatewaye. Backend zápis odmítne i při ručně sestaveném požadavku.
+- Instalátor automaticky vybere první bezpečný USB port. Pokud najde jen chráněná zařízení, vyžádá připojení ESP32/ESP32-S3 místo nabídnutí cizího zařízení k zápisu.
+- Chyba při záměně ESP32 a ESP32-S3 nyní česky uvádí port, skutečně rozpoznaný čip a vybraný firmware.
+
 ## [1.0.6] - 2026-09-09
 
 ### Opraveno

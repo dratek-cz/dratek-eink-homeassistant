@@ -115,6 +115,35 @@ class GatewayFlashTests(unittest.TestCase):
     def test_usb_metadata_keeps_other_usb_serial_names_available(self):
         self.assertTrue(gateway._is_flashable_serial_device("/dev/custom-uart", 0x303A, 0x1001))
 
+    def test_smlight_coordinator_is_protected_from_gateway_flashing(self):
+        port = types.SimpleNamespace(
+            device="/dev/ttyUSB0",
+            name="ttyUSB0",
+            description="SMLIGHT SLZB-06",
+            hwid="USB VID:PID=1A86:7523",
+            manufacturer="SMLIGHT",
+            product="SLZB-06",
+        )
+
+        reason = gateway._serial_port_protection_reason(port)
+
+        self.assertIsNotNone(reason)
+        self.assertIn("SMLIGHT SLZB-06", reason)
+
+    def test_protected_port_is_rejected_before_esptool_starts(self):
+        with patch.object(
+            gateway,
+            "_serial_port_protection_reason_for_device",
+            return_value="Port patří zařízení SMLIGHT SLZB-06.",
+        ), patch.object(gateway, "_run_esptool") as run:
+            result = gateway._flash_gateway_sync(
+                "/dev/ttyUSB0", "wifi", "secret", "test", "esp32s3"
+            )
+
+        self.assertFalse(result["ok"])
+        self.assertIn("SMLIGHT SLZB-06", result["error"])
+        run.assert_not_called()
+
     def test_invalid_system_uart_fails_before_esptool_is_started(self):
         result = gateway._flash_gateway_sync(
             "/dev/ttyS3",
@@ -153,6 +182,23 @@ class GatewayFlashTests(unittest.TestCase):
             result = gateway._flash_gateway_sync("COM9", "wifi", "secret", "test", "esp32")
         self.assertFalse(result["ok"])
         self.assertIn("Failed to connect", result["error"])
+        provision.assert_not_called()
+
+    def test_wrong_chip_error_names_the_port_and_both_chip_types_in_czech(self):
+        def failed(command, log):
+            log("A fatal error occurred: This chip is ESP32, not ESP32-S3. Wrong chip argument?")
+            return 2
+
+        with patch.object(gateway, "_run_esptool", side_effect=failed), patch.object(
+            gateway, "_provision_wifi_over_serial"
+        ) as provision:
+            result = gateway._flash_gateway_sync(
+                "/dev/ttyUSB0", "wifi", "secret", "test", "esp32s3"
+            )
+
+        self.assertFalse(result["ok"])
+        self.assertIn("Na portu /dev/ttyUSB0 byl rozpoznán čip ESP32", result["error"])
+        self.assertIn("firmware ESP32-S3", result["error"])
         provision.assert_not_called()
 
     def test_transport_failure_retries_once_with_rom_loader(self):

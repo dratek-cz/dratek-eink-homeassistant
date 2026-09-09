@@ -1179,13 +1179,47 @@ def _is_flashable_serial_device(device: str, vid: int | None = None, pid: int | 
     )
 
 
+_PROTECTED_SERIAL_MARKERS = ("smlight", "slzb-06")
+
+
+def _serial_port_protection_reason(port: Any) -> str | None:
+    """Protect known non-gateway USB devices from accidental firmware writes."""
+    identity = " ".join(
+        str(getattr(port, field, "") or "")
+        for field in ("device", "name", "description", "hwid", "manufacturer", "product")
+    ).lower()
+    if any(marker in identity for marker in _PROTECTED_SERIAL_MARKERS):
+        return (
+            "Port patří zařízení SMLIGHT SLZB-06, nikoli DRATEK gatewayi. "
+            "Jeho firmware nelze z této integrace přepsat."
+        )
+    return None
+
+
+def _serial_port_protection_reason_for_device(device: str) -> str | None:
+    """Look up protection metadata for one currently attached serial device."""
+    try:
+        from serial.tools import list_ports
+    except Exception:
+        return None
+    normalized = str(device or "").strip().lower()
+    for port in list_ports.comports():
+        if str(port.device or "").strip().lower() == normalized:
+            return _serial_port_protection_reason(port)
+    return None
+
+
 def _list_serial_ports_sync() -> list[dict[str, Any]]:
     try:
         from serial.tools import list_ports
     except Exception as exc:
         raise RuntimeError(f"pyserial is not available: {exc}") from exc
-    ports = [
-        {
+    ports = []
+    for port in list_ports.comports():
+        if not _is_flashable_serial_device(port.device, port.vid, port.pid):
+            continue
+        protection_reason = _serial_port_protection_reason(port)
+        ports.append({
             "device": port.device,
             "name": port.name,
             "description": port.description,
@@ -1193,13 +1227,13 @@ def _list_serial_ports_sync() -> list[dict[str, Any]]:
             "manufacturer": port.manufacturer,
             "vid": port.vid,
             "pid": port.pid,
-        }
-        for port in list_ports.comports()
-        if _is_flashable_serial_device(port.device, port.vid, port.pid)
-    ]
+            "flashable": protection_reason is None,
+            "warning": protection_reason,
+        })
     return sorted(
         ports,
         key=lambda port: (
+            not port["flashable"],
             port.get("vid") is None and port.get("pid") is None,
             str(port.get("device") or ""),
         ),
@@ -1396,6 +1430,18 @@ def _is_esptool_transport_failure(output: str) -> bool:
     ))
 
 
+def _friendly_esptool_error(detail: str, port: str, selected_chip: str) -> str:
+    """Explain a detected chip mismatch without esptool's ambiguous wording."""
+    mismatch = re.search(r"this chip is\s+([^,]+),\s+not\s+([^.]+)", detail, re.IGNORECASE)
+    if mismatch:
+        detected = mismatch.group(1).strip()
+        return (
+            f"Na portu {port} byl rozpoznán čip {detected}, ale je vybrán firmware "
+            f"{selected_chip}. Vyberte port připojené desky nebo správný typ desky."
+        )
+    return detail
+
+
 @_exclusive_serial
 def _flash_gateway_sync(
     port: str,
@@ -1421,6 +1467,12 @@ def _flash_gateway_sync(
         if job is not None:
             job.update(status="failed", ok=False, error=error)
         return {"ok": False, "error": error, "log": log}
+    protection_reason = _serial_port_protection_reason_for_device(port)
+    if protection_reason:
+        add_log(protection_reason)
+        if job is not None:
+            job.update(status="failed", ok=False, error=protection_reason)
+        return {"ok": False, "error": protection_reason, "log": log}
     if not _is_flashable_serial_device(port):
         error = (
             f"Port {port or '(none)'} is not a USB serial device suitable for flashing. "
@@ -1472,6 +1524,7 @@ def _flash_gateway_sync(
             if code != 0:
                 detail = next((line for line in reversed(log) if any(word in line.lower()
                               for word in ("fatal", "error", "failed", "wrong chip"))), "See USB upload log.")
+                detail = _friendly_esptool_error(detail, port, profile["label"])
                 raise RuntimeError(f"esptool ({code}): {detail}")
     except Exception as exc:
         error = _safe_log_line(str(exc), password)

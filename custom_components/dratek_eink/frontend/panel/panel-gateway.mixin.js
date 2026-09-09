@@ -109,21 +109,24 @@ export const gatewayMixin = {
 
   _renderGatewayPortPicker() {
     const ports = this._serialPorts || [];
-    const selected = ports.find((port) => port.device === this._flashForm.port);
-    const hint = ports.length
+    const selectablePorts = ports.filter((port) => port.flashable !== false);
+    const selected = selectablePorts.find((port) => port.device === this._flashForm.port);
+    const hint = selectablePorts.length
       ? selected
         ? this._escape(selected.description || selected.name || selected.device)
         : "Vyberte port, do kterého je deska zapojená"
-      : "Zatím žádný port. Zapojte desku do USB stroje s Home Assistantem a načtěte porty znovu.";
+      : ports.length
+        ? "Nalezena jsou pouze chráněná zařízení, která nesmí být přepsána. Připojte ESP32-S3 a načtěte porty znovu."
+        : "Zatím žádný port. Zapojte desku do USB stroje s Home Assistantem a načtěte porty znovu.";
     return `<div class="gateway-port-form gateway-form-fields"><div class="field">
         <label for="flashPort"><ha-icon icon="mdi:usb-port"></ha-icon>USB / Sériový port</label>
         <div class="field-with-icon">
           <ha-icon icon="mdi:usb-port" class="field-icon"></ha-icon>
-          <select id="flashPort" ${ports.length ? "" : "disabled"}>${ports.length
-            ? ports.map((port) => `<option value="${this._escape(port.device)}" ${port.device === this._flashForm.port ? "selected" : ""}>${this._escape(port.device)} — ${this._escape(port.description || port.name || "")}</option>`).join("")
+          <select id="flashPort" ${selectablePorts.length ? "" : "disabled"}>${ports.length
+            ? ports.map((port) => `<option value="${this._escape(port.device)}" ${port.device === this._flashForm.port ? "selected" : ""} ${port.flashable === false ? "disabled" : ""}>${this._escape(port.device)} — ${this._escape(port.description || port.name || "")}${port.flashable === false ? " — BLOKOVÁNO" : ""}</option>`).join("")
             : `<option value="">Žádný port nenalezen</option>`}</select>
         </div>
-        <small class="port-picker-hint ${ports.length ? "is-ready" : "is-empty"}"><ha-icon icon="${ports.length ? "mdi:check-circle-outline" : "mdi:alert-circle-outline"}"></ha-icon>${hint}</small>
+        <small class="port-picker-hint ${selectablePorts.length ? "is-ready" : "is-empty"}"><ha-icon icon="${selectablePorts.length ? "mdi:check-circle-outline" : "mdi:alert-circle-outline"}"></ha-icon>${hint}</small>
       </div></div>`;
   },
 
@@ -227,8 +230,9 @@ export const gatewayMixin = {
       const result = await this._hass.callWS({ type: "dratek_eink/gateways/serial_ports" });
       this._serialPorts = result.ports || [];
       this._serialPortsLoaded = true;
-      if (!this._serialPorts.some((port) => port.device === this._flashForm.port)) {
-        this._flashForm.port = this._serialPorts[0]?.device || "";
+      const selectablePorts = this._serialPorts.filter((port) => port.flashable !== false);
+      if (!selectablePorts.some((port) => port.device === this._flashForm.port)) {
+        this._flashForm.port = selectablePorts[0]?.device || "";
       }
     } catch (err) {
       this._serialPortsLoaded = true;
