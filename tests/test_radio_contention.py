@@ -150,13 +150,15 @@ class TransferQueueWiringTests(unittest.TestCase):
     def test_transfer_takes_the_radio_inside_the_transport_lock(self) -> None:
         """Lock order has to be identical everywhere or the three can deadlock."""
         run_attempt = _function_named(QUEUE_SOURCE, "run_attempt")
+        # The transport hold is _hold_route since the route is chosen when the
+        # transfer comes up rather than when it was queued - it takes the same
+        # per-radio lock, it just decides which radio at the last moment.
         transport_holds = [
             node
             for node in ast.walk(run_attempt)
             if isinstance(node, ast.AsyncWith)
             and any(
-                isinstance(item.context_expr, ast.Name)
-                and item.context_expr.id == "resource_lock"
+                "_hold_route" in _called_names(item.context_expr)
                 for item in node.items
             )
         ]
@@ -180,7 +182,7 @@ class TransferQueueWiringTests(unittest.TestCase):
         ]
         self.assertEqual(len(radio_holds), 1)
         self.assertIn(
-            "runner",
+            "active_runner",
             _called_names(radio_holds[0]),
             "the transfer itself must run inside the radio slot",
         )

@@ -32,25 +32,27 @@ export const template = {
   // the block the display's exact rectangle instead of the padded page box the
   // other templates are laid out in, so the lockup really does span the panel.
   //
-  // The DRÁTEK.CZ wordmark on every panel, whatever its shape, closed on
-  // four-colour displays by a yellow bar where every other template puts its
-  // red footer.
+  // Which lockup depends on how much room the panel has.
   //
-  // Never the stacked lockup, which large and portrait panels used to get: it
-  // puts a drawing of an eInk module under the wordmark, and a tag in a
-  // customer's hand showing a picture of a tag is the one thing a shelf does
-  // not need. The wide artwork is cropped to its wordmark before it is drawn
-  // (see _brandLogoWordmarkCrop), which is the whole subject here. On a
-  // portrait panel that leaves a band above and below the type, which is a
-  // layout rather than a gap.
+  // A small landscape tag gets the wide artwork cropped to the DRÁTEK.CZ
+  // wordmark alone (see _brandLogoWordmarkCrop): the drawing of an eInk module
+  // beside it would shrink the type to a smudge, and a tag in a customer's hand
+  // showing a picture of a tag helps nobody.
   //
-  // A three-colour display prints the same wordmark, black and red on white,
-  // and gets no bar - it has no yellow pigment, and neither a red bar (a
-  // different design) nor a dithered pretend-yellow (a speckle) is the same
-  // thing. See _brandLogoBandHeight.
-  design: () => [{
-    brandLogo: { stacked: false, band: "yellow" },
-    pixelPerfect: true,
-    h: 1,
-  }],
+  // A large or portrait panel gets the stacked lockup, module and all - it has
+  // the room for both, and there the product picture is the point rather than
+  // an obstacle. Its screen is dithered and framed by a one-pixel outline drawn
+  // after the dither, so the module keeps a sharp edge around a tone.
+  //
+  // Either way a four-colour display is closed by a yellow bar where every
+  // other template puts its red footer. A three-colour one has no yellow
+  // pigment and gets no bar: not a red one, which would be a different design,
+  // and not a dithered pretend-yellow, which is a speckle. See
+  // _brandLogoBandHeight.
+  design: ({ width, height }) => {
+    const w = width || 296;
+    const h = height || 128;
+    const stacked = h > w || Math.min(w, h) >= 200;
+    return [{ brandLogo: { stacked, band: "yellow" }, pixelPerfect: true, h: 1 }];
+  },
 };

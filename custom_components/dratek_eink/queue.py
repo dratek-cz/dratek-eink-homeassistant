@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime
 import logging
 import time
@@ -112,6 +113,24 @@ def gateway_resource(route: dict[str, Any]) -> str:
     return f"gateway:{str(route.get('id') or '')}"
 
 
+def gateway_transport_name(route: dict[str, Any]) -> str:
+    """The name a queue row shows for one gateway, and which box it means.
+
+    Two gateways can carry the same stored name - auto-named while they briefly
+    reported the same hostname, or named alike by hand - and then the queue
+    reads as one radio writing two displays at once. It is not: they serialise
+    correctly on separate locks, keyed by endpoint. Only the label collided,
+    which is worse than it sounds, because the one thing a queue row has to
+    answer is which piece of hardware is busy.
+    """
+    name = str(route.get("name") or route.get("host") or "DRATEK eInk gateway").strip()
+    endpoint = str(route.get("endpoint") or route.get("host") or "").strip()
+    host = endpoint.split(":")[0].strip()
+    if host and host not in name:
+        return f"{name} ({host})"
+    return name or "DRATEK eInk gateway"
+
+
 class TransferQueue:
     """Serialize transfers per Bluetooth transport and retain recent results."""
 
@@ -137,6 +156,9 @@ class TransferQueue:
         # so it goes out as soon as the display is back instead of on the next
         # poll tick.
         self._display_seen_events: dict[str, asyncio.Event] = {}
+        # Signalled whenever a radio is handed back, so a job waiting for one to
+        # come free wakes the moment it does rather than on a poll.
+        self._route_release = asyncio.Condition()
         self._load_lock = asyncio.Lock()
 
         self._save_lock = asyncio.Lock()
@@ -250,14 +272,11 @@ class TransferQueue:
             # would hang the call rather than queue anything. The uploads this
             # is for - a design sent to a display - are all submitted with
             # wait_for_completion=False and report back through the queue tab.
-            # Rebound between attempts when this job waits for its display, so
-            # it is the enclosing name that has to change, not a local copy.
-            nonlocal runner
             may_wait = manual and not wait_for_completion
             deadline = time.time() + DISPLAY_WAIT_MAX_SECONDS if may_wait else 0.0
             try:
                 while True:
-                    result = await self._run(job, runner)
+                    result = await self._run(job, runner, rebind)
                     if job.get("status") != "failed" or not may_wait:
                         self._clear_waiting_state(job)
                         return result
@@ -278,14 +297,8 @@ class TransferQueue:
                         "and will be written as soon as it is back."
                     )
                     job["log"] = job["log"][-80:]
-                    # The transport was chosen from a three-second scan taken
-                    # when this job was queued. A display that was asleep then
-                    # was pinned to whatever could be reached at that moment -
-                    # local Bluetooth, usually, because no gateway heard it -
-                    # and that pin is exactly the wrong answer when it wakes up
-                    # an hour later two metres from a gateway. A job that waits
-                    # for its display asks again before every attempt.
-                    runner = await self._rebind_route(job, rebind, runner)
+                    # No re-binding needed here any more: the next attempt
+                    # chooses its route when it comes up, like every other one.
             except asyncio.CancelledError:
                 if not manual and job["id"] in self._preempted_jobs:
                     return await self._skip_automatic_update(
@@ -373,9 +386,7 @@ class TransferQueue:
                 "error": "No gateway currently receives this display.",
                 "log": [],
             }
-        gateway_name = str(
-            route.get("name") or route.get("host") or "DRATEK eInk gateway"
-        )
+        gateway_name = gateway_transport_name(route)
         return await self.async_submit(
             resource=gateway_resource(route),
             transport_type="gateway",
@@ -387,36 +398,71 @@ class TransferQueue:
             rebind=rebind,
         )
 
-    async def _rebind_route(
-        self, job: dict[str, Any], rebind: "RouteRebinder | None", runner: TransferRunner
-    ) -> TransferRunner:
-        """Re-pick a held job's transport just before it tries again.
+    @asynccontextmanager
+    async def _hold_route(self, job, bind, fallback_runner):
+        """Hold one radio for one attempt, chosen when the attempt starts.
 
-        Returns the runner to use. A caller that supplied no rebinder, or a
-        lookup that fails, keeps the one the job already has: a stale route is
-        worse than a fresh one and better than none.
+        The transport used to be decided when the job was queued. On a shelf
+        that queues a hundred displays in one burst, every one of those
+        decisions was taken inside the same few seconds, from one snapshot of
+        which gateway was free - so the whole shelf was dealt out before a
+        single transfer had finished, and nothing afterwards could move a job to
+        a radio that had since gone idle. A gateway standing next to the
+        displays could sit out the entire run because it happened to look busy
+        during that one second.
+
+        Now the choice is made here, when the job is actually next in line. Ask
+        which route is best *now*; if that radio is free, take it; otherwise
+        wait for any radio to be handed back and ask again.
         """
-        if rebind is None:
-            return runner
+        lock, runner = await self._acquire_route(job, bind, fallback_runner)
         try:
-            bound = await rebind()
-        except Exception as exc:  # a scan can fail; the retry must not
-            job["log"].append(f"Could not re-check routing before the retry: {exc}")
-            job["log"] = job["log"][-80:]
-            return runner
-        if not bound:
-            return runner
-        resource, transport_type, transport_name, next_runner = bound
-        if resource != job.get("resource"):
-            job["log"].append(
-                f"Routing re-checked while waiting: {job.get('transport_name')} "
-                f"-> {transport_name}."
-            )
-            job["log"] = job["log"][-80:]
-        job["resource"] = resource
-        job["transport_type"] = transport_type
-        job["transport_name"] = transport_name
-        return next_runner
+            yield runner
+        finally:
+            lock.release()
+            # Whoever is waiting can now re-ask. Notifying under the condition
+            # is what makes the wait below a wait and not a poll.
+            async with self._route_release:
+                self._route_release.notify_all()
+
+    async def _acquire_route(self, job, bind, fallback_runner):
+        if bind is None:
+            lock = self._locks.setdefault(job["resource"], asyncio.Lock())
+            await lock.acquire()
+            return lock, fallback_runner
+
+        previous = str(job.get("resource") or "")
+        while True:
+            # Outside the condition: choosing a route talks to the gateways, and
+            # holding the condition across that would serialise every dispatch
+            # in the queue behind one scan.
+            bound = None
+            try:
+                bound = await bind()
+            except Exception as exc:
+                job["log"].append(f"Could not choose a route: {exc}")
+                job["log"] = job["log"][-80:]
+
+            resource = bound[0] if bound else str(job.get("resource") or "")
+            async with self._route_release:
+                lock = self._locks.setdefault(resource, asyncio.Lock())
+                if not lock.locked():
+                    # Free, so this cannot suspend - which is what makes the
+                    # test-and-take atomic against every other waiter.
+                    await lock.acquire()
+                    runner = fallback_runner
+                    if bound:
+                        resource, transport_type, transport_name, runner = bound
+                        job["resource"] = resource
+                        job["transport_type"] = transport_type
+                        job["transport_name"] = transport_name
+                        if previous and previous != resource:
+                            job["log"].append(
+                                f"Route chosen when the transfer came up: {transport_name}."
+                            )
+                            job["log"] = job["log"][-80:]
+                    return lock, runner
+                await self._route_release.wait()
 
     def _select_gateway_route(
         self, routes: list[dict[str, Any]]
@@ -534,14 +580,18 @@ class TransferQueue:
         self._preempt_automatic_update(address)
 
 
-    async def _run(self, job: dict[str, Any], runner: TransferRunner) -> dict[str, Any]:
+    async def _run(
+        self, job: dict[str, Any], runner: TransferRunner, bind: "RouteRebinder | None" = None
+    ) -> dict[str, Any]:
         device_lock = self._device_locks.setdefault(job["address"], asyncio.Lock())
         async with device_lock:
             if self._should_skip_automatic_update(job):
                 return await self._skip_automatic_update(job)
-            return await self._execute(job, runner)
+            return await self._execute(job, runner, bind)
 
-    async def _execute(self, job: dict[str, Any], runner: TransferRunner) -> dict[str, Any]:
+    async def _execute(
+        self, job: dict[str, Any], runner: TransferRunner, bind: "RouteRebinder | None" = None
+    ) -> dict[str, Any]:
         job["started_at"] = int(time.time())
         # Set only from a result that explicitly says the gateway - not the
         # display - is what failed. An exception escaping the runner is left
@@ -554,7 +604,6 @@ class TransferQueue:
             job["log"] = job["log"][-80:]
             _LOGGER.warning("[%s] %s", job["address"], message)
 
-        resource_lock = self._locks.setdefault(job["resource"], asyncio.Lock())
         skipped: dict[str, Any] | None = None
 
         async def run_attempt(log_line: Callable[[str], None]) -> dict[str, Any]:
@@ -567,7 +616,7 @@ class TransferQueue:
             """
             nonlocal skipped
             waiting_since = time.monotonic()
-            async with resource_lock:
+            async with self._hold_route(job, bind, runner) as active_runner:
                 queued_for = time.monotonic() - waiting_since
                 job["status"] = "writing"
                 if self._should_skip_automatic_update(job):
@@ -607,14 +656,14 @@ class TransferQueue:
                 # parallel transfers the gateway pool is meant to provide.
                 if job.get("transport_type") == "gateway":
                     async with asyncio.timeout(TRANSFER_JOB_TIMEOUT_SECONDS):
-                        return await runner(log_line)
+                        return await active_runner(log_line)
                 async with async_radio_slot(self.hass):
                     # Re-stamped: the radio slot is another queue, and waiting
                     # in it is not transfer time either.
                     job["started_at"] = int(time.time())
                     job["transfer_started_at"] = job["started_at"]
                     async with asyncio.timeout(TRANSFER_JOB_TIMEOUT_SECONDS):
-                        return await runner(log_line)
+                        return await active_runner(log_line)
 
         normalized_address = job["address"].upper()
         last_finish = self._last_finish_at.get(normalized_address)

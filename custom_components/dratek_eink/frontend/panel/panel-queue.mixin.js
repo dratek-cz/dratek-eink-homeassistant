@@ -470,6 +470,7 @@ export const queueMixin = {
       </div>
       <div class="queue-row-end">
         <span class="pill ${waitingForDisplay ? "warn" : STATUS_PILLS[status] || "muted"}">${waitingForDisplay ? "Čeká na displej" : STATUS_LABELS[status] || this._escape(status)}</span>
+        ${status === "succeeded" && job.confirmed === false ? `<span class="pill warn" title="Displej nepotvrdil, že obraz přijal a překreslil se. Přenos doběhl, ale potvrzovací paket 05 08 nedorazil - obvykle na místním Bluetooth, kde se čeká jen krátce.">Nepotvrzeno displejem</span>` : ""}
         ${status === "queued" ? `<button type="button" class="tile-icon-btn queue-cancel-btn" data-cancel-queue-job="${this._escape(job.id || "")}" title="${waitingForDisplay ? "Zrušit čekající nahrání" : "Zrušit frontu"}"><ha-icon icon="mdi:close-circle-outline"></ha-icon></button>` : ""}
       </div>
       <div class="queue-row-log" data-queue-live-summary ${waitingNote || job.error || logText ? "" : "hidden"}>${this._escape(waitingNote || job.error || logText)}</div>

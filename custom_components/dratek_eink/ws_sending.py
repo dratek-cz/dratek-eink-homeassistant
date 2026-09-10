@@ -16,7 +16,7 @@ import voluptuous as vol
 from .const import DOMAIN, LOCAL_ROUTE_ID
 from .display_preview import async_save_display_preview
 from .render import render_text_image
-from .queue import gateway_resource, get_transfer_queue
+from .queue import gateway_resource, gateway_transport_name, get_transfer_queue
 from .transfer import DratekTransfer
 from .automation import get_entity_auto_update_manager
 from .gateway import async_gateway_route, async_send_gateway_payload
@@ -118,7 +118,7 @@ async def _async_submit_routed_transfer(
         result = await queue.async_submit(
             resource=gateway_resource(route),
             transport_type="gateway",
-            transport_name=str(route["name"]),
+            transport_name=gateway_transport_name(route),
             address=address,
             operation=operation,
             runner=gateway_runner_factory(route),
@@ -149,7 +149,7 @@ async def _async_submit_routed_transfer(
         return (
             gateway_resource(route),
             "gateway",
-            str(route.get("name") or route.get("host") or "DRATEK eInk gateway"),
+            gateway_transport_name(route),
             gateway_runner_factory(route),
         )
 

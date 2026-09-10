@@ -55,6 +55,14 @@ export const renderUiMixin = {
   _backgroundUiCanRender() {
     const root = this.shadowRoot;
     if (!root) return true;
+    // A shelf-wide broadcast rasterises one display after another, and
+    // _withRenderingDevice makes _device() answer with whichever one is being
+    // drawn right now. Any repaint that lands inside that window draws the
+    // whole panel as that display - so the queue poll and the device poll,
+    // both on their own timers, walked the user through a hundred displays
+    // while they were trying to watch one. Their own progress line is the only
+    // thing that needs to move.
+    if (this._brandLogoBroadcasting) return false;
     const active = root.activeElement;
     if (active?.matches?.("input, textarea, select, [contenteditable='true']")) return false;
     return !root.querySelector([

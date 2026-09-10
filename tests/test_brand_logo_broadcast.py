@@ -44,11 +44,11 @@ class BrandLogoTemplateTests(unittest.TestCase):
         self.assertIn("pixelPerfect: true", self.template)
         self.assertIn("rows[0]?.brandLogo", self.svg)
 
-    def test_every_panel_gets_the_wordmark_and_never_the_module(self) -> None:
-        # Large and portrait panels used to get the stacked lockup, which draws
-        # an eInk module under the wordmark - a tag showing a picture of a tag.
-        self.assertIn("brandLogo: { stacked: false, band: \"yellow\" }", self.template)
-        self.assertNotIn("Math.min(w, h) >= 200", self.template)
+    def test_small_panels_get_the_wordmark_and_large_ones_the_whole_lockup(self) -> None:
+        # A small tag has no room for the module beside the type; a large or
+        # portrait panel does, and there the product picture is the point.
+        self.assertIn("const stacked = h > w || Math.min(w, h) >= 200;", self.template)
+        self.assertIn('brandLogo: { stacked, band: "yellow" }', self.template)
 
     def test_four_colour_panels_get_the_yellow_bar(self) -> None:
         # Where every other template closes its page with a red footer. Three
@@ -310,8 +310,32 @@ class BrandLogoBroadcastTests(unittest.TestCase):
         # were never attempted.
         body = self.mixin[self.mixin.index("for (const [index, device] of targets.entries()) {"):]
         body = body[: body.index("reachedEveryDisplay = true;")]
-        self.assertLess(body.index("try {"), body.index("this._render();"))
-        self.assertLess(body.index("this._render();"), body.index("} catch (error) {"))
+        self.assertLess(body.index("try {"), body.index("this._renderBroadcastProgress();"))
+        self.assertLess(body.index("this._renderBroadcastProgress();"), body.index("} catch (error) {"))
+
+    def test_the_broadcast_does_not_walk_the_user_through_the_shelf(self) -> None:
+        # _device() answers with _renderingDeviceAddress when one is pushed, so
+        # any repaint landing inside _withRenderingDevice draws the whole panel
+        # as the display being rasterised. The queue poll and the device poll
+        # are both on timers, so during a broadcast they marched the view
+        # through a hundred displays.
+        mixin = MIXIN.read_text(encoding="utf-8")
+        self.assertIn("if (this._renderingDeviceAddress) return;", mixin)
+        self.assertIn("_brandLogoProgressAt", mixin)
+        ui = (PANEL / "panel-render-ui.mixin.js").read_text(encoding="utf-8")
+        self.assertIn("if (this._brandLogoBroadcasting) return false;", ui)
+
+    def test_the_shelf_is_rescanned_before_the_targets_are_taken(self) -> None:
+        # The panel builds its device list from live advertisements, so a
+        # freshly opened one knows almost nothing - which is why the first click
+        # reached one display and the fourth reached the shelf.
+        body = self.mixin[self.mixin.index("async _broadcastBrandLogoToAllDisplays()"):]
+        scan = body.index("await this._scan({ background: true })")
+        targets = body.index("const targets = this._brandLogoTargets();")
+        self.assertLess(scan, targets)
+        # And a scan already in flight is waited out, not skipped: _scan returns
+        # immediately when one is running, which would leave the same stale list.
+        self.assertIn("this._scanInProgress", body[:scan])
 
     def test_a_broadcast_that_stopped_early_says_so(self) -> None:
         # The old finally block saw an empty failure list and reported success:

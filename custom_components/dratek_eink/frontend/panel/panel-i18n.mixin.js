@@ -15,6 +15,10 @@ const EN_EXACT = new Map(Object.entries({
   "Zápisy probíhají postupně přes dostupné gateway - průběh sledujte na kartě Fronta zápisu.":
     "The writes run one after another through the available gateways - follow their progress on the Write queue tab.",
   "Zbývající displeje nebyly vůbec zkoušeny.": "The remaining displays were never attempted.",
+  "Zjišťuji, které displeje jsou známé…": "Finding out which displays are known…",
+  "Nepotvrzeno displejem": "Not confirmed by the display",
+  "Displej nepotvrdil, že obraz přijal a překreslil se. Přenos doběhl, ale potvrzovací paket 05 08 nedorazil - obvykle na místním Bluetooth, kde se čeká jen krátce.":
+    "The display did not confirm that it received the image and repainted. The transfer finished, but the 05 08 confirmation packet never arrived - usually on local Bluetooth, which waits only briefly for it.",
   "Chyba je vypsaná v konzoli prohlížeče (F12).": "The error is written to the browser console (F12).",
   "Úplný seznam po displejích je v konzoli prohlížeče (F12).":
     "The full per-display list is in the browser console (F12).",

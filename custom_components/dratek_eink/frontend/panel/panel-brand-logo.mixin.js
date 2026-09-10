@@ -508,6 +508,22 @@ export const brandLogoMixin = {
       + "Tuto akci nelze vzít zpět.";
   },
 
+  // Progress, without walking the user through the shelf.
+  //
+  // Repainting per display cost two things. A full render a hundred times over
+  // is work the rasteriser needs; and a render that lands while
+  // _withRenderingDevice has an address pushed draws the panel as *that*
+  // display, so the view jumped from one to the next as the broadcast went.
+  // Both are avoided by repainting at most twice a second and never inside
+  // that scope - a progress line does not need to be exact to the display.
+  _renderBroadcastProgress() {
+    if (this._renderingDeviceAddress) return;
+    const now = Date.now();
+    if (this._brandLogoProgressAt && now - this._brandLogoProgressAt < 500) return;
+    this._brandLogoProgressAt = now;
+    this._render();
+  },
+
   // Three outcomes that used to collapse into one cheerful sentence: everything
   // queued, some displays refused, and the loop itself dying partway down the
   // list. The last one is the one that mattered and the one that was invisible.
@@ -568,6 +584,27 @@ export const brandLogoMixin = {
     if (this._brandLogoBroadcasting || !this._hass) return;
     const template = this._brandLogoTemplateCard();
     if (!template) return;
+    // Take a fresh scan first, and wait for it.
+    //
+    // The targets are whatever the panel has in hand, and the panel builds that
+    // from live BLE advertisements - so one that was just opened knows almost
+    // nothing. That is why the first click reached a single display, the next a
+    // handful, and only a fourth or fifth one the whole shelf: the list was
+    // filling up in the background between clicks, not the send getting better.
+    this._templateSendResult = { ok: true, message: "Zjišťuji, které displeje jsou známé…" };
+    this._render();
+    // A scan already running would return immediately without waiting for its
+    // own result, which is the same stale list one step later.
+    for (let waited = 0; waited < 40 && this._scanInProgress; waited += 1) {
+      await new Promise((resolve) => { window.setTimeout(resolve, 250); });
+    }
+    try {
+      await this._scan({ background: true });
+    } catch (_error) {
+      // A failed scan is not a reason to refuse: whatever is already known
+      // still deserves the logo.
+    }
+
     const targets = this._brandLogoTargets();
     if (!targets.length) {
       this._templateSendResult = { ok: false, message: "Není známý žádný displej, kam logo poslat." };
@@ -605,7 +642,7 @@ export const brandLogoMixin = {
             ok: true,
             message: `Logo Drátek: zařazuji displej ${index + 1}/${targets.length} do fronty zápisu…`,
           };
-          this._render();
+          this._renderBroadcastProgress();
           await this._brandLogoSendTo(device, template);
           sent += 1;
         } catch (error) {
@@ -620,6 +657,7 @@ export const brandLogoMixin = {
       reachedEveryDisplay = true;
     } finally {
       this._brandLogoBroadcasting = false;
+      this._brandLogoProgressAt = 0;
       await this._loadQueue?.(true);
       await this._loadAutomations?.();
       this._saveCachedDeviceDrafts?.();
