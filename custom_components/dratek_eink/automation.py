@@ -93,7 +93,21 @@ GATEWAY_ROUTE_CACHE_SECONDS = 30
 # already bounded to (see gateway.py's DEFAULT_TIMEOUT), so it never fires in
 # normal operation - it only matters if something manages to hang past its
 # own nominal timeout.
-GATEWAY_ROUTE_LOOKUP_TIMEOUT_SECONDS = 20
+GATEWAY_ROUTE_LOOKUP_TIMEOUT_SECONDS = 22
+# What one gateway's scan is allowed to take before it is abandoned - on its
+# own, without taking the other gateways' results with it. Above
+# async_scan_gateway's own ceiling of GATEWAY_ROUTE_SCAN_SECONDS + 5, so a
+# gateway that is merely slow still counts and only a genuinely hung one is
+# dropped.
+GATEWAY_ROUTE_SCAN_TIMEOUT_SECONDS = 13
+# Gateways standing on one shelf share one 2.4 GHz band, and each ESP32 shares
+# a single radio between its Wi-Fi and its BLE. Starting every scan in the same
+# instant costs a lost Wi-Fi packet on every gateway at once - measured on the
+# shelf: zero losses in 25 s of quiet, then exactly one on each of four boxes
+# the moment they were all scanned together. Spreading the starts costs a few
+# seconds of a cache window nobody is waiting on.
+GATEWAY_SCAN_STAGGER_SECONDS = 1.0
+GATEWAY_SCAN_STAGGER_CEILING_SECONDS = 4.0
 # Backstop for async_render_preview. Rendering normally takes well under a
 # second even for a complex 800x480 template; this only matters if something
 # in that chain (a service call, or the resvg SVG rasteriser this integration
@@ -2197,22 +2211,53 @@ class EntityAutoUpdateManager:
             runner=run_local,
         )
 
-    async def _async_load_gateways_and_scan(self) -> tuple[list[dict[str, Any]], list[Any]]:
-        """Load configured gateways and scan every one of them in parallel."""
-        gateways = await async_load_gateways(self.hass)
-        scan_results = await asyncio.gather(
-            *(
-                async_scan_gateway(
-                    self.hass,
-                    str(gateway.get("id") or ""),
-                    GATEWAY_ROUTE_SCAN_SECONDS,
+    async def _async_scan_gateways(self, gateways: list[dict[str, Any]]) -> list[Any]:
+        """Scan every gateway, one slow one costing only its own result.
+
+        Two things this deliberately does not do.
+
+        It does not put the gateways under one shared deadline. It used to: a
+        single wait_for around the whole gather, so one gateway hanging past
+        its own timeout cancelled the scans of every other gateway that had
+        already answered perfectly well.
+
+        And it does not start them all at the same instant. These boxes stand
+        on one shelf, sharing one 2.4 GHz band with each other and with the
+        displays they are scanning for, and each ESP32 shares a single radio
+        between its Wi-Fi and its BLE. Firing all the scans together is
+        measurable from outside: 25 s of quiet cost zero pings, and the moment
+        four gateways were scanned in parallel it cost exactly one lost packet
+        on each of the four - simultaneously, which is the worst possible
+        shape, because that is when the status monitor decides they are all
+        offline together.
+        """
+        scannable = [gateway for gateway in gateways if gateway.get("id")]
+
+        async def one(index: int, gateway: dict[str, Any]) -> Any:
+            delay = min(
+                index * GATEWAY_SCAN_STAGGER_SECONDS,
+                GATEWAY_SCAN_STAGGER_CEILING_SECONDS,
+            )
+            if delay:
+                await asyncio.sleep(delay)
+            try:
+                return await asyncio.wait_for(
+                    async_scan_gateway(
+                        self.hass,
+                        str(gateway.get("id") or ""),
+                        GATEWAY_ROUTE_SCAN_SECONDS,
+                    ),
+                    timeout=GATEWAY_ROUTE_SCAN_TIMEOUT_SECONDS,
                 )
-                for gateway in gateways
-                if gateway.get("id")
-            ),
+            except Exception as exc:
+                # Returned, not raised: this gateway contributes no live routes
+                # this cycle and every other gateway keeps its own.
+                return exc
+
+        return await asyncio.gather(
+            *(one(index, gateway) for index, gateway in enumerate(scannable)),
             return_exceptions=True,
         )
-        return gateways, scan_results
 
     async def _async_gateway_routes(self, address: str) -> list[dict[str, Any]]:
         """Return every gateway receiving this display, strongest first."""
@@ -2225,24 +2270,51 @@ class EntityAutoUpdateManager:
             if now - self._gateway_route_cache_at < GATEWAY_ROUTE_CACHE_SECONDS:
                 return list(self._gateway_route_cache.get(address.upper(), []))
 
+            # The gateway list is read first and on its own, outside anything
+            # that can time out.
+            #
+            # It used to be fetched inside the same wait_for as the scans, and
+            # the failure path set `gateways = []`. That looked local but was
+            # not: `configured_gateways` is built from it, and *both* fallbacks
+            # further down - the 30-minute discovery cache and the previously
+            # confirmed routes - look every candidate up in that dict and skip
+            # it when it is missing. So one slow scan emptied the gateway list,
+            # which disabled the two mechanisms whose whole purpose is to cover
+            # a missed scan, leaving `routes` empty; and the last line of this
+            # block then wrote that empty dict over `_gateway_route_cache`,
+            # destroying the memory of those routes as well.
+            #
+            # That is a latch, not a blip. Every display fell back to Home
+            # Assistant's own adapter and stayed there until a clean scan of
+            # every single gateway succeeded - and with four gateways sharing a
+            # band with a hundred advertising displays, that can be a long
+            # wait. It is why a shelf served by four working gateways was
+            # written entirely by Home Assistant.
             try:
-                # self._gateway_route_lock is shared by every device's automatic
-                # refresh (and, since today, the manual-pin failover path too) -
-                # if async_load_gateways or any single gateway's scan ever hangs
-                # past its own nominal timeout (a stalled TCP handshake to a
-                # gateway that's down in a way that doesn't cleanly refuse the
-                # connection, for instance), this lock would otherwise never be
-                # released, silently wedging automatic updates for every display
-                # forever, with nothing logged since nothing ever completes.
-                # wait_for is the backstop: whatever the underlying cause, this
-                # call can never hold the lock past GATEWAY_ROUTE_LOOKUP_TIMEOUT.
-                gateways, scan_results = await asyncio.wait_for(
-                    self._async_load_gateways_and_scan(),
-                    timeout=GATEWAY_ROUTE_LOOKUP_TIMEOUT_SECONDS,
-                )
-            except Exception:  # one unavailable gateway must not break local automation
+                gateways = await async_load_gateways(self.hass)
+            except Exception:
                 gateways = []
-                scan_results = []
+
+            # self._gateway_route_lock is shared by every device's automatic
+            # refresh (and the manual-pin failover path too) - if the scans ever
+            # hang past their own per-gateway ceilings, this lock would
+            # otherwise never be released, silently wedging automatic updates
+            # for every display forever, with nothing logged since nothing ever
+            # completes. wait_for is the backstop: whatever the underlying
+            # cause, this call can never hold the lock past
+            # GATEWAY_ROUTE_LOOKUP_TIMEOUT_SECONDS.
+            scan_results: list[Any] = []
+            if gateways:
+                try:
+                    scan_results = await asyncio.wait_for(
+                        self._async_scan_gateways(gateways),
+                        timeout=GATEWAY_ROUTE_LOOKUP_TIMEOUT_SECONDS,
+                    )
+                except Exception:
+                    # No live readings this cycle. The fallbacks below still
+                    # have a populated `gateways` to resolve against, which is
+                    # the entire point of loading it separately.
+                    scan_results = []
             scanned_gateways = [gateway for gateway in gateways if gateway.get("id")]
             routes: dict[str, list[dict[str, Any]]] = {}
             for gateway, scan_result in zip(scanned_gateways, scan_results, strict=False):

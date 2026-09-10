@@ -210,7 +210,7 @@ class DiscoveryScanTests(unittest.TestCase):
         This used to run under async_try_radio_slot and skip every gateway when
         the slot stayed busy, so any local transfer - minutes for an 800x480
         image - erased the whole gateway topology from the connection map. The
-        scheduler's own _async_load_gateways_and_scan never gated on the radio,
+        scheduler's own _async_scan_gateways never gated on the radio,
         so the map and the write disagreed about which route existed.
         """
         scan = _function_named(WS_DEVICES_SOURCE, "websocket_scan")

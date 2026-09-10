@@ -2,6 +2,33 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.6] - 2026-09-10
+
+### Jedna ztracená odpověď už neznamená, že gateway zmizí
+
+Tohle je oprava toho, proč vám gatewaje vypadávaly z nabídky a proč regál zapisovala jen Home Assistant, i když všechny čtyři gatewaje fungovaly.
+
+Nejdřív co se změřilo na vašem regálu. Všechny čtyři gatewaje na 0.1.75 odpovídají za 0,1–0,5 s a jejich sken se vrací celý. Když se na ně nepřetržitě pinguje a nic jiného se nedělá, neztratí se ani jeden paket za 25 sekund. Ale ve chvíli, kdy se všechny čtyři skenují **současně** — což integrace dělala každých 30 sekund — se ztratí právě jeden paket na **každé z nich, v tu samou sekundu**.
+
+Ty ztráty tedy nejsou nezávislé. Gatewaje stojí na jednom regálu, dělí se o jedno pásmo 2,4 GHz mezi sebou i se stovkou displejů, které skenují, a každý ESP32 má jediné rádio pro Wi-Fi i pro BLE. Ztráty proto přicházejí pohromadě, na všech gatewayích zároveň, a přicházejí přesně tehdy, když integrace sama pošle všechna rádia do práce.
+
+Dvě místa v kódu z toho udělala nahlášený problém:
+
+**Jedna pomalá odpověď smazala všechny cesty a i pamět na ně.** Seznam gatewayí se načítal uvnitř stejného časového limitu jako skeny, a když limit vypršel, seznam se vyprázdnil. To vypadá jako malá škoda, ale není: přes tento seznam se dohledávají **obě** záložní cesty — třicetiminutová paměť z vyhledávání i dříve potvrzené cesty. Jeden pomalý sken tak vypnul právě ty dva mechanismy, které mají vynechaný sken zakrýt, takže nezůstala žádná cesta přes gateway — a konec toho bloku pak tímto prázdnem přepsal i cache, která si cesty pamatovala.
+
+To není zakolísání, to je západka. Všechno spadlo na vlastní Bluetooth adaptér Home Assistanta a zůstalo tam, dokud neproběhl čistý sken **všech** gatewayí. Se čtyřmi gatewayemi v jednom pásmu se stovkou displejů se na to čeká dlouho. Proto regál zapisovala jen HA.
+
+**A jeden neúspěšný dotaz stačil na to označit gateway za offline.** Jednou za 30 sekund, jediným požadavkem — tedy přesně tím požadavkem, který se nejspíš ztratí.
+
+### Opraveno
+
+- **Seznam gatewayí přežije neúspěšný sken.** Načítá se zvlášť a mimo časový limit skenů, takže obě záložní cesty mají pořád k čemu se dohledat.
+- **Každý sken má vlastní strop.** Jedna zaseknutá gateway přijde jen o svůj výsledek; ostatní si své cesty ponechají. Dřív jeden společný limit zrušil i skeny gatewayí, které už dávno odpověděly.
+- **Skeny se rozprostřou v čase.** Gatewaje se už nespouští v jeden okamžik, takže si navzájem neberou pásmo — a hlavně nezhasnou všechny naráz.
+- **Neúspěšný dotaz se zopakuje.** Až gateway neodpoví dvakrát, teprve pak se řeší jako nedostupná. Stojí to jeden požadavek a jen tam, kde už něco selhalo; vyhledávání přes mDNS zůstává jako druhá linie pro gateway, která se opravdu přestěhovala.
+
+Bez změny firmwaru — 0.1.75 zůstává aktuální. **0.1.74 nepoužívejte.**
+
 ## [1.0.5] - 2026-09-10
 
 ### Gatewaye zase slyší displeje — ověřeno na hardwaru

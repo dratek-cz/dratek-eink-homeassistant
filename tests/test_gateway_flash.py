@@ -421,9 +421,63 @@ class GatewayAvailabilityTests(unittest.IsolatedAsyncioTestCase):
             gateway.async_gateway_status = original_status
             gateway.async_discover_gateways = original_discover
 
-        self.assertEqual(["192.168.1.20", "192.168.1.77"], probed_hosts)
+        # Three probes, not two: the stored address is asked a second time
+        # before any mDNS discovery is spent on it. On a shelf where every
+        # gateway shares one 2.4 GHz band with the displays it serves, a single
+        # unanswered request is far more often a dropped frame than a gateway
+        # that moved - see tests/test_gateways_survive_a_dropped_packet.py.
+        # Only after it fails twice is this treated as an address change.
+        self.assertEqual(
+            ["192.168.1.20", "192.168.1.20", "192.168.1.77"], probed_hosts
+        )
         self.assertEqual("192.168.1.77", configured["host"])
         self.assertTrue(configured["status"]["ok"])
+
+    async def test_a_gateway_that_answers_the_retry_is_never_rediscovered(self):
+        configured = {
+            "id": "stored-record",
+            "host": "192.168.1.20",
+            "gateway_id": "stable-gateway",
+            "status": {"ok": True, "gateway_id": "stable-gateway", "ip": "192.168.1.20"},
+        }
+        probes = []
+
+        async def status(_hass, item):
+            probes.append(item["host"])
+            if len(probes) == 1:
+                return {"ok": False, "message": "", "checked_at": 100}
+            return {
+                "ok": True,
+                "message": "Online",
+                "checked_at": 101,
+                "gateway_id": "stable-gateway",
+                "ip": "192.168.1.20",
+            }
+
+        discovered = []
+
+        async def discover(_hass, seconds):
+            discovered.append(seconds)
+            return []
+
+        original_status = gateway.async_gateway_status
+        original_discover = gateway.async_discover_gateways
+        gateway.async_gateway_status = status
+        gateway.async_discover_gateways = discover
+        try:
+            await gateway._async_refresh_gateway_set(object(), [configured])
+        finally:
+            gateway.async_gateway_status = original_status
+            gateway.async_discover_gateways = original_discover
+
+        self.assertEqual(["192.168.1.20", "192.168.1.20"], probes)
+        self.assertEqual(
+            [], discovered, "a gateway that answered must not cost a discovery sweep"
+        )
+        # And above all it stays online, which is the whole point: one lost
+        # response used to grey it out in the panel and drop it out of routing.
+        self.assertTrue(configured["status"]["ok"])
+        self.assertEqual("192.168.1.20", configured["host"])
 
 
 if __name__ == "__main__":

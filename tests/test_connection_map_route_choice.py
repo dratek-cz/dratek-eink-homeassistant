@@ -153,7 +153,7 @@ class ScanGatingTests(unittest.TestCase):
         automation = (COMPONENT / "automation.py").read_text(encoding="utf-8")
         for source, function in (
             (ws_devices, "websocket_scan"),
-            (automation, "_async_load_gateways_and_scan"),
+            (automation, "_async_scan_gateways"),
         ):
             with self.subTest(function=function):
                 called = self._called(source, function)

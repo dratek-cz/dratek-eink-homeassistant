@@ -156,7 +156,7 @@ async def websocket_scan(
     # It used to run under the local radio slot as well, and skip every gateway
     # outright when that slot stayed busy for five seconds. But a gateway scan
     # never touches Home Assistant's adapter: each ESP32 owns its own BLE radio
-    # (see radio.py) and the scheduler's own _async_load_gateways_and_scan has
+    # (see radio.py) and the scheduler's own _async_scan_gateways has
     # always scanned them with no radio gating at all. The only thing the gate
     # achieved was that any local transfer - minutes, for an 800x480 image -
     # blanked every gateway out of the connection map, so a gateway sitting

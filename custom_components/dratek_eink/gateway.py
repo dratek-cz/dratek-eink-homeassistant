@@ -38,6 +38,10 @@ DEFAULT_TIMEOUT = 8
 # up and reporting "busy" rather than queueing. Short on purpose: this is the
 # request the panel's online/offline dot is drawn from.
 GATEWAY_BUSY_WAIT_SECONDS = 3
+# How long to wait before asking a gateway that just failed to answer a second
+# time. Long enough for a single dropped frame to be past, short enough that
+# the monitor sweep does not visibly stall.
+GATEWAY_RETRY_DELAY_SECONDS = 1.5
 DISCOVERY_SERVICE = "_dratek-eink-gateway._tcp.local."
 FIRMWARE_DIR = Path(__file__).parent / "firmware"
 FLASH_JOBS_KEY = "dratek_eink_flash_jobs"
@@ -615,6 +619,41 @@ async def _async_refresh_gateway_set(
 
     if not unavailable:
         return
+
+    # One lost packet is not a verdict.
+    #
+    # These gateways share one 2.4 GHz band with each other and with the shelf
+    # of displays they serve, and each ESP32 shares a single radio between its
+    # Wi-Fi and its BLE. Measured on the shelf: an idle gateway loses well
+    # under 1% of pings, but the instant every gateway is scanned at once it is
+    # one lost packet on every one of them - together. A sweep that asks once
+    # every 30 seconds and believes the answer turns that into every gateway
+    # going dark at the same moment, which drops them all out of routing and
+    # sends the whole shelf to Home Assistant's own adapter.
+    #
+    # Asking again costs one request, and only for a gateway that already
+    # failed. Discovery below stays as the second line: it is for a gateway
+    # that genuinely moved, not for a dropped frame.
+    await asyncio.sleep(GATEWAY_RETRY_DELAY_SECONDS)
+    second_look = await asyncio.gather(
+        *(async_gateway_status(hass, gateway) for gateway in unavailable),
+        return_exceptions=True,
+    )
+    still_missing: list[dict[str, Any]] = []
+    for gateway, result in zip(unavailable, second_look, strict=False):
+        status = (
+            result
+            if isinstance(result, dict)
+            else {"ok": False, "message": str(result), "checked_at": int(time.time())}
+        )
+        if _remember_gateway_status(gateway, status):
+            gateway["updated_at"] = int(time.time())
+        else:
+            still_missing.append(gateway)
+    unavailable = still_missing
+    if not unavailable:
+        return
+
     try:
         discovered = await async_discover_gateways(hass, seconds=4)
     except Exception:
