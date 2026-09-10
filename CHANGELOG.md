@@ -2,6 +2,28 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.5] - 2026-09-10
+
+### Gatewaye zase slyší displeje — ověřeno na hardwaru
+
+**Firmware 0.1.74 nepoužívejte.** Byla to moje chybná oprava a rozbila sken víc, než byl rozbitý předtím. Přeskočte ji na **0.1.75**.
+
+Sken odpovídá tak, že se JSON posílá přes web server po malých kouscích. Dvě předchozí odpovědi byly špatné:
+- Sestavení celého těla do jednoho `String` potřebuje souvislý blok asi dvojnásobku délky. Tyto gatewaje mají největší volný blok okolo 8 kB, takže sken slyšící regál byl mlčky odseknutý v půlce textu a integrace ho nepřečetla vůbec.
+- Serializace přímo do `server.client()` sice vyrovnávací paměť odstranila, ale zapisovala do surového neblokujícího socketu. ArduinoJson posílá po drobných kouscích a každý zápis do plného socketu vrátil `EAGAIN` — `[E][WiFiClient.cpp:429] write(): fail on fd 49, errno: 11`. Tělo odešlo krátké nebo vůbec. Odtud „gatewaye nevidí displeje a odpojují se".
+
+`sendContent` je kód, který se socketem umí pracovat. Plněný z 512bajtové vyrovnávací paměti nepotřebuje velkou alokaci ani žádné opakování, při jakékoli délce odpovědi.
+
+Změřeno na gatewayi po nahrání 0.1.75:
+
+```
+http 200   10234 B   8,3 s
+device_count: 90 | dorazilo: 90 | shoda: ANO
+z toho DRATEK: 88 displejů
+```
+
+Dva a půl násobek starého 4kB stropu, kompletní a parsovatelné. Tatáž gateway předtím nabízela **nula** tras.
+
 ## [1.0.4] - 2026-09-10
 
 ### „Gateway is busy" už aktualizaci neodmítne

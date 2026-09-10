@@ -15,7 +15,7 @@
 #include <HWCDC.h>
 #endif
 
-static const char* FIRMWARE_VERSION = "0.1.74-gateway";
+static const char* FIRMWARE_VERSION = "0.1.75-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 // The chip id the second-stage bootloader expects to find in an application
@@ -203,30 +203,61 @@ String macId() {
   return mac;
 }
 
+// Serialises a JSON reply through the web server in small pieces.
+//
+// Two wrong answers came before this one. Building the whole body into a String
+// needs a contiguous block about twice its length, and these gateways run with
+// the largest free block near 8 kB once BLE and a staged payload have taken
+// theirs - so a scan that hears a shelf of displays was silently truncated
+// mid-token and the integration could not parse it at all.
+//
+// Serialising straight into server.client() removed the buffer but wrote to a
+// raw non-blocking socket: ArduinoJson emits in tiny pieces, and every write
+// into a full socket came back EAGAIN -
+//   [E][WiFiClient.cpp:429] write(): fail on fd 49, errno: 11
+// - so the body went out short or not at all, which is worse than truncated.
+//
+// sendContent is the code that already knows how to talk to a half-full socket.
+// Fed from a small fixed buffer, it needs no large allocation and no retry
+// logic here, at any reply length.
+class ChunkedJsonPrint : public Print {
+ public:
+  size_t write(uint8_t value) override { return write(&value, 1); }
+
+  size_t write(const uint8_t* data, size_t size) override {
+    size_t taken = 0;
+    while (taken < size) {
+      const size_t room = sizeof(buffer_) - filled_;
+      const size_t take = min(room, size - taken);
+      memcpy(buffer_ + filled_, data + taken, take);
+      filled_ += take;
+      taken += take;
+      if (filled_ == sizeof(buffer_)) flushBuffer();
+    }
+    return size;
+  }
+
+  void flushBuffer() {
+    if (filled_ == 0) return;
+    server.sendContent(reinterpret_cast<const char*>(buffer_), filled_);
+    filled_ = 0;
+  }
+
+ private:
+  uint8_t buffer_[512];
+  size_t filled_ = 0;
+};
+
 void sendJson(JsonDocument& doc, int status = 200) {
-  // Streamed to the socket, not built in a String first.
-  //
-  // A String has to hold the whole body in one contiguous allocation and grows
-  // by reallocating, so it needs a free block about twice the size of the text.
-  // This gateway runs at around 40 kB free heap with the largest free block
-  // near 8 kB once BLE and a staged payload have been through it - and a scan
-  // that hears a shelf of displays serialises to more than 4 kB. The String
-  // then could not grow, Arduino's String fails silently, and what went out
-  // was valid JSON cut off mid-string.
-  //
-  // What that cost: async_scan_gateway could not parse it, reported the scan as
-  // failed, and the gateway contributed no routes at all. A gateway standing in
-  // front of a hundred displays disappeared from routing *because* it could
-  // hear so many of them, and the whole shelf went to the one gateway whose
-  // reply still happened to fit, plus Home Assistant's own adapter.
-  //
-  // Serialising straight to the client needs no such buffer, at any length.
-  const size_t length = measureJson(doc);
-  server.setContentLength(length);
+  // The length is declared up front, so sendContent writes the body raw
+  // instead of chunk-encoding it - the integration reads a plain JSON body.
+  server.setContentLength(measureJson(doc));
   server.send(status, "application/json", "");
-  WiFiClient client = server.client();
-  serializeJson(doc, client);
+  ChunkedJsonPrint out;
+  serializeJson(doc, out);
+  out.flushBuffer();
 }
+
 
 String resetReasonName() {
   switch (esp_reset_reason()) {
