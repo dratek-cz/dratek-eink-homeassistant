@@ -165,10 +165,14 @@ async def _async_submit_routed_transfer(
         )
         if result and result.get("ok") is not False:
             return result
+    # Local Bluetooth is the fallback for a display no gateway reports hearing,
+    # and it is still only a fallback: the chooser runs again when the transfer
+    # comes up, and by then a gateway may well be offering the display. So the
+    # row says the route is undecided rather than naming this one.
     return await queue.async_submit(
         resource="local",
         transport_type="local",
-        transport_name="Home Assistant Bluetooth",
+        transport_name="Trasa se určí při zápisu",
         address=address,
         operation=operation,
         runner=local_runner,

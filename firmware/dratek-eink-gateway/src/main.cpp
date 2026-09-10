@@ -15,7 +15,7 @@
 #include <HWCDC.h>
 #endif
 
-static const char* FIRMWARE_VERSION = "0.1.73-gateway";
+static const char* FIRMWARE_VERSION = "0.1.74-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 // The chip id the second-stage bootloader expects to find in an application
@@ -204,9 +204,28 @@ String macId() {
 }
 
 void sendJson(JsonDocument& doc, int status = 200) {
-  String body;
-  serializeJson(doc, body);
-  server.send(status, "application/json", body);
+  // Streamed to the socket, not built in a String first.
+  //
+  // A String has to hold the whole body in one contiguous allocation and grows
+  // by reallocating, so it needs a free block about twice the size of the text.
+  // This gateway runs at around 40 kB free heap with the largest free block
+  // near 8 kB once BLE and a staged payload have been through it - and a scan
+  // that hears a shelf of displays serialises to more than 4 kB. The String
+  // then could not grow, Arduino's String fails silently, and what went out
+  // was valid JSON cut off mid-string.
+  //
+  // What that cost: async_scan_gateway could not parse it, reported the scan as
+  // failed, and the gateway contributed no routes at all. A gateway standing in
+  // front of a hundred displays disappeared from routing *because* it could
+  // hear so many of them, and the whole shelf went to the one gateway whose
+  // reply still happened to fit, plus Home Assistant's own adapter.
+  //
+  // Serialising straight to the client needs no such buffer, at any length.
+  const size_t length = measureJson(doc);
+  server.setContentLength(length);
+  server.send(status, "application/json", "");
+  WiFiClient client = server.client();
+  serializeJson(doc, client);
 }
 
 String resetReasonName() {
@@ -343,6 +362,10 @@ void handleScan() {
   doc["ok"] = true;
   doc["gateway_id"] = gatewayId;
   doc["scan_seconds"] = seconds;
+  // The count the gateway believes it is reporting. A reader that ends up with
+  // fewer entries than this knows the body was cut short rather than the shelf
+  // being quiet - the two used to be indistinguishable.
+  doc["device_count"] = results.getCount();
   JsonArray devices = doc["devices"].to<JsonArray>();
 
   for (int i = 0; i < results.getCount(); i++) {

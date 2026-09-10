@@ -237,3 +237,70 @@ class GatewayLabelTests(unittest.TestCase):
     def test_a_route_with_nothing_to_say_still_gets_a_name(self):
         label = self._label()
         self.assertEqual(label({}), "DRATEK eInk gateway")
+
+
+class PendingRouteTests(unittest.IsolatedAsyncioTestCase):
+    """A queued job must not claim a radio it has not been given.
+
+    The route stamped at submit is only a fallback for a chooser that fails and
+    a placeholder for the lock key - _hold_route asks again when the transfer
+    comes up. Showing it in the queue said the decision was already taken, so a
+    hundred rows appeared pre-assigned within a second of being queued while
+    the real choice was still minutes away.
+    """
+
+    async def test_a_queued_job_says_its_route_is_undecided(self):
+        queue = _make_queue()
+        attempts: list[str] = []
+        release = asyncio.Event()
+
+        async def bound(_add_log):
+            attempts.append("gateway")
+            await release.wait()
+            return {"ok": True}
+
+        async def bind():
+            return ("gateway@a", "gateway", "gw-a", bound)
+
+        submitted = await queue.async_submit(
+            resource="local", transport_type="local",
+            transport_name="Trasa se určí při zápisu",
+            address=ADDRESS, operation="design",
+            runner=_runner("local", attempts), wait_for_completion=False,
+            rebind=bind,
+        )
+        job = next(j for j in queue._jobs if j["id"] == submitted["queue_job_id"])
+        # Before it runs.
+        self.assertTrue(job["route_pending"])
+
+        await asyncio.sleep(0.05)
+        # Bound now, and no longer pending.
+        self.assertFalse(job["route_pending"])
+        self.assertEqual(job["resource"], "gateway@a")
+        self.assertEqual(job["transport_name"], "gw-a")
+        release.set()
+        await queue._job_tasks[submitted["queue_job_id"]]
+
+    async def test_a_job_that_names_its_own_transport_is_never_pending(self):
+        queue = _make_queue()
+        submitted = await queue.async_submit(
+            resource="gateway@pinned", transport_type="gateway",
+            transport_name="pinned", address=ADDRESS, operation="design",
+            runner=_runner("pinned", []), wait_for_completion=False,
+        )
+        job = next(j for j in queue._jobs if j["id"] == submitted["queue_job_id"])
+        self.assertFalse(job["route_pending"])
+        await queue._job_tasks[submitted["queue_job_id"]]
+
+    async def test_the_snapshot_carries_it_so_the_panel_can_say_so(self):
+        queue = _make_queue()
+        submitted = await queue.async_submit(
+            resource="local", transport_type="local",
+            transport_name="Trasa se určí při zápisu",
+            address=ADDRESS, operation="design",
+            runner=_runner("local", []), wait_for_completion=False,
+            rebind=None,
+        )
+        snapshot = await queue.async_snapshot()
+        self.assertIn("route_pending", snapshot["jobs"][0])
+        await queue._job_tasks[submitted["queue_job_id"]]

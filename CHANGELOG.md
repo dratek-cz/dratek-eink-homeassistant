@@ -2,6 +2,22 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.3] - 2026-09-10
+
+### Proč tři gatewaye „neslyšely" nic
+Mapa připojení to ukázala naostro: 35 displejů na Bluetooth Home Assistantu, 66 na jedné gatewayi a **nula na třech ostatních**, přesto že stojí vedle sebe. Nebyla to chyba směrování – integrace si opravdu myslela, že neslyší nic.
+
+Gateway staví odpověď na `/api/scan` do jednoho `String` v paměti. Ten potřebuje souvislý blok přibližně dvojnásobku své délky, a tyto gatewaje běží s největším volným blokem okolo 8 kB, jakmile si BLE a odložený obraz vezmou své. Sken, který slyší regál displejů, se serializuje na víc než 4 kB – `String` se nedokáže zvětšit, Arduino ho mlčky odsekne, a co odejde na síť je platný JSON přeseknutý v půlce textu. Změřeno přímo: odpověď 4123 bajtů končící `Unterminated string`.
+
+Integrace takový sken nepřečte, vyhodnotí ho jako selhaný a **ta gateway nenabídne žádnou trasu**. Gateway zmizela ze směrování *právě proto*, že slyší hodně displejů.
+
+- Firmware **0.1.74-gateway** posílá JSON přímo do socketu místo do vyrovnávací paměti. Žádný souvislý blok už není potřeba, při jakékoli délce.
+- Odpověď navíc uvádí `device_count`, takže odseknutá odpověď je rozeznatelná od tiché sítě.
+- Integrace nečitelný sken **nahlásí do logu** místo aby ho spolkla. Dosud to bylo to nejtišší možné selhání.
+
+### Fronta
+- **Zařazená úloha už netvrdí, že má trasu.** Trasa u zařazení je jen záloha pro případ, že se výběr nepovede, a zástupný klíč zámku – skutečná volba padne až při zápisu. Řádek fronty teď říká „Trasa se určí při zápisu", dokud opravdu nezačne zapisovat.
+
 ## [1.0.2] - 2026-09-10
 
 ### Fronta rozhoduje o trase až když na zápis dojde řada

@@ -17,6 +17,7 @@ const EN_EXACT = new Map(Object.entries({
   "Zbývající displeje nebyly vůbec zkoušeny.": "The remaining displays were never attempted.",
   "Zjišťuji, které displeje jsou známé…": "Finding out which displays are known…",
   "Nepotvrzeno displejem": "Not confirmed by the display",
+  "Trasa se určí při zápisu": "Route chosen when the write starts",
   "Displej nepotvrdil, že obraz přijal a překreslil se. Přenos doběhl, ale potvrzovací paket 05 08 nedorazil - obvykle na místním Bluetooth, kde se čeká jen krátce.":
     "The display did not confirm that it received the image and repainted. The transfer finished, but the 05 08 confirmation packet never arrived - usually on local Bluetooth, which waits only briefly for it.",
   "Chyba je vypsaná v konzoli prohlížeče (F12).": "The error is written to the browser console (F12).",

@@ -232,6 +232,8 @@ class TransferQueue:
             "finished_at": None,
             "error": "",
             "log": [],
+            # True until _hold_route binds a real radio to it.
+            "route_pending": rebind is not None,
         }
         manual = operation != "entity_update"
         if manual:
@@ -386,7 +388,18 @@ class TransferQueue:
                 "error": "No gateway currently receives this display.",
                 "log": [],
             }
-        gateway_name = gateway_transport_name(route)
+        # A job that chooses its radio at dispatch must not claim one now.
+        #
+        # The route picked here is only a fallback for a chooser that fails, and
+        # a placeholder for the lock key - _hold_route asks again when the
+        # transfer actually comes up. Showing this one in the queue said the
+        # decision had already been taken, which is exactly what it must not
+        # say: every row of a hundred appeared pre-assigned within a second of
+        # being queued, while the real choice was still minutes away.
+        gateway_name = (
+            "Trasa se určí při zápisu" if rebind is not None
+            else gateway_transport_name(route)
+        )
         return await self.async_submit(
             resource=gateway_resource(route),
             transport_type="gateway",
@@ -456,11 +469,13 @@ class TransferQueue:
                         job["resource"] = resource
                         job["transport_type"] = transport_type
                         job["transport_name"] = transport_name
+                        job["route_pending"] = False
                         if previous and previous != resource:
                             job["log"].append(
                                 f"Route chosen when the transfer came up: {transport_name}."
                             )
                             job["log"] = job["log"][-80:]
+                    job["route_pending"] = False
                     return lock, runner
                 await self._route_release.wait()
 
@@ -791,6 +806,7 @@ class TransferQueue:
             "transport_name": job.get("transport_name"),
             "error": job.get("error") or "",
             "confirmed": job.get("confirmed"),
+            "route_pending": bool(job.get("route_pending")),
         }
         return result
 

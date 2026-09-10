@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import functools
+import logging
 import queue
 import tempfile
 import threading
@@ -27,6 +28,8 @@ from . import quicklz
 from .const import DOMAIN
 from .discovery import resolve_raw_type
 from .render import pack_bwr_image, pack_bwr_region, packing_description
+
+_LOGGER = logging.getLogger(__name__)
 
 GATEWAY_STORE_KEY = "dratek_eink.gateways"
 GATEWAY_STORE_VERSION = 1
@@ -903,12 +906,32 @@ async def async_scan_gateway(hass: HomeAssistant, gateway_id: str, seconds: int 
             if response.status >= 400:
                 raise RuntimeError(f"HTTP {response.status}")
     except Exception as exc:
-        return {"ok": False, "error": str(exc), "devices": []}
+        # Loudly, because this used to be the quietest possible failure: a
+        # gateway whose reply could not be parsed reported no devices, and
+        # routing read that as a gateway that hears nothing. Firmware before
+        # 0.1.74 truncates this response when it hears enough displays to push
+        # it past the largest free block on the heap, so the gateways standing
+        # closest to the shelf were the ones that vanished.
+        _LOGGER.warning(
+            "[%s] Gateway scan could not be read (%s: %s); it will offer no new "
+            "routes this cycle. Firmware 0.1.74 streams this response instead of "
+            "buffering it, which is what truncated it.",
+            gateway_id, type(exc).__name__, exc,
+        )
+        return {"ok": False, "error": str(exc).strip() or type(exc).__name__, "devices": []}
 
+    devices = payload.get("devices", [])
+    declared = payload.get("device_count")
+    if isinstance(declared, int) and declared > len(devices):
+        _LOGGER.warning(
+            "[%s] Gateway said it heard %d devices but only %d arrived; the reply "
+            "was cut short. Update to firmware 0.1.74.",
+            gateway_id, declared, len(devices),
+        )
     return {
         "ok": True,
         "gateway_id": gateway_id,
-        "devices": payload.get("devices", []),
+        "devices": devices,
         "raw": payload,
     }
 
