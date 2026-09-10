@@ -2,6 +2,16 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.2-beta.1] - 2026-09-10
+
+Předběžné vydání (pre-release). Obsahem je totožné s 1.0.1 — jediný rozdíl je jedna věc:
+
+### Přidáno
+
+- **Firemní šablona DRÁTEK je v katalogu k dispozici**, včetně dlaždice „Odeslat na všechny displeje". Ve stabilním 1.0.1 se nenabízí.
+
+Nic jiného se neliší. Ostatní opravy a firmware 0.1.76 jsou v obou vydáních stejné.
+
 ## [1.0.1] - 2026-09-10
 
 Jedno vydání se všemi dosavadními opravami. Starší dílčí verze byly sloučeny sem a jejich popisy zůstaly beze změny.

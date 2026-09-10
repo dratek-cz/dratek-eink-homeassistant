@@ -30,7 +30,7 @@
     "esptool>=5.0.0",
     "resvg-py>=0.3.4"
   ],
-  "version": "1.0.1",
+  "version": "1.0.2-beta.1",
   "zeroconf": [
     "_dratek-eink-gateway._tcp.local."
   ]

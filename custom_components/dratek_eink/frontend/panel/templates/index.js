@@ -75,7 +75,7 @@ export const DISPLAY_TEMPLATES = [
 // template must keep drawing correctly after an update that hides the tile,
 // and its automation must keep resolving. Hiding it from the grid is a
 // question of what can be newly chosen, nothing more.
-export const BRAND_LOGO_TEMPLATE_VISIBLE = false;
+export const BRAND_LOGO_TEMPLATE_VISIBLE = true;
 
 export const DISPLAY_TEMPLATE_CATALOG = DISPLAY_TEMPLATES.filter(
   (entry) => BRAND_LOGO_TEMPLATE_VISIBLE || entry.catalog.id !== "dratek_logo",
