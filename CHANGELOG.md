@@ -2,6 +2,26 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.22] - 2026-09-10
+
+### OTA aktualizace ověřena na skutečné gatewayi
+Gateway byla připojena přes USB, nahrán firmware kabelem a pak spuštěno OTA se zapnutým sériovým záznamem. Celý obraz prošel napoprvé, bez jakéhokoli zpomalování:
+
+```
+OTA upload started: 1148160 bytes for esp32.
+OTA image verified. Reboot pending.
+Restarting into the updated firmware.
+```
+
+- **Skutečnou příčinou byla ta nedokončená relace `Update` z verze 0.1.71.** Gateway na 0.1.68 si nesla rozpracovanou relaci po prvním přerušeném nahrávání. `begin()` pak selhal, obsluha se vrátila, aniž by přečetla tělo požadavku – a spojení odumřelo po pár kilobajtech. Odtud ta čísla 7 180, 11 488 a nakonec 0 přijatých bajtů z 1,1 MB.
+
+### Vráceno
+- **Vypínání úsporného režimu Wi-Fi během OTA z verze 0.1.72 bylo chybné a škodlivé.** ESP-IDF zavolá `abort()`, jakmile modem sleep vypnete a přitom běží Wi-Fi i Bluetooth – a tento firmware zapíná BLE stack při startu, takže běží pořád, ne jen během přenosu. Gateway na tom padala přesně na 64 kB každého OTA. Ze sériové linky: `Should enable WiFi modem sleep when both WiFi and Bluetooth are enabled!!!!!! / abort() was called`. Firmware **0.1.73-gateway** je 0.1.71 bez této změny.
+- Test, který na tuto změnu upozornil, je zpět v původní přísné podobě. Měl pravdu.
+
+### Jednorázový zásah kabelem trvá
+Firmware **0.1.73 nahrajte na každou gateway přes USB, jednou.** OTA na 0.1.68 fungovat nemůže – oprava, která ho zprovozní, je právě v tom firmwaru. Od 0.1.73 dál už OTA funguje, ověřeno.
+
 ## [1.0.21] - 2026-09-10
 
 ### OTA: proč se nahrávání zaseklo

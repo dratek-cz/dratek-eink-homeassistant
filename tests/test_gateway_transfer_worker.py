@@ -122,44 +122,10 @@ class GatewayWifiCoexistenceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.source = FIRMWARE.read_text(encoding="utf-8")
 
-    def test_wifi_starts_with_the_modem_sleep_coexistence_requires(self) -> None:
-        # 0.1.67 turned modem sleep off during Wi-Fi startup and both chips
-        # reboot-looped: ESP-IDF requires it while Wi-Fi and Bluetooth share the
-        # radio. The startup value is not negotiable.
-        setup = self.source[self.source.index("WiFi.mode(WIFI_STA);"):]
-        setup = setup[: setup.index("WiFi.setAutoReconnect(true);")]
-        self.assertIn("WiFi.setSleep(true);", setup)
-        self.assertNotIn("setSleep(false)", setup)
-
-    def test_only_the_ota_upload_may_lift_it_and_it_always_puts_it_back(self) -> None:
-        # The one exception, added in 0.1.72: an OTA upload is a megabyte the
-        # chip must swallow while erasing 64 kB flash blocks, and on 0.1.68 it
-        # never ingested more than about 11 kB of it. Safe here where it was not
-        # at boot - long after the coexistence layer is up, and the OTA handler
-        # refuses to start while a BLE transfer is running, so there is nothing
-        # to coexist with.
-        self.assertEqual(1, self.source.count("WiFi.setSleep(enabled);"))
-        self.assertEqual(0, self.source.count("WiFi.setSleep(false);"))
-        toggle = self.source[self.source.index("void setOtaWifiPowerSave(bool enabled)"):]
-        toggle = toggle[: toggle.index(chr(10) + "}")]
-        self.assertIn("wifiPowerSaveEnabled = enabled;", toggle)
-        # Every exit from an upload restores it: the failure funnel, and the
-        # verified-and-waiting-to-reboot path.
-        self.assertIn("setOtaWifiPowerSave(true);" + chr(10)
-                      + '  Serial.println("OTA failed: "', self.source)
-        self.assertIn('otaStatus = "ready_to_reboot";' + chr(10)
-                      + '    setOtaWifiPowerSave(true);', self.source)
-        # And it is lifted only after the busy check has already refused a
-        # gateway that is mid-transfer.
-        start = self.source[self.source.index("if (upload.status == UPLOAD_FILE_START) {"):]
-        start = start[: start.index("if (upload.status == UPLOAD_FILE_WRITE) {")]
-        self.assertLess(start.index("if (transferIsBusy())"), start.index("setOtaWifiPowerSave(false)"))
-
-    def test_the_status_endpoint_reports_the_real_value(self) -> None:
-        # It answered a hard-coded true, which would now be a lie for the
-        # length of every upload - and this field is a diagnostic.
-        self.assertNotIn('doc["wifi_power_save"] = true;', self.source)
-        self.assertIn('doc["wifi_power_save"] = wifiPowerSaveEnabled;', self.source)
+    def test_wifi_and_bluetooth_coexistence_keeps_required_modem_sleep(self) -> None:
+        self.assertIn("WiFi.setSleep(true);", self.source)
+        self.assertNotIn("WiFi.setSleep(false);", self.source)
+        self.assertIn('doc["wifi_power_save"] = true;', self.source)
 
     def test_status_reports_wifi_disconnect_diagnostics(self) -> None:
         self.assertIn('doc["wifi_disconnect_count"] = wifiDisconnectCount;', self.source)
