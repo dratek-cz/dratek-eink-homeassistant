@@ -164,11 +164,27 @@ class StaleSessionTests(unittest.TestCase):
 
 
 class BusyIsNotOfflineOnTheOtaPathTests(unittest.TestCase):
-    def test_a_busy_gateway_is_waited_for_not_failed(self) -> None:
+    def test_a_busy_gateway_is_never_a_reason_to_refuse(self) -> None:
+        # "Busy" does not mean the gateway is doing something - it means this
+        # integration is holding that gateway's HTTP lock, and an upload that
+        # hung held it for its whole timeout. The box answered /api/status in a
+        # tenth of a second while the update refused to start. The upload takes
+        # the same lock anyway and can simply queue behind whatever has it.
         runner = GATEWAY[GATEWAY.index("async def async_start_gateway_ota("):]
         runner = runner[: runner.index("\ndef async_get_gateway_ota_job")]
         self.assertIn('if status.get("ok") or not status.get("busy"):', runner)
-        self.assertIn("Gateway is busy; waiting for it to finish.", runner)
+        self.assertIn("Gateway is busy; waiting for a turn.", runner)
+        # Falls back to the chip family already on record instead of raising.
+        self.assertIn("stored = gateway_chip(gateway)", runner)
+        self.assertIn("going ahead with its known chip", runner)
+        self.assertIn('elif confirm.get("busy"):', runner)
+
+    def test_a_hung_upload_releases_the_gateway_promptly(self) -> None:
+        # A working upload finishes in seconds - verified on hardware, the whole
+        # 1.1 MB in one go. The ceiling only decides how long a broken one keeps
+        # the box hostage, and at 300 s it held every status probe on it.
+        self.assertIn("upload_url, data=form, timeout=90", GATEWAY)
+        self.assertNotIn("data=form, timeout=300", GATEWAY)
 
     def test_an_empty_exception_no_longer_becomes_gateway_is_offline(self) -> None:
         # A gateway answering pings, and answering this endpoint a second

@@ -742,18 +742,44 @@ async def async_start_gateway_ota(
     async def runner() -> None:
         try:
             update("preparing", 5, "Reading gateway status and selecting the correct firmware image.")
-            # A gateway that is merely busy is not a gateway to give up on:
-            # the update is a deliberate, user-initiated action, and whatever
-            # is holding the box - a transfer, a scan - finishes in seconds.
+            # "Busy" must never be a reason to refuse an update.
+            #
+            # Busy here does not mean the gateway is doing something - it means
+            # this integration is already holding that gateway's HTTP lock. An
+            # earlier upload that hung holds it for its whole timeout, so a
+            # second attempt was told the box was busy while the box itself was
+            # answering /api/status in a tenth of a second. The update then
+            # refused, which is the one thing it must not do: the upload takes
+            # that same lock anyway and will simply queue behind whatever holds
+            # it.
+            #
+            # The probe is only here to read the chip family. When it cannot,
+            # the stored one - written by the last successful probe - is the
+            # answer, and the image is still checked against it below. Firmware
+            # 0.1.70 and newer refuses a wrong image itself, before writing a
+            # byte, so the chip guard does not rest on this probe alone.
             status = {}
-            for attempt in range(4):
+            for attempt in range(3):
                 status = await async_gateway_status(hass, gateway)
                 if status.get("ok") or not status.get("busy"):
                     break
                 if attempt == 0:
-                    update("preparing", 5, "Gateway is busy; waiting for it to finish.")
-                await asyncio.sleep(3)
-            if not status.get("ok"):
+                    update("preparing", 5, "Gateway is busy; waiting for a turn.")
+                await asyncio.sleep(2)
+            if not status.get("ok") and status.get("busy"):
+                stored = gateway_chip(gateway)
+                if not stored:
+                    raise RuntimeError(
+                        "Gateway is busy and its chip family is not known yet. "
+                        "Open the Gateways page once so it can be read, then retry."
+                    )
+                update(
+                    "preparing",
+                    5,
+                    f"Gateway is busy; going ahead with its known chip ({stored}).",
+                )
+                status = {"ok": True, "chip": stored, "ota_supported": True}
+            elif not status.get("ok"):
                 raise RuntimeError(status.get("message") or "Gateway did not answer.")
 
             # One address for the whole update, and it is the address the bytes
@@ -772,12 +798,22 @@ async def async_start_gateway_ota(
             gateway_with_status["status"] = status
             base_url = _gateway_send_base_url(gateway_with_status)
             confirm = await _async_probe_gateway_url(hass, base_url)
-            if not confirm.get("ok"):
+            if confirm.get("ok"):
+                status = confirm
+            elif confirm.get("busy"):
+                # Same reasoning as above: our own lock, not the gateway's
+                # business. Keep what we already know about the chip.
+                _LOGGER.warning(
+                    "[%s] Could not confirm the endpoint before the update - this "
+                    "integration is holding its HTTP lock. Continuing with the "
+                    "chip family already on record.",
+                    base_url,
+                )
+            else:
                 raise RuntimeError(
                     f"{base_url} did not answer the confirmation probe: "
                     f"{confirm.get('message') or 'no response'}"
                 )
-            status = confirm
             if not status.get("ota_supported"):
                 raise RuntimeError("Gateway firmware does not support OTA yet. Flash version 0.1.38 once over USB.")
 
@@ -826,13 +862,17 @@ async def async_start_gateway_ota(
                 content_type="application/octet-stream",
             )
             upload_url = f"{base_url}/api/ota/upload?size={len(firmware)}&md5={firmware_md5}"
-            # Was 120 s. An ESP32 erases its OTA slot as it writes, and 0.1.68
-            # restored Wi-Fi modem sleep, so a megabyte can take longer than
-            # that - and aiohttp's TimeoutError carries an empty message, which
-            # is why a failure here used to read "OTA update failed: " and say
-            # nothing at all.
+            # 90 s, not the 300 it briefly was.
+            #
+            # A working upload finishes in seconds - verified on hardware, the
+            # whole 1.1 MB through in one go. The long timeout was chosen while
+            # throughput was still the suspected problem, and it turned every
+            # hung attempt into five minutes during which this gateway's HTTP
+            # lock was held and every status probe on it answered "busy". A
+            # generous ceiling on the healthy case is worth far less than
+            # releasing the box promptly when something goes wrong.
             async with _gateway_http_lock(hass, base_url), session.post(
-                upload_url, data=form, timeout=300
+                upload_url, data=form, timeout=90
             ) as response:
                 result = await response.json(content_type=None)
                 if response.status >= 400 or not result.get("ok"):

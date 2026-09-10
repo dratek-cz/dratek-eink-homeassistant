@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.4] - 2026-09-10
+
+### „Gateway is busy" už aktualizaci neodmítne
+`busy` neznamenalo, že gateway něco dělá – znamenalo, že **tahle integrace drží její HTTP zámek**. A předchozí zaseknuté nahrávání ho drželo celých 300 sekund, takže druhý pokus dostal „gateway je zaneprázdněná", zatímco ta krabička odpovídala na `/api/status` za desetinu sekundy. Aktualizace pak odmítla začít, což je to jediné, co dělat nesmí – nahrávání si ten zámek vezme stejně a klidně počká ve řadě.
+
+- Sonda před aktualizací je tam jen kvůli zjištění typu čipu. Když se nedostane ke slovu, použije se **typ čipu z posledního úspěšného dotazu** a aktualizace pokračuje. Obraz se proti němu pořád kontroluje a firmware 0.1.70 a novější si cizí obraz odmítne sám, ještě než zapíše bajt – ta pojistka na téhle sondě nestojí.
+- Limit nahrávání snížen z **300 na 90 sekund**. Funkční nahrávání proběhne v řádu sekund (ověřeno na železe, celých 1,1 MB napoprvé). Ten dlouhý limit jsem zvolil, když jsem ještě mylně podezříval propustnost, a jediné, co určoval, bylo jak dlouho si rozbitý pokus drží gateway jako rukojmí.
+
 ## [1.0.3] - 2026-09-10
 
 ### Proč tři gatewaye „neslyšely" nic
