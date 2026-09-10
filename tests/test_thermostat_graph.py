@@ -57,10 +57,11 @@ class AutomationDeclarationsReachTheBindingTests(unittest.TestCase):
         # This is why the lookup is needed - if the card ever carries it, the
         # comment above the lookup stops being true.
         index = (PANEL / "templates" / "index.js").read_text(encoding="utf-8")
-        self.assertIn(
-            "export const DISPLAY_TEMPLATE_CATALOG = DISPLAY_TEMPLATES.map((entry) => entry.catalog);",
-            index,
-        )
+        # The catalog card is still nothing but the template's own `catalog`
+        # object. (The list it is mapped over is filtered now - see
+        # BRAND_LOGO_TEMPLATE_VISIBLE - but that changes which templates appear,
+        # not what a card contains.)
+        self.assertIn(").map((entry) => entry.catalog);", index)
         thermostat = TEMPLATE.read_text(encoding="utf-8")
         catalog = thermostat[thermostat.index("catalog: {"): thermostat.index("prepared: true")]
         self.assertNotIn("automation:", catalog)

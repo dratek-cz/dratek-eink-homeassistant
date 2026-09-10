@@ -6,7 +6,7 @@
 #
 # Run from the repository root:
 #
-#   powershell -ExecutionPolicy Bypass -File scripts\publish_github_release.ps1 -Version 1.0.7
+#   powershell -ExecutionPolicy Bypass -File scripts\publish_github_release.ps1 -Version 1.0.1
 #
 # The token is read from a file and sent straight to GitHub; it is never echoed,
 # logged, or written anywhere by this script.

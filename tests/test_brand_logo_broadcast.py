@@ -36,9 +36,15 @@ class BrandLogoTemplateTests(unittest.TestCase):
         self.assertIn("broadcast: true,", self.template)
         self.assertNotIn("internal: true,", self.template)
 
-    def test_it_is_visible_in_the_built_in_catalog(self) -> None:
+    def test_it_is_registered_and_its_tile_is_switchable(self) -> None:
+        # Whether the tile is offered is a build decision now: the stable build
+        # ships without it, the pre-release with it. What must not vary is that
+        # the template is registered at all - a display already carrying it
+        # resolves its design through DISPLAY_TEMPLATES, and so does the
+        # broadcast itself. See tests/test_brand_logo_tile_visibility.py.
         self.assertIn("  dratekLogo,", self.index)
-        self.assertIn("DISPLAY_TEMPLATES.map((entry) => entry.catalog)", self.index)
+        self.assertIn("export const BRAND_LOGO_TEMPLATE_VISIBLE = ", self.index)
+        self.assertIn(").map((entry) => entry.catalog);", self.index)
 
     def test_it_takes_the_whole_panel(self) -> None:
         self.assertIn("pixelPerfect: true", self.template)

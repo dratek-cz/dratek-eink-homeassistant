@@ -62,7 +62,24 @@ export const DISPLAY_TEMPLATES = [
   washer,
 ];
 
-export const DISPLAY_TEMPLATE_CATALOG = DISPLAY_TEMPLATES.map((entry) => entry.catalog);
+// Whether the DRÁTEK brand-logo tile is offered in the catalog.
+//
+// This is the one switch that separates a stable build from a pre-release: the
+// shelf-wide logo broadcast is a company tool rather than something every
+// installation wants a button for, so the stable build ships without the tile
+// and the pre-release ships with it.
+//
+// It filters the *catalog* only, and deliberately not DISPLAY_TEMPLATES or
+// DISPLAY_TEMPLATES_BY_ID. Those two are what renders a design and answers
+// "what does template X look like" - a display that already carries this
+// template must keep drawing correctly after an update that hides the tile,
+// and its automation must keep resolving. Hiding it from the grid is a
+// question of what can be newly chosen, nothing more.
+export const BRAND_LOGO_TEMPLATE_VISIBLE = false;
+
+export const DISPLAY_TEMPLATE_CATALOG = DISPLAY_TEMPLATES.filter(
+  (entry) => BRAND_LOGO_TEMPLATE_VISIBLE || entry.catalog.id !== "dratek_logo",
+).map((entry) => entry.catalog);
 
 export const DISPLAY_TEMPLATES_BY_ID = Object.fromEntries(
   DISPLAY_TEMPLATES.map((entry) => [entry.catalog.id, entry]),
