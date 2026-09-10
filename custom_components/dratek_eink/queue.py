@@ -32,6 +32,30 @@ OFFLINE_BACKOFF_SECONDS = 60  # 60s backoff for unreachable/failed displays
 # when another gateway also hears the display. Longer than the display backoff
 # because an out-of-heap ESP32 needs more than one cycle to recover.
 GATEWAY_BACKOFF_SECONDS = 180
+# ...and the window doubles for each further failure without a success in
+# between, up to this ceiling.
+#
+# A flat 180 s was not enough, measured on a real 24-minute broadcast:
+#
+#     gateway        succeeded  failed
+#     192.168.1.129          7       0
+#     192.168.1.130         11       0
+#     192.168.1.159          0      49
+#     192.168.1.188         29       4
+#
+# One gateway took 49 attempts and completed none of them, while two others
+# were writing displays without a single failure and were handed 7 and 11 jobs
+# between them. A fixed window let the dead one back into rotation every three
+# minutes for the whole run, and each return cost a display its place in the
+# queue - the box was unreachable about a quarter of the time, in bursts far
+# longer than the backoff.
+#
+# Doubling puts a gateway that keeps failing out of the way after a few
+# attempts rather than fifty, and one success clears the count completely, so a
+# gateway that recovers is used again immediately. This only ever changes
+# *preference*: _select_gateway_route's second pass still allows a backed-off
+# gateway, so a display that nothing else can hear is never stranded.
+GATEWAY_BACKOFF_MAX_SECONDS = 1800
 LEGACY_COMPLETION_TIMEOUT_MARKER = "waiting for the display to confirm the completed refresh"
 # What both transports log when the controller acknowledges the whole image.
 DISPLAY_RECEIPT_CONFIRMED_MARKER = "Display confirmed that the complete image was received."
@@ -151,6 +175,8 @@ class TransferQueue:
         # cannot start transfers is a property of that gateway, and every
         # display it serves would otherwise be punished for it individually.
         self._gateway_failure_at: dict[str, float] = {}
+        # Consecutive gateway-side failures per resource, cleared by a success.
+        self._gateway_failure_streak: dict[str, int] = {}
         # One event per display, set by discovery when that display is actually
         # heard. A manual upload held for an unreachable display waits on it,
         # so it goes out as soon as the display is back instead of on the next
@@ -577,14 +603,23 @@ class TransferQueue:
                 )
         return ranked[0]
 
+    def _gateway_backoff_window(self, resource: str) -> float:
+        """How long this gateway stays deprioritised, given its failure streak."""
+        streak = max(1, self._gateway_failure_streak.get(resource, 1))
+        # Doubling, but computed with a shift rather than 2 ** streak so a long
+        # streak cannot produce an enormous intermediate number.
+        window = GATEWAY_BACKOFF_SECONDS * float(1 << min(streak - 1, 16))
+        return min(window, float(GATEWAY_BACKOFF_MAX_SECONDS))
+
     def _is_gateway_backing_off(self, resource: str) -> bool:
         """True while a gateway is still recovering from its own failure."""
         failed_at = self._gateway_failure_at.get(resource)
         if failed_at is None:
             return False
-        if time.monotonic() - failed_at < GATEWAY_BACKOFF_SECONDS:
+        if time.monotonic() - failed_at < self._gateway_backoff_window(resource):
             return True
         self._gateway_failure_at.pop(resource, None)
+        self._gateway_failure_streak.pop(resource, None)
         return False
 
     @staticmethod
@@ -816,12 +851,19 @@ class TransferQueue:
                     # afterwards, so one sick gateway silently stopped every
                     # write to every display it served. Back off the gateway
                     # instead.
-                    self._gateway_failure_at[str(job.get("resource") or "")] = time.monotonic()
+                    failed_resource = str(job.get("resource") or "")
+                    self._gateway_failure_at[failed_resource] = time.monotonic()
+                    self._gateway_failure_streak[failed_resource] = (
+                        self._gateway_failure_streak.get(failed_resource, 0) + 1
+                    )
                 else:
                     self._last_failure_at[normalized_address] = time.monotonic()
             elif job.get("status") == "succeeded":
                 self._last_failure_at.pop(normalized_address, None)
+                # One success clears the streak as well as the timestamp, so a
+                # gateway that comes back is trusted again straight away.
                 self._gateway_failure_at.pop(str(job.get("resource") or ""), None)
+                self._gateway_failure_streak.pop(str(job.get("resource") or ""), None)
 
         job["finished_at"] = int(time.time())
         result["queue_job_id"] = job["id"]
@@ -1168,6 +1210,15 @@ class TransferQueue:
         self._gateway_failure_at = {
             key: value for key, value in self._gateway_failure_at.items()
             if key in retained_resources
+        }
+        # After _gateway_failure_at, not before: the streak is meaningless
+        # without the timestamp it is measured from, and filtering it against
+        # the unpruned dict would leave counts behind for gateways whose
+        # timestamp had just been dropped.
+        self._gateway_failure_streak = {
+            key: value
+            for key, value in self._gateway_failure_streak.items()
+            if key in self._gateway_failure_at
         }
 
     def _save_history_soon(self) -> None:

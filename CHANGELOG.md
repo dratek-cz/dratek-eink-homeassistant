@@ -12,6 +12,28 @@ Předběžné vydání (pre-release). Obsahem je totožné s 1.0.1 — jediný r
 
 Nic jiného se neliší. Ostatní opravy a firmware 0.1.76 jsou v obou vydáních stejné.
 
+## [1.0.2] - 2026-09-10
+
+### Mrtvá gateway přestane dostávat práci
+
+Z vašeho posledního běhu (24 minut, export 1789041159909):
+
+| gateway | uspělo | selhalo | úspěšnost |
+|---|---|---|---|
+| 192.168.1.129 | 7 | 0 | 100 % |
+| 192.168.1.130 | 11 | 0 | 100 % |
+| **192.168.1.159** | **0** | **49** | **0 %** |
+| 192.168.1.188 | 29 | 4 | 87 % |
+
+Čtyřicet devět pokusů na jedné gatewayi a **ani jeden dokončený** — pokaždé stejná chyba `Cannot connect to host 192.168.1.159:80`. Zatímco dvě gatewaje, které neselhaly ani jednou, dostaly dohromady sedm a jedenáct úloh. Práce k té mrtvé chodila celý běh: po dvouminutových úsecích dostala 1, 2, 8, 10, 4, 5, 6, 4, 2, 3, 3, 1 úlohu.
+
+Odstavení selhávající gatewaye ve frontě existovalo a mělo správný tvar. Špatně byla jen **délka**: pevných 180 sekund proti desce, která je nedostupná zhruba čtvrtinu času a ve výpadcích mnohem delších než tři minuty. Každé tři minuty se tedy vrátila do hry — a každý návrat stál jeden displej jeho místo ve frontě.
+
+### Opraveno
+
+- **Okno odstavení se s každým dalším selháním zdvojnásobuje** (180 s → 360 s → 720 s…, strop 30 minut) a **jediný úspěch ho vynuluje**. Gateway, která se vzpamatuje, se použije hned; ta, která nefunguje, vypadne po třech pokusech místo po padesáti.
+- **Zůstává to pravidlo o pořadí, ne vyloučení.** Displej, který slyší jenom ta odstavená gateway, se přes ni zapíše dál — jinak by po výpadku osiřel.
+
 ## [1.0.1] - 2026-09-10
 
 Jedno vydání se všemi dosavadními opravami. Starší dílčí verze byly sloučeny sem a jejich popisy zůstaly beze změny.
