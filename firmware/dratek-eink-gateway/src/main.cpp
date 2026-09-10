@@ -15,7 +15,7 @@
 #include <HWCDC.h>
 #endif
 
-static const char* FIRMWARE_VERSION = "0.1.71-gateway";
+static const char* FIRMWARE_VERSION = "0.1.72-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 // The chip id the second-stage bootloader expects to find in an application
@@ -162,6 +162,10 @@ String otaStatus = "idle";
 String otaError;
 size_t otaBytesWritten = 0;
 size_t otaExpectedSize = 0;
+// Whether Wi-Fi modem sleep is currently on. Reported in /api/status, which
+// used to answer a hard-coded true and would now be lying for the length of
+// every OTA upload.
+bool wifiPowerSaveEnabled = true;
 // The first bytes of the incoming image, held back until there are enough of
 // them to read the header. Nothing is written to flash before it checks out.
 static const size_t OTA_HEADER_BYTES = 16;
@@ -263,7 +267,7 @@ void handleStatus() {
   doc["ip"] = WiFi.localIP().toString();
   doc["mac"] = WiFi.macAddress();
   doc["wifi_rssi"] = WiFi.RSSI();
-  doc["wifi_power_save"] = true;
+  doc["wifi_power_save"] = wifiPowerSaveEnabled;
   doc["wifi_disconnect_count"] = wifiDisconnectCount;
   doc["last_wifi_disconnect_ms"] = lastWifiDisconnectAtMs;
   doc["uptime_ms"] = millis();
@@ -869,11 +873,36 @@ bool sendPayloadToDisplay(const String& address, const PayloadSource& payload, u
   return true;
 }
 
+// Wi-Fi modem sleep, off for the length of an OTA upload and on for everything
+// else.
+//
+// The gateway keeps modem sleep on because ESP-IDF requires it while Wi-Fi and
+// Bluetooth share the 2.4 GHz radio - 0.1.67 turned it off at boot and both
+// chips reboot-looped, which is why 0.1.68 put it back. But it costs receive
+// throughput, and an OTA upload is a megabyte the chip has to swallow while
+// also erasing 64 kB blocks of flash synchronously. Measured against a live
+// gateway on 0.1.68: the upload never ingested more than about 11 kB of
+// 1.1 MB, at any sender pacing, without the connection dying.
+//
+// This is safe where the boot-time version was not, on two counts: it happens
+// long after Wi-Fi and the coexistence layer have started, and the OTA handler
+// refuses to begin at all while a BLE transfer is running (transferIsBusy), so
+// there is no Bluetooth to coexist with while it is off. If it does misbehave
+// the chip reboots into the partition it is already running - the boot
+// partition is only switched after the whole image is verified.
+void setOtaWifiPowerSave(bool enabled) {
+  if (wifiPowerSaveEnabled == enabled) return;
+  WiFi.setSleep(enabled);
+  wifiPowerSaveEnabled = enabled;
+  Serial.println(enabled ? "Wi-Fi modem sleep restored." : "Wi-Fi modem sleep off for the OTA upload.");
+}
+
 void failOta(const String& error) {
   otaError = error;
   otaStatus = "failed";
   otaInProgress = false;
   if (Update.isRunning()) Update.abort();
+  setOtaWifiPowerSave(true);
   Serial.println("OTA failed: " + error);
 }
 
@@ -917,6 +946,10 @@ void handleOtaUploadChunk() {
       Update.abort();
       Serial.println("Cleared a stale OTA session left by an interrupted upload.");
     }
+
+    // No BLE transfer can be running (checked above), so nothing needs the
+    // radio shared right now - and the upload needs every bit of it.
+    setOtaWifiPowerSave(false);
 
     otaInProgress = true;
     otaStatus = "uploading";
@@ -991,6 +1024,7 @@ void handleOtaUploadChunk() {
     }
     otaInProgress = false;
     otaStatus = "ready_to_reboot";
+    setOtaWifiPowerSave(true);
     Serial.println("OTA image verified. Reboot pending.");
     return;
   }
@@ -1726,7 +1760,7 @@ void printSerialStatus(Stream& channel) {
   doc["wifi_connected"] = WiFi.status() == WL_CONNECTED;
   doc["ip"] = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "";
   doc["wifi_rssi"] = WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0;
-  doc["wifi_power_save"] = true;
+  doc["wifi_power_save"] = wifiPowerSaveEnabled;
   doc["wifi_disconnect_count"] = wifiDisconnectCount;
   doc["last_wifi_disconnect_ms"] = lastWifiDisconnectAtMs;
   doc["mac"] = WiFi.macAddress();
@@ -1878,6 +1912,7 @@ void connectWifi() {
   // shared 2.4 GHz radio. Disabling it aborts during Wi-Fi startup on both
   // ESP32 and ESP32-S3 and causes a permanent reboot loop.
   WiFi.setSleep(true);
+  wifiPowerSaveEnabled = true;
   WiFi.setAutoReconnect(true);
   WiFi.persistent(false);
   WiFi.setHostname(hostname.c_str());

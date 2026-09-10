@@ -2,6 +2,19 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.21] - 2026-09-10
+
+### OTA: proč se nahrávání zaseklo
+Změřeno přímo na živé gatewayi s firmwarem 0.1.68. Nahrávání se nezasekne na chybě – gateway prostě **nestíhá data přijímat**. Z 1 148 160 bajtů jich přijala 7 180, pak 11 488, pak nula, podle toho, jak rychle se posílala. ESP se přitom nerestartuje ani nespadne, uptime běží dál.
+
+Na vině je souběh dvou věcí: knihovna `Update` maže **synchronně celé 64kB bloky flash** přímo v cestě čtení ze socketu, a od verze 0.1.68 je zapnutý **úsporný režim Wi-Fi** (vrácený kvůli tomu, že 0.1.67 bez něj zacyklila restarty). Dohromady na příjem megabajtu nezbyde propustnost.
+
+- Firmware **0.1.72-gateway** vypne úsporný režim Wi-Fi **na dobu nahrávání OTA** a hned potom ho vrátí. Je to bezpečné tam, kde to ve verzi 0.1.67 bezpečné nebylo: děje se to dávno po startu Wi-Fi a OTA odmítne začít, pokud běží BLE přenos – takže není s čím sdílet rádio. Kdyby to přesto zlobilo, ESP se restartuje do firmwaru, ve kterém právě běží; bootovací oddíl se přepíná až po ověření celého obrazu.
+- `/api/status` hlásí skutečnou hodnotu `wifi_power_save` místo natvrdo zapsaného `true`.
+
+### Nutný jednorázový zásah kabelem
+Všechny čtyři gatewaye běží na **0.1.68**. Žádná z dnešních firmwarových oprav (0.1.69 až 0.1.72) se k nim nedostala, protože jediná cesta, jak je doručit, je OTA – a to je právě to rozbité. **Nahrajte 0.1.72 přes USB kabel, jednou na každou gateway.** Od té chvíle má OTA fungovat.
+
 ## [1.0.20] - 2026-09-10
 
 ### Opravena OTA aktualizace, podruhé
