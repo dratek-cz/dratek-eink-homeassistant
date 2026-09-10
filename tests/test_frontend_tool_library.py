@@ -716,7 +716,7 @@ class FrontendToolLibraryTests(unittest.TestCase):
         # 25 production templates including the custom photo card and the
         # built-in brand-logo broadcast. Hardware colour calibration targets
         # must not leak into the user catalog.
-        self.assertEqual(self.source.count('number: "'), 26)
+        self.assertEqual(self.source.count('number: "'), 25)
 
         self.assertIn("variables: [", self.source)
         # A promotion is a decision rather than a reading, so a price tag carries a

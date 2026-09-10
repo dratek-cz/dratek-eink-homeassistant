@@ -32,19 +32,25 @@ export const template = {
   // the block the display's exact rectangle instead of the padded page box the
   // other templates are laid out in, so the lockup really does span the panel.
   //
-  // Which lockup: the wide one on small panels, where a stacked logo would
-  // leave the wordmark tiny between two bands of white, and the stacked one on
-  // large panels and on anything portrait, where the wide lockup would be a
-  // thin strip across the middle of an empty page.
+  // The DRÁTEK.CZ wordmark on every panel, whatever its shape, closed on
+  // four-colour displays by a yellow bar where every other template puts its
+  // red footer.
   //
-  // The wide one is printed as the DRÁTEK.CZ wordmark alone - the drawing of an
-  // eInk module beside it in the source file is cropped away, because a small
-  // tag showing a picture of a small tag is the one thing the shelf does not
-  // need. See _brandLogoWordmarkCrop in panel-brand-logo.mixin.js.
-  design: ({ width, height }) => {
-    const w = width || 296;
-    const h = height || 128;
-    const stacked = h > w || Math.min(w, h) >= 200;
-    return [{ brandLogo: { stacked }, pixelPerfect: true, h: 1 }];
-  },
+  // Never the stacked lockup, which large and portrait panels used to get: it
+  // puts a drawing of an eInk module under the wordmark, and a tag in a
+  // customer's hand showing a picture of a tag is the one thing a shelf does
+  // not need. The wide artwork is cropped to its wordmark before it is drawn
+  // (see _brandLogoWordmarkCrop), which is the whole subject here. On a
+  // portrait panel that leaves a band above and below the type, which is a
+  // layout rather than a gap.
+  //
+  // A three-colour display prints the same wordmark, black and red on white,
+  // and gets no bar - it has no yellow pigment, and neither a red bar (a
+  // different design) nor a dithered pretend-yellow (a speckle) is the same
+  // thing. See _brandLogoBandHeight.
+  design: () => [{
+    brandLogo: { stacked: false, band: "yellow" },
+    pixelPerfect: true,
+    h: 1,
+  }],
 };

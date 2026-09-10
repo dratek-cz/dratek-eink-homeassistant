@@ -44,8 +44,19 @@ class BrandLogoTemplateTests(unittest.TestCase):
         self.assertIn("pixelPerfect: true", self.template)
         self.assertIn("rows[0]?.brandLogo", self.svg)
 
-    def test_small_panels_get_the_wide_lockup_and_large_ones_the_tall_one(self) -> None:
-        self.assertIn("const stacked = h > w || Math.min(w, h) >= 200;", self.template)
+    def test_every_panel_gets_the_wordmark_and_never_the_module(self) -> None:
+        # Large and portrait panels used to get the stacked lockup, which draws
+        # an eInk module under the wordmark - a tag showing a picture of a tag.
+        self.assertIn("brandLogo: { stacked: false, band: \"yellow\" }", self.template)
+        self.assertNotIn("Math.min(w, h) >= 200", self.template)
+
+    def test_four_colour_panels_get_the_yellow_bar(self) -> None:
+        # Where every other template closes its page with a red footer. Three
+        # colour panels have no yellow pigment and get no bar at all.
+        mixin = MIXIN.read_text(encoding="utf-8")
+        self.assertIn("_brandLogoBandHeight(row, height, device = this._device?.()) {", mixin)
+        self.assertIn('if (row?.brandLogo?.band !== "yellow") return 0;', mixin)
+        self.assertIn('!== "bwry") return 0;', mixin)
 
     def test_the_lockup_is_the_real_artwork_with_its_own_ordered_dither(self) -> None:
         # Redrawing the mark from type and rectangles printed sharply but was an
