@@ -89,7 +89,7 @@ class OtaPathTests(unittest.TestCase):
     def test_a_mismatched_image_is_refused_before_it_is_uploaded(self) -> None:
         runner = GATEWAY[GATEWAY.index("async def async_start_gateway_ota("):]
         refuse = runner.index("if image_chip != chip:")
-        upload = runner.index("session.post(upload_url")
+        upload = runner.index("upload_url, data=form")
         self.assertLess(refuse, upload)
         self.assertIn("Refusing to write it", runner)
 

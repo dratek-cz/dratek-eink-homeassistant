@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.19] - 2026-09-10
+
+### Kritická oprava stránky Gatewaye
+- Integrace se dotazovala gatewayí **souběžně a tím je sama umlčela**. Změřeno na třech živých gatewayích: dotazované po jedné odpoví každá zhruba za 100 ms; jakmile se dva dotazy překryjí, dvě ze tří přestanou odpovídat úplně – a to po celou dobu, co dotazy chodí. Na ping přitom odpovídají dál. ESP32 obsluhuje jedno HTTP spojení naráz a ostatní neřadí do fronty.
+- Nic to přitom nekoordinovalo: kontrola stavu, BLE sken pro mapu tras, nahrávání přenosu a jeho vlastní dotaz na průběh (jednou za sekundu) mohly mířit na jednu krabičku současně. Při hromadném odesílání to byl trvalý stav. Výsledkem byly čtyři zapnuté gatewaye, dvě označené jako offline, OTA aktualizace zaseknutá na 20 % a nemožnost s nimi cokoli dělat.
+- Každý HTTP požadavek na gateway teď drží zámek dané krabičky. Zámek je **na požadavek, ne na celou operaci** – dotazy na průběh přenosu ho drží pár milisekund, takže se mezi ně kontrola stavu vejde. A je **per gateway**, takže čtyři gatewaye pracují dál souběžně.
+- Gateway, na kterou se integrace nedostane, protože je zaneprázdněná jiným požadavkem, se **už nehlásí jako offline**. Dosud právě přenos na regál – tedy okamžik, kdy je nejzjevněji funkční – způsobil, že v panelu zšedla.
+
 ## [1.0.18] - 2026-09-09
 
 ### Kritická oprava OTA aktualizace

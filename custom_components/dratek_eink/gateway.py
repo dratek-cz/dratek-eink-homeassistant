@@ -31,6 +31,10 @@ from .render import pack_bwr_image, pack_bwr_region, packing_description
 GATEWAY_STORE_KEY = "dratek_eink.gateways"
 GATEWAY_STORE_VERSION = 1
 DEFAULT_TIMEOUT = 8
+# How long a status probe waits for the gateway's own HTTP lock before giving
+# up and reporting "busy" rather than queueing. Short on purpose: this is the
+# request the panel's online/offline dot is drawn from.
+GATEWAY_BUSY_WAIT_SECONDS = 3
 DISCOVERY_SERVICE = "_dratek-eink-gateway._tcp.local."
 FIRMWARE_DIR = Path(__file__).parent / "firmware"
 FLASH_JOBS_KEY = "dratek_eink_flash_jobs"
@@ -130,6 +134,44 @@ def _gateway_probe_lock(hass: HomeAssistant) -> asyncio.Lock:
     return hass.data.setdefault(DOMAIN, {}).setdefault(
         "gateway_probe_lock", asyncio.Lock()
     )
+
+
+def _gateway_http_lock(hass: HomeAssistant, base_url: str) -> asyncio.Lock:
+    """One HTTP request at a time, per gateway box.
+
+    The ESP32 runs the synchronous Arduino WebServer: it serves one connection
+    at a time and does not queue the rest. Measured against three live
+    gateways - probe them one at a time and every answer comes back in about
+    100 ms; let two callers overlap and the box stops answering *entirely*, for
+    as long as requests keep arriving. It recovers only once they stop.
+
+    Nothing here used to coordinate. The monitor's status sweep, the route
+    lookup's BLE scan, a transfer upload and that transfer's own once-a-second
+    progress poll could all be in flight at the same box at once, and a
+    shelf-wide send made that the normal state. What the panel then showed was
+    a gateway that is powered on, answering pings, and marked offline - because
+    every status poll spent its whole eight-second timeout waiting on a box
+    that was busy being asked four things at once. An OTA upload queued behind
+    the same jam never got served either.
+
+    So this is not a fairness lock, it is the hardware's actual capability
+    written down. It is held per request and never across a whole operation: a
+    transfer's progress polls take it for a few milliseconds each, so a status
+    probe can still get in between them.
+
+    Keyed by address, so two stored records pointing at one box share a lock
+    only when they spell the address the same way - the same limitation
+    gateway_send_endpoint documents, and the reason that function exists.
+    """
+    locks: dict[str, asyncio.Lock] = hass.data.setdefault(DOMAIN, {}).setdefault(
+        "gateway_http_locks", {}
+    )
+    key = str(base_url or "").strip().lower().removeprefix("http://").rstrip("/")
+    lock = locks.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        locks[key] = lock
+    return lock
 
 
 # A bare "host" or "host:port" - a name, an IPv4 literal, or a bracketed IPv6
@@ -414,6 +456,22 @@ async def _async_probe_gateway_url(hass: HomeAssistant, base_url: str) -> dict[s
     """
     session = async_get_clientsession(hass)
     url = f"{base_url}/api/status"
+    # Bounded, unlike every other caller's wait. A status probe is the one
+    # request whose answer decides whether the panel calls this gateway online,
+    # and a gateway that is mid-transfer or mid-OTA holds the lock for as long
+    # as that takes. Queueing behind it would report a working gateway as
+    # offline minutes later, and would hold the monitor's own sweep - and with
+    # it every panel action - for just as long. "Busy" is its own answer.
+    lock = _gateway_http_lock(hass, base_url)
+    try:
+        await asyncio.wait_for(lock.acquire(), timeout=GATEWAY_BUSY_WAIT_SECONDS)
+    except (TimeoutError, asyncio.TimeoutError):
+        return {
+            "ok": False,
+            "busy": True,
+            "message": "Gateway is busy with another request.",
+            "checked_at": int(time.time()),
+        }
     try:
         async with session.get(url, timeout=DEFAULT_TIMEOUT) as response:
             payload = await response.json(content_type=None)
@@ -432,6 +490,8 @@ async def _async_probe_gateway_url(hass: HomeAssistant, base_url: str) -> dict[s
             "message": str(exc),
             "checked_at": int(time.time()),
         }
+    finally:
+        lock.release()
 
     return {
         "ok": True,
@@ -478,6 +538,11 @@ async def async_gateway_status(hass: HomeAssistant, gateway: dict[str, Any]) -> 
 def _remember_gateway_status(gateway: dict[str, Any], status: dict[str, Any]) -> bool:
     """Apply a probe without forgetting the gateway after a transient failure."""
     previous = gateway.get("status") if isinstance(gateway.get("status"), dict) else {}
+    # A gateway that could not be asked was not found to be down. Reporting it
+    # offline is how a box that is busy writing a shelf of displays - the exact
+    # moment it is most obviously working - ends up greyed out in the panel.
+    if status.get("busy"):
+        return bool(previous.get("ok"))
     if status.get("ok"):
         gateway["status"] = status
         gateway["last_seen_at"] = int(status.get("checked_at") or time.time())
@@ -748,7 +813,9 @@ async def async_start_gateway_ota(
             # that - and aiohttp's TimeoutError carries an empty message, which
             # is why a failure here used to read "OTA update failed: " and say
             # nothing at all.
-            async with session.post(upload_url, data=form, timeout=300) as response:
+            async with _gateway_http_lock(hass, base_url), session.post(
+                upload_url, data=form, timeout=300
+            ) as response:
                 result = await response.json(content_type=None)
                 if response.status >= 400 or not result.get("ok"):
                     raise RuntimeError(result.get("error") or f"Gateway returned HTTP {response.status}.")
@@ -811,9 +878,12 @@ async def async_scan_gateway(hass: HomeAssistant, gateway_id: str, seconds: int 
         return None
 
     session = async_get_clientsession(hass)
-    url = f"{_gateway_base_url(gateway)}/api/scan?seconds={max(1, min(30, int(seconds)))}"
+    base_url = _gateway_base_url(gateway)
+    url = f"{base_url}/api/scan?seconds={max(1, min(30, int(seconds)))}"
     try:
-        async with session.get(url, timeout=max(DEFAULT_TIMEOUT, seconds + 5)) as response:
+        async with _gateway_http_lock(hass, base_url), session.get(
+            url, timeout=max(DEFAULT_TIMEOUT, seconds + 5)
+        ) as response:
             payload = await response.json(content_type=None)
             if response.status >= 400:
                 raise RuntimeError(f"HTTP {response.status}")
@@ -1002,7 +1072,7 @@ async def async_send_gateway_payload(
                     filename="display.bin",
                     content_type="application/octet-stream",
                 )
-                async with session.post(
+                async with _gateway_http_lock(hass, base_url), session.post(
                     start_url,
                     data=form,
                     timeout=30,
@@ -1036,7 +1106,9 @@ async def async_send_gateway_payload(
                 if attempt < 2:
                     await asyncio.sleep(2)
                     try:
-                        async with session.get(f"{base_url}/api/status", timeout=8) as status_response:
+                        async with _gateway_http_lock(hass, base_url), session.get(
+                            f"{base_url}/api/status", timeout=8
+                        ) as status_response:
                             status_data = await status_response.json(content_type=None)
                         add_log(
                             "Gateway status after disconnect: "
@@ -1076,7 +1148,9 @@ async def async_send_gateway_payload(
         while time.monotonic() < deadline:
             await asyncio.sleep(1)
             try:
-                async with session.get(status_url, timeout=10) as response:
+                async with _gateway_http_lock(hass, base_url), session.get(
+                    status_url, timeout=10
+                ) as response:
                     final_data = await response.json(content_type=None)
                     if response.status == 404:
                         add_log("Gateway lost the transfer job, most likely because it restarted.")
@@ -1133,7 +1207,9 @@ async def async_send_gateway_payload(
                 f"{base_url}/api/transfer/cancel?id={quote(job_id, safe='')}"
             )
             try:
-                async with session.post(cancel_url, timeout=8) as response:
+                async with _gateway_http_lock(hass, base_url), session.post(
+                    cancel_url, timeout=8
+                ) as response:
                     cancel_data = await response.json(content_type=None)
                     if response.status in {200, 202} and cancel_data.get("ok") is not False:
                         add_log(

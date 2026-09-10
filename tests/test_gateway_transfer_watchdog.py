@@ -93,7 +93,10 @@ class GatewayTransferWatchdogTests(unittest.TestCase):
 
     def test_home_assistant_cancels_the_remote_job_after_its_poll_timeout(self) -> None:
         self.assertIn('/api/transfer/cancel?id={quote(job_id, safe=\'\')}', self.gateway)
-        self.assertIn("async with session.post(cancel_url, timeout=8)", self.gateway)
+        # Wrapped in the per-gateway HTTP lock since 1.0.19, so this pins the
+        # request itself rather than the exact "async with" line it sits on.
+        self.assertIn("cancel_url, timeout=8", self.gateway)
+        self.assertIn("_gateway_http_lock(hass, base_url), session.post(", self.gateway)
         self.assertIn('"error": "gateway_transfer_timeout"', self.gateway)
         self.assertIn('"gateway_side": True', self.gateway)
 
