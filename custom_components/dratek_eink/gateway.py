@@ -485,9 +485,14 @@ async def _async_probe_gateway_url(hass: HomeAssistant, base_url: str) -> dict[s
                 # not a gateway.
                 raise RuntimeError("Address did not answer with a gateway status object.")
     except Exception as exc:
+        # aiohttp's TimeoutError and ServerDisconnectedError both stringify to
+        # "", and every caller that falls back on `message or "..."` then prints
+        # its own guess. That is how a gateway answering pings, and answering
+        # this very endpoint a second later, was reported as "Gateway is
+        # offline." - a diagnosis nobody made, standing in for a blank.
         return {
             "ok": False,
-            "message": str(exc),
+            "message": str(exc).strip() or type(exc).__name__,
             "checked_at": int(time.time()),
         }
     finally:
@@ -734,9 +739,19 @@ async def async_start_gateway_ota(
     async def runner() -> None:
         try:
             update("preparing", 5, "Reading gateway status and selecting the correct firmware image.")
-            status = await async_gateway_status(hass, gateway)
+            # A gateway that is merely busy is not a gateway to give up on:
+            # the update is a deliberate, user-initiated action, and whatever
+            # is holding the box - a transfer, a scan - finishes in seconds.
+            status = {}
+            for attempt in range(4):
+                status = await async_gateway_status(hass, gateway)
+                if status.get("ok") or not status.get("busy"):
+                    break
+                if attempt == 0:
+                    update("preparing", 5, "Gateway is busy; waiting for it to finish.")
+                await asyncio.sleep(3)
             if not status.get("ok"):
-                raise RuntimeError(status.get("message") or "Gateway is offline.")
+                raise RuntimeError(status.get("message") or "Gateway did not answer.")
 
             # One address for the whole update, and it is the address the bytes
             # will actually go to.

@@ -2,6 +2,14 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.20] - 2026-09-10
+
+### Opravena OTA aktualizace, podruhé
+- **Jedno přerušené nahrávání dosud připravilo gateway o OTA natrvalo.** Když spadne HTTP spojení, webserver ESP32 vždy nedoručí událost o přerušení, takže se neprovede `Update.abort()` a knihovna si nechá rozpracovanou relaci. Její `begin()` pak sáhne po jediné větvi v celé funkci, která nenastaví žádnou chybu – proto hláška `ota_begin_failed: No Error`. Ověřeno ve zdrojáku `Updater.cpp`: každé jiné selhání uvnitř `begin()` chybu nastaví, takže „No Error" tuhle cestu identifikuje přesně. Firmware **0.1.71-gateway** rozpracovanou relaci před začátkem zruší, takže druhý pokus projde bez restartu gatewaye.
+- Selhání `begin()` a odmítnutý kontrolní součet se hlásí odděleně. Sdílely jednu větev, takže odmítnutý součet vypsal chybu z `begin()` – a ta, když `begin()` uspěl, zněla „No Error".
+- **`OTA update failed: Gateway is offline.` u gatewaye, která je zjevně online.** Chyby aiohttpu `TimeoutError` a `ServerDisconnectedError` mají prázdný text, takže volající místo něj vypsal svůj vlastní dohad. Teď se vypíše typ chyby a formulace „offline", kterou nikdo nezjistil, zmizela.
+- Zaneprázdněná gateway se u OTA **počká, ne odmítne**. Aktualizace je vědomá akce uživatele a přenos nebo sken, který krabičku drží, skončí během pár sekund.
+
 ## [1.0.19] - 2026-09-10
 
 ### Kritická oprava stránky Gatewaye

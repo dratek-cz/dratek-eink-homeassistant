@@ -15,7 +15,7 @@
 #include <HWCDC.h>
 #endif
 
-static const char* FIRMWARE_VERSION = "0.1.70-gateway";
+static const char* FIRMWARE_VERSION = "0.1.71-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 // The chip id the second-stage bootloader expects to find in an application
@@ -901,10 +901,35 @@ void handleOtaUploadChunk() {
       return;
     }
 
+    // Clear a session left running by an upload that died mid-flight.
+    //
+    // When the HTTP connection drops, the WebServer does not always deliver
+    // UPLOAD_FILE_ABORTED, so failOta - and with it Update.abort() - never
+    // runs and UpdateClass keeps _size set. Its begin() then takes the one
+    // early return in the whole function that reports no error at all:
+    //
+    //     if (_size > 0) { log_w("already running"); return false; }
+    //
+    // which is why a gateway in this state answered "ota_begin_failed: No
+    // Error" to every later attempt, permanently, until someone power-cycled
+    // it. One aborted upload used to cost the gateway its OTA for good.
+    if (Update.isRunning()) {
+      Update.abort();
+      Serial.println("Cleared a stale OTA session left by an interrupted upload.");
+    }
+
     otaInProgress = true;
     otaStatus = "uploading";
-    if (!Update.begin(otaExpectedSize, U_FLASH) || !Update.setMD5(expectedMd5.c_str())) {
-      failOta(String("ota_begin_failed: ") + Update.errorString());
+    if (!Update.begin(otaExpectedSize, U_FLASH)) {
+      String reason = Update.errorString();
+      // Still nothing to report means the guard above did not take: say so
+      // rather than printing "No Error" as if it were a diagnosis.
+      if (reason.length() == 0 || reason == "No Error") reason = "update already running";
+      failOta(String("ota_begin_failed: ") + reason);
+      return;
+    }
+    if (!Update.setMD5(expectedMd5.c_str())) {
+      failOta("ota_begin_failed: gateway rejected the checksum");
       return;
     }
     Serial.println("OTA upload started: " + String(otaExpectedSize) + " bytes for " + String(CHIP_FAMILY) + ".");

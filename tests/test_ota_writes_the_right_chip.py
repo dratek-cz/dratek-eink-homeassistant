@@ -122,3 +122,58 @@ class FirmwareGuardTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StaleSessionTests(unittest.TestCase):
+    """One interrupted upload must not cost the gateway its OTA for good.
+
+    When the HTTP connection drops, the WebServer does not always deliver
+    UPLOAD_FILE_ABORTED, so failOta - and with it Update.abort() - never runs
+    and UpdateClass keeps _size set. Its begin() then takes the one early
+    return in the whole function that sets no error:
+
+        if (_size > 0) { log_w("already running"); return false; }
+
+    which is why a gateway in that state answered "ota_begin_failed: No Error"
+    to every later attempt until it was power-cycled. Confirmed against
+    framework-arduinoespressif32's Updater.cpp: every other failure inside
+    begin() sets _error first, so "No Error" identifies this path exactly.
+    """
+
+    def test_a_stale_update_session_is_cleared_before_begin(self) -> None:
+        start = MAIN_CPP[MAIN_CPP.index("if (upload.status == UPLOAD_FILE_START) {"):]
+        start = start[: start.index("if (upload.status == UPLOAD_FILE_WRITE) {")]
+        clear = start.index("if (Update.isRunning()) {")
+        begin = start.index("Update.begin(otaExpectedSize")
+        self.assertLess(clear, begin, "the stale session must be cleared first")
+        self.assertIn("Update.abort();", start)
+
+    def test_no_error_is_never_reported_as_a_reason(self) -> None:
+        start = MAIN_CPP[MAIN_CPP.index("if (upload.status == UPLOAD_FILE_START) {"):]
+        start = start[: start.index("if (upload.status == UPLOAD_FILE_WRITE) {")]
+        self.assertIn('reason == "No Error"', start)
+        self.assertIn("update already running", start)
+
+    def test_begin_and_the_checksum_report_separately(self) -> None:
+        # They shared one branch, so a rejected checksum printed begin()'s
+        # error string - which, begin() having succeeded, was "No Error".
+        start = MAIN_CPP[MAIN_CPP.index("if (upload.status == UPLOAD_FILE_START) {"):]
+        start = start[: start.index("if (upload.status == UPLOAD_FILE_WRITE) {")]
+        self.assertNotIn("|| !Update.setMD5(", start)
+        self.assertIn("gateway rejected the checksum", start)
+
+
+class BusyIsNotOfflineOnTheOtaPathTests(unittest.TestCase):
+    def test_a_busy_gateway_is_waited_for_not_failed(self) -> None:
+        runner = GATEWAY[GATEWAY.index("async def async_start_gateway_ota("):]
+        runner = runner[: runner.index("\ndef async_get_gateway_ota_job")]
+        self.assertIn('if status.get("ok") or not status.get("busy"):', runner)
+        self.assertIn("Gateway is busy; waiting for it to finish.", runner)
+
+    def test_an_empty_exception_no_longer_becomes_gateway_is_offline(self) -> None:
+        # A gateway answering pings, and answering this endpoint a second
+        # later, was reported "offline" because str(TimeoutError()) is "".
+        self.assertNotIn('or "Gateway is offline."', GATEWAY)
+        probe = GATEWAY[GATEWAY.index("async def _async_probe_gateway_url("):]
+        probe = probe[: probe.index("\n\n\nasync def ")]
+        self.assertIn('"message": str(exc).strip() or type(exc).__name__', probe)
