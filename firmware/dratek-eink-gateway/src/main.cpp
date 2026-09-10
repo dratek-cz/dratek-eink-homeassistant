@@ -6,6 +6,7 @@
 #include <Update.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
@@ -15,7 +16,7 @@
 #include <HWCDC.h>
 #endif
 
-static const char* FIRMWARE_VERSION = "0.1.75-gateway";
+static const char* FIRMWARE_VERSION = "0.1.76-gateway";
 #if CONFIG_IDF_TARGET_ESP32S3
 static const char* CHIP_FAMILY = "esp32s3";
 // The chip id the second-stage bootloader expects to find in an application
@@ -57,6 +58,16 @@ static const uint32_t TRANSFER_MAX_RUNTIME_MS = 10UL * 60UL * 1000UL;
 static const uint32_t TRANSFER_RECOVERY_RESTART_DELAY_MS = 1000;
 static const uint32_t MDNS_REFRESH_INTERVAL_MS = 5UL * 60UL * 1000UL;
 static const uint32_t WIFI_RECONNECT_INTERVAL_MS = 15UL * 1000UL;
+// How often the link is verified, how long one probe waits for its reply, and
+// how many must fail in a row before the association is torn down and rebuilt.
+// Three failures at 20 s is about a minute of genuine silence - comfortably
+// longer than any ordinary Wi-Fi hiccup, and far shorter than the 441 s outage
+// that was measured. The probe is skipped entirely while a transfer or an OTA
+// is running, so it never competes with BLE for the radio.
+static const uint32_t LINK_PROBE_INTERVAL_MS = 20UL * 1000UL;
+static const uint32_t LINK_PROBE_REPLY_TIMEOUT_MS = 1500UL;
+static const uint32_t LINK_PROBE_FAILURES_BEFORE_RECONNECT = 3;
+static const uint16_t LINK_PROBE_LOCAL_PORT = 5388;
 static const uint16_t DRATEK_COMPANY_ID = 0x5053;
 static const char* TRANSFER_UUIDS[][3] = {
   {"0000fef0-0000-1000-8000-00805f9b34fb", "0000fef1-0000-1000-8000-00805f9b34fb", "0000fef2-0000-1000-8000-00805f9b34fb"},
@@ -157,6 +168,26 @@ uint32_t lastMdnsStartMs = 0;
 uint32_t lastWifiReconnectMs = 0;
 uint32_t wifiDisconnectCount = 0;
 uint32_t lastWifiDisconnectAtMs = 0;
+// The link watchdog.
+//
+// Measured on the shelf over a 25-minute window, four gateways: 20 separate
+// outages, 8 s to 441 s long, totalling more unreachable time than the window
+// itself. On most of them the board never noticed - uptime kept running and
+// wifiDisconnectCount did not move, so WiFi.status() said WL_CONNECTED for the
+// whole outage while neither ICMP nor HTTP could reach the box from outside.
+//
+// maintainNetworkServices() only ever asked WiFi.status(), so there was
+// nothing in the firmware that could see this state, let alone leave it. The
+// board sat there believing it was on the network until something else -
+// usually the AP - happened to fix it minutes later.
+//
+// So the link is verified rather than believed: a small DNS query to the
+// router, and a reply or its absence is the answer.
+uint32_t lastLinkProbeMs = 0;
+uint32_t linkProbeFailures = 0;
+uint32_t linkRecoveries = 0;
+uint32_t lastLinkOkMs = 0;
+uint16_t linkProbeId = 0;
 bool otaInProgress = false;
 String otaStatus = "idle";
 String otaError;
@@ -316,6 +347,16 @@ void handleStatus() {
   doc["wifi_power_save"] = true;
   doc["wifi_disconnect_count"] = wifiDisconnectCount;
   doc["last_wifi_disconnect_ms"] = lastWifiDisconnectAtMs;
+  // Which access point this gateway is actually talking to, and on which
+  // channel. Four gateways going silent together looks the same whether the
+  // cause is one AP misbehaving or each board failing on its own - these two
+  // fields are what tells those apart, and whether a mesh is handing the
+  // boards between radios behind our back.
+  doc["wifi_bssid"] = WiFi.BSSIDstr();
+  doc["wifi_channel"] = WiFi.channel();
+  doc["link_recoveries"] = linkRecoveries;
+  doc["link_probe_failures"] = linkProbeFailures;
+  doc["last_link_ok_ms"] = lastLinkOkMs;
   doc["uptime_ms"] = millis();
   doc["free_heap"] = ESP.getFreeHeap();
   doc["minimum_free_heap"] = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
@@ -1876,6 +1917,113 @@ void startMdns() {
   Serial.println(".local");
 }
 
+// Ask the router a question and see whether anything comes back.
+//
+// A DNS query is used because it is a real round trip that every router on a
+// home network answers, and because WiFiUDP is already in the framework - no
+// extra dependency, no extra heap worth naming. The name asked about is
+// irrelevant; any reply at all, even a refusal, proves the link carries
+// traffic in both directions.
+bool linkAnswersProbe() {
+  IPAddress target = WiFi.dnsIP();
+  if (target == IPAddress(0, 0, 0, 0)) target = WiFi.gatewayIP();
+  if (target == IPAddress(0, 0, 0, 0)) return false;
+
+  WiFiUDP udp;
+  if (!udp.begin(LINK_PROBE_LOCAL_PORT)) return false;
+
+  // A minimal DNS query for "a.root-servers.net": header, then the name in
+  // length-prefixed labels, then type A / class IN.
+  linkProbeId += 1;
+  uint8_t query[] = {
+    static_cast<uint8_t>(linkProbeId >> 8), static_cast<uint8_t>(linkProbeId & 0xFF),
+    0x01, 0x00,              // standard query, recursion desired
+    0x00, 0x01,              // one question
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x01, 'a',
+    0x0c, 'r','o','o','t','-','s','e','r','v','e','r','s',
+    0x03, 'n','e','t',
+    0x00,
+    0x00, 0x01,              // type A
+    0x00, 0x01,              // class IN
+  };
+
+  bool sent = udp.beginPacket(target, 53)
+              && udp.write(query, sizeof(query)) == sizeof(query)
+              && udp.endPacket();
+  if (!sent) {
+    udp.stop();
+    return false;
+  }
+
+  const uint32_t deadline = millis() + LINK_PROBE_REPLY_TIMEOUT_MS;
+  bool answered = false;
+  while (static_cast<int32_t>(millis() - deadline) < 0) {
+    if (udp.parsePacket() > 0) {
+      answered = true;
+      break;
+    }
+    delay(10);
+  }
+  udp.stop();
+  return answered;
+}
+
+// Tear the association down and build it again.
+//
+// WiFi.reconnect() is not enough for the state this exists for: the board
+// believes it is already associated, so a reconnect can be a no-op. Only a
+// full disconnect and a fresh begin() reliably gets a new association.
+void rebuildWifiAssociation() {
+  prefs.begin("dratek", true);
+  String ssid = prefs.getString("ssid", "");
+  String password = prefs.getString("password", "");
+  prefs.end();
+  if (ssid.length() == 0) return;
+
+  Serial.println("Link is silent while Wi-Fi claims to be connected; re-associating.");
+  linkRecoveries += 1;
+  if (mdnsStarted) MDNS.end();
+  mdnsStarted = false;
+  WiFi.disconnect(false, false);
+  delay(200);
+  WiFi.begin(ssid.c_str(), password.c_str());
+  // Not waited on here: loop() keeps running, and maintainNetworkServices
+  // restarts mDNS as soon as the association is back.
+  lastWifiReconnectMs = millis();
+  linkProbeFailures = 0;
+  lastLinkProbeMs = millis();
+}
+
+void maintainLink() {
+  // Never while the radio is committed to something else, and never before
+  // the first association.
+  if (gatewayOperationBusy() || WiFi.status() != WL_CONNECTED) return;
+  if (millis() - lastLinkProbeMs < LINK_PROBE_INTERVAL_MS) return;
+  lastLinkProbeMs = millis();
+
+  if (linkAnswersProbe()) {
+    if (linkProbeFailures > 0) {
+      Serial.print("Link answered again after ");
+      Serial.print(linkProbeFailures);
+      Serial.println(" silent probe(s).");
+    }
+    linkProbeFailures = 0;
+    lastLinkOkMs = millis();
+    return;
+  }
+
+  linkProbeFailures += 1;
+  Serial.print("Link probe got no reply (");
+  Serial.print(linkProbeFailures);
+  Serial.print("/");
+  Serial.print(LINK_PROBE_FAILURES_BEFORE_RECONNECT);
+  Serial.println(") while Wi-Fi reports connected.");
+  if (linkProbeFailures >= LINK_PROBE_FAILURES_BEFORE_RECONNECT) {
+    rebuildWifiAssociation();
+  }
+}
+
 void maintainNetworkServices() {
   bool connected = WiFi.status() == WL_CONNECTED;
   if (connected && !wifiWasConnected) {
@@ -2052,5 +2200,6 @@ void loop() {
   }
   startQueuedTransfer();
   maintainNetworkServices();
+  maintainLink();
   delay(2);
 }

@@ -13,6 +13,10 @@
 import { DISPLAY_TEMPLATES_BY_ID } from "./templates/index.js";
 
 export const BRAND_LOGO_TEMPLATE_ID = "dratek_logo";
+// How many times a display in this broadcast may be put back at the end of the
+// queue after a failed write. Must not exceed MAX_RETRY_BUDGET in
+// ws_sending.py, which clamps it anyway.
+export const BRAND_LOGO_RETRY_BUDGET = 3;
 
 // The lockup is dithered at every panel size. There used to be a height below
 // which it was not: the module's screen printed as plain white inside its black
@@ -464,6 +468,19 @@ export const brandLogoMixin = {
       // Home Assistant's own adapter). Flooding a dead gateway is a routing
       // problem and is solved where routing happens - see _select_gateway_route.
       wait_for_completion: false,
+      // Anything that fails goes back to the end of the queue on its own.
+      //
+      // This send is a hundred displays written one at a time over half an
+      // hour, and on a shelf that size a display losing its radio for a few
+      // seconds is ordinary, not exceptional: it may be mid-refresh from the
+      // previous job, or the gateway that hears it may be in its recovery
+      // backoff. Failing it once and leaving it failed means hunting through a
+      // hundred-row queue afterwards to find the dozen that did not land.
+      //
+      // The back of the queue rather than an immediate retry is the point -
+      // by the time the rest of the shelf has been written, whatever was busy
+      // is free. See TransferQueue._requeue_if_it_failed.
+      retry_budget: BRAND_LOGO_RETRY_BUDGET,
       // No `automation` key at all, which is what makes the send itself clear
       // whatever automatic update the display had (see
       // _clear_previous_entity_automation in ws_sending.py). The explicit

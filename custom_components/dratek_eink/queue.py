@@ -215,6 +215,8 @@ class TransferQueue:
         runner: TransferRunner,
         wait_for_completion: bool = True,
         rebind: RouteRebinder | None = None,
+        retry_budget: int = 0,
+        attempt: int = 1,
     ) -> dict[str, Any]:
         await self._ensure_loaded()
         normalized_address = address.upper()
@@ -234,7 +236,18 @@ class TransferQueue:
             "log": [],
             # True until _hold_route binds a real radio to it.
             "route_pending": rebind is not None,
+            # How many more times this work may be put back at the end of the
+            # queue if it fails, and which attempt this job is. Both travel
+            # with the job so the queue tab can say "2. pokus" rather than
+            # showing what looks like a duplicate entry.
+            "retry_budget": max(0, int(retry_budget)),
+            "attempt": max(1, int(attempt)),
         }
+        if job["attempt"] > 1:
+            job["log"].append(
+                f"{job['attempt']}. pokus - predchozi zapis do tohoto displeje selhal."
+            )
+
         manual = operation != "entity_update"
         if manual:
             self._last_failure_at.pop(normalized_address, None)
@@ -256,7 +269,7 @@ class TransferQueue:
             current_task = asyncio.current_task()
             if current_task is not None:
                 self._automatic_tasks[normalized_address] = (job["id"], current_task)
-        async def process_job() -> dict[str, Any]:
+        async def run_job_once() -> dict[str, Any]:
             # A manual upload to a display that is simply not answering is held
             # rather than failed: the queue keeps it, re-attempts it when the
             # display is heard again (or once a minute regardless), and the
@@ -337,6 +350,29 @@ class TransferQueue:
                         self._automatic_tasks.pop(normalized_address, None)
                     self._preempted_jobs.discard(job["id"])
 
+        async def resubmit() -> None:
+            """Put this same work back, at the end of the queue."""
+            await self.async_submit(
+                resource=resource,
+                transport_type=transport_type,
+                transport_name=transport_name,
+                address=address,
+                operation=operation,
+                runner=runner,
+                # Never awaited, whatever the original caller asked for. A
+                # caller that waited for the first attempt is waiting for a
+                # result it can show now; the retry belongs to the queue.
+                wait_for_completion=False,
+                rebind=rebind,
+                retry_budget=job["retry_budget"] - 1,
+                attempt=job["attempt"] + 1,
+            )
+
+        async def process_job() -> dict[str, Any]:
+            result = await run_job_once()
+            await self._requeue_if_it_failed(job, resubmit)
+            return result
+
         if wait_for_completion:
             return await process_job()
 
@@ -366,6 +402,7 @@ class TransferQueue:
         runner_factory: GatewayRunnerFactory,
         wait_for_completion: bool = True,
         rebind: RouteRebinder | None = None,
+        retry_budget: int = 0,
     ) -> dict[str, Any]:
         """Choose a gateway atomically and submit one transfer through it.
 
@@ -409,6 +446,7 @@ class TransferQueue:
             runner=runner_factory(route),
             wait_for_completion=wait_for_completion,
             rebind=rebind,
+            retry_budget=retry_budget,
         )
 
     @asynccontextmanager
@@ -810,6 +848,48 @@ class TransferQueue:
         }
         return result
 
+
+    async def _requeue_if_it_failed(
+        self, job: dict[str, Any], resubmit: Callable[[], Awaitable[None]]
+    ) -> None:
+        """Send a failed job to the back of the queue, if it has budget left.
+
+        Opt-in, per submission, because "try it again later" is only the right
+        answer when something is going to write the whole shelf anyway. A
+        broadcast is exactly that: a hundred displays, written one at a time
+        over half an hour, where a single display losing its radio for ten
+        seconds is ordinary and having to hunt for it afterwards is not.
+
+        The back of the queue, not the front, and that is the whole point. A
+        display that just failed is the least likely one to succeed if it is
+        retried immediately - its radio is busy, or the gateway serving it is
+        backing off, or the panel is mid-refresh. By the time ninety other
+        displays have been written, all three have had time to pass. It also
+        means one unreachable display can never stall the shelf behind it.
+        """
+        if job.get("status") != "failed":
+            return
+        if job.get("retry_budget", 0) <= 0:
+            return
+        # A user who cancelled this does not want it back. Cancellation before
+        # the write starts finishes as "skipped" and never reaches here; a
+        # cancellation mid-write is this exact message.
+        if job.get("error") == "Transfer cancelled.":
+            return
+        if job["id"] not in {existing.get("id") for existing in self._jobs}:
+            # Cleared from the queue while it was running.
+            return
+        job["log"].append(
+            "Zarazeno znovu na konec fronty; zbyva pokusu: "
+            f"{job['retry_budget'] - 1}."
+        )
+        job["log"] = job["log"][-80:]
+        try:
+            await resubmit()
+        except Exception as exc:  # never let a retry break the finished job
+            job["log"].append(f"Znovuzarazeni do fronty se nezdarilo: {exc}")
+            job["log"] = job["log"][-80:]
+        await self._save_history()
 
     async def _run_with_automatic_bluetooth_retry(
         self,

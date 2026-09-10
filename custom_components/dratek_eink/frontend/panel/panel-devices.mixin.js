@@ -4370,6 +4370,10 @@ export const devicesMixin = {
         automation: payload.automation,
         template_ids: Array.isArray(payload.template_ids) ? payload.template_ids : [],
         wait_for_completion: payload.wait_for_completion === true,
+        // How many times the queue may put this back at its own end if the
+        // write fails. Absent or 0 keeps the old behaviour: fail once, stay
+        // failed. See MAX_RETRY_BUDGET in ws_sending.py for the ceiling.
+        retry_budget: Number(payload.retry_budget) || 0,
       });
     } catch (err) {
       throw new Error(`Home Assistant nezařadil přijatý obrázek do fronty: ${this._message(err)}`);

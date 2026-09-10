@@ -37,6 +37,12 @@ DESIGN_UPLOAD_CHUNK_BYTES = 64 * 1024
 DESIGN_UPLOAD_MAX_CHUNKS = 128
 DESIGN_UPLOAD_MAX_BYTES = 8 * 1024 * 1024
 DESIGN_UPLOAD_TTL_SECONDS = 10 * 60
+# A ceiling on how many times one submission may put itself back at the end of
+# the queue. Four is enough to ride out a display that is asleep, a gateway in
+# its recovery backoff and a panel mid-refresh - the three ordinary reasons a
+# write fails on a busy shelf - without letting a display that is genuinely
+# dead (flat battery, taken off the shelf) cycle through the queue forever.
+MAX_RETRY_BUDGET = 4
 
 
 async def _async_route_preference(
@@ -93,6 +99,7 @@ async def _async_submit_routed_transfer(
     local_runner,
     gateway_runner_factory,
     wait_for_completion: bool,
+    retry_budget: int = 0,
 ) -> dict[str, Any]:
     """Submit through a pinned route or the smart multi-gateway pool."""
     manager, gateway_selection, manual_route = await _async_route_preference(
@@ -123,6 +130,7 @@ async def _async_submit_routed_transfer(
             operation=operation,
             runner=gateway_runner_factory(route),
             wait_for_completion=wait_for_completion,
+            retry_budget=retry_budget,
         )
         if result and result.get("ok") is not False:
             return result
@@ -162,6 +170,7 @@ async def _async_submit_routed_transfer(
             runner_factory=gateway_runner_factory,
             wait_for_completion=wait_for_completion,
             rebind=rebind,
+            retry_budget=retry_budget,
         )
         if result and result.get("ok") is not False:
             return result
@@ -178,6 +187,7 @@ async def _async_submit_routed_transfer(
         runner=local_runner,
         wait_for_completion=wait_for_completion,
         rebind=rebind,
+        retry_budget=retry_budget,
     )
 
 
@@ -429,6 +439,7 @@ async def websocket_upload_design_chunk(
         vol.Optional("automation"): dict,
         vol.Optional("template_ids"): [str],
         vol.Optional("wait_for_completion", default=False): bool,
+        vol.Optional("retry_budget", default=0): int,
     }
 )
 @websocket_api.async_response
@@ -529,6 +540,12 @@ async def websocket_commit_design_upload(
             local_runner=run_transfer,
             gateway_runner_factory=gateway_runner_factory,
             wait_for_completion=bool(msg.get("wait_for_completion", False)),
+            # Opt-in, and bounded. The shelf-wide logo broadcast asks for this
+            # because it writes a hundred displays over half an hour and a
+            # display losing its radio for ten seconds in the middle of that is
+            # ordinary - but a caller that does not ask keeps the old behaviour
+            # of failing once and staying failed.
+            retry_budget=max(0, min(int(msg.get("retry_budget") or 0), MAX_RETRY_BUDGET)),
         )
     except Exception as exc:
         connection.send_result(

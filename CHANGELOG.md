@@ -2,6 +2,36 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.7] - 2026-09-10
+
+### Co selže, vrátí se samo na konec fronty — a gateway pozná, že je hluchá
+
+Nejdřív měření z vašeho běhu na 1.0.6 (100 displejů): **67 uspělo, 33 selhalo**, a práce se konečně rozdělila mezi všechny čtyři gatewaje (34 / 33 / 16 / 15) — přes Home Assistant šly už jen 2. Směrování z 1.0.6 tedy funguje.
+
+Jenže **28 z těch 33 chyb byla jedna a ta samá věc**: `Cannot connect to host 192.168.1.188:80`. Gatewaje během běhu vypadávají ze sítě.
+
+### Přidáno a vylepšeno
+
+- **Hromadná šablona si nezdařené displeje sama zařadí znovu na konec fronty.** Až třikrát. Na regálu o sto displejích je selhání kvůli krátkému výpadku rádia normální jev, ne výjimka — a hledat potom ve stovce řádků těch pár, co nedojely, je nepoužitelné.
+
+  Na **konec** fronty, ne na začátek, a to je celý smysl: displej, který právě selhal, má ze všech nejmenší šanci uspět hned teď — jeho rádio je zaneprázdněné, gateway couvá po chybě, nebo se panel ještě překresluje. Až se mezitím zapíše zbytek regálu, všechny tři důvody pominou. A hlavně: jeden nedosažitelný displej tím nikdy nezablokuje frontu za sebou.
+
+  Řádek ve frontě se označí jako „2. pokus", aby nevypadal jako duplikát.
+
+### Opraveno
+
+- **Firmware 0.1.76: gateway si už neplete „jsem připojená" s „jde to ke mně".**
+
+  Měřeno na regálu, okno 25 minut, čtyři gatewaje: **20 samostatných výpadků, 8 až 441 sekund dlouhých**, dohromady víc nedostupného času než kolik trvalo celé okno. A u většiny z nich si toho deska vůbec nevšimla — `uptime` běžel dál a `wifi_disconnect_count` se nepohnul, takže `WiFi.status()` po celou dobu hlásil `WL_CONNECTED`, zatímco se k desce nedostal ani ping, ani HTTP.
+
+  Ve firmwaru nebylo nic, co by tenhle stav mohlo vidět, natož z něj odejít — `maintainNetworkServices()` se ptal jen `WiFi.status()`. Deska tedy seděla v přesvědčení, že je na síti, dokud to o minuty později nespravil někdo jiný.
+
+  Nově se spojení **ověřuje, ne věří**: každých 20 sekund malý DNS dotaz na router. Tři ticha po sobě (tedy asi minuta skutečného mlčení) a asociace se zbourá a postaví znovu — `WiFi.reconnect()` na tohle nestačí, protože deska si myslí, že už připojená je. Během přenosu nebo OTA se neprobuje vůbec, aby to nesoupeřilo s BLE o rádio.
+
+- **Gateway hlásí, na kterém AP a kanálu vlastně visí** (`wifi_bssid`, `wifi_channel`), plus počet vynucených obnov spojení. Když zmlkne všechno naráz, tohle je to, co odliší jedno zlobící AP od čtyř desek selhávajících nezávisle. U vás už to jednu věc ukázalo: všechny čtyři gatewaje nevisí na routeru `192.168.1.1`, ale na přístupovém bodě `74:4D:28:85:7C:BE` (`192.168.1.254`) na kanálu 5.
+
+**Aktualizujte gatewaje na 0.1.76.** 0.1.74 stále nepoužívejte.
+
 ## [1.0.6] - 2026-09-10
 
 ### Jedna ztracená odpověď už neznamená, že gateway zmizí
