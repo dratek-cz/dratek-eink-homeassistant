@@ -131,7 +131,7 @@ def register_display_device(
     if width and height and f"{width}x{height}" not in model:
         model = f"{model} ({width}×{height})"
 
-    via_device = None
+    gateway_identifier: tuple[str, str] | None = None
     preferred = display.get("preferred_path")
     if isinstance(preferred, dict) and preferred.get("type") == "gateway":
         gateway_ref = str(preferred.get("id") or "")
@@ -149,7 +149,7 @@ def register_display_device(
                 gateway.get("gateway_id") or status.get("gateway_id") or ""
             ).strip()
             if stable_id:
-                via_device = (DOMAIN, f"gateway:{stable_id}")
+                gateway_identifier = (DOMAIN, f"gateway:{stable_id}")
 
     physical_code = str(display.get("physical_code") or "").strip()
     name = str(
@@ -158,6 +158,17 @@ def register_display_device(
         or (f"DRATEK eInk {physical_code}" if physical_code else f"DRATEK eInk {address}")
     ).strip()
     registry = dr.async_get(hass)
+    extra: dict[str, Any] = {}
+    if gateway_identifier is not None:
+        # The gateway device is registered separately; until it exists the
+        # display is created without a parent and linked on a later update, so
+        # the existing link is never cleared and no placeholder device appears.
+        try:
+            extra["via_device_id"] = dr.async_get_device_id_by_identifier(
+                hass, gateway_identifier, config_entry_id=config_entry_id
+            )
+        except ValueError:
+            pass
     registry.async_get_or_create(
         config_entry_id=config_entry_id,
         identifiers={(DOMAIN, f"display:{address}")},
@@ -167,7 +178,7 @@ def register_display_device(
         hw_version=str(display.get("hw") or "") or None,
         sw_version=str(display.get("sw") or "") or None,
         serial_number=physical_code or address,
-        via_device=via_device,
+        **extra,
     )
     try:
         from homeassistant.helpers.dispatcher import async_dispatcher_send

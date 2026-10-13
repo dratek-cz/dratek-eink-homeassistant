@@ -21,7 +21,7 @@ from typing import Any
 
 from homeassistant.components.camera import Camera
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
@@ -66,6 +66,7 @@ async def async_setup_entry(
 
     display_cameras: dict[str, DratekDisplayPreviewCamera] = {}
 
+    @callback
     def _add_or_refresh(address: str) -> None:
         normalized = str(address or "").strip().upper()
         if not normalized:

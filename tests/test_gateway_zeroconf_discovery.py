@@ -47,7 +47,7 @@ class GatewayZeroconfDiscoveryTests(unittest.TestCase):
         self.assertIn("async def async_step_bluetooth(", flow)
         self.assertIn("register_display_device(hass, entry_id, device, gateways)", scan)
         self.assertIn('identifiers={(DOMAIN, f"display:{address}")}', registry)
-        self.assertIn("via_device=via_device", registry)
+        self.assertIn('extra["via_device_id"] = dr.async_get_device_id_by_identifier(', registry)
         init_source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
         self.assertIn("GATEWAY_DISPLAY_DISCOVERY_INTERVAL_SECONDS = 5 * 60", init_source)
         self.assertIn("await async_register_gateway_displays(", init_source)

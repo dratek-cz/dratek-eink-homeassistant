@@ -29,7 +29,7 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -89,6 +89,9 @@ async def async_setup_entry(
 
     display_entities: dict[str, list[DratekDisplaySensor]] = {}
 
+    # The dispatcher runs plain functions in the executor; this touches entity
+    # and platform APIs that are only safe on the event loop.
+    @callback
     def _add_or_refresh(address: str) -> None:
         normalized = str(address or "").strip().upper()
         if not normalized:
