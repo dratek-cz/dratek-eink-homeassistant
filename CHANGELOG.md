@@ -2,6 +2,26 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.4-beta.1] - 2026-10-13
+
+Totožné s 1.0.4 a navíc dvě dlaždice, které stabilní vydání nemá: firemní šablona **DRÁTEK** (hromadné odeslání) a šablona **Cedule s ikonou**. Obsahuje opravu aktualizace entit displejů v hlavní smyčce Home Assistantu a přechod na `via_device_id` popsané níže.
+
+## [1.0.4] - 2026-10-13
+
+Oprava kompatibility s Home Assistantem 2026.10: entity fyzických displejů se znovu aktualizují a nové displeje dostanou entity bez restartu.
+
+### Opraveno
+
+- Baterie, napětí baterie, síla signálu, poslední kontakt, dostupnost a náhled displeje se aktualizují v hlavní smyčce Home Assistantu. Aktualizace dřív běžela ve vláknu, takže Home Assistant 2026.10 hlásil `RuntimeError` (`async_write_ha_state`, `async_create_task`), hodnoty zůstávaly zastaralé, náhled se po odeslání obrazu neobnovil a v logu přibývalo varování „coroutine was never awaited“.
+- Displej nalezený až za běhu dostane své entity hned, bez nového načtení integrace nebo restartu Home Assistantu.
+- Přiřazení displeje k bráně používá `via_device_id` místo zastaralého `via_device`, který Home Assistant 2027.8 odstraní. Když brána v registru zařízení ještě není, displej se vytvoří bez nadřazeného zařízení a propojí se při další aktualizaci. Duplicitní zařízení nevznikají a identifikátory zařízení ani entit se nemění.
+
+### Ověření
+
+- Nové testy v `tests/test_display_entities_event_loop.py` (13 případů): displej nalezený při startu i později, aktualizace všech senzorů, obnova náhledu, rychlé události za sebou, odpojení a opětovné načtení bez duplicitních posluchačů, vazba na bránu, chybějící brána, žádné nezačekané korutiny a žádné chyby vlákna.
+- Testy běží proti zástupným třídám Home Assistantu, které přesně napodobují jeho pravidla (obyčejná funkce běží ve vlákně, entity API mimo smyčku vyhodí `RuntimeError`). Bez `@callback` šest z nich spolehlivě selže. Na reálném Home Assistantu 2026.10 zatím ověřeno nebylo.
+- Firmware gateway zůstává 0.1.76.
+
 ## [1.0.3] - 2026-09-18
 
 Sjednocené číslování. Vydání obsahuje všechny opravy z dřívějších pracovních verzí 1.0.8 a 1.0.9-beta.*, které byly staženy.

@@ -55,6 +55,24 @@ class DisplayDeviceEntityTests(unittest.TestCase):
         self.assertIn("async_dispatcher_connect", self.binary)
         self.assertIn("async_dispatcher_connect", self.camera)
 
+    def test_dispatcher_listeners_are_event_loop_callbacks(self) -> None:
+        # A dispatcher target without @callback runs in the executor, where
+        # async_write_ha_state / async_add_entities / hass.async_create_task
+        # raise RuntimeError. Behaviour is covered in
+        # test_display_entities_event_loop.py; this guards the decorator itself.
+        for source in (self.sensor, self.binary, self.camera):
+            self.assertIn("from homeassistant.core import HomeAssistant, callback", source)
+            self.assertIn(
+                "    @callback\n    def _add_or_refresh(address: str) -> None:", source
+            )
+
+    def test_gateway_parent_uses_via_device_id(self) -> None:
+        self.assertNotIn("via_device=", self.registry)
+        self.assertIn("via_device_id", self.registry)
+        self.assertIn("async_get_device_id_by_identifier", self.registry)
+        self.assertNotIn("except Exception", self.registry.split("def register_display_device(")[1]
+                         .split("async def async_register_gateway_displays(")[0])
+
     def test_registered_displays_are_restored_before_platform_setup(self) -> None:
         self.assertIn("def restore_registered_display_states(", self.registry)
         self.assertIn('identifier.startswith("display:")', self.registry)

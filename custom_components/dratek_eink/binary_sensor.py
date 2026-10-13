@@ -7,7 +7,7 @@ from typing import Any
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -29,6 +29,7 @@ async def async_setup_entry(
     """Add one connectivity entity for each discovered physical display."""
     entities: dict[str, DisplayConnectivityBinarySensor] = {}
 
+    @callback
     def _add_or_refresh(address: str) -> None:
         normalized = str(address or "").strip().upper()
         if not normalized:
