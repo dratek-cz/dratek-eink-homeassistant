@@ -373,7 +373,19 @@ export const templatesMixin = {
       return;
     }
     const template = this._templateDefinitions().find((item) => item.id === templateId);
-    if (!template) return;
+    if (!template) {
+      // Catalog templates such as "custom_image" are not in the legacy
+      // designer list above, so there is nothing to load - but the editor
+      // elements of the template that was open until now must not stay behind.
+      // They are drawn on top of whatever is assigned to the display and sent
+      // with it, so opening a custom template and then the picture template
+      // stamped the custom template's label, clock and gauge onto the picture.
+      this._restoreTemplateEditorState?.(templateId);
+      this._render();
+      this._paint();
+      this._scheduleDraftSave();
+      return;
+    }
     if (!skipConfirm && this._objects.length && !confirm(`Nahradit aktualni navrh sablonou "${template.title}"?`)) return;
     this._pushHistory();
     const device = this._device();

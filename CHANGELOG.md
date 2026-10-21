@@ -2,6 +2,20 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.5-beta.2] - 2026-10-21
+
+Předběžné vydání. Obsahem totožné s 1.0.5-beta.1 a navíc jedna oprava.
+
+### Opraveno
+
+- **Šablona z katalogu se už nesloučí s tou, která byla otevřená předtím.** Po otevření vlastní šablony (popisek, hodiny, budík) a hned potom šablony „Vlastní obrázek“ zůstaly prvky vlastní šablony načtené v editoru. Panel je nakreslil přes obrázek, odeslal je i na displej a uložil je pod šablonu obrázku. Platilo to pro každou šablonu z katalogu, která není ve starém seznamu návrhářských šablon. Panel teď při přepnutí načte editor otevírané šablony, tedy její vlastní prvky nebo prázdný seznam.
+- Prvky, které se do konceptu přilepily ve starší verzi, se samy neodstraní. Stačí šablonu obrázku otevřít a prvky v editoru smazat.
+
+### Ověření
+
+- Nový test spouští kód panelu v Node: bez opravy selže, s opravou projde.
+- Ověřeno jen testy, v Home Assistantu ani na displeji zatím ne.
+
 ## [1.0.5-beta.1] - 2026-10-21
 
 Předběžné vydání. Obsahem totožné s 1.0.4, navíc dvě dlaždice, které stabilní vydání nemá (firemní šablona DRÁTEK a Cedule s ikonou), a jedna oprava.
