@@ -2068,9 +2068,67 @@ export const devicesMixin = {
       element_adjustments: structuredClone(this._templateElementAdjustments || {}),
       designer_viewport: this._templateDesignerViewport || "wide",
     };
+    this._pruneForeignTemplateElements();
+  },
+
+  // Which user templates each element id belongs to. An element is created
+  // inside one template and keeps its id; only user templates can own elements
+  // this way, so the ids found in their saved elements and in the editor state
+  // kept for them are the ownership record.
+  _templateElementOwners() {
+    const owners = new Map();
+    const add = (templateId, elements) => {
+      if (!String(templateId || "").startsWith("user-template-")) return;
+      for (const element of Array.isArray(elements) ? elements : []) {
+        if (!element?.id) continue;
+        if (!owners.has(element.id)) owners.set(element.id, new Set());
+        owners.get(element.id).add(String(templateId));
+      }
+    };
+    for (const template of this._userDisplayTemplates || []) add(template?.id, template?.editor_elements);
+    for (const [templateId, state] of Object.entries(this._templateEditorStates || {})) add(templateId, state?.editor_elements);
+    return owners;
+  },
+
+  // Older builds stored the elements of the template that had just been open
+  // under whichever template was opened next (a custom template's label and
+  // gauges ended up in the picture template, the sign, ...), and those stored
+  // copies came back on every load. An element belonging to a user template
+  // has no business in the state of a template that is not a user template, so
+  // it is dropped from there - from the stored states and from the live editor.
+  _pruneForeignTemplateElements() {
+    const owners = this._templateElementOwners();
+    if (!owners.size) return;
+    const isForeign = (templateId, element) =>
+      !String(templateId || "").startsWith("user-template-") && owners.has(element?.id);
+    const prune = (templateId, elements, adjustments) => {
+      const kept = (Array.isArray(elements) ? elements : []).filter((element) => !isForeign(templateId, element));
+      if (kept.length === (elements || []).length) return null;
+      const dropped = new Set((elements || []).filter((element) => isForeign(templateId, element)).map((element) => element.id));
+      const keptAdjustments = Object.fromEntries(Object.entries(adjustments || {}).filter(([key]) => !dropped.has(key)));
+      return { kept, keptAdjustments };
+    };
+    for (const [templateId, state] of Object.entries(this._templateEditorStates || {})) {
+      const result = prune(templateId, state?.editor_elements, state?.element_adjustments);
+      if (!result) continue;
+      state.editor_elements = result.kept;
+      state.element_adjustments = result.keptAdjustments;
+    }
+    const activeId = this._activeTemplateEditorStateId?.();
+    if (activeId) {
+      const live = prune(activeId, this._templateEditorElements, this._templateElementAdjustments);
+      if (live) {
+        this._templateEditorElements = live.kept;
+        this._templateElementAdjustments = live.keptAdjustments;
+        if (!live.kept.some((element) => element.id === this._selectedTemplateEditorElementId)) {
+          this._selectedTemplateEditorElementId = "";
+        }
+      }
+    }
   },
 
   _restoreTemplateEditorState(templateId, template = null) {
+    this._pruneForeignTemplateElements();
     const id = String(templateId || "");
     const saved = this._templateEditorStates?.[id];
     const sourceElements = saved?.editor_elements
@@ -2276,6 +2334,7 @@ export const devicesMixin = {
       const sharedUpdated = Date.parse(shared?.updated_at || "") || Number(shared?.updated_at || 0);
       if (!shared || embeddedUpdated > sharedUpdated) this._saveUserDisplayTemplate?.(template).catch(() => {});
     }
+    this._pruneForeignTemplateElements();
     this._templateImageLibrary = Array.isArray(config.image_library)
       ? structuredClone(config.image_library).filter((asset) => asset?.id && String(asset.src || "").startsWith("data:image/"))
       : [];
@@ -3294,6 +3353,7 @@ export const devicesMixin = {
   // Reading the model instead makes the send and the preview independent of
   // the DOM, and lets each slot's elements land inside their own slot.
   _collectTemplateOverlayBoxes(request) {
+    this._pruneForeignTemplateElements();
     const templates = request?.templates || [];
     if (!templates.length) return [];
     const width = Math.max(1, Number(request.width) || 1);

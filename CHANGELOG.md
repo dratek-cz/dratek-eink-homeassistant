@@ -2,6 +2,19 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.5-beta.3] - 2026-10-21
+
+Předběžné vydání. Obsahem totožné s 1.0.5-beta.2 a navíc dočištění starých dat.
+
+### Opraveno
+
+- **Prvky vlastní šablony, které se do konceptu displeje přilepily ve starší verzi, se teď samy odstraní.** Oprava z beta.2 zabránila novému přilepení, ale uložený koncept už obsahoval prvky vlastní šablony (popisek, budíky) ve stavech dalších šablon – obrázkové, Cedule i Spotových cen – a při jejich otevření se vrátily. Prvek patří šabloně, ve které vznikl; panel ho teď ze stavů šablon, které vlastní šablonou nejsou, odstraní při načtení konceptu, při přepnutí šablony, při uložení stavu i před sestavením odesílaného obrazu. Prvky, které si šablona vytvořila sama, zůstávají.
+
+### Ověření
+
+- Test spouští kód panelu v Node nad stavem, jaký zanechala chyba: obrázková šablona si ponechá jen vlastní prvek, vlastní šablona o svoje prvky nepřijde.
+- Ověřeno i na skutečném konceptu z testovací instalace a po Ctrl+F5 v panelu v Home Assistantu: po otevření vlastní šablony a pak obrázkové zůstane na displeji jen obrázek.
+
 ## [1.0.5-beta.2] - 2026-10-21
 
 Předběžné vydání. Obsahem totožné s 1.0.5-beta.1 a navíc jedna oprava.

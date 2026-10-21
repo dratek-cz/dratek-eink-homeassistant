@@ -29,9 +29,8 @@ import { templatesMixin } from %(templates)s;
 import { devicesMixin } from %(devices)s;
 const label = { id: "el-1", type: "text", text: "Popisek" };
 const panel = {
+  ...devicesMixin,
   ...templatesMixin,
-  _restoreTemplateEditorState: devicesMixin._restoreTemplateEditorState,
-  _rememberActiveTemplateEditorState: devicesMixin._rememberActiveTemplateEditorState,
   _normalizeTemplateEditorElement: (item) => item,
   _templateDefinitions: () => [{ id: "weather", title: "Pocasi", objects: [] }],
   _templateEditorStates: {},
@@ -49,6 +48,39 @@ console.log(JSON.stringify({
   afterPicture,
   restoredOwn: panel._templateEditorElements.map((item) => item.id),
   saved: panel.saved === true,
+}));
+"""
+
+
+_PRUNE_SCRIPT = """
+import { devicesMixin } from %(devices)s;
+const gauge = { id: "template-element-1-0", type: "gauge" };
+const own = { id: "template-element-9-9", type: "text" };
+const panel = {
+  ...devicesMixin,
+  _normalizeTemplateEditorElement: (item) => item,
+  _userDisplayTemplates: [{ id: "user-template-a", user_created: true, editor_elements: [gauge] }],
+  // What a build with the bug left in the stored draft: the custom template's
+  // gauge sits in the state of every template that was opened after it.
+  _templateEditorStates: {
+    "user-template-a": { editor_elements: [gauge], element_adjustments: { [gauge.id]: { x: 1 } } },
+    custom_image: { editor_elements: [gauge, own], element_adjustments: { [gauge.id]: { x: 1 }, [own.id]: { y: 2 } } },
+    sign: { editor_elements: [gauge], element_adjustments: {} },
+  },
+  _templateEditorElements: [],
+  _templateElementAdjustments: {},
+  _selectedDisplayTemplateId: "custom_image",
+  _selectedTemplateCanvasSlot: "primary",
+  _refreshTemplateEntityElements() {},
+};
+panel._restoreTemplateEditorState("custom_image");
+const states = panel._templateEditorStates;
+console.log(JSON.stringify({
+  live: panel._templateEditorElements.map((item) => item.id),
+  liveAdjustments: Object.keys(panel._templateElementAdjustments),
+  picture: states.custom_image.editor_elements.map((item) => item.id),
+  sign: states.sign.editor_elements.length,
+  owner: states["user-template-a"].editor_elements.map((item) => item.id),
 }));
 """
 
@@ -73,6 +105,25 @@ class TemplateSwitchKeepsElementsApartTests(unittest.TestCase):
         # A template's own saved elements still come back when it is reopened.
         self.assertEqual(["own"], result["restoredOwn"])
         self.assertTrue(result["saved"])
+
+    def test_elements_a_custom_template_left_in_a_stored_draft_are_dropped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "run.mjs"
+            script.write_text(
+                _PRUNE_SCRIPT % {"devices": json.dumps((PANEL / "panel-devices.mixin.js").as_uri())},
+                encoding="utf-8",
+            )
+            out = subprocess.run(
+                ["node", str(script)], capture_output=True, text=True, check=True, timeout=30
+            ).stdout
+        result = json.loads(out.strip().splitlines()[-1])
+        # The picture template keeps only an element it really created itself.
+        self.assertEqual(["template-element-9-9"], result["live"])
+        self.assertEqual(["template-element-9-9"], result["liveAdjustments"])
+        self.assertEqual(["template-element-9-9"], result["picture"])
+        self.assertEqual(0, result["sign"])
+        # The template that owns the gauge is left alone.
+        self.assertEqual(["template-element-1-0"], result["owner"])
 
 
 if __name__ == "__main__":
