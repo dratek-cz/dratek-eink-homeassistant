@@ -183,6 +183,9 @@ export const projectsMixin = {
     this._refreshTriggerMode = ["both", "change_only", "interval_only"].includes(source.refresh_trigger_mode)
       ? source.refresh_trigger_mode
       : "interval_only";
+    // The backend automation is the source of truth once it exists; a stored
+    // draft can still carry the value from before the card was edited.
+    this._adoptAutomationRefreshSettings?.();
     this._invertColors = false;
     this._backgroundColor = ["white", "black", "red"].includes(source.background_color) ? source.background_color : "white";
     const size = this._displaySize(device);

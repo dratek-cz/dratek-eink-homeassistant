@@ -2,6 +2,19 @@
 
 Všechny významné změny a historie verzí v projektu DRATEK eInk.
 
+## [1.0.5-beta.1] - 2026-10-21
+
+Předběžné vydání. Obsahem totožné s 1.0.4, navíc dvě dlaždice, které stabilní vydání nemá (firemní šablona DRÁTEK a Cedule s ikonou), a jedna oprava.
+
+### Opraveno
+
+- **Interval a způsob spouštění automatického zápisu se po změně na kartě už nevrací zpátky.** Změna se uložila do automatizace, ale koncept displeje si držel starou hodnotu (výchozí „Při změně entity i pravidelně"). Při dalším uložení konceptu nebo odeslání ji poslal zpět a nastavení se přepsalo. Panel teď po uložení na kartě, po načtení automatizací i při otevření konceptu převezme hodnotu z automatizace.
+
+### Ověření
+
+- Nový test spouští kód panelu v Node a ověřuje, že změna na kartě dorazí do editoru i do konceptu displeje.
+- Ověřeno jen testy, v Home Assistantu ani na displeji zatím ne.
+
 ## [1.0.4] - 2026-10-13
 
 Oprava kompatibility s Home Assistantem 2026.10: entity fyzických displejů se znovu aktualizují a nové displeje dostanou entity bez restartu.

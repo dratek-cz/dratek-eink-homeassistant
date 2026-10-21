@@ -79,7 +79,7 @@ export const DISPLAY_TEMPLATES = [
 // template must keep drawing correctly after an update that hides the tile,
 // and its automation must keep resolving. Hiding it from the grid is a
 // question of what can be newly chosen, nothing more.
-export const BRAND_LOGO_TEMPLATE_VISIBLE = false;
+export const BRAND_LOGO_TEMPLATE_VISIBLE = true;
 
 // The tiles that ship only in a pre-release. Both are company tools rather
 // than something every installation wants a button for: one broadcasts the

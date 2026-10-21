@@ -11,6 +11,9 @@ path, and the backend's draft-save handler pushes a live update through.
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
+import subprocess
+import tempfile
 import unittest
 
 
@@ -49,6 +52,61 @@ class FrontendTriggerModeWiringTests(unittest.TestCase):
 
     def test_manual_send_carries_the_mode_into_the_automation_config(self) -> None:
         self.assertIn("refresh_trigger_mode: [\"both\", \"change_only\", \"interval_only\"].includes(this._refreshTriggerMode)", self.devices)
+
+
+_NODE_SCRIPT = """
+import { automationsMixin } from %(mixin)s;
+const panel = {
+  ...automationsMixin,
+  _selectedDeviceAddress: "AA:BB",
+  _refreshTriggerMode: "both",
+  _refreshIntervalSeconds: 600,
+  _deviceDrafts: { "AA:BB": { refresh_trigger_mode: "both", refresh_interval_seconds: 600 } },
+  _automations: [{ address: "AA:BB", refresh_trigger_mode: "both", refresh_interval_seconds: 600 }],
+};
+panel._rememberAutomationRefreshSetting("aa:bb", { refresh_trigger_mode: "interval_only" });
+panel._rememberAutomationRefreshSetting("AA:BB", { refresh_interval_seconds: 3600 });
+console.log(JSON.stringify({
+  mode: panel._refreshTriggerMode,
+  seconds: panel._refreshIntervalSeconds,
+  draft: panel._deviceDrafts["AA:BB"],
+}));
+"""
+
+
+@unittest.skipUnless(shutil.which("node"), "node is required")
+class CardEditSurvivesDraftSaveTests(unittest.TestCase):
+    """Editing the interval/mode on an automation card must reach the drafts.
+
+    A device draft carries a copy of both settings and every draft save pushes
+    that copy to the backend, so a copy left at its old value reverted the
+    user's choice ("Při změně entity i pravidelně" kept coming back).
+    """
+
+    def test_card_edit_updates_editor_fields_and_stored_draft(self) -> None:
+        import json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            module = Path(tmp) / "automations.mjs"
+            shutil.copyfile(PANEL / "panel-automations.mixin.js", module)
+            script = Path(tmp) / "run.mjs"
+            script.write_text(_NODE_SCRIPT % {"mixin": json.dumps(module.as_uri())}, encoding="utf-8")
+            out = subprocess.run(
+                ["node", str(script)], capture_output=True, text=True, check=True, timeout=30
+            ).stdout
+        result = json.loads(out)
+        self.assertEqual("interval_only", result["mode"])
+        self.assertEqual(3600, result["seconds"])
+        self.assertEqual("interval_only", result["draft"]["refresh_trigger_mode"])
+        self.assertEqual(3600, result["draft"]["refresh_interval_seconds"])
+
+    def test_handlers_and_draft_apply_use_the_backend_value(self) -> None:
+        automations = (PANEL / "panel-automations.mixin.js").read_text(encoding="utf-8")
+        projects = (PANEL / "panel-projects.mixin.js").read_text(encoding="utf-8")
+        self.assertIn("this._rememberAutomationRefreshSetting(address, { refresh_trigger_mode: select.value });", automations)
+        self.assertIn("this._rememberAutomationRefreshSetting(address, { refresh_interval_seconds: Number(select.value) });", automations)
+        self.assertIn("this._adoptAutomationRefreshSettings();", automations)
+        self.assertIn("this._adoptAutomationRefreshSettings?.();", projects)
 
 
 class BackendTriggerModeWiringTests(unittest.TestCase):

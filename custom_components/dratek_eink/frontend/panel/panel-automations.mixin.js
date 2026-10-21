@@ -7,6 +7,7 @@ export const automationsMixin = {
     try {
       const result = await this._hass.callWS({ type: "dratek_eink/automations/list" });
       this._automations = Array.isArray(result?.automations) ? result.automations : [];
+      this._adoptAutomationRefreshSettings();
     } catch (err) {
       this._automationsError = this._message(err);
     } finally {
@@ -16,6 +17,43 @@ export const automationsMixin = {
         this._paint();
       }
     }
+  },
+
+  // The automation's interval and trigger mode live in the backend and are
+  // edited on its card, but every device draft carries a copy of both and
+  // _scheduleDraftSave pushes that copy back to the backend. A copy that was
+  // not refreshed after a card edit silently reverted the user's choice on the
+  // next draft save or send, so whenever the backend value is learned the
+  // drafts (and the open editor's fields) are brought in line with it.
+  _adoptAutomationRefreshSettings() {
+    const selected = String(this._selectedDeviceAddress || "").toUpperCase();
+    (this._automations || []).forEach((automation) => {
+      const address = String(automation?.address || "").toUpperCase();
+      if (!address) return;
+      const seconds = Math.max(30, Math.min(86400, Number(automation.refresh_interval_seconds) || 0));
+      const mode = ["both", "change_only", "interval_only"].includes(automation.refresh_trigger_mode)
+        ? automation.refresh_trigger_mode
+        : "";
+      const draft = this._deviceDrafts?.[address];
+      if (draft) {
+        if (seconds) draft.refresh_interval_seconds = seconds;
+        if (mode) draft.refresh_trigger_mode = mode;
+      }
+      if (address === selected) {
+        if (seconds) this._refreshIntervalSeconds = seconds;
+        if (mode) this._refreshTriggerMode = mode;
+      }
+    });
+  },
+
+  // Applies a just-saved card edit locally right away. Re-listing alone is not
+  // enough: _loadAutomations returns early while a poll is already in flight,
+  // which would leave the stale draft copy to overwrite the edit.
+  _rememberAutomationRefreshSetting(address, patch) {
+    const normalized = String(address || "").toUpperCase();
+    const automation = (this._automations || []).find((item) => String(item.address || "").toUpperCase() === normalized);
+    if (automation) Object.assign(automation, patch);
+    this._adoptAutomationRefreshSettings();
   },
 
   _automationDevice(address) {
@@ -258,6 +296,7 @@ export const automationsMixin = {
             address,
             refresh_interval_seconds: Number(select.value),
           });
+          this._rememberAutomationRefreshSetting(address, { refresh_interval_seconds: Number(select.value) });
           this._automationsResult = "Interval automatického zápisu byl uložen.";
           await this._loadAutomations(false);
         } catch (err) {
@@ -281,6 +320,7 @@ export const automationsMixin = {
             address,
             refresh_trigger_mode: select.value,
           });
+          this._rememberAutomationRefreshSetting(address, { refresh_trigger_mode: select.value });
           this._automationsResult = "Způsob spouštění obnovy byl uložen.";
           await this._loadAutomations(false);
         } catch (err) {
